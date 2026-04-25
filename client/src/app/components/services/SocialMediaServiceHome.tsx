@@ -23,9 +23,9 @@ import {
 } from "lucide-react";
 
 import logoImage from "../../../assets/28d6c1698c390e901d670fea04f3d952314f5313.png";
-import stepMeetingImage from "../../../assets/9f6ffebad46d464dd5e391ce71a41f2027994a17.png";
-import stepAccountImage from "../../../assets/2691e81d30a6e9a87ebef5c9c67236616cd226ae.png";
-import stepDashboardImage from "../../../assets/19ee8247f296710692b313a59485eb0258d8e3b8.png";
+import stepMeetingImage from "../../../assets/9f6ffebad46d464dd5e391ce71a41f2027994a17.webp";
+import stepAccountImage from "../../../assets/2691e81d30a6e9a87ebef5c9c67236616cd226ae.webp";
+import stepDashboardImage from "../../../assets/19ee8247f296710692b313a59485eb0258d8e3b8.webp";
 import socialStartIcon from "../../../assets/10b5332e3454775fe1e3e6d7a10d4f5e09ccd17d.png";
 import socialProIcon from "../../../assets/2519a3a2e3cc0d11e6fbd9187b747dfca3581898.png";
 import socialBrandIcon from "../../../assets/a5987d169558dd87ca74caf7bcc1512b1706b5e7.png";
@@ -38,6 +38,7 @@ import socialWhatsappIcon from "../../../assets/100df1ea0b5537c2a776132fa6b5f218
 import socialSnapchatIcon from "../../../assets/ee893046d93b786d05f5b1cb76d451b4f7a0f95c.png";
 import socialPinterestIcon from "../../../assets/9fc2a7e67129638bedcf545812f1b84bbfbdb7c9.png";
 import ActionButton from "../site/ActionButton";
+import HeroBackdrop from "../site/HeroBackdrop";
 import PackageFeatureBullet from "../site/PackageFeatureBullet";
 import PaymentLogos from "../site/PaymentLogos";
 import SiteHeader from "../site/SiteHeader";
@@ -353,11 +354,8 @@ export default function SocialMediaServiceHome() {
   return (
     <div className="min-h-screen bg-[#111111] text-white" id="top">
       <SiteHeader />
-      <section className="relative isolate min-h-[900px] overflow-hidden bg-[#050607]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_36%,rgba(0,162,229,0.12),transparent_28%),radial-gradient(circle_at_72%_30%,rgba(170,255,1,0.18),transparent_30%),radial-gradient(circle_at_18%_72%,rgba(138,56,245,0.16),transparent_26%),linear-gradient(135deg,#050607_0%,#111317_48%,#030405_100%)]" />
-        <div className="absolute left-[-8rem] top-32 h-[26rem] w-[26rem] rounded-full border border-[#aaff01]/18" />
-        <div className="absolute right-[-9rem] top-14 h-[32rem] w-[32rem] rounded-full border border-[#aaff01]/10" />
-        <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-[#111111] to-transparent" />
+      <section className="relative isolate flex min-h-[900px] items-center justify-center overflow-hidden bg-[#050607]">
+        <HeroBackdrop fadeColor="#111111" />
 
         <header className="hidden">
           <div className="mx-auto flex w-full max-w-[1540px] items-center justify-between gap-6 px-6 py-6 lg:px-10">

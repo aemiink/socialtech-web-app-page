@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 
 import logoImage from "../../../assets/28d6c1698c390e901d670fea04f3d952314f5313.png";
-import figmaIcon from "../../../assets/464ced20317afa1aaf01c1b14334b6991902da40.png";
 import photoshopIcon from "../../../assets/a3de08031b9f85a9f9727b45980157fd6355c073.png";
 import illustratorIcon from "../../../assets/58f77f624371049002598eeb7cdd1d1f5d7a23d1.png";
 import designIcon from "../../../assets/a40fe3d757147e38682e79fcea9f480b98b0e79a.png";
@@ -25,6 +24,7 @@ import starterPackageIcon from "../../../assets/10b5332e3454775fe1e3e6d7a10d4f5e
 import proPackageIcon from "../../../assets/2519a3a2e3cc0d11e6fbd9187b747dfca3581898.png";
 import scalePackageIcon from "../../../assets/a5987d169558dd87ca74caf7bcc1512b1706b5e7.png";
 import ActionButton from "../site/ActionButton";
+import HeroBackdrop from "../site/HeroBackdrop";
 import PackageFeatureBullet from "../site/PackageFeatureBullet";
 import PaymentLogos from "../site/PaymentLogos";
 import SiteHeader from "../site/SiteHeader";
@@ -57,9 +57,9 @@ const navItems = [
 ];
 
 const toolIcons = [
-  { label: "Figma", icon: figmaIcon },
-  { label: "Photoshop", icon: photoshopIcon },
-  { label: "Illustrator", icon: illustratorIcon },
+  { label: "UI Kit", icon: designIcon },
+  { label: "Görsel Tasarım", icon: photoshopIcon },
+  { label: "Vektör Sistem", icon: illustratorIcon },
 ];
 
 const valueCards: ValueCardData[] = [
@@ -97,8 +97,8 @@ const workflow: ValueCardData[] = [
     icon: codeIcon,
   },
   {
-    title: "Tasarım & Prototip",
-    description: "Yüksek kaliteli görseller ve interaktif prototipler oluşturuyoruz.",
+    title: "Tasarım & Akış",
+    description: "Yüksek kaliteli görseller ve tıklama rotası net arayüz akışları oluşturuyoruz.",
     icon: designIcon,
   },
   {
@@ -123,17 +123,17 @@ const packageCards: PackageData[] = [
       "Responsive (mobil + desktop)",
       "Basit marka rehberi",
       "2 revize hakkı",
-      "Figma kaynak dosyası",
+      "Kaynak tasarım dosyaları",
       "Hızlı destek (48 saat)",
-      "Prototipleme",
+      "Etkileşim akışı",
     ],
   },
   {
-    name: "Tasarım & Prototip Paketi",
+    name: "Tasarım & Akış Paketi",
     description: "Büyüyen işletmeler için kapsamlı tasarım çözümü.",
     price: "24.900 ₺",
     suffix: "/ tek seferlik",
-    note: "7-10 iş günü içinde marka, akış ve prototip birlikte teslim edilir.",
+    note: "7-10 iş günü içinde marka, akış ve arayüz sistemi birlikte teslim edilir.",
     cta: "Dönüşüm Odaklı Sayfa İstiyorum",
     icon: proPackageIcon,
     accent: "lime",
@@ -147,11 +147,11 @@ const packageCards: PackageData[] = [
       "Tüm kaynak dosyalar",
       "Öncelikli destek (24 saat)",
       "1 ay ücretsiz güncelleme",
-      "Prototipleme",
+      "Etkileşim akışı",
     ],
   },
   {
-    name: "Tasarım & Prototip+ Paketi",
+    name: "Tasarım & Akış+ Paketi",
     description: "Büyük ölçekli projeler için tam hizmet paketi.",
     price: "45.900 ₺",
     suffix: "/ tek seferlik",
@@ -163,7 +163,7 @@ const packageCards: PackageData[] = [
       "Sınırsız sayfa tasarımı",
       "Tüm platformlar için optimizasyon",
       "Kapsamlı design system",
-      "Prototipleme ve testler",
+      "Akış testi ve kullanım kontrolleri",
       "Sınırsız revize",
       "Animasyon ve mikroetkileşimler",
       "7/24 özel destek",
@@ -337,10 +337,8 @@ export default function LandingPageServiceHome() {
   return (
     <div className="min-h-screen bg-[#111111] text-white" id="top">
       <SiteHeader />
-      <section className="relative isolate min-h-[900px] overflow-hidden bg-[#050607]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_72%_30%,rgba(170,255,1,0.18),transparent_30%),radial-gradient(circle_at_16%_72%,rgba(138,56,245,0.16),transparent_28%),linear-gradient(135deg,#050607_0%,#111317_48%,#030405_100%)]" />
-        <div className="absolute left-[-8rem] top-28 h-[28rem] w-[28rem] rounded-full border border-[#aaff01]/18" />
-        <div className="absolute right-[-9rem] top-10 h-[34rem] w-[34rem] rounded-full border border-[#aaff01]/10" />
+      <section className="relative isolate flex min-h-[900px] items-center justify-center overflow-hidden bg-[#050607]">
+        <HeroBackdrop fadeColor="#111111" />
 
         <header className="hidden">
           <div className="mx-auto flex w-full max-w-[1540px] items-center justify-between gap-6 px-6 py-6 lg:px-10">
@@ -405,7 +403,7 @@ export default function LandingPageServiceHome() {
             </span>
             için yanınızdayız.
           </p>
-          <div className="mt-10 flex flex-col gap-4 sm:flex-row">
+          <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <ActionButton accent="lime" className="min-w-[280px]" href="#footer" label="Ücretsiz Konsültasyon İste" />
             <ActionButton accent="violet" className="min-w-[240px]" href="#packages" label="Paketleri İncele" />
           </div>

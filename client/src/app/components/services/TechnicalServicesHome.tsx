@@ -20,9 +20,9 @@ import wooIcon from "../../../assets/f16185c3fccdbc09b48f3936735bf25fbd2b91a2.pn
 import wordpressIcon from "../../../assets/a56dc130860c00dd18ef049f57bc6aed87db0f63.png";
 import wixIcon from "../../../assets/f7749653a3663ed07e43018262e3b49114327c4a.png";
 import lightningIcon from "../../../assets/6b28e6372b5679aecd6606305bad3b4544d5fb47.png";
-import seoAuditImage from "../../../assets/f42ac26471dca5c89a85a3e3dc7b0c438dd4c892.png";
-import seoTeamImage from "../../../assets/966aba04ea26ec594f20dcd37e22f3e10bdf8676.png";
-import seoRecipeImage from "../../../assets/5e20f8ba4c40fbc150b631266aed6ef04a12a35e.png";
+import seoAuditImage from "../../../assets/f42ac26471dca5c89a85a3e3dc7b0c438dd4c892.webp";
+import seoTeamImage from "../../../assets/966aba04ea26ec594f20dcd37e22f3e10bdf8676.webp";
+import seoRecipeImage from "../../../assets/5e20f8ba4c40fbc150b631266aed6ef04a12a35e.webp";
 import designIcon from "../../../assets/20b545e325c1fc86b38c36656bdc928249b39d46.png";
 import replyIcon from "../../../assets/3b88aa7f8e7ac3a09e3f1acb949227f9ab751fd9.png";
 import calendarIcon from "../../../assets/23657017fdc0a77a72af39e7b0ed443979cbaad6.png";
@@ -42,6 +42,7 @@ import starterPackageIcon from "../../../assets/10b5332e3454775fe1e3e6d7a10d4f5e
 import proPackageIcon from "../../../assets/2519a3a2e3cc0d11e6fbd9187b747dfca3581898.png";
 import scalePackageIcon from "../../../assets/a5987d169558dd87ca74caf7bcc1512b1706b5e7.png";
 import ActionButton from "../site/ActionButton";
+import HeroBackdrop from "../site/HeroBackdrop";
 import PackageFeatureBullet from "../site/PackageFeatureBullet";
 import PaymentLogos from "../site/PaymentLogos";
 import SiteHeader from "../site/SiteHeader";
@@ -623,11 +624,8 @@ function Hero({
   const isSeo = variant === "seo";
 
   return (
-    <section className="relative isolate min-h-[900px] overflow-hidden bg-[#050607]">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_72%_30%,rgba(170,255,1,0.18),transparent_30%),radial-gradient(circle_at_16%_72%,rgba(138,56,245,0.16),transparent_28%),linear-gradient(135deg,#050607_0%,#111317_48%,#030405_100%)]" />
-      <div className="absolute left-[-8rem] top-28 h-[28rem] w-[28rem] rounded-full border border-[#aaff01]/18" />
-      <div className="absolute right-[-9rem] top-10 h-[34rem] w-[34rem] rounded-full border border-[#aaff01]/10" />
-      <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-[#131313] to-transparent" />
+    <section className="relative isolate flex min-h-[900px] items-center justify-center overflow-hidden bg-[#050607]">
+      <HeroBackdrop fadeColor="#131313" />
       <SiteHeader />
 
       <div className="relative z-10 mx-auto flex min-h-[760px] w-full max-w-[1540px] flex-col items-center justify-center px-6 pb-24 pt-16 text-center lg:px-10">
@@ -664,7 +662,7 @@ function Hero({
             </>
           )}
         </p>
-        <div className="mt-10 flex flex-col gap-4 sm:flex-row">
+        <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
           <ActionButton
             accent="lime"
             className="min-w-[280px]"

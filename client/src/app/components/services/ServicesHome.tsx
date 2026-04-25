@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 
 import logoImage from "../../../assets/28d6c1698c390e901d670fea04f3d952314f5313.png";
-import focusIllustration from "../../../assets/5e20f8ba4c40fbc150b631266aed6ef04a12a35e.png";
+import focusIllustration from "../../../assets/5e20f8ba4c40fbc150b631266aed6ef04a12a35e.webp";
 import growthHubIcon from "../../../assets/68dd4a4fc4783dc83cbb2467ace3baf4d5b9a15d.png";
 import metaIcon from "../../../assets/65e1a43c4dce73a01c24356c3586bfbf475832d6.png";
 import googleAdsIcon from "../../../assets/5b206b0237faec866dce4fbe8362d34d74185271.png";
@@ -34,6 +34,7 @@ import tiktokIcon from "../../../assets/a1de6043ae1c2f3e2f2d6cda834f1928f2d41623
 import amazonIcon from "../../../assets/c522312a5748c7b7f98f6a7c5116f935fa925f9c.png";
 import hubIcon from "../../../assets/0d460586791bd1107e32f062391c4347fcc9c89a.png";
 import ActionButton from "../site/ActionButton";
+import HeroBackdrop from "../site/HeroBackdrop";
 import SiteHeader from "../site/SiteHeader";
 import { getFooterLinkTarget } from "../site/footerLinks";
 
@@ -329,9 +330,9 @@ export default function ServicesHome() {
         <div className="absolute bottom-[-12rem] left-1/2 h-[24rem] w-[40rem] -translate-x-1/2 rounded-full bg-[#00a2e5]/8 blur-[180px]" />
       </div>
 
-      <section className="relative isolate overflow-hidden bg-[#040607]">
+      <section className="relative isolate flex items-center justify-center overflow-hidden bg-[#040607]">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(106,117,124,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(106,117,124,0.08)_1px,transparent_1px)] bg-[size:64px_64px] opacity-20" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_14%_24%,rgba(181,255,21,0.14),transparent_28%),radial-gradient(circle_at_76%_18%,rgba(138,56,245,0.2),transparent_32%),linear-gradient(180deg,rgba(3,5,8,0.88),rgba(3,5,8,0.98))]" />
+        <HeroBackdrop fadeColor="#232425" />
 
         <header className="hidden">
           <div className="mx-auto flex w-full max-w-[1540px] items-center justify-between gap-6 px-6 py-6 lg:px-10">
@@ -382,8 +383,8 @@ export default function ServicesHome() {
           ) : null}
         </header>
 
-        <div className="relative z-10 mx-auto grid w-full max-w-[1540px] items-center gap-12 px-6 pb-24 pt-12 lg:min-h-[820px] lg:grid-cols-[0.82fr_1.18fr] lg:px-10">
-          <div className="max-w-[620px]">
+        <div className="relative z-10 mx-auto grid w-full max-w-[1540px] items-center gap-12 px-6 pb-24 pt-24 text-center lg:min-h-[820px] lg:grid-cols-[0.82fr_1.18fr] lg:px-10 lg:pt-28 lg:text-left">
+          <div className="mx-auto flex max-w-[620px] flex-col items-center lg:mx-0 lg:items-start">
             <h1 className="text-[38px] font-bold leading-tight tracking-tight text-white md:text-[64px]">
               Dijitalde Tek Bir Hizmet Yetmez.
               <br />
@@ -394,7 +395,7 @@ export default function ServicesHome() {
               <span className="mx-2 font-semibold text-[#b5ff15]">birbirini besleyen dijital büyüme sistemleri</span>
               inşa eder.
             </p>
-            <div className="mt-12 flex flex-col gap-4 sm:flex-row">
+            <div className="mt-12 flex flex-col items-center justify-center gap-4 sm:flex-row lg:justify-start">
               <ActionButton accent="lime" className="min-w-[240px]" href="#cta" label="Hangisi Bana Uygun?" />
               <ActionButton accent="violet" className="min-w-[240px]" href="#modules" label="Hizmetleri Keşfet" />
             </div>
@@ -403,14 +404,14 @@ export default function ServicesHome() {
           <div className="relative mx-auto h-[560px] w-full max-w-[760px]">
             <div className="absolute inset-x-6 top-6 rounded-[34px] border border-[#aaff01]/24 bg-[#111820] p-5 shadow-[0_34px_110px_rgba(0,0,0,0.55)]">
               <div className="rounded-[22px] bg-white px-5 py-4 text-[#101820]">
-                <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-black/42">service operating system</p>
+                <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-black/42">büyüme sistemi</p>
                 <p className="mt-1 text-xl font-extrabold">Büyüme modülleri tek panelde</p>
               </div>
               <div className="mt-5 grid grid-cols-2 gap-3">
                 {["Strateji", "Reklam", "Web", "Rapor"].map((item) => (
                   <div key={item} className="rounded-[18px] bg-[#232f3e] px-4 py-6 text-center">
                     <p className="text-2xl font-extrabold text-[#aaff01]">{item}</p>
-                    <p className="mt-1 text-[11px] text-white/55">module</p>
+                    <p className="mt-1 text-[11px] text-white/55">modül</p>
                   </div>
                 ))}
               </div>

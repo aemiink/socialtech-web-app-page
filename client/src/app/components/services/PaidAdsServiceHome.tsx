@@ -20,9 +20,9 @@ import {
 } from "lucide-react";
 
 import logoImage from "../../../assets/28d6c1698c390e901d670fea04f3d952314f5313.png";
-import journeyMeetingImage from "../../../assets/9f6ffebad46d464dd5e391ce71a41f2027994a17.png";
-import journeyAccountImage from "../../../assets/2691e81d30a6e9a87ebef5c9c67236616cd226ae.png";
-import journeyDashboardImage from "../../../assets/19ee8247f296710692b313a59485eb0258d8e3b8.png";
+import journeyMeetingImage from "../../../assets/9f6ffebad46d464dd5e391ce71a41f2027994a17.webp";
+import journeyAccountImage from "../../../assets/2691e81d30a6e9a87ebef5c9c67236616cd226ae.webp";
+import journeyDashboardImage from "../../../assets/19ee8247f296710692b313a59485eb0258d8e3b8.webp";
 import campaignIcon from "../../../assets/20b545e325c1fc86b38c36656bdc928249b39d46.png";
 import messageIcon from "../../../assets/ee91d4126ebf0bdfd37b879f86b9839c287bc57a.png";
 import reportIcon from "../../../assets/fcf622c22ef809497405a6660ea02eb1e5f5413a.png";
@@ -53,6 +53,7 @@ import starterPackageIcon from "../../../assets/10b5332e3454775fe1e3e6d7a10d4f5e
 import growthPackageIcon from "../../../assets/2519a3a2e3cc0d11e6fbd9187b747dfca3581898.png";
 import scalePackageIcon from "../../../assets/a5987d169558dd87ca74caf7bcc1512b1706b5e7.png";
 import ActionButton from "../site/ActionButton";
+import HeroBackdrop from "../site/HeroBackdrop";
 import PackageFeatureBullet from "../site/PackageFeatureBullet";
 import PaymentLogos from "../site/PaymentLogos";
 import SiteHeader from "../site/SiteHeader";
@@ -949,14 +950,14 @@ function PaidAdsHeroVisual({ visual }: { visual: HeroVisualData }) {
               <p className="text-lg font-extrabold">{visual.platform}</p>
             </div>
           </div>
-          <span className="rounded-full bg-[#aaff01] px-3 py-1 text-xs font-extrabold text-black">live</span>
+          <span className="rounded-full bg-[#aaff01] px-3 py-1 text-xs font-extrabold text-black">canlı</span>
         </div>
 
         <div className="mt-5 grid grid-cols-3 gap-3">
           {visual.channels.map((channel) => (
             <div key={channel} className="rounded-[18px] bg-[#232f3e] px-4 py-5 text-center">
               <p className="text-xl font-extrabold text-[#aaff01]">{channel}</p>
-              <p className="mt-1 text-[11px] text-white/55">module</p>
+              <p className="mt-1 text-[11px] text-white/55">modül</p>
             </div>
           ))}
         </div>
@@ -965,9 +966,9 @@ function PaidAdsHeroVisual({ visual }: { visual: HeroVisualData }) {
           <div className="mb-4 flex items-center justify-between">
             <span className="inline-flex items-center gap-2 text-sm font-bold text-white">
               <Radar className="h-4 w-4 text-[#aaff01]" />
-              Growth signal
+              Büyüme sinyali
             </span>
-            <span className="text-xs text-[#aaff01]">optimizing</span>
+            <span className="text-xs text-[#aaff01]">optimizasyon</span>
           </div>
           {visual.searchRows.map(([keyword, metric]) => (
             <div key={keyword} className="mb-3 flex items-center justify-between rounded-xl bg-white/7 px-4 py-3 text-sm">
@@ -1000,7 +1001,7 @@ function PaidAdsHeroVisual({ visual }: { visual: HeroVisualData }) {
       <div className="absolute right-12 top-[-10px] hidden rotate-6 rounded-[22px] border border-white/10 bg-white/8 px-5 py-4 backdrop-blur md:block">
         <p className="flex items-center gap-2 text-sm font-extrabold text-white">
           <TrendingUp className="h-5 w-5 text-[#aaff01]" />
-          Scale loop
+          Ölçekleme döngüsü
           <ArrowUpRight className="h-4 w-4 text-white/54" />
         </p>
       </div>
@@ -1035,11 +1036,8 @@ export default function PaidAdsServiceHome({ variant }: { variant: PaidAdsVarian
   return (
     <div className="min-h-screen bg-[#111111] text-white" id="top">
       <SiteHeader />
-      <section className="relative isolate min-h-[940px] overflow-hidden bg-[#050607]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_76%_32%,rgba(170,255,1,0.2),transparent_32%),radial-gradient(circle_at_12%_72%,rgba(138,56,245,0.16),transparent_28%),linear-gradient(135deg,#050607_0%,#111317_46%,#030405_100%)]" />
-        <div className="absolute left-[-9rem] top-28 h-[28rem] w-[28rem] rounded-full border border-[#aaff01]/20" />
-        <div className="absolute right-[-10rem] top-8 h-[34rem] w-[34rem] rounded-full border border-[#aaff01]/10" />
-        <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-[#111111] to-transparent" />
+      <section className="relative isolate flex min-h-[940px] items-center justify-center overflow-hidden bg-[#050607]">
+        <HeroBackdrop fadeColor="#111111" />
 
         <header className="hidden">
           <div className="mx-auto flex w-full max-w-[1540px] items-center justify-between gap-6 px-6 py-6 lg:px-10">
@@ -1090,15 +1088,15 @@ export default function PaidAdsServiceHome({ variant }: { variant: PaidAdsVarian
           ) : null}
         </header>
 
-        <div className="relative z-10 mx-auto grid min-h-[790px] w-full max-w-[1540px] items-center gap-14 px-6 pb-24 pt-12 lg:grid-cols-[1fr_0.92fr] lg:px-10">
-          <div>
+        <div className="relative z-10 mx-auto grid min-h-[790px] w-full max-w-[1540px] items-center gap-14 px-6 pb-24 pt-24 text-center lg:grid-cols-[0.92fr_0.88fr] lg:px-10 lg:pt-28 lg:text-left">
+          <div className="mx-auto flex max-w-[760px] flex-col items-center lg:mx-0 lg:items-start">
             <span className="inline-flex items-center gap-2 rounded-full bg-[#aaff01] px-4 py-1.5 text-xs font-extrabold text-[#121212]">
               <img alt="" className="h-4 w-4 object-contain" src={data.heroVisual.icon} />
               {data.badge}
             </span>
             <h1 className="mt-7 max-w-[860px] text-[40px] font-medium leading-tight tracking-tight text-white md:text-[68px]">{data.heroTitle}</h1>
             <p className="mt-8 max-w-[760px] text-lg leading-8 text-white/76 md:text-xl">{data.heroText}</p>
-            <div className="mt-10 flex flex-col gap-4 sm:flex-row">
+            <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row lg:justify-start">
               <ActionButton accent="lime" className="min-w-[260px]" href="#footer" label={data.primaryCta} />
               <ActionButton accent="violet" className="min-w-[260px]" href="#packages" label="Paketleri İncele" />
             </div>

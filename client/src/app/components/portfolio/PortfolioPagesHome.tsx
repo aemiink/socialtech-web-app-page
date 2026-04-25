@@ -26,12 +26,13 @@ import {
   X as XIcon,
 } from "lucide-react";
 import ActionButton from "../site/ActionButton";
+import HeroBackdrop from "../site/HeroBackdrop";
 import SiteHeader from "../site/SiteHeader";
 import { getFooterLinkTarget } from "../site/footerLinks";
 
 import logoImage from "../../../assets/28d6c1698c390e901d670fea04f3d952314f5313.png";
-import careerWomanImage from "../../../assets/991188e8e509b67c1ff6ac7a5eaf1b433f87e95e.png";
-import careerManImage from "../../../assets/74b30c061ad09e20c8b32c6622fe5bba17d10ca1.png";
+import careerWomanImage from "../../../assets/991188e8e509b67c1ff6ac7a5eaf1b433f87e95e.webp";
+import careerManImage from "../../../assets/74b30c061ad09e20c8b32c6622fe5bba17d10ca1.webp";
 import blogSapImage from "../../../assets/fbc4090b516bf34c0d7009bf7a5312e602dcc56e.png";
 import stepbagLogo from "../../../assets/1da609174c8279af605ceae4765e62f302108fc8.png";
 import jewelleryLogo from "../../../assets/59e8e6639c98ab2e3bd51c651b9f6595c768f8e6.png";
@@ -41,11 +42,11 @@ import sapientiusLogo from "../../../assets/014e6b1d53b1b355d5e14e69e017154869d9
 import kLogo from "../../../assets/98858b20365095da51bfb77ebf790d2e093f3c6f.png";
 import sivasMatbaaLogo from "../../../assets/ffad7d3244a2a3efff7f37f7c8d6ed6e9dd2996e.png";
 import taksiLogo from "../../../assets/c23dd3c3a7e2ac1f113a214529e907ec6e2a5849.png";
-import avatarSue from "../../../assets/573ad1f39f6055a34e7171ec9bb627fdf05cf003.png";
-import avatarJhon from "../../../assets/4e64811246c2bda815c83e5aa067453ff586901e.png";
-import avatarRobbie from "../../../assets/dd23378db022480fe43081e8f5774a27c17b0a9d.png";
-import trustBannerImage from "../../../assets/d66d403f3b68db2e5dedb81961508f5cf25a1d58.png";
-import structureImage from "../../../assets/5e20f8ba4c40fbc150b631266aed6ef04a12a35e.png";
+import avatarSue from "../../../assets/573ad1f39f6055a34e7171ec9bb627fdf05cf003.webp";
+import avatarJhon from "../../../assets/4e64811246c2bda815c83e5aa067453ff586901e.webp";
+import avatarRobbie from "../../../assets/dd23378db022480fe43081e8f5774a27c17b0a9d.webp";
+import trustBannerImage from "../../../assets/d66d403f3b68db2e5dedb81961508f5cf25a1d58.webp";
+import structureImage from "../../../assets/5e20f8ba4c40fbc150b631266aed6ef04a12a35e.webp";
 
 type PageKind = "career" | "case-study" | "case-detail" | "customers";
 
@@ -303,11 +304,8 @@ function HeroSection({
   const isCustomers = kind === "customers";
 
   return (
-    <section className="relative isolate min-h-[760px] overflow-hidden bg-[#050607] md:min-h-[880px]">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_72%_32%,rgba(170,255,1,0.18),transparent_31%),radial-gradient(circle_at_18%_70%,rgba(138,56,245,0.17),transparent_28%),linear-gradient(135deg,#050607_0%,#111317_48%,#030405_100%)]" />
-      <div className="absolute left-[-9rem] top-28 h-[28rem] w-[28rem] rounded-full border border-[#aaff01]/18" />
-      <div className="absolute right-[-10rem] top-8 h-[34rem] w-[34rem] rounded-full border border-[#aaff01]/10" />
-      <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-[#17191b] to-transparent" />
+    <section className="relative isolate flex min-h-[760px] items-center justify-center overflow-hidden bg-[#050607] md:min-h-[880px]">
+      <HeroBackdrop fadeColor="#17191b" />
       <SiteHeader />
 
       <div className="relative z-10 mx-auto flex min-h-[640px] w-full max-w-[1540px] flex-col items-center justify-center px-6 pb-20 pt-16 text-center lg:px-10">
@@ -323,7 +321,7 @@ function HeroSection({
               <span className="mx-2 font-extrabold text-[#b5ff15]">sadece bir pozisyon değil,</span>
               öğrenme, üretme ve büyüme sürecidir.
             </p>
-            <div className="mt-12 flex flex-col gap-4 sm:flex-row">
+            <div className="mt-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <ActionButton accent="violet" className="min-w-[260px]" href="#application" label="Açık Pozisyonlar" />
               <ActionButton accent="lime" className="min-w-[260px]" href="#culture" label="Bizi Tanıyın" />
             </div>
@@ -340,15 +338,15 @@ function HeroSection({
               <span className="mx-2 font-extrabold text-[#8a38f5]">startup’lardan kurumsal markalara kadar</span>
               ölçeklenebilir dijital sistemler kurduğumuz markalarla uzun vadeli iş ortaklıkları geliştiriyoruz.
             </p>
-            <div className="mt-8 grid gap-3 text-left text-sm font-semibold text-white/86 sm:grid-cols-3">
+            <div className="mt-8 grid gap-3 text-center text-sm font-semibold text-white/86 sm:grid-cols-3">
               {["Uzun vadeli iş ortaklığı", "Şeffaf süreç & raporlama", "Ölçülebilir sonuçlar"].map((item) => (
-                <span key={item} className="flex items-center gap-2">
+                <span key={item} className="flex items-center justify-center gap-2">
                   <Check className="h-4 w-4 text-[#b5ff15]" />
                   {item}
                 </span>
               ))}
             </div>
-            <div className="mt-12 flex flex-col gap-4 sm:flex-row">
+            <div className="mt-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <ActionButton accent="violet" className="min-w-[260px]" to="/calismalar" label="Projeleri İncele" />
               <ActionButton accent="lime" className="min-w-[260px]" href="#footer" label="Bizimle Çalışın" />
             </div>
@@ -365,7 +363,7 @@ function HeroSection({
               <span className="mx-2 font-extrabold">uygulama ve ölçümleme adımlarının bir araya geldiği,</span>
               sonuç odaklı bir dijital projedir.
             </p>
-            <div className="mt-12 flex flex-col gap-4 sm:flex-row">
+            <div className="mt-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <ActionButton accent="violet" className="min-w-[260px]" href="#case-list" label="Projeleri İncele" />
               <ActionButton accent="lime" className="min-w-[260px]" href="#footer" label="Bizimle Çalışın" />
             </div>

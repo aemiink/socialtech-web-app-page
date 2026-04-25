@@ -21,24 +21,25 @@ import {
   Youtube,
 } from "lucide-react";
 import ActionButton from "../site/ActionButton";
+import HeroBackdrop from "../site/HeroBackdrop";
 import PackageFeatureBullet from "../site/PackageFeatureBullet";
 import PaymentLogos from "../site/PaymentLogos";
 import SiteHeader from "../site/SiteHeader";
 import { getFooterLinkTarget } from "../site/footerLinks";
 
 import logoImage from "../../../assets/28d6c1698c390e901d670fea04f3d952314f5313.png";
-import projectInstagramStory from "../../../assets/f4ec847bb1ec1b27fd4a2842a4e930bd1bc501ab.png";
-import projectWebLanding from "../../../assets/a9d5346d10fbc3273e93e817ca98937f4bf09d7a.png";
-import projectInstagramPosts from "../../../assets/90f28dbedc4eb333bc83f5943cd6c1ef73617d87.png";
-import aboutBackImage from "../../../assets/5ed8f400caa5014730ebf7a12da1567fe8d681f1.png";
-import aboutFrontImage from "../../../assets/9e5f7ad16c0d59e3f4ef0266505f0976a41d55bc.png";
-import trustBannerImage from "../../../assets/d66d403f3b68db2e5dedb81961508f5cf25a1d58.png";
-import blogWireframeImage from "../../../assets/b180e00e08f5659eea7cb564d44ce4b577244437.png";
-import blogSeoImage from "../../../assets/c5f0ad0a25f5f070c7404384352ca5dc9460331e.png";
-import blogEcommerceImage from "../../../assets/2a4556d55251a48bc607f0696b65efb4a8117133.png";
-import avatarSue from "../../../assets/573ad1f39f6055a34e7171ec9bb627fdf05cf003.png";
-import avatarJhon from "../../../assets/4e64811246c2bda815c83e5aa067453ff586901e.png";
-import avatarRobbie from "../../../assets/dd23378db022480fe43081e8f5774a27c17b0a9d.png";
+import projectInstagramStory from "../../../assets/f4ec847bb1ec1b27fd4a2842a4e930bd1bc501ab.webp";
+import projectWebLanding from "../../../assets/a9d5346d10fbc3273e93e817ca98937f4bf09d7a.webp";
+import projectInstagramPosts from "../../../assets/90f28dbedc4eb333bc83f5943cd6c1ef73617d87.webp";
+import aboutBackImage from "../../../assets/5ed8f400caa5014730ebf7a12da1567fe8d681f1.webp";
+import aboutFrontImage from "../../../assets/9e5f7ad16c0d59e3f4ef0266505f0976a41d55bc.webp";
+import trustBannerImage from "../../../assets/d66d403f3b68db2e5dedb81961508f5cf25a1d58.webp";
+import blogWireframeImage from "../../../assets/b180e00e08f5659eea7cb564d44ce4b577244437.webp";
+import blogSeoImage from "../../../assets/c5f0ad0a25f5f070c7404384352ca5dc9460331e.webp";
+import blogEcommerceImage from "../../../assets/2a4556d55251a48bc607f0696b65efb4a8117133.webp";
+import avatarSue from "../../../assets/573ad1f39f6055a34e7171ec9bb627fdf05cf003.webp";
+import avatarJhon from "../../../assets/4e64811246c2bda815c83e5aa067453ff586901e.webp";
+import avatarRobbie from "../../../assets/dd23378db022480fe43081e8f5774a27c17b0a9d.webp";
 import iconDigitalMarketing from "../../../assets/68dd4a4fc4783dc83cbb2467ace3baf4d5b9a15d.png";
 import iconAws from "../../../assets/3ac04e4c13757378e2740d66ab0ee4804511697a.png";
 import iconGoogleAds from "../../../assets/e849124adaf316f4fe59ff0ddf0cc15fd75d72df.png";
@@ -601,11 +602,8 @@ export default function LandingHome() {
         <div className="absolute bottom-[-12rem] left-1/2 h-[26rem] w-[38rem] -translate-x-1/2 rounded-full bg-[#00a2e5]/10 blur-[160px]" />
       </div>
 
-      <section className="relative isolate min-h-[900px] overflow-hidden bg-[#050607]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_34%,rgba(170,255,1,0.16),transparent_30%),radial-gradient(circle_at_76%_28%,rgba(138,56,245,0.18),transparent_30%),linear-gradient(135deg,#050607_0%,#111317_48%,#030405_100%)]" />
-        <div className="absolute left-[-9rem] top-28 h-[28rem] w-[28rem] rounded-full border border-[#aaff01]/18" />
-        <div className="absolute right-[-10rem] top-8 h-[34rem] w-[34rem] rounded-full border border-[#aaff01]/10" />
-        <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#050816] to-transparent" />
+      <section className="relative isolate flex min-h-[900px] items-center justify-center overflow-hidden bg-[#050607]">
+        <HeroBackdrop fadeColor="#050816" />
 
         <header className="hidden">
           <div className="mx-auto flex w-full max-w-[1540px] items-center justify-between gap-6 px-6 py-6 lg:px-10">
@@ -663,7 +661,7 @@ export default function LandingHome() {
             </span>
             markanızı sürdürülebilir şekilde büyütüyoruz.
           </p>
-          <div className="mt-12 flex flex-col gap-4 sm:flex-row">
+          <div className="mt-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <ActionButton accent="lime" className="min-w-[280px]" label="Hizmetlerimizi Keşfedin" to="/hizmetler" />
             <ActionButton accent="violet" className="min-w-[280px]" href="#packages" label="Marka Hesabı Oluşturun" />
           </div>

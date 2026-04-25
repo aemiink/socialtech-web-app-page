@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 
 import logoImage from "../../../assets/28d6c1698c390e901d670fea04f3d952314f5313.png";
-import productIllustration from "../../../assets/83cc49f17772c91d9271f333870b3c09d4d21aa4.png";
+import productIllustration from "../../../assets/83cc49f17772c91d9271f333870b3c09d4d21aa4.webp";
 import interfaceIcon from "../../../assets/dff7469f9313f17f27e9efb8174ceb54235acb08.png";
 import seoIcon from "../../../assets/cbe607eb3f54ad7b61aafcae8659f361cfea1078.png";
 import speedIcon from "../../../assets/fa5f8979fb13ea6b9e298585ab60ae5cacffecdf.png";
@@ -40,6 +40,7 @@ import wixIcon from "../../../assets/f7749653a3663ed07e43018262e3b49114327c4a.pn
 import lightningIcon from "../../../assets/6b28e6372b5679aecd6606305bad3b4544d5fb47.png";
 import customWindowIcon from "../../../assets/3d207c82e4a8ece2497d77ec0e54505c5671a4a7.png";
 import ActionButton from "../site/ActionButton";
+import HeroBackdrop from "../site/HeroBackdrop";
 import SiteHeader from "../site/SiteHeader";
 import { getFooterLinkTarget } from "../site/footerLinks";
 
@@ -245,10 +246,8 @@ export default function WebAppServiceHome() {
   return (
     <div className="min-h-screen bg-[#111111] text-white" id="top">
       <SiteHeader />
-      <section className="relative isolate min-h-[900px] overflow-hidden bg-[#050607]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_72%_30%,rgba(170,255,1,0.18),transparent_30%),radial-gradient(circle_at_16%_72%,rgba(138,56,245,0.16),transparent_28%),linear-gradient(135deg,#050607_0%,#111317_48%,#030405_100%)]" />
-        <div className="absolute left-[-8rem] top-28 h-[28rem] w-[28rem] rounded-full border border-[#aaff01]/18" />
-        <div className="absolute right-[-9rem] top-10 h-[34rem] w-[34rem] rounded-full border border-[#aaff01]/10" />
+      <section className="relative isolate flex min-h-[900px] items-center justify-center overflow-hidden bg-[#050607]">
+        <HeroBackdrop fadeColor="#111111" />
 
         <header className="hidden">
           <div className="mx-auto flex w-full max-w-[1540px] items-center justify-between gap-6 px-6 py-6 lg:px-10">
@@ -311,7 +310,7 @@ export default function WebAppServiceHome() {
             <span className="mx-2 font-semibold text-[#b5ff15]">iş hedeflerinize hizmet eden ölçeklenebilir web ürünleri</span>
             geliştiriyoruz.
           </p>
-          <div className="mt-10 flex flex-col gap-4 sm:flex-row">
+          <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <ActionButton accent="lime" className="min-w-[260px]" href="#footer" label="Ücretsiz Ön Görüşme Planlayın" />
             <ActionButton accent="violet" className="min-w-[260px]" href="#brief" label="Projenizi Anlatın" />
           </div>

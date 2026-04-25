@@ -15,16 +15,17 @@ import {
   Youtube,
 } from "lucide-react";
 import ActionButton from "../site/ActionButton";
+import HeroBackdrop from "../site/HeroBackdrop";
 import PackageFeatureBullet from "../site/PackageFeatureBullet";
 import PaymentLogos from "../site/PaymentLogos";
 import SiteHeader from "../site/SiteHeader";
 import { getFooterLinkTarget } from "../site/footerLinks";
 
 import logoImage from "../../../assets/28d6c1698c390e901d670fea04f3d952314f5313.png";
-import meetingImage from "../../../assets/9f6ffebad46d464dd5e391ce71a41f2027994a17.png";
-import accountImage from "../../../assets/2691e81d30a6e9a87ebef5c9c67236616cd226ae.png";
-import dashboardImage from "../../../assets/19ee8247f296710692b313a59485eb0258d8e3b8.png";
-import nextStepImage from "../../../assets/1e5af86c00392bb0fe92a555e4fb3ee9c958a179.png";
+import meetingImage from "../../../assets/9f6ffebad46d464dd5e391ce71a41f2027994a17.webp";
+import accountImage from "../../../assets/2691e81d30a6e9a87ebef5c9c67236616cd226ae.webp";
+import dashboardImage from "../../../assets/19ee8247f296710692b313a59485eb0258d8e3b8.webp";
+import nextStepImage from "../../../assets/1e5af86c00392bb0fe92a555e4fb3ee9c958a179.webp";
 import flashIcon from "../../../assets/7f91547c4b7f13742e55cdac63b5c8ef8f7abc39.png";
 import growthIcon from "../../../assets/82312ba45b1ac3e92f1b25a1dca8320c66ded7dd.png";
 import targetIcon from "../../../assets/656b5acd143474c028060d2be3e3d099e011b7c5.png";
@@ -289,11 +290,9 @@ function SectionTitle({
 
 function HeroSection() {
   return (
-    <section className="relative isolate overflow-hidden bg-[#050607]">
+    <section className="relative isolate flex items-center justify-center overflow-hidden bg-[#050607]">
       <div className="relative mx-auto min-h-[520px] w-full max-w-none overflow-hidden md:min-h-[590px]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_34%,rgba(170,255,1,0.18),transparent_30%),radial-gradient(circle_at_18%_70%,rgba(138,56,245,0.16),transparent_28%),linear-gradient(135deg,#050607_0%,#111317_48%,#030405_100%)]" />
-        <div className="absolute left-[-8rem] top-20 h-[24rem] w-[24rem] rounded-full border border-[#aaff01]/18" />
-        <div className="absolute right-[-9rem] top-4 h-[30rem] w-[30rem] rounded-full border border-[#aaff01]/10" />
+        <HeroBackdrop fadeColor="#060708" />
         <div className="relative z-10 mx-auto flex min-h-[520px] w-full max-w-[1540px] flex-col items-center justify-center px-6 text-center md:min-h-[590px] lg:px-10">
           <span className="rounded-full bg-[#b5ff15] px-4 py-1 text-xs font-extrabold text-[#102000]">
             Growth & Hub

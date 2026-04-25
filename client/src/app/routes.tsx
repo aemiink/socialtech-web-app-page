@@ -1,113 +1,99 @@
 import { createBrowserRouter } from "react-router";
-import LandingPage from "./pages/LandingPage";
-import AboutUsPage from "./pages/AboutUsPage";
-import OurServicesPage from "./pages/OurServicesPage";
-import OurCustomerPage from "./pages/OurCustomerPage";
-import CareerInternPage from "./pages/CareerInternPage";
-import CaseStudyPage from "./pages/CaseStudyPage";
-import CaseStudyDetailsPage from "./pages/CaseStudyDetailsPage";
-import GrowthHubServicesPage from "./pages/GrowthHubServicesPage";
-import SocialMediaServicesPage from "./pages/SocialMediaServicesPage";
-import WebAppServicesPage from "./pages/WebAppServicesPage";
-import MobileAppServicesPage from "./pages/MobileAppServicesPage";
-import LandingPageServicesPage from "./pages/LandingPageServicesPage";
-import WebDesignServicesPage from "./pages/WebDesignServicesPage";
-import DigitalMarketingHubServicesPage from "./pages/DigitalMarketingHubServicesPage";
-import MetaAdsServicesPage from "./pages/MetaAdsServicesPage";
-import GoogleAdsServicesPage from "./pages/GoogleAdsServicesPage";
-import TiktokAdsServicesPage from "./pages/TiktokAdsServicesPage";
-import AmazonAdsServicesPage from "./pages/AmazonAdsServicesPage";
-import WebTechnicServicesPage from "./pages/WebTechnicServicesPage";
-import SeoServicesPage from "./pages/SeoServicesPage";
-import ContactPage from "./pages/ContactPage";
+import type { ComponentType } from "react";
+
+const lazyPage = (loader: () => Promise<{ default: ComponentType }>) => async () => {
+  const page = await loader();
+
+  return { Component: page.default };
+};
 
 export const router = createBrowserRouter([
   {
     path: "/",
-    Component: LandingPage,
+    lazy: lazyPage(() => import("./pages/LandingPage")),
   },
   {
     path: "/hakkimizda",
-    Component: AboutUsPage,
+    lazy: lazyPage(() => import("./pages/AboutUsPage")),
   },
   {
     path: "/hizmetler",
-    Component: OurServicesPage,
+    lazy: lazyPage(() => import("./pages/OurServicesPage")),
   },
   {
     path: "/musteriler",
-    Component: OurCustomerPage,
+    lazy: lazyPage(() => import("./pages/OurCustomerPage")),
   },
   {
     path: "/iletisim",
-    Component: ContactPage,
+    lazy: lazyPage(() => import("./pages/ContactPage")),
   },
   {
     path: "/kariyer",
-    Component: CareerInternPage,
+    lazy: lazyPage(() => import("./pages/CareerInternPage")),
   },
   {
     path: "/calismalar",
-    Component: CaseStudyPage,
+    lazy: lazyPage(() => import("./pages/CaseStudyPage")),
   },
   {
     path: "/calisma-detaylari",
-    Component: CaseStudyDetailsPage,
+    lazy: lazyPage(() => import("./pages/CaseStudyDetailsPage")),
   },
   {
     path: "/calismalar/:id",
-    Component: CaseStudyDetailsPage,
+    lazy: lazyPage(() => import("./pages/CaseStudyDetailsPage")),
   },
   {
     path: "/hizmetler/buyume-hub",
-    Component: GrowthHubServicesPage,
+    lazy: lazyPage(() => import("./pages/GrowthHubServicesPage")),
   },
   {
     path: "/hizmetler/sosyal-medya",
-    Component: SocialMediaServicesPage,
+    lazy: lazyPage(() => import("./pages/SocialMediaServicesPage")),
   },
   {
     path: "/hizmetler/web-uygulama",
-    Component: WebAppServicesPage,
+    lazy: lazyPage(() => import("./pages/WebAppServicesPage")),
   },
   {
     path: "/hizmetler/mobil-uygulama",
-    Component: MobileAppServicesPage,
+    lazy: lazyPage(() => import("./pages/MobileAppServicesPage")),
   },
   {
     path: "/hizmetler/karsilama-sayfasi",
-    Component: LandingPageServicesPage,
+    lazy: lazyPage(() => import("./pages/LandingPageServicesPage")),
   },
   {
     path: "/hizmetler/web-tasarim",
-    Component: WebDesignServicesPage,
+    lazy: lazyPage(() => import("./pages/WebDesignServicesPage")),
   },
   {
     path: "/hizmetler/dijital-pazarlama-hub",
-    Component: DigitalMarketingHubServicesPage,
+    lazy: lazyPage(() => import("./pages/DigitalMarketingHubServicesPage")),
   },
   {
     path: "/hizmetler/meta-reklamlari",
-    Component: MetaAdsServicesPage,
+    lazy: lazyPage(() => import("./pages/MetaAdsServicesPage")),
   },
   {
     path: "/hizmetler/google-reklamlari",
-    Component: GoogleAdsServicesPage,
+    lazy: lazyPage(() => import("./pages/GoogleAdsServicesPage")),
   },
   {
     path: "/hizmetler/tiktok-reklamlari",
-    Component: TiktokAdsServicesPage,
+    lazy: lazyPage(() => import("./pages/TiktokAdsServicesPage")),
   },
   {
     path: "/hizmetler/amazon-reklamlari",
-    Component: AmazonAdsServicesPage,
+    lazy: lazyPage(() => import("./pages/AmazonAdsServicesPage")),
   },
   {
     path: "/hizmetler/web-teknik-destek",
-    Component: WebTechnicServicesPage,
+    lazy: lazyPage(() => import("./pages/WebTechnicServicesPage")),
   },
   {
     path: "/hizmetler/seo",
-    Component: SeoServicesPage,
+    lazy: lazyPage(() => import("./pages/SeoServicesPage")),
   },
 ]);

@@ -30,15 +30,15 @@ import {
 } from "lucide-react";
 
 import logoImage from "../../../assets/28d6c1698c390e901d670fea04f3d952314f5313.png";
-import manifestoIllustration from "../../../assets/2451c6f130ea0918f38f6002b1e6ebfc1c2f99df.png";
-import manifestoMockup from "../../../assets/dff7469f9313f17f27e9efb8174ceb54235acb08.png";
+import manifestoIllustration from "../../../assets/2451c6f130ea0918f38f6002b1e6ebfc1c2f99df.webp";
+import manifestoPanelIcon from "../../../assets/dff7469f9313f17f27e9efb8174ceb54235acb08.png";
 import manifestoMetrics from "../../../assets/cbe607eb3f54ad7b61aafcae8659f361cfea1078.png";
 import manifestoSpeed from "../../../assets/fa5f8979fb13ea6b9e298585ab60ae5cacffecdf.png";
 import manifestoWeb from "../../../assets/cc3a73b6f38cea421b8743c49f0f128183d4c187.png";
-import processStepOneImage from "../../../assets/9f6ffebad46d464dd5e391ce71a41f2027994a17.png";
-import processStepTwoImage from "../../../assets/2691e81d30a6e9a87ebef5c9c67236616cd226ae.png";
+import processStepOneImage from "../../../assets/9f6ffebad46d464dd5e391ce71a41f2027994a17.webp";
+import processStepTwoImage from "../../../assets/2691e81d30a6e9a87ebef5c9c67236616cd226ae.webp";
 import processStepThreeImage from "../../../assets/d407dea157c52e067680066f8673e56861aa712d.png";
-import processStepFourImage from "../../../assets/19ee8247f296710692b313a59485eb0258d8e3b8.png";
+import processStepFourImage from "../../../assets/19ee8247f296710692b313a59485eb0258d8e3b8.webp";
 import socialFacebookIcon from "../../../assets/e85560ced236146567089e9e207b21cb74f94c95.png";
 import socialInstagramIcon from "../../../assets/e0029c37d99a6a8e289a793abaaf02984f19717b.png";
 import socialLinkedinIcon from "../../../assets/1c1a20c7d8c2a14e8d97dd68e316412e56d2450f.png";
@@ -47,7 +47,6 @@ import socialTiktokIcon from "../../../assets/7d47dd30db922c5fc58659809a3e1d956b
 import socialWhatsappIcon from "../../../assets/100df1ea0b5537c2a776132fa6b5f2184d8ffc8e.png";
 import socialSnapchatIcon from "../../../assets/ee893046d93b786d05f5b1cb76d451b4f7a0f95c.png";
 import socialPinterestIcon from "../../../assets/9fc2a7e67129638bedcf545812f1b84bbfbdb7c9.png";
-import toolFigmaIcon from "../../../assets/464ced20317afa1aaf01c1b14334b6991902da40.png";
 import toolPhotoshopIcon from "../../../assets/a3de08031b9f85a9f9727b45980157fd6355c073.png";
 import toolIllustratorIcon from "../../../assets/58f77f624371049002598eeb7cdd1d1f5d7a23d1.png";
 import toolWooCommerceIcon from "../../../assets/f16185c3fccdbc09b48f3936735bf25fbd2b91a2.png";
@@ -57,6 +56,7 @@ import toolQuickModeIcon from "../../../assets/6b28e6372b5679aecd6606305bad3b454
 import toolWindowIcon from "../../../assets/3d207c82e4a8ece2497d77ec0e54505c5671a4a7.png";
 import toolShopifyIcon from "../../../assets/cc24a5c5ac0319bdeacf0c74b1781b13e57edb85.png";
 import ActionButton from "../site/ActionButton";
+import HeroBackdrop from "../site/HeroBackdrop";
 import SiteHeader from "../site/SiteHeader";
 import { getFooterLinkTarget } from "../site/footerLinks";
 
@@ -72,7 +72,7 @@ const manifestoPoints = [
     title: "Strateji + Uygulama birlikte",
     description:
       "Sadece strateji hazırlamakla kalmıyor, onu canlıya alıp büyüme ritmine sokuyoruz.",
-    icon: manifestoMockup,
+    icon: manifestoPanelIcon,
   },
   {
     title: "Ölçümleme olmadan iş yapmayız",
@@ -180,7 +180,6 @@ const socialIcons = [
 ];
 
 const toolIcons = [
-  toolFigmaIcon,
   toolPhotoshopIcon,
   toolIllustratorIcon,
   toolShopifyIcon,
@@ -300,11 +299,8 @@ export default function AboutHome() {
         <div className="absolute bottom-[-12rem] left-1/2 h-[24rem] w-[42rem] -translate-x-1/2 rounded-full bg-[#00a2e5]/8 blur-[160px]" />
       </div>
 
-      <section className="relative isolate min-h-[860px] overflow-hidden bg-[#050607]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_34%,rgba(170,255,1,0.16),transparent_30%),radial-gradient(circle_at_76%_28%,rgba(138,56,245,0.18),transparent_30%),linear-gradient(135deg,#050607_0%,#111317_48%,#030405_100%)]" />
-        <div className="absolute left-[-9rem] top-28 h-[28rem] w-[28rem] rounded-full border border-[#aaff01]/18" />
-        <div className="absolute right-[-10rem] top-8 h-[34rem] w-[34rem] rounded-full border border-[#aaff01]/10" />
-        <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#101411] to-transparent" />
+      <section className="relative isolate flex min-h-[860px] items-center justify-center overflow-hidden bg-[#050607]">
+        <HeroBackdrop fadeColor="#101411" />
 
         <header className="hidden">
           <div className="mx-auto flex w-full max-w-[1540px] items-center justify-between gap-6 px-6 py-6 lg:px-10">
@@ -366,7 +362,7 @@ export default function AboutHome() {
             <span className="mx-2 font-semibold text-[#b5ff15]">ölçülebilir büyüme üreten dijital sistemler</span>
             inşa eder.
           </p>
-          <div className="mt-12 flex flex-col gap-4 sm:flex-row">
+          <div className="mt-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <ActionButton accent="lime" className="min-w-[240px]" href="#cta" label="Bizimle Tanışın" />
             <ActionButton accent="violet" className="min-w-[240px]" href="#process" label="Nasıl Çalışıyoruz?" />
           </div>

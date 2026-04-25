@@ -25,6 +25,7 @@ import {
   Youtube,
 } from "lucide-react";
 import ActionButton from "../site/ActionButton";
+import HeroBackdrop from "../site/HeroBackdrop";
 import SiteHeader from "../site/SiteHeader";
 import { getFooterLinkTarget } from "../site/footerLinks";
 
@@ -447,15 +448,12 @@ export default function ContactHome() {
 
   return (
     <div className="min-h-screen bg-[#111317] text-white" id="top">
-      <section className="relative isolate min-h-[940px] overflow-hidden bg-[#050607]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_76%_32%,rgba(170,255,1,0.2),transparent_32%),radial-gradient(circle_at_12%_72%,rgba(138,56,245,0.16),transparent_28%),linear-gradient(135deg,#050607_0%,#111317_46%,#030405_100%)]" />
-        <div className="absolute left-[-9rem] top-28 h-[28rem] w-[28rem] rounded-full border border-[#aaff01]/20" />
-        <div className="absolute right-[-10rem] top-8 h-[34rem] w-[34rem] rounded-full border border-[#aaff01]/10" />
-        <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-[#111317] to-transparent" />
+      <section className="relative isolate flex min-h-[940px] items-center justify-center overflow-hidden bg-[#050607]">
+        <HeroBackdrop fadeColor="#111317" />
         <SiteHeader />
 
-        <div className="relative z-10 mx-auto grid min-h-[790px] w-full max-w-[1540px] items-center gap-14 px-6 pb-24 pt-12 lg:grid-cols-[1fr_0.92fr] lg:px-10">
-          <div>
+        <div className="relative z-10 mx-auto grid min-h-[790px] w-full max-w-[1540px] items-center gap-14 px-6 pb-24 pt-24 text-center lg:grid-cols-[0.92fr_0.88fr] lg:px-10 lg:pt-28 lg:text-left">
+          <div className="mx-auto flex max-w-[760px] flex-col items-center lg:mx-0 lg:items-start">
             <span className="inline-flex items-center gap-2 rounded-full bg-[#aaff01] px-4 py-1.5 text-xs font-extrabold text-[#121212]">
               <MessageCircle className="h-4 w-4" />
               İletişim
@@ -469,7 +467,7 @@ export default function ContactHome() {
               <span className="mx-2 font-extrabold text-[#aaff01]">uygulanabilir dijital yol haritası</span>
               sunalım.
             </p>
-            <div className="mt-10 flex flex-col gap-4 sm:flex-row">
+            <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row lg:justify-start">
               <ActionButton accent="lime" className="min-w-[260px]" href="#contact-form" label="Formu Doldur" />
               <ActionButton accent="violet" className="min-w-[260px]" href="#channels" label="İletişim Kanalları" />
             </div>

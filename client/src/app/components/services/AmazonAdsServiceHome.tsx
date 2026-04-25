@@ -24,15 +24,16 @@ import {
   Youtube,
 } from "lucide-react";
 import ActionButton from "../site/ActionButton";
+import HeroBackdrop from "../site/HeroBackdrop";
 import PackageFeatureBullet from "../site/PackageFeatureBullet";
 import SiteHeader from "../site/SiteHeader";
 import { getFooterLinkTarget } from "../site/footerLinks";
 
 import logoImage from "../../../assets/28d6c1698c390e901d670fea04f3d952314f5313.png";
 import amazonIcon from "../../../assets/c522312a5748c7b7f98f6a7c5116f935fa925f9c.png";
-import dashboardImage from "../../../assets/19ee8247f296710692b313a59485eb0258d8e3b8.png";
-import meetingImage from "../../../assets/9f6ffebad46d464dd5e391ce71a41f2027994a17.png";
-import accountImage from "../../../assets/2691e81d30a6e9a87ebef5c9c67236616cd226ae.png";
+import dashboardImage from "../../../assets/19ee8247f296710692b313a59485eb0258d8e3b8.webp";
+import meetingImage from "../../../assets/9f6ffebad46d464dd5e391ce71a41f2027994a17.webp";
+import accountImage from "../../../assets/2691e81d30a6e9a87ebef5c9c67236616cd226ae.webp";
 import starterPackageIcon from "../../../assets/10b5332e3454775fe1e3e6d7a10d4f5e09ccd17d.png";
 import growthPackageIcon from "../../../assets/2519a3a2e3cc0d11e6fbd9187b747dfca3581898.png";
 import scalePackageIcon from "../../../assets/a5987d169558dd87ca74caf7bcc1512b1706b5e7.png";
@@ -353,14 +354,12 @@ function HeroVisual() {
 
 function HeroSection({ mobileMenuOpen, setMobileMenuOpen }: { mobileMenuOpen: boolean; setMobileMenuOpen: (value: boolean) => void }) {
   return (
-    <section className="relative isolate min-h-[940px] overflow-hidden bg-[#050607]">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_76%_32%,rgba(170,255,1,0.22),transparent_32%),radial-gradient(circle_at_12%_72%,rgba(138,56,245,0.16),transparent_28%),linear-gradient(135deg,#050607_0%,#111317_46%,#030405_100%)]" />
-      <div className="absolute left-[-9rem] top-28 h-[28rem] w-[28rem] rounded-full border border-[#aaff01]/20" />
-      <div className="absolute right-[-10rem] top-8 h-[34rem] w-[34rem] rounded-full border border-[#aaff01]/10" />
+    <section className="relative isolate flex min-h-[940px] items-center justify-center overflow-hidden bg-[#050607]">
+      <HeroBackdrop fadeColor="#111111" />
       <SiteHeader />
 
-      <div className="relative z-10 mx-auto grid min-h-[790px] w-full max-w-[1540px] items-center gap-14 px-6 pb-24 pt-12 lg:grid-cols-[1fr_0.92fr] lg:px-10">
-        <div>
+      <div className="relative z-10 mx-auto grid min-h-[790px] w-full max-w-[1540px] items-center gap-14 px-6 pb-24 pt-24 text-center lg:grid-cols-[0.92fr_0.88fr] lg:px-10 lg:pt-28 lg:text-left">
+        <div className="mx-auto flex max-w-[760px] flex-col items-center lg:mx-0 lg:items-start">
           <span className="inline-flex items-center gap-2 rounded-full bg-[#aaff01] px-4 py-1.5 text-xs font-extrabold text-[#121212]">
             <img alt="" className="h-4 w-4 object-contain" src={amazonIcon} />
             Amazon Ads
@@ -373,7 +372,7 @@ function HeroSection({ mobileMenuOpen, setMobileMenuOpen }: { mobileMenuOpen: bo
             Amazon reklamlarını arama niyeti, ürün sayfası kalitesi, Buy Box durumu ve karlılık metrikleriyle birlikte yönetiyoruz. Hedefimiz tıklama değil;
             <span className="mx-2 font-extrabold text-[#aaff01]">karlı pazar yeri büyümesi.</span>
           </p>
-          <div className="mt-10 flex flex-col gap-4 sm:flex-row">
+          <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row lg:justify-start">
             <ActionButton accent="lime" className="min-w-[260px]" href="#packages" label="Paketleri İncele" />
             <ActionButton accent="violet" className="min-w-[260px]" href="#system" label="Sistemi Gör" />
           </div>
