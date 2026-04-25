@@ -27,6 +27,7 @@ type ServiceMenuGroup = {
 const navItems = [
   { label: "Anasayfa", to: "/" },
   { label: "Hizmetlerimiz", to: "/hizmetler" },
+  { label: "Otomasyonlar", to: "/otomasyonlar" },
   { label: "Çalışmalarımız", to: "/calismalar" },
   { label: "Hakkımızda", to: "/hakkimizda" },
 ];
@@ -37,6 +38,11 @@ const serviceMenuGroups: ServiceMenuGroup[] = [
     label: "Büyüme & Reklam",
     icon: <Megaphone className="h-4 w-4" />,
     links: [
+      {
+        title: "Otomasyonlar",
+        description: "Brand DNA, WhatsApp, DM, görsel ve analiz otomasyonlarını paket sistemine bağlayın.",
+        to: "/otomasyonlar",
+      },
       {
         title: "Growth & Hub",
         description: "Dijital büyüme stratejisi, kanal yönetimi ve ölçümleme sistemi.",

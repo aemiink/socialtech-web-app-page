@@ -5,6 +5,7 @@ type FooterLinkTarget = {
 
 const footerLinkTargets: Record<string, FooterLinkTarget> = {
   Anasayfa: { to: "/" },
+  Otomasyonlar: { to: "/otomasyonlar" },
   "Müşteriler": { to: "/musteriler" },
   "Bize Ulaşın": { to: "/iletisim" },
   "Kariyer & Staj": { to: "/kariyer" },

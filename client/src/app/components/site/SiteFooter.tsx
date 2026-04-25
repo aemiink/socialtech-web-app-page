@@ -6,12 +6,13 @@ import logoImage from "../../../assets/28d6c1698c390e901d670fea04f3d952314f5313.
 import ActionButton from "./ActionButton";
 import { getFooterLinkTarget } from "./footerLinks";
 
-const usefulLinks = ["Anasayfa", "Müşteriler", "Bize Ulaşın", "Kariyer & Staj", "Portfolyo & Projeler", "Bloglar"];
+const usefulLinks = ["Anasayfa", "Otomasyonlar", "Müşteriler", "Bize Ulaşın", "Kariyer & Staj", "Portfolyo & Projeler", "Bloglar"];
 
 const serviceLinks = [
   "Growth & Hub",
   "Sosyal Medya",
   "Dijital Pazarlama",
+  "Otomasyonlar",
   "Web Sitesi Geliştirme",
   "Mobil Uygulama Geliştirme",
   "Reklam Yönetimi",
