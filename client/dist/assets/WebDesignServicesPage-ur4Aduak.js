@@ -1,0 +1,1 @@
+import{j as r}from"./index-C3Aa9Xsw.js";import{L as e}from"./LandingPageServiceHome-DxM_1K-q.js";import"./58f77f624371049002598eeb7cdd1d1f5d7a23d1-B8sewOFy.js";import"./a5987d169558dd87ca74caf7bcc1512b1706b5e7-CmRhxGhj.js";import"./HeroBackdrop-lA8p8nTr.js";import"./PaymentLogos-DfPgzuMU.js";function a(){return r.jsx(e,{})}export{a as default};
