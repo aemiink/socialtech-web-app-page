@@ -41,7 +41,6 @@ import lightningIcon from "../../../assets/6b28e6372b5679aecd6606305bad3b4544d5f
 import customWindowIcon from "../../../assets/3d207c82e4a8ece2497d77ec0e54505c5671a4a7.png";
 import ActionButton from "../site/ActionButton";
 import HeroBackdrop from "../site/HeroBackdrop";
-import SiteHeader from "../site/SiteHeader";
 import { getFooterLinkTarget } from "../site/footerLinks";
 
 const navItems = [
@@ -173,40 +172,6 @@ function SectionHeading({
   );
 }
 
-function FooterLinkColumn({
-  title,
-  links,
-}: {
-  title: string;
-  links: string[];
-}) {
-  return (
-    <div>
-      <h3 className="text-lg font-semibold text-white">{title}</h3>
-      <ul className="mt-6 space-y-3 text-sm text-white/62">
-        {links.map((link, index) => {
-          const target = getFooterLinkTarget(link);
-          const className = index === 3 ? "text-[#b5ff15]" : "transition hover:text-[#b5ff15]";
-
-          return (
-            <li key={link}>
-              {target.to ? (
-                <Link className={className} to={target.to}>
-                  {link}
-                </Link>
-              ) : (
-                <a className={className} href={target.href}>
-                  {link}
-                </a>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
-
 function ValueCard({
   title,
   description,
@@ -241,64 +206,13 @@ function FaqCard({ question, answer }: { question: string; answer: string }) {
 }
 
 export default function WebAppServiceHome() {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-[#111111] text-white" id="top">
-      <SiteHeader />
       <section className="relative isolate flex min-h-[900px] items-center justify-center overflow-hidden bg-[#050607]">
         <HeroBackdrop fadeColor="#111111" />
 
-        <header className="hidden">
-          <div className="mx-auto flex w-full max-w-[1540px] items-center justify-between gap-6 px-6 py-6 lg:px-10">
-            <Link className="shrink-0" to="/">
-              <img alt="Social Tech" className="h-10 w-auto object-contain md:h-12" src={logoImage} />
-            </Link>
-
-            <nav className="hidden items-center gap-10 text-sm lg:flex">
-              {navItems.map((item) => (
-                <Link
-                  key={item.label}
-                  className={item.active ? "text-[#b5ff15]" : "text-white/76 transition hover:text-[#b5ff15]"}
-                  to={item.to}
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
-
-            <div className="hidden items-center gap-3 lg:flex">
-              <ActionButton accent="violet" label="İletişime Geç" to="/iletisim" />
-              <ActionButton accent="lime" label="Giriş Yap" />
-            </div>
-
-            <button
-              className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-white/10 bg-white/5 lg:hidden"
-              onClick={() => setMobileMenuOpen((prev) => !prev)}
-              type="button"
-            >
-              <Menu className="h-5 w-5" />
-            </button>
-          </div>
-
-          {mobileMenuOpen ? (
-            <div className="mx-6 rounded-lg border border-white/10 bg-[#0d1019]/95 p-5 backdrop-blur lg:hidden">
-              <div className="flex flex-col gap-4 text-sm text-white/80">
-                {navItems.map((item) => (
-                  <Link key={item.label} onClick={() => setMobileMenuOpen(false)} to={item.to}>
-                    {item.label}
-                  </Link>
-                ))}
-                <div className="mt-3 flex flex-col gap-3">
-                  <ActionButton accent="violet" label="İletişime Geç" to="/iletisim" />
-                  <ActionButton accent="lime" label="Giriş Yap" />
-                </div>
-              </div>
-            </div>
-          ) : null}
-        </header>
-
-        <div className="relative z-10 mx-auto flex min-h-[760px] w-full max-w-[1540px] flex-col items-center justify-center px-6 pb-24 pt-16 text-center lg:px-10">
+<div className="relative z-10 mx-auto flex min-h-[760px] w-full max-w-[1540px] flex-col items-center justify-center px-6 pb-24 pt-16 text-center lg:px-10">
           <span className="rounded-full bg-[#b5ff15] px-4 py-1 text-xs font-bold text-[#102000]">Web Uygulamaları</span>
           <h1 className="mt-7 max-w-[980px] text-[34px] font-bold leading-tight text-white md:text-[60px]">
             Fikirden Ürüne
@@ -311,8 +225,8 @@ export default function WebAppServiceHome() {
             geliştiriyoruz.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <ActionButton accent="lime" className="min-w-[260px]" href="#footer" label="Ücretsiz Ön Görüşme Planlayın" />
-            <ActionButton accent="violet" className="min-w-[260px]" href="#brief" label="Projenizi Anlatın" />
+            <ActionButton accent="lime" className="min-w-[260px]" to="/iletisim#contact-form" label="Ücretsiz Ön Görüşme Planlayın" />
+            <ActionButton accent="violet" className="min-w-[260px]" to="/iletisim#contact-form" label="Projenizi Anlatın" />
           </div>
         </div>
       </section>
@@ -391,7 +305,7 @@ export default function WebAppServiceHome() {
                 <br />
                 Projenizi Konuşun
               </h2>
-              <ActionButton accent="lime" className="mt-8" href="#footer" label="Ücretsiz Ön Görüşme Planlayın" />
+              <ActionButton accent="lime" className="mt-8" to="/iletisim#contact-form" label="Ücretsiz Ön Görüşme Planlayın" />
             </div>
 
             <div className="rounded-lg bg-[linear-gradient(135deg,#221633_0%,#8a38f5_100%)] p-8">
@@ -432,78 +346,6 @@ export default function WebAppServiceHome() {
         </div>
       </section>
 
-      <footer className="border-t border-white/10 bg-black py-16" id="footer">
-        <div className="mx-auto w-full max-w-[1540px] px-6 lg:px-10">
-          <div className="grid gap-12 xl:grid-cols-[1.1fr_0.6fr_0.8fr_0.95fr]">
-            <div>
-              <img alt="Social Tech" className="h-12 w-auto object-contain" src={logoImage} />
-              <p className="mt-6 max-w-[360px] text-sm leading-7 text-white/64">
-                Pazarlama bütçenizden daha fazla sonuçlar elde etmek istiyorsanız, yeni partneriniz olmak için fazlasıyla hazırız!
-              </p>
-              <div className="mt-6 flex flex-wrap gap-3 text-white/72">
-                <a className="rounded-md border border-white/10 p-2 hover:text-[#b5ff15]" href="#top">
-                  <Facebook className="h-4 w-4" />
-                </a>
-                <a className="rounded-md border border-white/10 p-2 hover:text-[#b5ff15]" href="#top">
-                  <Instagram className="h-4 w-4" />
-                </a>
-                <a className="rounded-md border border-white/10 p-2 hover:text-[#b5ff15]" href="#top">
-                  <Youtube className="h-4 w-4" />
-                </a>
-                <a className="rounded-md border border-white/10 p-2 hover:text-[#b5ff15]" href="#top">
-                  <Linkedin className="h-4 w-4" />
-                </a>
-                <a className="rounded-md border border-white/10 p-2 hover:text-[#b5ff15]" href="#top">
-                  <Mail className="h-4 w-4" />
-                </a>
-                <a className="rounded-md border border-white/10 p-2 hover:text-[#b5ff15]" href="#top">
-                  <X className="h-4 w-4" />
-                </a>
-              </div>
-            </div>
-
-            <FooterLinkColumn
-              links={["Anasayfa", "Müşteriler", "Bize Ulaşın", "Kariyer & Staj", "Portfolyo & Projeler", "Bloglar"]}
-              title="Faydalı Linkler"
-            />
-            <FooterLinkColumn
-              links={["Growth & Hub", "Sosyal Medya", "Dijital Pazarlama", "Web Uygulaması Geliştirme", "Mobil Uygulama Geliştirme", "Reklam Yönetimi", "Web Teknik Destek"]}
-              title="Ürün ve Hizmetler"
-            />
-
-            <div className="flex flex-col gap-4">
-              <ActionButton
-                accent="violet"
-                filled
-                icon={<CalendarDays className="h-4 w-4" />}
-                label="Online Toplantı Planla"
-              />
-              <ActionButton
-                accent="lime"
-                filled
-                icon={<MessageCircle className="h-4 w-4" />}
-                label="WhatsApp Destek Hattı"
-              />
-              <ActionButton
-                accent="cyan"
-                filled
-                icon={<Package2 className="h-4 w-4" />}
-                label="Dijital Yolda Büyüme"
-              />
-            </div>
-          </div>
-
-          <div className="mt-14 flex flex-col gap-4 border-t border-white/10 pt-6 text-xs text-white/38 md:flex-row md:items-center md:justify-between">
-            <p>Copyright © 2025 SOCIAL TECH Reklam ve Teknoloji A.Ş</p>
-            <div className="flex flex-wrap gap-5">
-              <a href="#top">Gizlilik Politikası</a>
-              <a href="#top">Mesafeli Satış Sözleşmesi</a>
-              <a href="#top">K.V.K.K</a>
-              <a href="#top">Çerez Politikası</a>
-            </div>
-          </div>
-        </div>
-      </footer>
-    </div>
+</div>
   );
 }

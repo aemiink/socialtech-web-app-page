@@ -27,7 +27,6 @@ import {
 } from "lucide-react";
 import ActionButton from "../site/ActionButton";
 import HeroBackdrop from "../site/HeroBackdrop";
-import SiteHeader from "../site/SiteHeader";
 import { getFooterLinkTarget } from "../site/footerLinks";
 
 import logoImage from "../../../assets/28d6c1698c390e901d670fea04f3d952314f5313.png";
@@ -226,87 +225,13 @@ function HighlightTitle({
   );
 }
 
-function HeaderNav({
-  active,
-  mobileMenuOpen,
-  setMobileMenuOpen,
-}: {
-  active?: string;
-  mobileMenuOpen: boolean;
-  setMobileMenuOpen: (value: boolean) => void;
-}) {
-  return (
-    <header className="relative z-20">
-      <div className="mx-auto flex w-full max-w-[1540px] items-center justify-between gap-6 px-6 py-6 lg:px-10">
-        <Link className="shrink-0" to="/">
-          <img alt="Social Tech" className="h-10 w-auto object-contain md:h-12" src={logoImage} />
-        </Link>
-
-        <nav className="hidden items-center gap-10 text-sm lg:flex">
-          {navItems.map((item) => (
-            <Link
-              key={item.label}
-              className={
-                item.label === active
-                  ? "text-[#b5ff15]"
-                  : "text-white/76 transition hover:text-[#b5ff15]"
-              }
-              to={item.to}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-
-        <div className="hidden items-center gap-3 lg:flex">
-          <ActionButton accent="violet" label="İletişime Geç" to="/iletisim" />
-          <ActionButton accent="lime" label="Giriş Yap" />
-        </div>
-
-        <button
-          className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/5 lg:hidden"
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          type="button"
-        >
-          {mobileMenuOpen ? <XIcon className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </button>
-      </div>
-
-      {mobileMenuOpen ? (
-        <div className="mx-6 rounded-[18px] border border-white/10 bg-[#0d1019]/95 p-5 backdrop-blur lg:hidden">
-          <div className="flex flex-col gap-4 text-sm text-white/80">
-            {navItems.map((item) => (
-              <Link key={item.label} onClick={() => setMobileMenuOpen(false)} to={item.to}>
-                {item.label}
-              </Link>
-            ))}
-            <div className="mt-3 flex flex-col gap-3">
-              <ActionButton accent="violet" label="İletişime Geç" to="/iletisim" />
-              <ActionButton accent="lime" label="Giriş Yap" />
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </header>
-  );
-}
-
-function HeroSection({
-  kind,
-  mobileMenuOpen,
-  setMobileMenuOpen,
-}: {
-  kind: PageKind;
-  mobileMenuOpen: boolean;
-  setMobileMenuOpen: (value: boolean) => void;
-}) {
+function HeroSection({ kind }: { kind: PageKind }) {
   const isCareer = kind === "career";
   const isCustomers = kind === "customers";
 
   return (
     <section className="relative isolate flex min-h-[760px] items-center justify-center overflow-hidden bg-[#050607] md:min-h-[880px]">
       <HeroBackdrop fadeColor="#17191b" />
-      <SiteHeader />
 
       <div className="relative z-10 mx-auto flex min-h-[640px] w-full max-w-[1540px] flex-col items-center justify-center px-6 pb-20 pt-16 text-center lg:px-10">
         {isCareer ? (
@@ -348,7 +273,7 @@ function HeroSection({
             </div>
             <div className="mt-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <ActionButton accent="violet" className="min-w-[260px]" to="/calismalar" label="Projeleri İncele" />
-              <ActionButton accent="lime" className="min-w-[260px]" href="#footer" label="Bizimle Çalışın" />
+              <ActionButton accent="lime" className="min-w-[260px]" to="/iletisim#contact-form" label="Bizimle Çalışın" />
             </div>
           </>
         ) : (
@@ -365,124 +290,12 @@ function HeroSection({
             </p>
             <div className="mt-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <ActionButton accent="violet" className="min-w-[260px]" href="#case-list" label="Projeleri İncele" />
-              <ActionButton accent="lime" className="min-w-[260px]" href="#footer" label="Bizimle Çalışın" />
+              <ActionButton accent="lime" className="min-w-[260px]" to="/iletisim#contact-form" label="Bizimle Çalışın" />
             </div>
           </>
         )}
       </div>
     </section>
-  );
-}
-
-function FooterLinkColumn({
-  title,
-  links,
-  activeIndex = 0,
-}: {
-  title: string;
-  links: string[];
-  activeIndex?: number;
-}) {
-  return (
-    <div>
-      <h3 className="text-lg font-semibold text-white">{title}</h3>
-      <ul className="mt-6 space-y-3 text-sm text-white/62">
-        {links.map((link, index) => {
-          const target = getFooterLinkTarget(link);
-          const className = index === activeIndex ? "text-[#b5ff15]" : "transition hover:text-[#b5ff15]";
-
-          return (
-            <li key={link}>
-              {target.to ? (
-                <Link className={className} to={target.to}>
-                  {link}
-                </Link>
-              ) : (
-                <a className={className} href={target.href}>
-                  {link}
-                </a>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
-
-function SocialIconLink({ children }: { children: ReactNode }) {
-  return (
-    <a className="rounded-md border border-white/10 p-2 text-white/72 transition hover:text-[#b5ff15]" href="#top">
-      {children}
-    </a>
-  );
-}
-
-function SharedFooter({ activeLinkIndex = 0 }: { activeLinkIndex?: number }) {
-  return (
-    <footer className="border-t border-white/10 bg-black py-16" id="footer">
-      <div className="mx-auto w-full max-w-[1540px] px-6 lg:px-10">
-        <div className="grid gap-12 xl:grid-cols-[1.1fr_0.6fr_0.8fr_0.95fr]">
-          <div>
-            <img alt="Social Tech" className="h-12 w-auto object-contain" src={logoImage} />
-            <p className="mt-6 max-w-[360px] text-sm leading-7 text-white/64">
-              Pazarlama bütçenizden daha fazla sonuçlar elde etmek istiyorsanız, yeni partneriniz olmak için fazlasıyla hazırız!
-            </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <SocialIconLink>
-                <Facebook className="h-4 w-4" />
-              </SocialIconLink>
-              <SocialIconLink>
-                <Instagram className="h-4 w-4" />
-              </SocialIconLink>
-              <SocialIconLink>
-                <XIcon className="h-4 w-4" />
-              </SocialIconLink>
-              <SocialIconLink>
-                <Linkedin className="h-4 w-4" />
-              </SocialIconLink>
-              <SocialIconLink>
-                <Mail className="h-4 w-4" />
-              </SocialIconLink>
-            </div>
-          </div>
-
-          <FooterLinkColumn
-            activeIndex={activeLinkIndex}
-            links={["Anasayfa", "Müşteriler", "Bize Ulaşın", "Kariyer & Staj", "Portfolyo & Projeler", "Bloglar"]}
-            title="Faydalı Linkler"
-          />
-          <FooterLinkColumn
-            links={[
-              "Growth & Hub",
-              "Sosyal Medya",
-              "Dijital Pazarlama",
-              "Web Sitesi Geliştirme",
-              "Mobil Uygulama Geliştirme",
-              "Reklam Yönetimi",
-              "Web Teknik Destek",
-            ]}
-            title="Ürün ve Hizmetler"
-          />
-
-          <div className="flex flex-col gap-4">
-            <ActionButton accent="violet" filled icon={<CalendarDays className="h-4 w-4" />} label="Online Toplantı Planla" />
-            <ActionButton accent="lime" filled icon={<MessageCircle className="h-4 w-4" />} label="WhatsApp Destek Hattı" />
-            <ActionButton accent="cyan" filled icon={<Package2 className="h-4 w-4" />} label="Dijital Yolda Büyüme" />
-          </div>
-        </div>
-
-        <div className="mt-14 flex flex-col gap-4 border-t border-white/10 pt-6 text-xs text-white/38 md:flex-row md:items-center md:justify-between">
-          <p>Copyright © 2025 SOCIAL TECH Reklam ve Teknoloji A.Ş</p>
-          <div className="flex flex-wrap gap-5">
-            <a href="#top">Gizlilik Politikası</a>
-            <a href="#top">Mesafeli Satış Sözleşmesi</a>
-            <a href="#top">K.V.K.K</a>
-            <a href="#top">Çerez Politikası</a>
-          </div>
-        </div>
-      </div>
-    </footer>
   );
 }
 
@@ -498,7 +311,7 @@ function CtaBand({ accent = "lime" }: { accent?: "lime" | "violet" }) {
         <HighlightTitle accent={accent} center highlight="Hazır mısınız?" prefix="Bizimle Çalışmaya" />
         <p className="mt-6 text-lg text-white/86">Sizi tanımadan teklif sunmuyoruz. Önce dinliyor, sonra çözüyoruz.</p>
         <div className="mt-10 flex flex-col justify-center gap-4 sm:flex-row">
-          <ActionButton accent={accent === "violet" ? "violet" : "lime"} className="min-w-[260px]" href="#footer" label="Ücretsiz Ön Görüşme" />
+          <ActionButton accent={accent === "violet" ? "violet" : "lime"} className="min-w-[260px]" to="/iletisim#contact-form" label="Ücretsiz Ön Görüşme" />
           <ActionButton accent="violet" className="min-w-[260px]" to="/hizmetler" label="Hizmetleri İncele" />
         </div>
       </div>
@@ -507,11 +320,10 @@ function CtaBand({ accent = "lime" }: { accent?: "lime" | "violet" }) {
 }
 
 function CareerHome() {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-[#121416] text-white" id="top">
-      <HeroSection kind="career" mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} />
+      <HeroSection kind="career" />
 
       <section className="bg-[#151719] py-24" id="culture">
         <div className="mx-auto w-full max-w-[1540px] px-6 lg:px-10">
@@ -597,7 +409,6 @@ function CareerHome() {
       </section>
 
       <CtaBand />
-      <SharedFooter activeLinkIndex={3} />
     </div>
   );
 }
@@ -650,11 +461,10 @@ function BlogSidebar({ tone = "lime" }: { tone?: "lime" | "cyan" }) {
 }
 
 function CaseStudyHome() {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-[#191b1d] text-white" id="top">
-      <HeroSection kind="case-study" mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} />
+      <HeroSection kind="case-study" />
 
       <main className="bg-[#1a1c1e] py-24" id="case-list">
         <div className="mx-auto w-full max-w-[1540px] px-6 lg:px-10">
@@ -703,7 +513,6 @@ function CaseStudyHome() {
         </div>
       </main>
 
-      <SharedFooter activeLinkIndex={4} />
     </div>
   );
 }
@@ -729,12 +538,11 @@ SELECT * FROM orders INTO TABLE lt_orders
 }
 
 function CaseStudyDetailsHome() {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const title = blogPosts[0].title;
 
   return (
     <div className="min-h-screen bg-[#17191b] text-white" id="top">
-      <HeroSection kind="case-detail" mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} />
+      <HeroSection kind="case-detail" />
 
       <main className="bg-[#17191b] py-24">
         <div className="mx-auto grid w-full max-w-[1540px] gap-14 px-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:px-10">
@@ -813,7 +621,6 @@ function CaseStudyDetailsHome() {
         </div>
       </main>
 
-      <SharedFooter activeLinkIndex={4} />
     </div>
   );
 }
@@ -937,16 +744,14 @@ function StructureSection() {
 }
 
 function CustomersHome() {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-[#111317] text-white" id="top">
-      <HeroSection kind="customers" mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} />
+      <HeroSection kind="customers" />
       <BrandShowcase />
       <TestimonialsSection />
       <StructureSection />
       <CtaBand accent="violet" />
-      <SharedFooter activeLinkIndex={1} />
     </div>
   );
 }

@@ -218,7 +218,7 @@ export default function SiteHeader() {
         </nav>
 
         <div className="hidden items-center gap-3 lg:flex">
-          <ActionButton accent="violet" label="İletişime Geç" to="/iletisim" />
+          <ActionButton accent="violet" label="İletişime Geç" to="/iletisim#contact-form" />
           <ActionButton accent="lime" label="Giriş Yap" />
         </div>
 
@@ -306,7 +306,7 @@ export default function SiteHeader() {
               );
             })}
             <div className="mt-3 flex flex-col gap-3">
-              <ActionButton accent="violet" label="İletişime Geç" to="/iletisim" />
+              <ActionButton accent="violet" label="İletişime Geç" to="/iletisim#contact-form" />
               <ActionButton accent="lime" label="Giriş Yap" />
             </div>
           </div>

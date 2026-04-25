@@ -21,7 +21,6 @@ import ActionButton from "../site/ActionButton";
 import HeroBackdrop from "../site/HeroBackdrop";
 import PackageFeatureBullet from "../site/PackageFeatureBullet";
 import PaymentLogos from "../site/PaymentLogos";
-import SiteHeader from "../site/SiteHeader";
 import { getFooterLinkTarget } from "../site/footerLinks";
 
 import logoImage from "../../../assets/28d6c1698c390e901d670fea04f3d952314f5313.png";
@@ -267,7 +266,7 @@ function PackageCard({ pack }: { pack: (typeof packages)[number] }) {
       <ActionButton
         accent={pack.accent === "violet" ? "violet" : pack.accent === "cyan" ? "cyan" : "lime"}
         className={`mt-7 w-full justify-center ${palette.button}`}
-        href="#footer"
+        to="/iletisim#contact-form"
         label={pack.cta}
       />
       <ul className="mt-9 space-y-4">
@@ -282,74 +281,9 @@ function PackageCard({ pack }: { pack: (typeof packages)[number] }) {
   );
 }
 
-function FooterLinkColumn({ title, links }: { title: string; links: string[] }) {
-  return (
-    <div>
-      <h4 className="text-sm font-extrabold text-white">{title}</h4>
-      <div className="mt-6 flex flex-col gap-3 text-sm text-white/55">
-        {links.map((link) => {
-          const target = getFooterLinkTarget(link);
-          const className = "transition hover:text-[#aaff01]";
-
-          return target.to ? (
-            <Link className={className} key={link} to={target.to}>
-              {link}
-            </Link>
-          ) : (
-            <a className={className} href={target.href} key={link}>
-              {link}
-            </a>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function SharedFooter() {
-  return (
-    <footer className="border-t border-white/10 bg-black py-14" id="footer">
-      <div className="mx-auto w-full max-w-[1540px] px-6 lg:px-10">
-        <div className="grid gap-12 lg:grid-cols-[1.35fr_0.8fr_0.9fr_0.9fr]">
-          <div>
-            <img alt="Social Tech" className="h-12 w-auto" src={logoImage} />
-            <p className="mt-7 max-w-[360px] text-sm leading-7 text-white/55">
-              Pazarlama bütçenizden daha fazla sonuç almak için teknoloji, tasarım ve büyüme sistemlerini birlikte kuruyoruz.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-3 text-white/72">
-              {[Linkedin, Instagram, Youtube, Facebook, Mail].map((Icon, index) => (
-                <a className="rounded-md border border-white/10 p-2 transition hover:text-[#aaff01]" href="#top" key={index}>
-                  <Icon className="h-4 w-4" />
-                </a>
-              ))}
-            </div>
-          </div>
-          <FooterLinkColumn links={["Anasayfa", "Müşteriler", "Bize Ulaşın", "Kariyer & Staj", "Portfolyo & Projeler", "Bloglar"]} title="Faydalı Linkler" />
-          <FooterLinkColumn links={["Growth & Hub", "Sosyal Medya", "Dijital Pazarlama", "Web Uygulaması Geliştirme", "Mobil Uygulama Geliştirme", "Web Teknik Destek"]} title="Ürün ve Hizmetler" />
-          <div className="flex flex-col gap-4">
-            <ActionButton accent="violet" label="Online Toplantı Planla" />
-            <ActionButton accent="lime" label="WhatsApp Destek Hattı" />
-            <ActionButton accent="cyan" label="Dijital Yolda Büyüme" />
-          </div>
-        </div>
-        <div className="mt-14 flex flex-col gap-4 border-t border-white/10 pt-6 text-xs text-white/38 md:flex-row md:items-center md:justify-between">
-          <p>Copyright © 2025 SOCIAL TECH Reklam ve Teknoloji A.Ş</p>
-          <div className="flex flex-wrap gap-5">
-            <a href="#top">Gizlilik Politikası</a>
-            <a href="#top">Mesafeli Satış Sözleşmesi</a>
-            <a href="#top">K.V.K.K</a>
-            <a href="#top">Çerez Politikası</a>
-          </div>
-        </div>
-      </div>
-    </footer>
-  );
-}
-
 export default function MobileAppServiceHome() {
   return (
     <div className="min-h-screen bg-[#111317] text-white" id="top">
-      <SiteHeader />
       <section className="relative isolate flex min-h-[940px] items-center justify-center overflow-hidden bg-[#050607]">
         <HeroBackdrop fadeColor="#111317" />
 
@@ -433,9 +367,9 @@ export default function MobileAppServiceHome() {
           </div>
           <p className="mx-auto mt-12 max-w-[920px] text-center text-lg font-semibold leading-8 text-white/78">
             Eğer hangi paket size uygun bilmiyorsanız hemen
-            <a className="mx-2 font-black text-[#aaff01] underline" href="#footer">
+            <Link className="mx-2 font-black text-[#aaff01] underline" to="/iletisim#contact-form">
               formu
-            </a>
+            </Link>
             doldurun, beraber karar verelim.
           </p>
         </div>
@@ -451,13 +385,12 @@ export default function MobileAppServiceHome() {
             Sizi tanımadan teklif sunmuyoruz. Önce fikri, kullanıcıyı ve minimum canlıya çıkış kapsamını konuşuyoruz.
           </p>
           <div className="mt-10 flex flex-col justify-center gap-4 sm:flex-row">
-            <ActionButton accent="violet" className="min-w-[240px]" to="/iletisim" label="Ücretsiz Ön Görüşme" />
+            <ActionButton accent="violet" className="min-w-[240px]" to="/iletisim#contact-form" label="Ücretsiz Ön Görüşme" />
             <ActionButton accent="lime" className="min-w-[240px]" href="#packages" label="Paketleri İncele" />
           </div>
         </div>
       </section>
 
-      <SharedFooter />
     </div>
   );
 }
