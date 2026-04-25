@@ -459,7 +459,7 @@ export default function ContactHome() {
               İletişim
             </span>
             <h1 className="mt-7 max-w-[860px] text-[40px] font-medium leading-tight tracking-tight text-white md:text-[68px]">
-              Bir form doldurmayın,
+              İletişime geçin,
               <span className="block font-extrabold text-[#aaff01]">büyüme sisteminizi konuşalım.</span>
             </h1>
             <p className="mt-8 max-w-[760px] text-lg leading-8 text-white/76 md:text-xl">
