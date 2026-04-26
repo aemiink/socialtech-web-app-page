@@ -1,11 +1,21 @@
+# Social Tech Client
 
-  # Sayfa kodlama ve düzenleme
+Bu klasor Social Tech Web App'in Vite + React client uygulamasidir.
 
-  This is a code bundle for Sayfa kodlama ve düzenleme. The original project is available at https://www.figma.com/design/seNA6QGgug4BBnAjY3pfPE/Sayfa-kodlama-ve-d%C3%BCzenleme.
+Ana proje dokumantasyonu icin root seviyedeki `../README.md` dosyasina bakiniz.
 
-  ## Running the code
+## Komutlar
 
-  Run `npm i` to install the dependencies.
+```bash
+npm install
+npm run dev
+npm run build
+```
 
-  Run `npm run dev` to start the development server.
-  
+## Ana Dosyalar
+
+- `src/main.tsx`: React uygulamasinin giris noktasi.
+- `src/app/App.tsx`: RouterProvider ve scroll davranisi.
+- `src/app/routes.tsx`: Tum route haritasi.
+- `src/app/components`: Feature, layout, site ve UI componentleri.
+- `src/styles`: Global font, theme ve Tailwind girisleri.
