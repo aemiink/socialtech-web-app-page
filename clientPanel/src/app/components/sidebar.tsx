@@ -2,23 +2,23 @@ import {
   LayoutDashboard, BarChart3, Calendar, CreditCard, Settings, LogOut, ChevronLeft, ChevronRight, ArrowLeft,
   TrendingUp, Target, Layers, CheckSquare, Zap, MessageSquare, FileText, Eye, Users, Megaphone,
   Search, Image, Cpu, Smartphone, Code, FileCode, Palette, Wrench, AlertCircle, Activity,
-  Package, Hash, Video, DollarSign, Grid, ShoppingCart, PlayCircle
+  Package, Hash, Video, DollarSign, Grid, ShoppingCart, PlayCircle, LucideIcon
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useState } from 'react';
-import { runClientAction } from '../lib/client-actions';
 
 interface SidebarProps {
   currentPage: string;
   onPageChange: (page: string) => void;
   selectedService?: string | null;
   onBackToServices?: () => void;
+  onLogout: () => void;
 }
 
 interface MenuItem {
   id: string;
   label: string;
-  icon: any;
+  icon: LucideIcon;
 }
 
 const serviceLabels: Record<string, string> = {
@@ -182,7 +182,7 @@ const sharedBottomItems: MenuItem[] = [
   { id: 'settings', label: 'Ayarlar', icon: Settings },
 ];
 
-export function Sidebar({ currentPage, onPageChange, selectedService, onBackToServices }: SidebarProps) {
+export function Sidebar({ currentPage, onPageChange, selectedService, onBackToServices, onLogout }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const serviceSpecificItems = selectedService ? serviceMenuItems[selectedService] || [] : [];
@@ -287,12 +287,12 @@ export function Sidebar({ currentPage, onPageChange, selectedService, onBackToSe
 
       <div className="p-4 border-t border-white/[0.08]">
         <button
-        onClick={() => runClientAction('Çıkış Yap', 'generic')}
-        className={cn(
-          "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-[#A0A0A0] hover:bg-white/[0.05] hover:text-white transition-all",
-          isCollapsed && "justify-center"
-        )}
-        title={isCollapsed ? "Çıkış Yap" : undefined}
+          onClick={onLogout}
+          className={cn(
+            "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-[#A0A0A0] hover:bg-white/[0.05] hover:text-white transition-all",
+            isCollapsed && "justify-center"
+          )}
+          title={isCollapsed ? "Çıkış Yap" : undefined}
         >
           <LogOut className="w-5 h-5 flex-shrink-0" />
           {!isCollapsed && <span className="text-sm">Çıkış Yap</span>}

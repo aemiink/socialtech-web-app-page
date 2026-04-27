@@ -1,10 +1,10 @@
-import { Outlet, Link, useLocation, Navigate } from "react-router";
+import { Outlet, Link, useLocation, Navigate, useNavigate } from "react-router";
 import { useRole, EmployeeRole } from "../contexts/RoleContext";
 import {
   LayoutDashboard, CheckSquare, Users, Calendar, Bell, Folder, Settings,
   FileText, ThumbsUp, UserCheck, FolderKanban, TrendingUp, Zap, Image,
   MessageSquare, BookOpen, Code, Bug, Rocket, Headphones, Wrench, Shield,
-  Search as SearchIcon, BarChart, Globe, Search, Plus
+  Search as SearchIcon, BarChart, Globe, Search, Plus, LogOut, LucideIcon
 } from "lucide-react";
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
@@ -14,7 +14,7 @@ import { Avatar, AvatarFallback } from "../components/ui/avatar";
 type SidebarItem = {
   path: string;
   label: string;
-  icon: any;
+  icon: LucideIcon;
 };
 
 const roleMenus: Record<EmployeeRole, SidebarItem[]> = {
@@ -148,14 +148,28 @@ const roleNames: Record<EmployeeRole, string> = {
 };
 
 export function EmployeeLayout() {
-  const { selectedRole } = useRole();
+  const { selectedRole, currentUser, logout } = useRole();
   const location = useLocation();
+  const navigate = useNavigate();
+
+  if (!currentUser) {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  }
+
+  if (currentUser.accountType !== "employee") {
+    return <Navigate to="/" replace />;
+  }
 
   if (!selectedRole) {
-    return <Navigate to="/employee/login" replace />;
+    return <Navigate to="/login" replace />;
   }
 
   const menuItems = roleMenus[selectedRole] || [];
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login", { replace: true });
+  };
 
   return (
     <div className="flex h-screen bg-[#131313] text-white">
@@ -219,9 +233,22 @@ export function EmployeeLayout() {
               <span className="absolute top-1 right-1 w-2 h-2 bg-[#AAFF01] rounded-full" />
             </button>
 
+            <Button
+              variant="ghost"
+              onClick={handleLogout}
+              className="h-9 rounded-lg text-[#A0A0A0] hover:bg-[#1A1A1A] hover:text-white"
+            >
+              <LogOut className="w-4 h-4" />
+              Çıkış
+            </Button>
+
             <div className="flex items-center gap-3 pl-4 border-l border-white/[0.06]">
+              <div className="text-right">
+                <p className="text-sm text-white">{currentUser.name}</p>
+                <p className="text-xs text-[#A0A0A0]">{currentUser.email}</p>
+              </div>
               <Avatar className="w-9 h-9 bg-[#AAFF01] text-[#131313]">
-                <AvatarFallback>ST</AvatarFallback>
+                <AvatarFallback>{currentUser.initials}</AvatarFallback>
               </Avatar>
             </div>
           </div>

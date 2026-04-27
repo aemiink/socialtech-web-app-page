@@ -1,5 +1,6 @@
-import { createBrowserRouter } from "react-router";
+import { createBrowserRouter, Navigate } from "react-router";
 import { RootLayout } from "./components/RootLayout";
+import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
 import { Clients } from "./pages/Clients";
 import { ClientDetail } from "./pages/ClientDetail";
@@ -22,7 +23,6 @@ import { Automations } from "./pages/Automations";
 import { Settings } from "./pages/Settings";
 
 import { EmployeeLayout } from "./employee/EmployeeLayout";
-import { RoleAccessLogin } from "./employee/RoleAccessLogin";
 import { EmployeeDashboard } from "./employee/dashboards/EmployeeDashboard";
 import { Gorevlerim } from "./employee/pages/Gorevlerim";
 import { Musterilerim } from "./employee/pages/Musterilerim";
@@ -71,7 +71,15 @@ import { IndexDurumu } from "./employee/pages/IndexDurumu";
 import { SearchConsole } from "./employee/pages/SearchConsole";
 import { AksiyonPlani } from "./employee/pages/AksiyonPlani";
 
+function LoginRedirect() {
+  return <Navigate to="/login" replace />;
+}
+
 export const router = createBrowserRouter([
+  {
+    path: "/login",
+    Component: Login,
+  },
   {
     path: "/",
     Component: RootLayout,
@@ -100,12 +108,13 @@ export const router = createBrowserRouter([
   },
   {
     path: "/employee/login",
-    Component: RoleAccessLogin,
+    Component: LoginRedirect,
   },
   {
     path: "/employee",
     Component: EmployeeLayout,
     children: [
+      { index: true, element: <Navigate to="dashboard" replace /> },
       { path: "dashboard", Component: EmployeeDashboard },
       { path: "gorevlerim", Component: Gorevlerim },
       { path: "musterilerim", Component: Musterilerim },

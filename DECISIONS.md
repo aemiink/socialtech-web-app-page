@@ -93,3 +93,32 @@ This is an internal dashboard/panel tool. SPA with client-side routing is suffic
 Affected files:
 - `adminandemployeePanel/vite.config.ts`
 - `adminandemployeePanel/src/app/routes.tsx`
+
+---
+
+## 2026-04-28 - Demo Login Flow for Admin, Employee, and Client Portal
+
+Context:
+Admin + Employee Panel and Client Portal needed realistic login screens, but the project still has no backend, API, JWT, session, or database layer.
+
+Decision:
+Implemented frontend-only demo login flows inside the existing Vite + React SPAs. Admin and employee users authenticate through a shared `/login` screen in `adminandemployeePanel/`; demo role/account type comes from a static email map in `RoleContext.tsx`. Client Portal uses a separate frontend demo login gate in `clientPanel/` before the existing service selection flow. Demo auth state is browser-local and should be replaced by real JWT/session-backed auth later.
+
+This supersedes the earlier demo role-picker flow for active navigation.
+
+Reason:
+This provides a realistic premium login experience without changing the current SPA architecture or introducing backend infrastructure prematurely.
+
+Affected files:
+- `adminandemployeePanel/src/app/contexts/RoleContext.tsx`
+- `adminandemployeePanel/src/app/pages/Login.tsx`
+- `adminandemployeePanel/src/app/routes.tsx`
+- `adminandemployeePanel/src/app/components/RootLayout.tsx`
+- `adminandemployeePanel/src/app/employee/EmployeeLayout.tsx`
+- `adminandemployeePanel/src/app/employee/dashboards/EmployeeDashboard.tsx`
+- `adminandemployeePanel/src/app/employee/RoleAccessLogin.tsx`
+- `clientPanel/src/app/App.tsx`
+- `clientPanel/src/app/components/client-login.tsx`
+- `clientPanel/src/app/components/sidebar.tsx`
+- `clientPanel/src/app/components/topbar.tsx`
+- `clientPanel/src/app/pages/service-selection.tsx`

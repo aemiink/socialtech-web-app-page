@@ -7,11 +7,11 @@
 
 ## Planned
 
-- Real authentication system (JWT, sessions, or OAuth) — currently demo-only role picker
+- Real authentication system (JWT, sessions, or OAuth) — currently frontend-only demo login state
 - Backend / API layer — all data is currently mock static arrays
 - Database integration — no schema or ORM exists yet
 - Persistent role/session storage (localStorage or server session)
-- TypeScript strict mode enforcement — `any` types present in EmployeeLayout (icon type)
+- TypeScript strict mode enforcement — no dedicated typecheck script exists yet
 - Lint and typecheck scripts in package.json
 - Test infrastructure (no tests exist)
 
@@ -30,6 +30,7 @@ None identified.
 - Shared project memory files (PROJECT_CONTEXT.md, REPO_MAP.md, DECISIONS.md, ROAD_MAP.md)
 - Client Portal structure mapped: standalone Vite + React SPA at `clientPanel/`, with state-based in-app navigation, service selection, 13 service dashboards, shared reports/meetings/billing/settings pages, mock service data, and local action history
 - Employee Panel page content: All 37 previously placeholder employee pages filled with realistic, role-appropriate Social Tech agency content (KPI cards, tables, status badges, mock data, action buttons). Pages covered: Projeler, Onaylar, Teslimatlar, Toplantilar, RaporTakibi, Kampanyalar, Optimizasyonlar, KreatifTalepleri, PixelTracking, RaporNotlari, IcerikTakvimi, Captionlar, OnayBekleyenler, YayinAkisi, DmYorumlar, TrendNotlari, Kreatifler, UITasarimlar, Revizyonlar, TeslimDosyalari, MarkaDosyalari, Sprintler, Frontend, BackendAPI, Buglar, TestYayin, DestekTalepleri, AcikIsler, CozulenIsler, Bakim, Guvenlik, Yedekleme, Guncellemeler, SEOAudit, TeknikHatalar, AnahtarKelimeler, SayfaHizi, IndexDurumu, SearchConsole, AksiyonPlani
+- Demo login flows completed for Admin Panel, Employee Panel, and Client Portal. Real authentication remains planned.
 
 ## Blocked
 

@@ -1,5 +1,11 @@
+import { LogOut } from 'lucide-react';
+
 interface TopbarProps {
   selectedService?: string | null;
+  clientName: string;
+  companyName: string;
+  initials: string;
+  onLogout: () => void;
 }
 
 const serviceLabels: Record<string, string> = {
@@ -18,7 +24,7 @@ const serviceLabels: Record<string, string> = {
   'seo-audit': 'SEO Denetimi',
 };
 
-export function Topbar({ selectedService }: TopbarProps) {
+export function Topbar({ selectedService, clientName, companyName, initials, onLogout }: TopbarProps) {
   return (
     <div className="h-20 bg-[#131313] border-b border-white/[0.08] px-8 flex items-center justify-between">
       <div className="flex items-center gap-4">
@@ -33,13 +39,21 @@ export function Topbar({ selectedService }: TopbarProps) {
       </div>
 
       <div className="flex items-center gap-4">
+        <button
+          type="button"
+          onClick={onLogout}
+          className="flex h-10 items-center gap-2 rounded-xl border border-white/[0.08] px-3 text-sm text-[#A0A0A0] transition-all hover:border-[#AAFF01]/30 hover:text-white"
+        >
+          <LogOut className="h-4 w-4" />
+          Çıkış
+        </button>
         <div className="flex items-center gap-3">
           <div className="text-right">
-            <div className="text-sm text-white">Ahmet Yılmaz</div>
-            <div className="text-xs text-[#A0A0A0]">Acme E-ticaret</div>
+            <div className="text-sm text-white">{clientName}</div>
+            <div className="text-xs text-[#A0A0A0]">{companyName}</div>
           </div>
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#AAFF01] to-[#7B61FF] flex items-center justify-center">
-            <span className="text-black">AY</span>
+            <span className="text-black">{initials}</span>
           </div>
         </div>
       </div>

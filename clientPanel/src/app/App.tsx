@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Sidebar } from './components/sidebar';
 import { Topbar } from './components/topbar';
 import { ClientActionCenter } from './components/client-action-center';
+import { ClientLogin, DemoClient } from './components/client-login';
 import { ServiceSelectionPage } from './pages/service-selection';
 import { ReportsPage } from './pages/reports';
 import { MeetingsPage } from './pages/meetings';
@@ -22,9 +23,41 @@ import { LandingPagesDashboard } from './pages/services/landing-pages-dashboard'
 import { WebMobileDesignDashboard } from './pages/services/web-mobile-design-dashboard';
 import { ServiceTabPage } from './pages/service-tab-page';
 
+const CLIENT_AUTH_STORAGE_KEY = 'socialtech-client-demo-auth';
+
+const DEMO_CLIENT: DemoClient = {
+  email: 'client@socialtech.com',
+  password: 'demo123',
+  name: 'Ahmet Yılmaz',
+  company: 'Acme E-ticaret',
+  initials: 'AY',
+};
+
 export default function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(() => readClientAuth());
   const [selectedService, setSelectedService] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState('overview');
+
+  const handleLogin = (email: string, password: string) => {
+    const isValid =
+      email.trim().toLowerCase() === DEMO_CLIENT.email &&
+      password === DEMO_CLIENT.password;
+
+    if (!isValid) return false;
+
+    setIsAuthenticated(true);
+    writeClientAuth();
+
+    return true;
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setSelectedService(null);
+    setCurrentPage('overview');
+
+    removeClientAuth();
+  };
 
   const handleServiceSelect = (serviceId: string) => {
     setSelectedService(serviceId);
@@ -79,8 +112,19 @@ export default function App() {
     return <ServiceTabPage serviceId={selectedService || 'growth-hub'} tabId={currentPage} />;
   };
 
+  if (!isAuthenticated) {
+    return <ClientLogin demoClient={DEMO_CLIENT} onLogin={handleLogin} />;
+  }
+
   if (!selectedService) {
-    return <ServiceSelectionPage onServiceSelect={handleServiceSelect} />;
+    return (
+      <ServiceSelectionPage
+        onServiceSelect={handleServiceSelect}
+        onLogout={handleLogout}
+        clientName={DEMO_CLIENT.name}
+        companyName={DEMO_CLIENT.company}
+      />
+    );
   }
 
   return (
@@ -90,9 +134,16 @@ export default function App() {
         onPageChange={setCurrentPage}
         selectedService={selectedService}
         onBackToServices={handleBackToServices}
+        onLogout={handleLogout}
       />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Topbar selectedService={selectedService} />
+        <Topbar
+          selectedService={selectedService}
+          clientName={DEMO_CLIENT.name}
+          companyName={DEMO_CLIENT.company}
+          initials={DEMO_CLIENT.initials}
+          onLogout={handleLogout}
+        />
         <main className="flex-1 overflow-y-auto">
           {renderContent()}
         </main>
@@ -100,4 +151,35 @@ export default function App() {
       </div>
     </div>
   );
+}
+
+function readClientAuth() {
+  if (typeof window === 'undefined') return false;
+
+  try {
+    return window.localStorage.getItem(CLIENT_AUTH_STORAGE_KEY) === DEMO_CLIENT.email;
+  } catch {
+    removeClientAuth();
+    return false;
+  }
+}
+
+function writeClientAuth() {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.setItem(CLIENT_AUTH_STORAGE_KEY, DEMO_CLIENT.email);
+  } catch {
+    // Demo auth can continue in memory if browser storage is unavailable.
+  }
+}
+
+function removeClientAuth() {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.removeItem(CLIENT_AUTH_STORAGE_KEY);
+  } catch {
+    // Ignore storage errors for frontend-only demo auth.
+  }
 }

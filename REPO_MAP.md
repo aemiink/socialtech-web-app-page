@@ -18,7 +18,8 @@ Location: `adminandemployeePanel/`
 - Entry: `adminandemployeePanel/src/main.tsx`
 - App root: `adminandemployeePanel/src/app/App.tsx`
 - Router: `adminandemployeePanel/src/app/routes.tsx`
-- Admin layout: `adminandemployeePanel/src/app/layouts/RootLayout.tsx`
+- Login page: `adminandemployeePanel/src/app/pages/Login.tsx`
+- Admin layout: `adminandemployeePanel/src/app/components/RootLayout.tsx`
 - Employee layout: `adminandemployeePanel/src/app/employee/EmployeeLayout.tsx`
 - Role context: `adminandemployeePanel/src/app/contexts/RoleContext.tsx`
 - Admin pages: `adminandemployeePanel/src/app/pages/`
@@ -45,6 +46,7 @@ Purpose: customer-facing visibility panel for purchased Social Tech services, re
 
 ### Navigation
 
+- The Client Portal shows `clientPanel/src/app/components/client-login.tsx` before the portal workspace when demo auth is missing.
 - The Client Portal currently uses local React state in `clientPanel/src/app/App.tsx`.
 - `selectedService` controls whether the service selection screen or the selected service workspace is visible.
 - `currentPage` controls shared pages, service dashboards, and service tab workspaces.
@@ -53,7 +55,8 @@ Purpose: customer-facing visibility panel for purchased Social Tech services, re
 ### Core Components
 
 - `clientPanel/src/app/components/sidebar.tsx` - service-specific navigation, shared bottom items, collapse state, service switching.
-- `clientPanel/src/app/components/topbar.tsx` - selected service title and hardcoded demo client identity.
+- `clientPanel/src/app/components/topbar.tsx` - selected service title, demo client identity, and logout.
+- `clientPanel/src/app/components/client-login.tsx` - frontend demo client login screen.
 - `clientPanel/src/app/components/client-action-center.tsx` - floating action button, toast, action history drawer.
 - `clientPanel/src/app/components/button.tsx` - local portal button abstraction.
 - `clientPanel/src/app/components/metric-card.tsx` - reusable metric display.
@@ -90,6 +93,7 @@ Additional portal pages exist under `clientPanel/src/app/pages/` and `clientPane
 
 - `clientPanel/src/app/data/service-pages.ts` - service labels, service profiles, KPIs, tab content, tables, timelines, agency comments, and client action prompts.
 - `clientPanel/src/app/lib/client-actions.ts` - browser `localStorage` action history, action type inference, action event dispatch, and local text-file download behavior.
+- `clientPanel/src/app/App.tsx` stores demo client auth in browser `localStorage` and resets selected service/page on logout.
 - All Client Portal data is mock/static. There is no backend, API, database, or real authentication.
 
 ### Styles
@@ -115,6 +119,7 @@ The `client/` directory is the public/marketing Social Tech website, not the Cli
 ## Start Here For Client Portal Work
 
 - `clientPanel/src/app/App.tsx`
+- `clientPanel/src/app/components/client-login.tsx`
 - `clientPanel/src/app/components/sidebar.tsx`
 - `clientPanel/src/app/pages/service-selection.tsx`
 - `clientPanel/src/app/pages/service-tab-page.tsx`
@@ -125,6 +130,6 @@ The `client/` directory is the public/marketing Social Tech website, not the Cli
 
 - `adminandemployeePanel/vite.config.ts` and `clientPanel/vite.config.ts` - both include Figma asset resolver behavior.
 - `adminandemployeePanel/src/app/routes.tsx` - Admin and Employee Panel route definitions.
-- `adminandemployeePanel/src/app/contexts/RoleContext.tsx` - Employee Panel RBAC foundation.
+- `adminandemployeePanel/src/app/contexts/RoleContext.tsx` - Admin/Employee demo auth and RBAC foundation.
 - `clientPanel/src/app/App.tsx` - Client Portal navigation state lives here until a router is introduced.
 - `clientPanel/src/app/data/service-pages.ts` - dense mock service content used across portal tabs.

@@ -1,13 +1,14 @@
-import { Outlet, Link, useLocation } from "react-router";
+import { Outlet, Link, Navigate, useLocation, useNavigate } from "react-router";
 import {
   LayoutDashboard, Users, Briefcase, FolderKanban,
   CheckSquare, ThumbsUp, Megaphone, FileText,
   BarChart3, Calendar, UserCheck, DollarSign,
-  Zap, Settings, Search, Plus, Bell
+  Zap, Settings, Search, Plus, Bell, LogOut
 } from "lucide-react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Avatar, AvatarFallback } from "./ui/avatar";
+import { useRole } from "../contexts/RoleContext";
 
 const menuItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -28,6 +29,21 @@ const menuItems = [
 
 export function RootLayout() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { currentUser, logout } = useRole();
+
+  if (!currentUser) {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  }
+
+  if (currentUser.accountType !== "admin") {
+    return <Navigate to="/employee/dashboard" replace />;
+  }
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login", { replace: true });
+  };
 
   return (
     <div className="flex h-screen bg-[#131313] text-white">
@@ -87,13 +103,22 @@ export function RootLayout() {
               <span className="absolute top-1 right-1 w-2 h-2 bg-[#AAFF01] rounded-full" />
             </button>
 
+            <Button
+              variant="ghost"
+              onClick={handleLogout}
+              className="h-9 rounded-lg text-[#A0A0A0] hover:bg-[#1A1A1A] hover:text-white"
+            >
+              <LogOut className="w-4 h-4" />
+              Çıkış
+            </Button>
+
             <div className="flex items-center gap-3 pl-4 border-l border-white/[0.06]">
               <div className="text-right">
-                <p className="text-sm">Social Tech Admin</p>
-                <p className="text-xs text-[#A0A0A0]">Admin</p>
+                <p className="text-sm">{currentUser.name}</p>
+                <p className="text-xs text-[#A0A0A0]">{currentUser.title}</p>
               </div>
               <Avatar className="w-9 h-9 bg-[#AAFF01] text-[#131313]">
-                <AvatarFallback>ST</AvatarFallback>
+                <AvatarFallback>{currentUser.initials}</AvatarFallback>
               </Avatar>
             </div>
           </div>

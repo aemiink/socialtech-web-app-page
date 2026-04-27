@@ -1,5 +1,4 @@
 import { useRole } from "../../contexts/RoleContext";
-import { AdminDashboard } from "./AdminDashboard";
 import { ProjectManagerDashboard } from "./ProjectManagerDashboard";
 import { PerformanceSpecialistDashboard } from "./PerformanceSpecialistDashboard";
 import { SocialMediaSpecialistDashboard } from "./SocialMediaSpecialistDashboard";
@@ -12,8 +11,6 @@ export function EmployeeDashboard() {
   const { selectedRole } = useRole();
 
   switch (selectedRole) {
-    case "admin":
-      return <AdminDashboard />;
     case "project-manager":
       return <ProjectManagerDashboard />;
     case "performance-specialist":
@@ -29,6 +26,13 @@ export function EmployeeDashboard() {
     case "seo-specialist":
       return <SEOSpecialistDashboard />;
     default:
-      return <AdminDashboard />;
+      return (
+        <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-6">
+          <h2 className="text-xl text-white">Çalışan rolü bulunamadı</h2>
+          <p className="mt-2 text-sm text-[#A0A0A0]">
+            Panele erişmek için geçerli bir çalışan demo hesabıyla giriş yapın.
+          </p>
+        </div>
+      );
   }
 }

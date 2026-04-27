@@ -1,10 +1,25 @@
-import { TrendingUp, MessageSquare, Video, Megaphone, Search, ShoppingCart, Code, Smartphone, FileText, Palette, Headphones, BarChart3, Zap } from 'lucide-react';
+import {
+  TrendingUp,
+  MessageSquare,
+  Video,
+  Megaphone,
+  Search,
+  ShoppingCart,
+  Code,
+  Smartphone,
+  FileText,
+  Palette,
+  Headphones,
+  BarChart3,
+  LogOut,
+  LucideIcon,
+} from 'lucide-react';
 
 interface Service {
   id: string;
   title: string;
   description: string;
-  icon: any;
+  icon: LucideIcon;
   status: 'active' | 'inactive';
   metrics?: { label: string; value: string }[];
 }
@@ -118,17 +133,41 @@ const services: Service[] = [
 
 interface ServiceSelectionPageProps {
   onServiceSelect: (serviceId: string) => void;
+  onLogout: () => void;
+  clientName: string;
+  companyName: string;
 }
 
-export function ServiceSelectionPage({ onServiceSelect }: ServiceSelectionPageProps) {
+export function ServiceSelectionPage({
+  onServiceSelect,
+  onLogout,
+  clientName,
+  companyName,
+}: ServiceSelectionPageProps) {
   const activeServices = services.filter(s => s.status === 'active').length;
 
   return (
     <div className="min-h-screen bg-[#131313] p-8">
       <div className="max-w-7xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-4xl text-white mb-2">Hangi hizmet panelini görüntülemek istiyorsunuz?</h1>
-          <p className="text-[#A0A0A0] text-lg">Aktif hizmetlerinizin detaylarına göz atın</p>
+        <div className="mb-8 flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h1 className="text-4xl text-white mb-2">Hangi hizmet panelini görüntülemek istiyorsunuz?</h1>
+            <p className="text-[#A0A0A0] text-lg">Aktif hizmetlerinizin detaylarına göz atın</p>
+          </div>
+          <div className="flex items-center gap-4 rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-3">
+            <div className="text-right">
+              <div className="text-sm text-white">{clientName}</div>
+              <div className="text-xs text-[#A0A0A0]">{companyName}</div>
+            </div>
+            <button
+              type="button"
+              onClick={onLogout}
+              className="flex h-10 items-center gap-2 rounded-xl border border-white/[0.08] px-3 text-sm text-[#A0A0A0] transition-all hover:border-[#AAFF01]/30 hover:text-white"
+            >
+              <LogOut className="h-4 w-4" />
+              Çıkış
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">

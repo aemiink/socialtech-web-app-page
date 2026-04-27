@@ -33,8 +33,8 @@ Defined in `RoleContext.tsx`:
 - `seo-specialist` — SEO audit, keyword tracking, index status, Search Console
 
 There are two panel types:
-- Admin Panel (no role restriction, flat navigation)
-- Employee Panel (role-gated sidebar via `RoleContext`)
+- Admin Panel (protected by frontend demo login, flat navigation)
+- Employee Panel (protected by frontend demo login, role-gated sidebar via `RoleContext`)
 
 There is also a Client Portal as a separate sub-app at `clientPanel/`.
 
@@ -50,6 +50,7 @@ Role-based sidebar. Common pages: Dashboard, Gorevlerim, Musterilerim, Takvim, B
 Separate Vite + React SPA at `clientPanel/`. It is a customer-facing visibility panel, not a public SaaS product.
 
 Portal areas:
+- Frontend demo client login gate
 - Service selection screen with 13 active Social Tech services
 - Service-specific dashboards for Growth & Hub, Social Media, Media Hub, Meta/TikTok/Google/Amazon Ads, Web App, Mobile App, Landing Pages, Web & Mobile Design, Technical Support, and SEO Audit
 - Generic service tab workspace for service-specific sections
@@ -58,11 +59,13 @@ Portal areas:
 
 ## Auth & RBAC Summary
 
-- Auth: Demo only — no real authentication. Employee login is a role picker screen (`RoleAccessLogin.tsx`).
-- RBAC: `RoleContext` (React Context + useState) stores the selected role in memory. No persistence (no localStorage/session/JWT).
-- Guard: `EmployeeLayout` redirects to `/employee/login` if `selectedRole` is null.
-- Admin Panel has no role guard — accessible without login.
-- Client Portal has no real authentication. It uses hardcoded demo client identity text and browser-local action history.
+- Auth: Demo only — no backend authentication, JWT, session, API, or database.
+- Admin + Employee login: single `/login` route in `adminandemployeePanel/` with email/password demo credentials.
+- Demo users are defined in `RoleContext.tsx`; the authenticated demo account is stored by email in browser `localStorage` and rehydrated from the static demo user list.
+- RBAC: `RoleContext` stores `currentUser`, `selectedRole`, account type, login, and logout helpers. Employee role comes from the demo email map, not from a free-form role picker.
+- Guards: `RootLayout` redirects unauthenticated users to `/login` and only allows admin accounts. `EmployeeLayout` redirects unauthenticated users to `/login` and only allows employee accounts.
+- Old `RoleAccessLogin.tsx` role picker was removed from active flow.
+- Client Portal login: `clientPanel/` shows a frontend demo login gate before service selection. Demo auth is stored in browser `localStorage`.
 - No backend permission checks exist (frontend-only, demo state).
 
 ## Frontend Architecture
@@ -70,6 +73,7 @@ Portal areas:
 - Entry: `adminandemployeePanel/src/main.tsx`
 - App root: `adminandemployeePanel/src/app/App.tsx`
 - Router: `adminandemployeePanel/src/app/routes.tsx` (createBrowserRouter)
+- Login page: `adminandemployeePanel/src/app/pages/Login.tsx`
 - Layouts:
   - `RootLayout` — Admin Panel shell (sidebar + topbar + `<Outlet />`)
   - `EmployeeLayout` — Employee Panel shell (role-aware sidebar + topbar + `<Outlet />`)
@@ -87,7 +91,8 @@ Portal areas:
 - Location: `clientPanel/`
 - Entry: `clientPanel/src/main.tsx`
 - App root: `clientPanel/src/app/App.tsx`
-- Navigation: state-based in-app navigation using `selectedService` and `currentPage` in `App.tsx`; no current React Router route file
+- Login: `clientPanel/src/app/components/client-login.tsx`
+- Navigation: frontend demo login gate, then state-based in-app navigation using `selectedService` and `currentPage` in `App.tsx`; no current React Router route file
 - Core components:
   - `clientPanel/src/app/components/sidebar.tsx` — service-specific sidebar menu
   - `clientPanel/src/app/components/topbar.tsx` — selected service and demo client identity
@@ -146,7 +151,7 @@ From `adminandemployeePanel/package.json`:
 pnpm dev       # start dev server (Vite)
 pnpm build     # production build
 ```
-No test, lint, or typecheck scripts defined yet.
+No test, lint, or typecheck scripts defined yet. If `pnpm` is unavailable, `npm run build` works with the existing package scripts.
 
 From `clientPanel/package.json`:
 ```
