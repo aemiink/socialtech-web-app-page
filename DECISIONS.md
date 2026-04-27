@@ -63,6 +63,22 @@ Affected files:
 
 ---
 
+## 2026-04-28 - Employee Panel Pages: Inline Mock Data, No Shared Store
+
+Context:
+37 employee pages were placeholder-only (5-line files delegating to PlaceholderPage component). They needed realistic, role-appropriate content.
+
+Decision:
+Each page was filled with inline mock data arrays typed explicitly (no `any`) rather than adding all data to mockData.ts. Role-specific data (bugs, sprints, pixel IDs, SEO audits, etc.) is too narrow to be shared globally. Pages that already had relevant shared data (campaigns, tasks, reports, approvals, meetings, projects, clients) import from mockData.ts. Pages with highly specialized content define their own local arrays.
+
+Reason:
+Keeps mockData.ts focused on shared cross-role entities. Specialist data (e.g., pixel tracking IDs, SSL certificates, SEO audit scores) is unlikely to be reused outside its role's pages. Avoids inflating mockData.ts with rarely shared data.
+
+Affected files:
+- All 37 files in `adminandemployeePanel/src/app/employee/pages/` that previously used PlaceholderPage
+
+---
+
 ## 2026-04-28 - Single SPA, No Next.js
 
 Context:
