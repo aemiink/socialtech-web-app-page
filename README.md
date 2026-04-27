@@ -1,51 +1,57 @@
-# Social Tech Web App
+# Social Tech Web Platform
 
-Social Tech Web App, Social Tech Reklam ve Teknoloji markasi icin hazirlanan modern, full-width, conversion odakli bir pazarlama web sitesidir. Proje; dijital ajans hizmetlerini, otomasyon tekliflerini, case study akisini, iletisim funnel'ini ve servis detay sayfalarini tek bir React/Vite uygulamasi icinde toplar.
+Bu repo, Social Tech Reklam ve Teknoloji markasi icin hazirlanan iki ayri React/Vite uygulamasini barindirir:
 
-Bu README, repodaki mevcut yazilim mimarisini, kullanilan teknolojileri, sayfa organizasyonunu ve bugune kadar yapilan ana gelistirmeleri aciklar.
+- `client`: Public marketing web sitesi. Marka, servisler, otomasyonlar, case study'ler, iletisim funnel'i ve paket sayfalarini kullaniciya sunar.
+- `clientPanel`: Social Tech musterileri icin ozel client visibility paneli. Musterinin satin aldigi hizmetleri, raporlari, onaylari, toplantilari, faturalari ve aksiyonlarini tek panelde izletir.
 
-## Proje Ozeti
+Repo public bir SaaS urunu degildir. Ana odak, Social Tech ajansinin hem dis yuzunu hem de musteriye sundugu operasyon gorunurlugunu ayni tasarim diliyle yonetmektir.
 
-Uygulama tek bir client uygulamasindan olusur:
+## Proje Yapisi
 
 ```text
 socialtech-web-app-sonunda/
   client/
     src/
-    public veya dist ciktilari
     package.json
     vite.config.ts
+  clientPanel/
+    src/
+    package.json
+    vite.config.ts
+  README.md
 ```
-
-Ana hedefler:
-
-- Social Tech markasinin dijital buyume, reklam, web, teknik destek ve otomasyon hizmetlerini anlatmak.
-- Kullanici yolculugunu servis sayfalarindan iletisim formuna tasimak.
-- Paket, case study, musteri, otomasyon ve iletisim sayfalarini funnel mantigiyla baglamak.
-- Sayfa bazli lazy loading ile chunk boyutunu kontrol altinda tutmak.
-- Tasarim dilini neon lime `#aaff01`, violet `#8a38f5`, koyu yuzeyler ve glass/sticky navbar uzerine kurmak.
 
 ## Teknoloji Stack'i
 
-Proje su teknolojilerle gelistirildi:
+Iki uygulama da modern React/Vite stack'i ile gelistirildi.
 
-- `React 18`: UI katmani ve component tabanli sayfa yapisi.
-- `Vite 6`: Development server, build pipeline ve asset bundling.
-- `React Router 7`: Route tanimlari, nested layout ve lazy page loading.
-- `Tailwind CSS 4`: Utility-first styling, responsive tasarim ve hizli layout uretimi.
-- `@tailwindcss/vite`: Tailwind'in Vite entegrasyonu.
-- `lucide-react`: Icon sistemi.
-- `Radix UI`: UI primitive dependency seti. `client/src/app/components/ui` altinda cok sayida primitive component bulunur.
-- `MUI`: Paketlerde dependency olarak mevcut, ancak ana tasarim dili agirlikli olarak Tailwind ve custom componentlerle ilerler.
+- `React 18`: Component tabanli UI mimarisi.
+- `Vite 6`: Dev server, production build ve asset bundling.
+- `React Router 7`: Public site tarafinda route yapisi ve lazy page loading.
+- `Tailwind CSS 4`: Utility-first stil sistemi.
+- `@tailwindcss/vite`: Tailwind/Vite entegrasyonu.
+- `lucide-react`: Ikon sistemi.
+- `Radix UI`: UI primitive dependency seti.
+- `MUI`: Dependency olarak mevcut; ana tasarim dili custom Tailwind componentleri uzerinden ilerler.
+- `recharts`: Dashboard chart ve grafik ihtiyaclari.
 - `motion`: Animasyon ihtiyaclari icin dependency olarak mevcut.
-- `Google Fonts / Poppins`: Global font importu `client/src/styles/fonts.css` icinde tanimli.
+- `Poppins`: Global font ailesi.
 
 ## Calistirma
 
-Komutlar `client` klasoru icinden calistirilir:
+Public web sitesi:
 
 ```bash
 cd client
+npm install
+npm run dev
+```
+
+Client panel:
+
+```bash
+cd clientPanel
 npm install
 npm run dev
 ```
@@ -55,30 +61,38 @@ Production build:
 ```bash
 cd client
 npm run build
+
+cd ../clientPanel
+npm run build
 ```
 
-Build ciktisi:
+Build ciktilari ilgili uygulamanin `dist/` klasorune uretilir.
 
-```text
-client/dist/
-```
+## Public Web Sitesi: `client`
 
-## Uygulama Giris Noktalari
+`client`, Social Tech'in pazarlama ve lead toplama web sitesidir.
 
-Ana dosyalar:
+Temel amaclari:
 
-- `client/src/main.tsx`: React root render islemi.
-- `client/src/app/App.tsx`: RouterProvider ve route degisimlerinde scroll davranisi.
-- `client/src/app/routes.tsx`: Tum route haritasi ve lazy page loading.
-- `client/src/styles/index.css`: Global stil girisi.
-- `client/src/styles/theme.css`: Tema tokenlari, animasyonlar, base stiller.
+- Social Tech'in hizmetlerini ve konumlandirmasini anlatmak.
+- Kullanici yolculugunu servis sayfalarindan iletisim formuna tasimak.
+- Paket, case study, musteriler, otomasyonlar ve iletisim sayfalarini funnel mantigiyla baglamak.
+- SEO ve performans icin route bazli lazy loading kullanmak.
+- Marka tasarim dilini koyu zemin, neon lime `#aaff01`, violet accent ve glass navbar ile tutarli hale getirmek.
+
+### Public Site Giriş Noktalari
+
+- `client/src/main.tsx`: React root render.
+- `client/src/app/App.tsx`: RouterProvider ve scroll davranisi.
+- `client/src/app/routes.tsx`: Tum route haritasi.
+- `client/src/app/components/layout/AppLayout.tsx`: Global layout.
+- `client/src/app/components/site/SiteHeader.tsx`: Navbar ve hizmetler menusu.
+- `client/src/app/components/site/SiteFooter.tsx`: Footer ve CTA linkleri.
+- `client/src/styles/index.css`: Global CSS girisi.
+- `client/src/styles/theme.css`: Tema tokenlari, animasyonlar ve base stiller.
 - `client/src/styles/fonts.css`: Poppins font importu.
 
-`App.tsx` icinde route degisimlerinde sayfanin en uste alinmasi ve hash ile hedef section'a gidilmesi icin manuel scroll kontrolu vardir. Bu, `/iletisim#contact-form` gibi CTA linklerinin dogru calismasini saglar.
-
-## Route Haritasi
-
-Tum route'lar `client/src/app/routes.tsx` icinde tanimlidir. Sayfalar lazy import edilir.
+### Public Site Route Haritasi
 
 | Route | Sayfa |
 | --- | --- |
@@ -106,377 +120,333 @@ Tum route'lar `client/src/app/routes.tsx` icinde tanimlidir. Sayfalar lazy impor
 | `/hizmetler/web-teknik-destek` | Web teknik destek |
 | `/hizmetler/seo` | SEO denetimi |
 
-## Layout Mimarisi
+### Public Site Mimari Mantigi
 
-Proje global layout mantigi ile calisir:
-
-```text
-App
-  RouterProvider
-    AppLayout
-      SiteHeader
-      Outlet
-      SiteFooter
-```
-
-Ana layout dosyalari:
-
-- `client/src/app/components/layout/AppLayout.tsx`
-- `client/src/app/components/site/SiteHeader.tsx`
-- `client/src/app/components/site/SiteFooter.tsx`
-
-Header ozellikleri:
-
-- Fixed navbar.
-- Scroll olunca glass/blur arka plan.
-- Hizmetlerimiz menusu icin dropdown mega menu.
-- Desktop ve mobile menu ayrimi.
-- Iletisime gec CTA'si `/iletisim#contact-form` hedefine baglidir.
-
-Footer ozellikleri:
-
-- Faydalı linkler ve urun/hizmet linkleri route'lara baglidir.
-- CTA butonlari ile iletisim formuna yonlendirme yapilir.
-- `footerLinks.ts` ile label-to-route eslesmesi merkezi tutulur.
-
-## Component Organizasyonu
-
-Uygulama feature bazli component mimarisi kullanir. Her buyuk sayfa kendi klasoru altinda `Home` dosyasi, data/shared dosyalari ve section componentleriyle ayrilir.
-
-Genel pattern:
+Public site feature bazli component yapisi kullanir.
 
 ```text
-components/
-  landing/
-    LandingHome.tsx
-    LandingHome.shared.tsx
-    sections/
-      HeroSection.tsx
-      IntroSection.tsx
-      DigitalSolutionsSection.tsx
-      ...
+client/src/app/
+  pages/
+  components/
+    landing/
+      LandingHome.tsx
+      sections/
+    about/
+    contact/
+    automations/
+    services/
+    portfolio/
+    site/
+    ui/
 ```
 
-Bu sayede `Home` dosyalari sadece sayfa iskeletini kurar; icerik ve bolumler okunabilir parcalara ayrilir.
+Sayfa dosyalari bilincli olarak ince tutulur. Page componentleri ilgili feature `Home` componentini render eder. Sayfa icindeki buyuk bolumler `sections/` altinda ayrilir.
 
-Ana component gruplari:
-
-- `components/landing`: Ana sayfa.
-- `components/about`: Hakkimizda sayfasi.
-- `components/contact`: Iletisim sayfasi, form ve gorusme akisi.
-- `components/automations`: Otomasyonlar sayfasi.
-- `components/services`: Tum servis detay sayfalari ve overview.
-- `components/portfolio`: Musteriler, kariyer, case study listesi ve detaylari.
-- `components/site`: Site genelinde kullanilan header, footer, button, hero backdrop, payment logos gibi ortak componentler.
-- `components/ui`: Radix/shadcn benzeri UI primitive componentleri.
-
-## Sayfa Mimarisi
-
-Sayfa dosyalari `client/src/app/pages` altindadir. Page dosyalari bilincli olarak ince tutulur ve ilgili feature componentini render eder.
-
-Ornek:
-
-```tsx
-import AutomationHome from "../components/automations/AutomationHome";
-
-export default function AutomationsPage() {
-  return <AutomationHome />;
-}
-```
-
-Bu yaklasim su avantajlari saglar:
+Bu yapi su avantajlari saglar:
 
 - Route dosyalari sade kalir.
-- Sayfa mantigi feature klasorlerinde toplanir.
-- Section bazli gelistirme ve refactor kolaylasir.
-- Ileride Next.js veya baska bir routing mimarisine gecis daha kontrollu olur.
+- Sayfa bolumleri okunabilir ve tekrar kullanilabilir olur.
+- Design system ve UI parcalari merkezi sekilde gelistirilir.
+- Ileride Next.js gibi bir mimariye gecis daha kontrollu olur.
 
-## Ortak Site Componentleri
+### Public Site Yapilan Ana Gelistirmeler
 
-`client/src/app/components/site` altinda tekrar kullanilan site componentleri vardir:
-
-- `ActionButton.tsx`: Lime, violet ve cyan accent destekleyen CTA butonu.
-- `HeroBackdrop.tsx`: Ortak hero arka plan glow/orb sistemi.
-- `PaymentLogos.tsx`: Paket bolumlerinde kullanilan odeme logolari grid sistemi.
-- `PackageFeatureBullet.tsx`: Paket ozellik listesi icin ikonlu bullet.
-- `SiteHeader.tsx`: Navbar ve hizmetler dropdown.
-- `SiteFooter.tsx`: Footer linkleri ve CTA bloklari.
-- `footerLinks.ts`: Footer link label eslestirmeleri.
-
-## Tasarim Sistemi
-
-Gorsel dil:
-
-- Ana renk: `#aaff01`
-- Yardimci mor: `#8a38f5`
-- Yardimci mavi/cyan: `#00a2e5`
-- Arka planlar: siyah, koyu gri, koyu gradient yuzeyler.
-- Tipografi: Poppins.
-- Genel hissiyat: modern dijital ajans, neon teknoloji, koyu zemin, yuksek kontrast CTA.
-
-`theme.css` icinde marka tokenlari:
-
-```css
---st-lime: #aaff01;
---st-violet: #8a38f5;
---st-cyan: #00a2e5;
---st-surface: rgba(8, 11, 23, 0.82);
-```
-
-Hero arka planlarinda animasyonlu orb/glow efektleri kullanilir. `prefers-reduced-motion` durumunda animasyonlar kapatilir.
-
-## Dönüşüm ve Funnel Yaklasimi
-
-Site, kullaniciyi servis bilgisinden iletisim aksiyonuna tasimak icin tasarlandi.
-
-Uygulanan funnel yaklasimlari:
-
-- CTA butonlari genel olarak `/iletisim#contact-form` hedefine yonlendirilir.
-- Paket kartlari, servis detaylari ve case study detaylari iletisime baglanir.
-- Case study sayfalari problem, sistem, sonuc ve kullanilan servisler formatina cekildi.
-- Otomasyonlar sayfasi yeni pozisyonlama icin ayri bir funnel girisi olarak eklendi.
-- Footer ve header butonlari ile iletisim akisi her sayfadan ulasilabilir hale getirildi.
-
-Gelecekte gelistirilebilecek funnel katmanlari:
-
-- Formda kaynak sayfaya gore otomatik konu secimi.
-- Paket CTA'sindan gelen kullanicilar icin ozellestirilmis form metni.
-- Case study slug'ina gore formda hidden context tasima.
-- Analytics/event tracking.
-- CRM veya form backend entegrasyonu.
-
-## Yapilan Ana Gelistirmeler
-
-Projede bugune kadar yapilan temel gelistirmeler:
-
-- Landing page full-width hale getirildi.
+- Landing page full-width yapildi.
 - Global font Poppins olarak ayarlandi.
 - Buton kontrastlari ve hover davranislari duzenlendi.
-- Navbar fixed yapildi ve scroll durumunda glass arka plan eklendi.
-- Hizmetlerimiz dropdown mega menu eklendi.
-- Tum route'lar Turkcelestirildi.
+- Navbar fixed hale getirildi, scroll durumunda glass arka plan eklendi.
+- Hizmetlerimiz icin dropdown/mega menu eklendi.
+- Route'lar Turkcelestirildi.
 - Sayfa degisimlerinde scroll'un en uste alinmasi saglandi.
-- Iletisim sayfasi section bazli olarak olusturuldu.
-- Navbar ve CTA linkleri iletisim formuna baglandi.
-- Paketlerde odeme logolari gorsel grid ile duzenlendi.
-- Paket ozellik listelerinde marka ikonlu bullet yapisi kullanildi.
-- Landing page servis kartlari otomatik kayan carousel mantigina cekildi.
-- Hakkimizda, hizmetler, servis detaylari, musteriler, kariyer ve case study sayfalari gorsel referanslara gore yeniden tasarlandi.
-- Google Ads, Meta Ads, TikTok Ads ve Amazon Ads sayfalari ortak hero/component mantigina yaklastirildi.
-- Mobil uygulama sayfasi eklendi.
-- Otomasyonlar sayfasi eklendi.
-- Case study icerikleri gercekci pazarlama/otomasyon vakalarina donusturuldu.
-- Sidebar renkleri marka paletiyle tutarli hale getirildi.
-- Kullanilmayan bazi gorseller temizlendi ve kullanilan gorsellerin bir kismi WebP formatina cekildi.
-- Tum buyuk sayfalar section bazli component yapisina ayrildi.
+- Iletisim sayfasi olusturuldu ve CTA'lar forma baglandi.
+- Footer linkleri gercek route'lara baglandi.
+- Odeme logolari gorsel grid sistemiyle duzenlendi.
+- Paket feature listelerinde marka ikonlu bullet sistemi kuruldu.
+- Otomasyonlar sayfasi olusturuldu.
+- Growth Hub, sosyal medya, web app, landing page, web tasarim, reklam ve teknik destek servis sayfalari tasarim diline uyarlandi.
+- Case study sayfalari daha gercekci proje anlatimina cekildi.
+- Hero yapilari, CTA'lar, kartlar ve responsive tasarimlar yeniden duzenlendi.
+- Kullanilmayan asset ve buyuk gorsel problemi icin gorsel optimizasyonlari yapildi.
 
-## Otomasyonlar Sayfasi
+## Client Panel: `clientPanel`
 
-`/otomasyonlar` sayfasi, Social Tech'in reklam ajansi pozisyonundan otomasyon destekli buyume partneri pozisyonuna gecisini anlatir.
+`clientPanel`, Social Tech musterileri icin ozel bir gorunurluk panelidir. Bu panel public SaaS gibi dusunulmez; amaci musteriye ajans operasyonunun anlasilir ve guven veren bir ozetini gostermektir.
 
-Sayfadaki ana otomasyonlar:
+Panel su sorulara cevap verir:
 
-- `PromptIMG by Social Tech MDA`: Brand DNA ile pazar yeri ve sosyal medya metinleri uretir.
-- `PromptVisual by Social Tech MDA`: Urun gorsellerini marka diline uygun vitrin gorsellerine donusturur.
-- `PromptAnalysis by Social Tech MDA`: Instagram Ads, profil ve web analizini rakiplerle karsilastirir.
-- `PromptWhatsApp by Social Tech MDA`: 7/24 cevap, lead sicakligi etiketleme ve WhatsApp mesajlasma akisi sunar.
-- `PromptCommander by Social Tech MDA`: Instagram DM ve yorum tetikleyici otomasyonlari kurar.
+- Hangi hizmetler aktif?
+- Hangi kampanyalar, icerikler veya teslimler onay bekliyor?
+- Ajans bu hafta ne yapti?
+- Musteriden ne bekleniyor?
+- Raporlar, toplantilar, faturalama ve ayarlar nerede?
+- Her servis icin o servise ozel metrikler ve is akislari nasil ilerliyor?
 
-Sayfa yapisi:
+### Client Panel Giriş Noktalari
 
-```text
-components/automations/
-  AutomationHome.tsx
-  AutomationSectionTitle.tsx
-  automationData.ts
-  sections/
-    HeroSection.tsx
-    ValueSection.tsx
-    AutomationGridSection.tsx
-    BrandDnaSection.tsx
-    AccessSection.tsx
-    RoadmapSection.tsx
-    CtaSection.tsx
-```
+- `clientPanel/src/main.tsx`: React root render.
+- `clientPanel/src/app/App.tsx`: Secili servis ve secili sekme state yonetimi.
+- `clientPanel/src/app/components/sidebar.tsx`: Servise ozel sidebar.
+- `clientPanel/src/app/components/topbar.tsx`: Secili servis adini gosteren ust bar.
+- `clientPanel/src/app/pages/service-selection.tsx`: 13 aktif hizmetin secildigi ekran.
+- `clientPanel/src/app/pages/service-tab-page.tsx`: Servis sekmelerini gercek ekran hissiyle render eden ana renderer.
+- `clientPanel/src/app/data/service-pages.ts`: Servis/sekme icerik verisi.
+- `clientPanel/src/app/lib/client-actions.ts`: Buton aksiyonlari, local action history ve dosya ciktilari.
+- `clientPanel/src/app/components/client-action-center.tsx`: Islem merkezi ve toast sistemi.
 
-## Case Study Yapisi
+### Client Panel State/Routing Mantigi
 
-Case study icerikleri `PortfolioPagesHome.shared.tsx` icindeki `caseStudies` verisiyle beslenir.
-
-Mevcut ornek vakalar:
-
-- `NEV Jewellery`: Growth Hub, Meta Ads ve PromptAnalysis.
-- `Sivas Matbaa`: Google Ads ve PromptWhatsApp.
-- `Stepbag`: PromptIMG, PromptVisual ve pazaryeri icerik sistemi.
-
-Case study detay route'u:
+Client panelde browser URL routing yerine uygulama ici state kullanilir.
 
 ```text
-/calismalar/:id
+selectedService -> hangi hizmet paneli acik?
+currentPage     -> sidebar'da hangi sekme acik?
 ```
 
-Ornek:
+Akis:
 
 ```text
-/calismalar/nev-jewellery-growth-sistemi
+ServiceSelectionPage
+  -> service seçilir
+  -> App selectedService ve currentPage state'ini gunceller
+  -> Sidebar servise ozel menuyu gosterir
+  -> Topbar secili hizmet adini gosterir
+  -> dashboard veya tab page render edilir
 ```
 
-Detay sayfasi su yapida ilerler:
+Bu tercih panelin su anki kapsaminda yeterlidir. Ileride gercek URL ihtiyaci dogarsa React Router ile `/panel/:serviceId/:tabId` gibi bir yapıya gecilebilir.
 
-- Hero.
-- Kapak gorseli.
-- Musteri, tarih, kategori bilgisi.
-- Ozet.
-- Metrikler.
-- Baslangic problemi.
-- Kurulan sistem.
-- Sonuc ve ogrenimler.
-- Kullanilan servisler.
-- Iletisim CTA'si.
+### Aktif Servisler
 
-## Servis Sayfalari
+Panelde tam 13 aktif servis vardir. Hicbiri locked/disabled gosterilmez.
 
-Servisler `components/services` altinda toplanir. Her servis kendi section klasorune sahiptir.
+| Service ID | Servis |
+| --- | --- |
+| `growth-hub` | Growth & Hub |
+| `social-media` | Sosyal Medya Yonetimi |
+| `media-hub` | Medya Hub |
+| `meta-ads` | Meta ADS |
+| `tiktok-ads` | TikTok ADS |
+| `google-ads` | Google ADS |
+| `amazon-ads` | Amazon ADS |
+| `web-app` | Web APP |
+| `mobile-app` | Mobil APP |
+| `landing-pages` | Landing Pages |
+| `web-mobile-design` | Web & Mobil Tasarimlar |
+| `technical-support` | Teknik Destek |
+| `seo-audit` | SEO Denetimi |
 
-Servis gruplari:
+### Dashboard Mapping
 
-- Overview: `services/overview`
-- Growth Hub: `services/growth-hub`
-- Social Media: `services/social-media`
-- Web App: `services/web-app`
-- Mobile App: `services/mobile-app`
-- Landing Page: `services/landing-page`
-- Amazon Ads: `services/amazon-ads`
-- Paid Ads varyantlari: `services/paid-ads`
-- Technical ve SEO: `services/technical`
+Her servis kendi dashboard componentine gider.
 
-Paid ads varyantlari ayni component setini kullanarak Google, Meta, TikTok ve Digital Marketing Hub sayfalarini besler.
+| Service ID | Dashboard Component |
+| --- | --- |
+| `growth-hub` | `GrowthHubDashboard` |
+| `social-media` | `SocialMediaDashboard` |
+| `media-hub` | `MediaHubDashboard` |
+| `meta-ads` | `MetaAdsDashboard` |
+| `tiktok-ads` | `TikTokAdsDashboard` |
+| `google-ads` | `GoogleAdsDashboard` |
+| `amazon-ads` | `AmazonAdsDashboard` |
+| `web-app` | `WebAppDashboard` |
+| `mobile-app` | `MobileAppDashboard` |
+| `landing-pages` | `LandingPagesDashboard` |
+| `web-mobile-design` | `WebMobileDesignDashboard` |
+| `technical-support` | `TechnicalSupportDashboard` |
+| `seo-audit` | `SeoAuditDashboard` |
 
-## Asset Stratejisi
+### Sidebar ve Sekme Yapisi
 
-Gorseller `client/src/assets` altinda tutulur. Projede PNG, WebP ve SVG dosyalari bulunur.
+Her servisin sidebar'i servise ozeldir. Ornegin:
 
-Kullanilan yaklasim:
+- Sosyal medya servisi icerik takvimi, onay bekleyenler, yayinlanan icerikler, DM/yorumlar, rakip analizi ve trend notlari gosterir.
+- Meta ADS servisi kampanyalar, reklam setleri, kreatifler, kitleler, Pixel & Events, funnel ve optimizasyon notlari gosterir.
+- Web APP servisi proje yol haritasi, sprint durumu, UI/UX, frontend, backend/API, admin panel, test/yayin, revizyonlar ve dosyalar gosterir.
+- Teknik destek servisi destek talepleri, acik isler, cozulen isler, bakim, guvenlik, yedekleme, guncellemeler ve aktivite logu gosterir.
+- SEO denetimi servisi audit, teknik hatalar, anahtar kelimeler, sayfa hizi, index durumu, Search Console, rakip analizi ve aksiyon plani gosterir.
 
-- Fotoğraf agirlikli gorsellerde WebP tercih edildi.
-- Logo, ikon ve odeme gorsellerinde PNG/SVG korundu.
-- Payment logo gorselleri `PaymentLogos` componentinde grid yapisiyla kullanilir.
-- Case study ve servis gorselleri feature shared dosyalarinda import edilir.
+Shared tablar:
 
-Not:
+- `Raporlar`
+- `Toplantilar`
+- `Faturalama`
+- `Ayarlar`
 
-- Asset dosya isimleri buyuk oranda Figma/export hash adlariyla gelmistir.
-- Ileride assetleri semantik isimlerle yeniden adlandirmak bakim kolayligi saglar.
+Bu shared tablar tum servislerde bulunur ve client-facing bilgi verir.
 
-## Kod Organizasyon Prensipleri
+### Sekme Renderer Mantigi
 
-Bu projede su prensipler hedeflenir:
+Ilk panel iterasyonunda sekmeler ayni generic template ile gorunuyordu. Sonraki sprintte `service-tab-page.tsx` daha gercekci ekran tipleri uretecek sekilde gelistirildi.
 
-- Page dosyalari ince kalmali.
-- Her buyuk sayfa section'lara bolunmeli.
-- Ortak UI/site componentleri `components/site` veya `components/ui` altinda tutulmali.
-- Sayfa verileri mumkunse `*.shared.tsx` veya feature data dosyalarinda toplanmali.
-- CTA linkleri merkezi funnel hedeflerine baglanmali.
-- Yeni route eklenince header, footer ve route map birlikte dusunulmeli.
-- Marka rengi olarak ana accent `#aaff01` korunmali.
-- Buyuk statik sayfalarda lazy page import pattern'i surdurulmeli.
+Tab ID'ye gore farkli workspace tipleri render edilir:
 
-## Yeni Sayfa Ekleme Rehberi
+- Growth control center
+- Icerik takvimi
+- Onay masasi
+- Yayinlanan icerik grid'i
+- DM & yorum inbox
+- Rakip/trend/keyword insight ekrani
+- Kampanya cockpit'i
+- Butce ve performans karsilastirmasi
+- Funnel/UX flow map
+- Kreatif/prototip galeri
+- SEO/teknik checklist
+- Sprint/project board
+- Destek ticket panosu
+- Brief formu
+- Teslim dosyalari ekrani
 
-Yeni bir sayfa eklemek icin onerilen pattern:
+Bu sayede her sekme ayni template gibi degil, yaptigi ise uygun bir panel gibi gorunur.
 
-```text
-client/src/app/pages/NewPage.tsx
-client/src/app/components/new-page/NewPageHome.tsx
-client/src/app/components/new-page/newPageData.ts
-client/src/app/components/new-page/sections/HeroSection.tsx
-client/src/app/components/new-page/sections/ContentSection.tsx
-client/src/app/components/new-page/sections/CtaSection.tsx
-```
+### Client Action Sistemi
 
-Route ekleme:
+Paneldeki butonlar sadece statik prototip degildir. Merkezi aksiyon sistemi vardir.
 
-```tsx
-{
-  path: "yeni-route",
-  lazy: lazyPage(() => import("./pages/NewPage")),
-}
-```
+Ana dosyalar:
 
-Gerekiyorsa:
+- `clientPanel/src/app/lib/client-actions.ts`
+- `clientPanel/src/app/components/client-action-center.tsx`
+- `clientPanel/src/app/components/button.tsx`
 
-- `SiteHeader` nav item guncellenir.
-- `SiteFooter` link listesi guncellenir.
-- `footerLinks.ts` label-to-route eslesmesi eklenir.
+Butonlar otomatik olarak aksiyon tipini algilar:
 
-## Form ve Iletisim Akisi
+- Onayla
+- Revizyon iste
+- Yorum ekle
+- Raporu incele
+- PDF/dosya indir
+- Toplantiya katil
+- Degisiklikleri kaydet
+- Talep gonder
+- Goruntule/ac/incele
+- Kullanici davet et
+- Yeni kayit olustur
 
-Iletisim sayfasi `components/contact` altinda section'lara ayrilmistir.
+Butona tiklandiginda:
 
-Ana hedef:
+- Islem merkezi toast gosterir.
+- Aksiyon local history'ye kaydedilir.
+- Onay ekranlarinda kart statusu degisir.
+- Destek talebi ekraninda yeni ticket acik isler kolonuna duser.
+- Rapor/indir aksiyonlari local `.txt` cikti dosyasi olusturur.
 
-```text
-/iletisim#contact-form
-```
+Backend entegrasyonu yoktur; bu katman su an front-end seviyesinde musteri portalinin gercek calisiyormus hissini verir.
 
-CTA'larin buyuk bolumu bu hedefe yonlendirilir. Su an form front-end seviyesinde kurgulanmistir. Backend, CRM, e-posta veya webhook entegrasyonu ayrica yapilmalidir.
+### Automation Preview Kurali
 
-## Build ve Performans Notlari
+Automation Preview her yerde gosterilmez. Sadece otomasyonun hizmet vaadiyle dogrudan iliskili oldugu servislerde vardir:
 
-Vite build sonucunda route bazli lazy chunk'lar uretilir. Bu, tek buyuk bundle yerine sayfa bazli yukleme saglar.
+- Growth & Hub
+- Sosyal Medya Yonetimi
+- Medya Hub
+- Meta ADS
+- TikTok ADS
+- Google ADS
 
-Performans icin mevcut adimlar:
+Su servislerde gosterilmez:
 
-- Sayfalar lazy import edilir.
-- Gorsellerin bir kismi WebP formatinda kullanilir.
-- Header/footer global, sayfa icerikleri route bazli yuklenir.
-- Animasyonlarda `prefers-reduced-motion` kontrolu vardir.
+- Amazon ADS
+- Web APP
+- Mobil APP
+- Landing Pages
+- Web & Mobil Tasarimlar
+- Teknik Destek
+- SEO Denetimi
 
-Ileride yapilabilecekler:
+### Client Panel Yapilan Ana Gelistirmeler
 
-- Asset isimlerini semantik hale getirmek.
-- Kritik gorseller icin responsive image stratejisi eklemek.
-- Form submit backend entegrasyonu yapmak.
-- Analytics event tracking eklemek.
-- SEO icin metadata, sitemap ve Open Graph katmanini guclendirmek.
-- Pazarlama sitesi organik trafik hedefliyorsa Next.js migration degerlendirmek.
+- 13 aktif servis karti olusturuldu.
+- Tum servisler icin dashboard mapping duzeltildi.
+- `Mobil APP`, `Landing Pages`, `Web & Mobil Tasarimlar` icin ayri dashboardlar eklendi.
+- Topbar servis etiketleri duzeltildi.
+- Servise ozel sidebar yapisi kuruldu.
+- Placeholder sayfa davranisi kaldirildi.
+- Tum sidebar sekmeleri anlamli icerik gosterir hale getirildi.
+- Sekmeler islevlerine gore farkli workspace gorunumleriyle tasarlandi.
+- Automation Preview sadece ilgili hizmetlerde birakildi.
+- Shared pages guclendirildi: raporlar, toplantilar, faturalama, ayarlar.
+- Butonlar islevlendirildi.
+- Islem merkezi, toast ve local action history eklendi.
+- Rapor/indirme aksiyonlari local dosya uretir hale getirildi.
 
-## Bilinen Teknik Notlar
+## Tasarim Dili
 
-- Proje su an React SPA olarak calisir.
-- SEO ve metadata ihtiyaclari buyurse Next.js daha uygun olabilir.
-- `dist` klasoru build ciktisidir ve build aldikca hash'li dosya adlari degisir.
-- `node_modules` repoya dahil edilmemelidir.
-- Google Fonts importu dis kaynak uzerinden yapilir. Ileride performans ve gizlilik icin font self-host edilebilir.
+Iki uygulama ayni marka hissiyatini tasir:
 
-## Scriptler
+- Koyu premium yuzeyler.
+- Neon lime ana aksan: `#aaff01`.
+- Violet yardimci aksan: `#7B61FF` veya public sitede `#8a38f5`.
+- Cyan yardimci sinyal rengi.
+- Yuvarlatilmis kartlar.
+- Glass/blur arka planlar.
+- Poppins font.
+- Yuksek kontrast CTA'lar.
+- Ajans odakli, musteriye guven veren mikro copy.
 
-`client/package.json` icindeki scriptler:
+Panel tarafinda dil ozellikle client-facing tutulur. Internal/developer jargon yerine su dil kullanilir:
 
-```json
-{
-  "dev": "vite",
-  "build": "vite build"
-}
-```
+- Ajans Yorumu
+- Sizden Beklenenler
+- Son Aktiviteler
+- Onay Bekleyenler
+- Raporu Incele
+- Revizyon Iste
+- Dosyalari Goruntule
 
-Kullanim:
+## Performans ve Build Notlari
 
-```bash
-cd client
-npm run dev
-npm run build
-```
+Her iki uygulama Vite ile build edilir. Son buildlerde clientPanel icin Vite buyuk chunk uyarisi vermektedir. Bu hata degildir, ancak ileride iyilestirilebilir.
 
-## Kisa Bakim Checklist'i
+Onerilen performans gelistirmeleri:
 
-Yeni bir degisiklikten sonra kontrol edilmesi onerilenler:
+- `clientPanel` icin dashboard ve sekme renderer'larini lazy import etmek.
+- Recharts ve Radix gibi agir dependency'leri manual chunklara ayirmak.
+- Public site tarafinda kritik gorseller icin responsive image stratejisi eklemek.
+- Font self-hosting dusunmek.
+- Kullanilmayan shadcn/Radix primitive'lerini temizlemek.
 
-- `npm run build` basarili mi?
-- Yeni route `routes.tsx` icinde tanimli mi?
-- Header/footer linkleri gerekiyorsa guncellendi mi?
-- CTA'lar dogru hedefe gidiyor mu?
-- Mobil gorunumde hero, kartlar ve paketler okunabilir mi?
-- Case study ve servis sayfalari iletisim funnel'ina bagli mi?
-- Kullanilmayan asset veya import kaldi mi?
+## Bilinen Eksikler ve Sonraki Sprint Fikirleri
 
+Backend entegrasyonu:
+
+- Form submit, CRM, e-posta, webhook veya veritabani entegrasyonu yok.
+- Client panel action history localStorage uzerinden calisir.
+- Rapor indirme su an front-end generated `.txt` cikti uretir; gercek PDF endpoint'i eklenebilir.
+
+Routing:
+
+- Public site React Router ile route bazli calisir.
+- Client panel state bazli calisir; ileride URL tabanli servis/sekme route'lari eklenebilir.
+
+Auth:
+
+- Client panelde gercek login/auth yok.
+- Kullanici ve yetki ekrani UI seviyesindedir.
+
+Data:
+
+- Dashboard verileri statiktir.
+- Ileride API/CRM/ads platformlari ile dinamik hale getirilebilir.
+
+## Bakim Checklist'i
+
+Yeni bir degisiklikten sonra kontrol edilmesi onerilir:
+
+- `cd client && npm run build`
+- `cd clientPanel && npm run build`
+- Header/footer linkleri dogru route'a gidiyor mu?
+- CTA'lar `/iletisim#contact-form` hedefine gidiyor mu?
+- Public site mobil gorunumde okunabilir mi?
+- Client panelde 13 servis karti dogru dashboard'a aciliyor mu?
+- Sidebar sekmeleri placeholder yerine anlamli ekran gosteriyor mu?
+- Automation Preview sadece ilgili servislerde mi?
+- Islem Merkezi buton aksiyonlarini kaydediyor mu?
+- Build ciktisinda sadece beklenen chunk uyarilari mi var?
+
+## Kisa Ozet
+
+Bu repo, Social Tech icin hem public pazarlama sitesini hem de musteriye ozel operasyon panelini kapsayan iki parcali bir front-end platformudur.
+
+`client`, dis dunyaya donuk conversion odakli web sitesidir.
+
+`clientPanel`, musteriye hizmet, onay, rapor, toplantı, faturalama ve ajans aksiyonlarini gorunur kilan dark premium dashboard uygulamasidir.
