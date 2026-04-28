@@ -1,7 +1,7 @@
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Test, TestingModule } from "@nestjs/testing";
-import { AccountType, PrismaClient, UserRole, UserStatus } from "@prisma/client";
+import { AccountType, Prisma, PrismaClient, UserRole, UserStatus } from "@prisma/client";
 import cookieParser from "cookie-parser";
 import { randomUUID } from "crypto";
 import request from "supertest";
@@ -19,6 +19,30 @@ const MANAGED_EMPLOYEE_INITIAL_PASSWORD = "Start12345";
 const MANAGED_EMPLOYEE_INITIAL_PASSWORD_HASH =
   "$2b$10$3yBQjNKNtpc7eG3y8onlVebjnuVnmSbsvVKjl9P8pSMSPifb04FZ6";
 const MANAGED_EMPLOYEE_RESET_PASSWORD = "Reset12345";
+const ADMIN_USER_AUDIT_ACTIONS = {
+  CREATED: "ADMIN_USER_CREATED",
+  UPDATED: "ADMIN_USER_UPDATED",
+  DEACTIVATED: "ADMIN_USER_DEACTIVATED",
+  ACTIVATED: "ADMIN_USER_ACTIVATED",
+  PASSWORD_RESET: "ADMIN_USER_PASSWORD_RESET",
+} as const;
+const SENSITIVE_AUDIT_METADATA_TOKENS = [
+  "password",
+  "passwordHash",
+  "token",
+  "secret",
+  "authorization",
+  "auth header",
+  "authHeader",
+  "auth_header",
+  "bearer",
+  DEMO_PASSWORD,
+  MANAGED_EMPLOYEE_INITIAL_PASSWORD,
+  MANAGED_EMPLOYEE_RESET_PASSWORD,
+] as const;
+
+type AdminUserAuditAction =
+  (typeof ADMIN_USER_AUDIT_ACTIONS)[keyof typeof ADMIN_USER_AUDIT_ACTIONS];
 
 type LoginBody = {
   accessToken: string;
@@ -81,6 +105,8 @@ describe("Admin Users Management Authorization (e2e)", () => {
   const managedEmployeeEmail = `${TEST_EMAIL_PREFIX}${randomUUID()}@example.com`;
   const managedEmployeeDisplayName = "Authz Managed Employee";
   const updatedEmployeeDisplayName = "Authz Managed Employee Updated";
+  const auditCreatedEmployeeEmail = `${TEST_EMAIL_PREFIX}audit-${randomUUID().slice(0, 8)}@example.com`;
+  const auditCreatedEmployeeDisplayName = "Audit Created Employee";
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -348,6 +374,49 @@ describe("Admin Users Management Authorization (e2e)", () => {
     expectApiError(response.body);
   });
 
+  it("admin create writes a sanitized audit record", async () => {
+    const response = await request(app.getHttpServer())
+      .post(ADMIN_USERS_PATH)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send(createEmployeePayload(auditCreatedEmployeeEmail, auditCreatedEmployeeDisplayName))
+      .expect(201);
+
+    const user = response.body as AdminUserBody;
+    expect(user).toEqual(
+      expect.objectContaining({
+        id: expect.any(String),
+        email: auditCreatedEmployeeEmail,
+        displayName: auditCreatedEmployeeDisplayName,
+        accountType: AccountType.EMPLOYEE,
+        role: UserRole.SEO_SPECIALIST,
+        status: UserStatus.ACTIVE,
+        isActive: true,
+      }),
+    );
+    expectNoSensitiveUserFields(user);
+    await expectAdminUserAuditLog(ADMIN_USER_AUDIT_ACTIONS.CREATED, user.id);
+  });
+
+  it("employee 403 create attempt does not write an audit record", async () => {
+    const forbiddenEmployeeEmail = `${TEST_EMAIL_PREFIX}forbidden-${randomUUID().slice(0, 8)}@example.com`;
+
+    await expectNoAuditWriteDuring(async () => {
+      const response = await request(app.getHttpServer())
+        .post(ADMIN_USERS_PATH)
+        .set("Authorization", `Bearer ${employeeToken}`)
+        .send(createEmployeePayload(forbiddenEmployeeEmail, "Forbidden Employee Create"))
+        .expect(403);
+
+      expectApiError(response.body);
+    });
+
+    const createdUser = await prisma.user.findUnique({
+      where: { email: forbiddenEmployeeEmail },
+      select: { id: true },
+    });
+    expect(createdUser).toBeNull();
+  });
+
   it("admin user detail returns 200 without sensitive fields", async () => {
     const response = await request(app.getHttpServer())
       .get(`${ADMIN_USERS_PATH}/${managedEmployeeId}`)
@@ -391,6 +460,7 @@ describe("Admin Users Management Authorization (e2e)", () => {
       }),
     );
     expectNoSensitiveUserFields(user);
+    await expectAdminUserAuditLog(ADMIN_USER_AUDIT_ACTIONS.UPDATED, managedEmployeeId);
   });
 
   it("employee cannot update admin-users endpoint", async () => {
@@ -403,14 +473,16 @@ describe("Admin Users Management Authorization (e2e)", () => {
     expectApiError(response.body);
   });
 
-  it("client cannot update admin-users endpoint", async () => {
-    const response = await request(app.getHttpServer())
-      .patch(`${ADMIN_USERS_PATH}/${managedEmployeeId}`)
-      .set("Authorization", `Bearer ${clientToken}`)
-      .send({ displayName: "Forbidden Update" })
-      .expect(403);
+  it("client cannot update admin-users endpoint and does not write an audit record", async () => {
+    await expectNoAuditWriteDuring(async () => {
+      const response = await request(app.getHttpServer())
+        .patch(`${ADMIN_USERS_PATH}/${managedEmployeeId}`)
+        .set("Authorization", `Bearer ${clientToken}`)
+        .send({ displayName: "Forbidden Update" })
+        .expect(403);
 
-    expectApiError(response.body);
+      expectApiError(response.body);
+    });
   });
 
   it("admin deactivates employee", async () => {
@@ -429,6 +501,7 @@ describe("Admin Users Management Authorization (e2e)", () => {
       }),
     );
     expectNoSensitiveUserFields(user);
+    await expectAdminUserAuditLog(ADMIN_USER_AUDIT_ACTIONS.DEACTIVATED, managedEmployeeId);
   });
 
   it("deactivated employee login is blocked", async () => {
@@ -474,6 +547,7 @@ describe("Admin Users Management Authorization (e2e)", () => {
       }),
     );
     expectNoSensitiveUserFields(user);
+    await expectAdminUserAuditLog(ADMIN_USER_AUDIT_ACTIONS.ACTIVATED, managedEmployeeId);
   });
 
   it("activated employee can login again", async () => {
@@ -536,6 +610,7 @@ describe("Admin Users Management Authorization (e2e)", () => {
       }),
     );
     expectNoSensitiveUserFields(resetUser);
+    await expectAdminUserAuditLog(ADMIN_USER_AUDIT_ACTIONS.PASSWORD_RESET, managedEmployeeId);
 
     await request(app.getHttpServer())
       .post(AUTH_LOGIN_PATH)
@@ -639,6 +714,16 @@ describe("Admin Users Management Authorization (e2e)", () => {
     expectNoSensitiveUserFields(user);
   }
 
+  function createEmployeePayload(email: string, displayName: string) {
+    return {
+      email,
+      displayName,
+      password: MANAGED_EMPLOYEE_INITIAL_PASSWORD,
+      accountType: AccountType.EMPLOYEE,
+      role: UserRole.SEO_SPECIALIST,
+    };
+  }
+
   async function ensureManagedEmployeeActive(): Promise<void> {
     const user = await prisma.user.findUnique({
       where: { id: managedEmployeeId },
@@ -683,6 +768,42 @@ describe("Admin Users Management Authorization (e2e)", () => {
     }
 
     throw new Error("Unable to generate a missing user id.");
+  }
+
+  async function expectAdminUserAuditLog(
+    action: AdminUserAuditAction,
+    entityId: string,
+  ): Promise<void> {
+    const auditLog = await prisma.auditLog.findFirst({
+      where: {
+        action,
+        entityId,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (!auditLog) {
+      throw new Error(`Expected ${action} audit log for admin user ${entityId}.`);
+    }
+
+    expect(auditLog).toEqual(
+      expect.objectContaining({
+        actorUserId: adminUserId,
+        action,
+        entityId,
+      }),
+    );
+    expect(typeof auditLog.entityType).toBe("string");
+    expect(auditLog.entityType.length).toBeGreaterThan(0);
+    expect(auditLog.createdAt).toBeInstanceOf(Date);
+    expectAuditMetadataIsSanitized(auditLog.metadata);
+  }
+
+  async function expectNoAuditWriteDuring(action: () => Promise<void>): Promise<void> {
+    const auditLogCountBefore = await prisma.auditLog.count();
+    await action();
+
+    await expect(prisma.auditLog.count()).resolves.toBe(auditLogCountBefore);
   }
 
   function extractRefreshCookieHeader(response: CookieResponse): string {
@@ -771,6 +892,17 @@ describe("Admin Users Management Authorization (e2e)", () => {
     }
 
     return timestamp;
+  }
+
+  function expectAuditMetadataIsSanitized(metadata: Prisma.JsonValue | null): void {
+    if (metadata === null) {
+      return;
+    }
+
+    const serializedMetadata = JSON.stringify(metadata).toLocaleLowerCase("en-US");
+    for (const token of SENSITIVE_AUDIT_METADATA_TOKENS) {
+      expect(serializedMetadata).not.toContain(token.toLocaleLowerCase("en-US"));
+    }
   }
 
   function expectNoSensitiveUserFields(user: unknown): void {

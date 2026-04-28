@@ -6,6 +6,12 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { AccountType, Prisma, UserRole, UserStatus } from "@prisma/client";
+import {
+  ADMIN_USER_AUDIT_ACTIONS,
+  AuditLogService,
+  type AdminUserAuditAction,
+  type AuditLogRequestContext,
+} from "../audit-log/audit-log.service";
 import { AuthService } from "../auth/auth.service";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { PrismaService } from "../database/prisma.service";
@@ -52,6 +58,7 @@ const EMPLOYEE_ROLES: readonly UserRole[] = [
 ];
 
 const USERS_MANAGE_PERMISSION = "users.manage";
+const ADMIN_USER_AUDIT_ENTITY_TYPE = "User";
 
 type AdminUserReadModel = Prisma.UserGetPayload<{ select: typeof adminUserReadSelect }>;
 
@@ -101,11 +108,22 @@ type AdminUsersListResponse = {
   };
 };
 
+type AdminUserAuditMetadataOptions = {
+  actorUserId: string;
+  targetUserId: string;
+  changedFields: string[];
+  previousRole?: UserRole;
+  nextRole?: UserRole;
+  previousStatus?: UserStatus;
+  nextStatus?: UserStatus;
+};
+
 @Injectable()
 export class AdminUsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly authService: AuthService,
+    private readonly auditLogService: AuditLogService,
   ) {}
 
   async getAdminUsers(
@@ -159,6 +177,7 @@ export class AdminUsersService {
   async createEmployeeUser(
     currentUser: AuthenticatedUser,
     dto: CreateAdminEmployeeUserDto,
+    auditRequestContext?: AuditLogRequestContext,
   ): Promise<AdminUserResponse> {
     this.assertCanManageUsers(currentUser);
     this.assertEmployeeAccountType(dto.accountType);
@@ -175,16 +194,35 @@ export class AdminUsersService {
     const passwordHash = await this.authService.hashUserPassword(dto.password);
 
     try {
-      const createdUser = await this.prisma.user.create({
-        data: {
-          email: dto.email,
-          displayName: dto.displayName ?? null,
-          passwordHash,
-          accountType: AccountType.EMPLOYEE,
-          role: dto.role,
-          clientProfileId: null,
-        },
-        select: adminUserReadSelect,
+      const createdUser = await this.prisma.$transaction(async (tx) => {
+        const user = await tx.user.create({
+          data: {
+            email: dto.email,
+            displayName: dto.displayName ?? null,
+            passwordHash,
+            accountType: AccountType.EMPLOYEE,
+            role: dto.role,
+            clientProfileId: null,
+          },
+          select: adminUserReadSelect,
+        });
+
+        await this.recordAdminUserAudit(
+          tx,
+          currentUser,
+          ADMIN_USER_AUDIT_ACTIONS.created,
+          user.id,
+          this.buildAuditMetadata({
+            actorUserId: currentUser.id,
+            targetUserId: user.id,
+            changedFields: this.getCreatedUserChangedFields(user),
+            nextRole: user.role,
+            nextStatus: user.status,
+          }),
+          auditRequestContext,
+        );
+
+        return user;
       });
 
       return this.toAdminUserResponse(createdUser);
@@ -211,6 +249,7 @@ export class AdminUsersService {
     currentUser: AuthenticatedUser,
     userId: string,
     dto: UpdateAdminUserDto,
+    auditRequestContext?: AuditLogRequestContext,
   ): Promise<AdminUserResponse> {
     this.assertCanManageUsers(currentUser);
     this.assertHasUpdatePayload(dto);
@@ -231,12 +270,32 @@ export class AdminUsersService {
 
     const roleChanged = dto.role !== undefined && dto.role !== manageableUser.role;
     const shouldInvalidateSessions = roleChanged || dto.isActive === false;
+    const recordUpdateAudit = async (
+      tx: Prisma.TransactionClient,
+      updatedUser: AdminUserReadModel,
+    ): Promise<void> => {
+      await this.recordAdminUserAudit(
+        tx,
+        currentUser,
+        ADMIN_USER_AUDIT_ACTIONS.updated,
+        updatedUser.id,
+        this.buildUpdateAuditMetadata(currentUser.id, manageableUser, updatedUser),
+        auditRequestContext,
+      );
+    };
+
     const updatedUser = shouldInvalidateSessions
-      ? await this.updateUserAndInvalidateSessions(userId, data)
-      : await this.prisma.user.update({
-          where: { id: userId },
-          data,
-          select: adminUserReadSelect,
+      ? await this.updateUserAndInvalidateSessions(userId, data, recordUpdateAudit)
+      : await this.prisma.$transaction(async (tx) => {
+          const user = await tx.user.update({
+            where: { id: userId },
+            data,
+            select: adminUserReadSelect,
+          });
+
+          await recordUpdateAudit(tx, user);
+
+          return user;
         });
 
     return this.toAdminUserResponse(updatedUser);
@@ -245,13 +304,27 @@ export class AdminUsersService {
   async deactivateAdminUser(
     currentUser: AuthenticatedUser,
     userId: string,
+    auditRequestContext?: AuditLogRequestContext,
   ): Promise<AdminUserResponse> {
     this.assertCanManageUsers(currentUser);
     this.assertNotSelfDeactivation(currentUser, userId);
 
-    await this.getManageableEmployeeOrFail(userId);
+    const manageableUser = await this.getManageableEmployeeOrFail(userId);
     const deactivatedUser = await this.updateUserAndInvalidateSessions(userId, {
       status: UserStatus.INACTIVE,
+    }, async (tx, updatedUser) => {
+      await this.recordAdminUserAudit(
+        tx,
+        currentUser,
+        ADMIN_USER_AUDIT_ACTIONS.deactivated,
+        updatedUser.id,
+        this.buildStatusAuditMetadata(
+          currentUser.id,
+          manageableUser,
+          updatedUser,
+        ),
+        auditRequestContext,
+      );
     });
 
     return this.toAdminUserResponse(deactivatedUser);
@@ -260,6 +333,7 @@ export class AdminUsersService {
   async activateAdminUser(
     currentUser: AuthenticatedUser,
     userId: string,
+    auditRequestContext?: AuditLogRequestContext,
   ): Promise<AdminUserResponse> {
     this.assertCanManageUsers(currentUser);
 
@@ -268,10 +342,23 @@ export class AdminUsersService {
       return this.toAdminUserResponse(user);
     }
 
-    const activatedUser = await this.prisma.user.update({
-      where: { id: userId },
-      data: { status: UserStatus.ACTIVE },
-      select: adminUserReadSelect,
+    const activatedUser = await this.prisma.$transaction(async (tx) => {
+      const updatedUser = await tx.user.update({
+        where: { id: userId },
+        data: { status: UserStatus.ACTIVE },
+        select: adminUserReadSelect,
+      });
+
+      await this.recordAdminUserAudit(
+        tx,
+        currentUser,
+        ADMIN_USER_AUDIT_ACTIONS.activated,
+        updatedUser.id,
+        this.buildStatusAuditMetadata(currentUser.id, user, updatedUser),
+        auditRequestContext,
+      );
+
+      return updatedUser;
     });
 
     return this.toAdminUserResponse(activatedUser);
@@ -281,12 +368,30 @@ export class AdminUsersService {
     currentUser: AuthenticatedUser,
     userId: string,
     dto: ResetAdminUserPasswordDto,
+    auditRequestContext?: AuditLogRequestContext,
   ): Promise<AdminUserResponse> {
     this.assertCanManageUsers(currentUser);
     await this.getManageableEmployeeOrFail(userId);
 
     const passwordHash = await this.authService.hashUserPassword(dto.newPassword);
-    const updatedUser = await this.updateUserAndInvalidateSessions(userId, { passwordHash });
+    const updatedUser = await this.updateUserAndInvalidateSessions(
+      userId,
+      { passwordHash },
+      async (tx, user) => {
+        await this.recordAdminUserAudit(
+          tx,
+          currentUser,
+          ADMIN_USER_AUDIT_ACTIONS.passwordReset,
+          user.id,
+          this.buildAuditMetadata({
+            actorUserId: currentUser.id,
+            targetUserId: user.id,
+            changedFields: ["credentials"],
+          }),
+          auditRequestContext,
+        );
+      },
+    );
 
     return this.toAdminUserResponse(updatedUser);
   }
@@ -316,6 +421,10 @@ export class AdminUsersService {
   private async updateUserAndInvalidateSessions(
     userId: string,
     data: Prisma.UserUpdateInput,
+    auditAfterUpdate?: (
+      tx: Prisma.TransactionClient,
+      updatedUser: AdminUserReadModel,
+    ) => Promise<void>,
   ): Promise<AdminUserReadModel> {
     const sessionInvalidatedAt = new Date();
 
@@ -337,8 +446,113 @@ export class AdminUsersService {
         data: { revokedAt: sessionInvalidatedAt },
       });
 
+      if (auditAfterUpdate) {
+        await auditAfterUpdate(tx, updatedUser);
+      }
+
       return updatedUser;
     });
+  }
+
+  private async recordAdminUserAudit(
+    tx: Prisma.TransactionClient,
+    currentUser: AuthenticatedUser,
+    action: AdminUserAuditAction,
+    targetUserId: string,
+    metadata: Prisma.InputJsonObject,
+    requestContext?: AuditLogRequestContext,
+  ): Promise<void> {
+    await this.auditLogService.record(
+      {
+        actorUserId: currentUser.id,
+        action,
+        entityType: ADMIN_USER_AUDIT_ENTITY_TYPE,
+        entityId: targetUserId,
+        metadata,
+        requestContext,
+      },
+      tx,
+    );
+  }
+
+  private buildUpdateAuditMetadata(
+    actorUserId: string,
+    previousUser: AdminUserReadModel,
+    updatedUser: AdminUserReadModel,
+  ): Prisma.InputJsonObject {
+    const roleChanged = previousUser.role !== updatedUser.role;
+    const statusChanged = previousUser.status !== updatedUser.status;
+
+    return this.buildAuditMetadata({
+      actorUserId,
+      targetUserId: updatedUser.id,
+      changedFields: this.getUpdatedUserChangedFields(previousUser, updatedUser),
+      ...(roleChanged
+        ? { previousRole: previousUser.role, nextRole: updatedUser.role }
+        : {}),
+      ...(statusChanged
+        ? { previousStatus: previousUser.status, nextStatus: updatedUser.status }
+        : {}),
+    });
+  }
+
+  private buildStatusAuditMetadata(
+    actorUserId: string,
+    previousUser: AdminUserReadModel,
+    updatedUser: AdminUserReadModel,
+  ): Prisma.InputJsonObject {
+    return this.buildAuditMetadata({
+      actorUserId,
+      targetUserId: updatedUser.id,
+      changedFields: previousUser.status === updatedUser.status ? [] : ["status"],
+      previousStatus: previousUser.status,
+      nextStatus: updatedUser.status,
+    });
+  }
+
+  private buildAuditMetadata(options: AdminUserAuditMetadataOptions): Prisma.InputJsonObject {
+    const metadata = {
+      actorUserId: options.actorUserId,
+      targetUserId: options.targetUserId,
+      changedFields: options.changedFields,
+      ...(options.previousRole !== undefined ? { previousRole: options.previousRole } : {}),
+      ...(options.nextRole !== undefined ? { nextRole: options.nextRole } : {}),
+      ...(options.previousStatus !== undefined ? { previousStatus: options.previousStatus } : {}),
+      ...(options.nextStatus !== undefined ? { nextStatus: options.nextStatus } : {}),
+    } satisfies Prisma.InputJsonObject;
+
+    return metadata;
+  }
+
+  private getCreatedUserChangedFields(user: AdminUserReadModel): string[] {
+    return [
+      "email",
+      ...(user.displayName === null ? [] : ["displayName"]),
+      "accountType",
+      "role",
+      "status",
+    ];
+  }
+
+  private getUpdatedUserChangedFields(
+    previousUser: AdminUserReadModel,
+    updatedUser: AdminUserReadModel,
+  ): string[] {
+    const changedFields: string[] = [];
+
+    if (previousUser.displayName !== updatedUser.displayName) {
+      changedFields.push("displayName");
+    }
+
+    if (previousUser.role !== updatedUser.role) {
+      changedFields.push("role");
+    }
+
+    if (previousUser.status !== updatedUser.status) {
+      changedFields.push("status");
+    }
+
+    return changedFields;
   }
 
   private assertHasUpdatePayload(dto: UpdateAdminUserDto): void {

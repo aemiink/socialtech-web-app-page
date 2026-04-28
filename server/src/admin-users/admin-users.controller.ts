@@ -1,4 +1,6 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { Request } from "express";
+import { AuditLogRequestContext } from "../audit-log/audit-log.service";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { RequirePermissions } from "../auth/decorators/permissions.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
@@ -28,8 +30,13 @@ export class AdminUsersController {
   createEmployeeUser(
     @CurrentUser() currentUser: AuthenticatedUser,
     @Body() dto: CreateAdminEmployeeUserDto,
+    @Req() request: Request,
   ) {
-    return this.adminUsersService.createEmployeeUser(currentUser, dto);
+    return this.adminUsersService.createEmployeeUser(
+      currentUser,
+      dto,
+      this.toAuditRequestContext(request),
+    );
   }
 
   @Get(":id")
@@ -45,24 +52,40 @@ export class AdminUsersController {
     @CurrentUser() currentUser: AuthenticatedUser,
     @Param("id", ParseUUIDPipe) userId: string,
     @Body() dto: UpdateAdminUserDto,
+    @Req() request: Request,
   ) {
-    return this.adminUsersService.updateAdminUser(currentUser, userId, dto);
+    return this.adminUsersService.updateAdminUser(
+      currentUser,
+      userId,
+      dto,
+      this.toAuditRequestContext(request),
+    );
   }
 
   @Patch(":id/deactivate")
   deactivateAdminUser(
     @CurrentUser() currentUser: AuthenticatedUser,
     @Param("id", ParseUUIDPipe) userId: string,
+    @Req() request: Request,
   ) {
-    return this.adminUsersService.deactivateAdminUser(currentUser, userId);
+    return this.adminUsersService.deactivateAdminUser(
+      currentUser,
+      userId,
+      this.toAuditRequestContext(request),
+    );
   }
 
   @Patch(":id/activate")
   activateAdminUser(
     @CurrentUser() currentUser: AuthenticatedUser,
     @Param("id", ParseUUIDPipe) userId: string,
+    @Req() request: Request,
   ) {
-    return this.adminUsersService.activateAdminUser(currentUser, userId);
+    return this.adminUsersService.activateAdminUser(
+      currentUser,
+      userId,
+      this.toAuditRequestContext(request),
+    );
   }
 
   @Patch(":id/reset-password")
@@ -70,7 +93,20 @@ export class AdminUsersController {
     @CurrentUser() currentUser: AuthenticatedUser,
     @Param("id", ParseUUIDPipe) userId: string,
     @Body() dto: ResetAdminUserPasswordDto,
+    @Req() request: Request,
   ) {
-    return this.adminUsersService.resetAdminUserPassword(currentUser, userId, dto);
+    return this.adminUsersService.resetAdminUserPassword(
+      currentUser,
+      userId,
+      dto,
+      this.toAuditRequestContext(request),
+    );
+  }
+
+  private toAuditRequestContext(request: Request): AuditLogRequestContext {
+    return {
+      ipAddress: request.ip ?? null,
+      userAgent: request.get("user-agent") ?? null,
+    };
   }
 }
