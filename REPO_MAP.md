@@ -5,6 +5,7 @@
 - `adminandemployeePanel/` - Vite + React SPA for the Admin Panel and role-based Employee Panel.
 - `client/` - public/marketing Social Tech website. This is not the Client Portal.
 - `clientPanel/` - Client Portal Vite + React SPA for customer service visibility.
+- `server/` - NestJS + TypeScript backend (single shared REST API with implemented auth core).
 - `PROJECT_CONTEXT.md` - shared product, stack, architecture, and convention memory.
 - `REPO_MAP.md` - shared file and module map.
 - `DECISIONS.md` - dated architecture decisions.
@@ -29,6 +30,11 @@ Location: `adminandemployeePanel/`
 - Mock data: `adminandemployeePanel/src/app/data/mockData.ts`
 - Styles: `adminandemployeePanel/src/styles/`
 - Vite config: `adminandemployeePanel/vite.config.ts`
+- Workflow config:
+  - `adminandemployeePanel/package.json`
+  - `adminandemployeePanel/package-lock.json`
+  - `adminandemployeePanel/tsconfig.json`
+  - npm scripts: `dev`, `build`, `typecheck`, `preview`, `check`
 
 ## Client Portal
 
@@ -40,6 +46,10 @@ Purpose: customer-facing visibility panel for purchased Social Tech services, re
 
 - Package scripts: `clientPanel/package.json`
 - Vite config: `clientPanel/vite.config.ts`
+- Workflow config:
+  - `clientPanel/package-lock.json`
+  - `clientPanel/tsconfig.json`
+  - npm scripts: `dev`, `build`, `typecheck`, `preview`, `check`
 - HTML entry: `clientPanel/index.html`
 - React entry: `clientPanel/src/main.tsx`
 - App root: `clientPanel/src/app/App.tsx`
@@ -94,7 +104,68 @@ Additional portal pages exist under `clientPanel/src/app/pages/` and `clientPane
 - `clientPanel/src/app/data/service-pages.ts` - service labels, service profiles, KPIs, tab content, tables, timelines, agency comments, and client action prompts.
 - `clientPanel/src/app/lib/client-actions.ts` - browser `localStorage` action history, action type inference, action event dispatch, and local text-file download behavior.
 - `clientPanel/src/app/App.tsx` stores demo client auth in browser `localStorage` and resets selected service/page on logout.
-- All Client Portal data is mock/static. There is no backend, API, database, or real authentication.
+- Client Portal data flow is still mock/static in frontend. Backend API foundation exists in `server/` but frontend integration has not started yet.
+
+## Backend API
+
+Location: `server/`
+
+Purpose: shared NestJS REST API that serves as the common backend for Admin Panel, Employee Panel, and Client Portal.
+
+### Config And Runtime
+
+- `server/package.json` - npm scripts (`dev`, `start`, `build`, `typecheck`, `check`, `prisma:*`) and `packageManager: npm@11.8.0`
+- `server/.env.example` - backend env variable template
+- `server/nest-cli.json`
+- `server/tsconfig.json`
+- `server/tsconfig.build.json`
+
+### App Bootstrap
+
+- `server/src/main.ts` - Nest bootstrap, `/api/v1` global prefix, global ValidationPipe, global exception filter, CORS setup
+- `server/src/app.module.ts` - root module imports for config/database/health/auth/users/clients
+- `server/src/config/env.validation.ts` - Joi env validation schema
+- `server/src/config/cors.config.ts` - env-based CORS whitelist
+- `server/src/common/filters/global-exception.filter.ts` - centralized error response format
+
+### Database Foundation
+
+- `server/prisma/schema.prisma` - Prisma schema foundation:
+  - Core models: `User`, `RefreshToken`, `ClientProfile`, `AuditLog`
+  - Hybrid RBAC models: `Permission`, `RolePermission`
+  - `User.role` enum remains the primary fixed role field
+  - `ClientProfile.slug` is unique
+- `server/src/database/prisma.service.ts` - Prisma client lifecycle management
+- `server/src/database/database.module.ts` - global database module
+- `server/prisma/seed.ts` - demo seed foundation:
+  - seeds admin + 7 employee roles + 1 client owner
+  - seeds permission catalog and role-permission mappings
+  - links `client@socialtech.com` to `Acme E-ticaret` client profile
+  - uses `bcryptjs` hashes for demo passwords
+- `server/tsconfig.seed.json` - TypeScript check config for seed files
+
+### Auth And Core Modules
+
+- `server/src/health/` - health service/controller/module (`GET /api/v1/health`)
+- `server/src/auth/` - implemented auth flow and authorization scaffolding:
+  - `auth.controller.ts` - `/api/v1/auth/login|refresh|logout|me`
+  - `auth.service.ts` - login/refresh/logout/me logic, refresh rotation, revoke handling
+  - `authorization.service.ts` - role -> permission resolution
+  - `dto/` - `LoginDto`, `RefreshTokenDto`, `LogoutDto`
+  - `guards/` - `JwtAuthGuard`, `PermissionsGuard`
+  - `decorators/` - `CurrentUser`, `RequirePermissions`
+  - `types/` - auth response, token payload, authenticated user types
+- `server/src/users/` - users module skeleton
+- `server/src/clients/` - clients module skeleton
+- `users` and `clients` modules are still skeleton scope; domain CRUD and authorization rollout is pending.
+
+### Seed And Prisma Commands
+
+From `server/package.json`:
+- `npm run prisma:generate`
+- `npm run prisma:push` (currently used for local schema sync)
+- `npm run prisma:seed`
+- `npm run prisma:migrate` (planned for migration-first workflow)
 
 ### Styles
 

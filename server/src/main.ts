@@ -1,6 +1,7 @@
 import { ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
+import * as cookieParser from "cookie-parser";
 import { AppModule } from "./app.module";
 import { GlobalExceptionFilter } from "./common/filters/global-exception.filter";
 import { createCorsOptions } from "./config/cors.config";
@@ -19,6 +20,7 @@ async function bootstrap(): Promise<void> {
   );
   app.useGlobalFilters(new GlobalExceptionFilter(configService));
   app.enableCors(createCorsOptions(configService));
+  app.use(cookieParser());
 
   const port = configService.get<number>("PORT") ?? 4000;
   await app.listen(port);

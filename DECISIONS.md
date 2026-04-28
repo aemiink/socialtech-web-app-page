@@ -122,3 +122,167 @@ Affected files:
 - `clientPanel/src/app/components/sidebar.tsx`
 - `clientPanel/src/app/components/topbar.tsx`
 - `clientPanel/src/app/pages/service-selection.tsx`
+
+---
+
+## 2026-04-28 - npm Developer Workflow Standardization
+
+Context:
+`adminandemployeePanel/` and `clientPanel/` were buildable, but developer workflow signaling was inconsistent (`package-lock.json` existed while `pnpm` metadata was still present), and there was no explicit TypeScript typecheck pipeline before backend/auth integration work.
+
+Decision:
+Standardized both apps on npm (`packageManager: npm@11.8.0`), removed pnpm-specific workspace/override metadata, moved `react` and `react-dom` into `dependencies`, added TypeScript typecheck infrastructure (`typescript`, `@types/*`, `tsconfig.json`), and added `typecheck`, `preview`, and `check` scripts. Ran `npm install` and updated lockfiles, then verified `npm run check` succeeds in both apps.
+
+ESLint/Prettier were intentionally not added in this pass to keep the change set minimal and focused on package manager consistency plus type/build gating.
+
+Reason:
+Creates a stable, reproducible baseline for upcoming backend/auth integration while minimizing risk and avoiding broad formatting/lint churn.
+
+Affected files:
+- `adminandemployeePanel/package.json`
+- `adminandemployeePanel/package-lock.json`
+- `adminandemployeePanel/tsconfig.json`
+- `adminandemployeePanel/pnpm-workspace.yaml`
+- `adminandemployeePanel/vite.config.ts`
+- `adminandemployeePanel/src/app/pages/Clients.tsx`
+- `clientPanel/package.json`
+- `clientPanel/package-lock.json`
+- `clientPanel/tsconfig.json`
+- `clientPanel/pnpm-workspace.yaml`
+- `clientPanel/vite.config.ts`
+
+---
+
+## 2026-04-28 - NestJS Backend Foundation
+
+Context:
+The repository had multiple Vite + React SPAs with frontend-only demo auth and mock/static data, but no backend service. A backend foundation was required before real authentication, RBAC, database migration, and API integration phases.
+
+Decision:
+Created a new `server/` application as a NestJS + TypeScript backend foundation to act as a single shared API for Admin/Employee Panel and Client Portal. Added foundational infrastructure only:
+- `/api/v1` global prefix
+- env/config validation
+- global request validation
+- global exception handling
+- env-driven CORS
+- Prisma/PostgreSQL preparation
+- health endpoint
+- auth/users/clients module skeletons
+
+This milestone intentionally does not include full auth, real RBAC enforcement, full domain modeling, or frontend API integration.
+
+Reason:
+Establishes a clean, testable, extensible backend base while keeping implementation risk low and preserving phased delivery.
+
+Affected files:
+- `server/.env.example`
+- `server/package.json`
+- `server/nest-cli.json`
+- `server/tsconfig.json`
+- `server/tsconfig.build.json`
+- `server/src/main.ts`
+- `server/src/app.module.ts`
+- `server/src/config/env.validation.ts`
+- `server/src/config/cors.config.ts`
+- `server/src/common/filters/global-exception.filter.ts`
+- `server/prisma/schema.prisma`
+- `server/src/database/prisma.service.ts`
+- `server/src/database/database.module.ts`
+- `server/src/health/*`
+- `server/src/auth/*`
+- `server/src/users/*`
+- `server/src/clients/*`
+
+---
+
+## 2026-04-28 - Hybrid RBAC Schema and Demo Seed Foundation
+
+Context:
+Backend foundation existed in `server/`, but auth implementation had not started yet. The project needed an auth-ready schema baseline and deterministic demo data before implementing real `login/refresh/logout/me`.
+
+Decision:
+Extended Prisma schema with a hybrid RBAC-ready approach:
+- Keep fixed `User.role` enum as the primary role identity.
+- Add `Permission` and `RolePermission` tables for expandable backend authorization mapping.
+- Add `User.displayName` and `User.lastLoginAt`.
+- Add unique `ClientProfile.slug`.
+
+Added `prisma/seed.ts` and seed scripts to establish deterministic demo data:
+- Admin + 7 employee role users + 1 client owner user.
+- Permission catalog and role-permission mapping rows.
+- `client@socialtech.com` linked to `Acme E-ticaret` client profile.
+
+This milestone intentionally does not implement auth endpoints, JWT logic, refresh rotation, or backend guard enforcement.
+
+Reason:
+Provides a stable schema + seed baseline for the next task (real auth endpoints) while keeping scope controlled and avoiding premature full RBAC/auth implementation.
+
+Operational note:
+- Current local schema sync uses `prisma db push`.
+- Prisma migration files are not created yet and remain a planned follow-up.
+- `package.json#prisma` seed config is currently valid but deprecated in Prisma 7; migrate later to `prisma.config.ts`.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/seed.ts`
+- `server/package.json`
+- `server/package-lock.json`
+- `server/tsconfig.seed.json`
+
+---
+
+## 2026-04-28 - Backend Auth Flow with Refresh Token Rotation
+
+Context:
+`server/` backend foundation and Prisma seed/schema baseline were ready, but auth endpoints were still placeholder and frontend apps were operating with demo-only auth state.
+
+Decision:
+Implemented real backend auth endpoints under `/api/v1/auth`:
+- `POST /login`
+- `POST /refresh`
+- `POST /logout`
+- `GET /me`
+
+Security and session behavior:
+- Access token is returned in response body and consumed as Bearer token.
+- Refresh token is issued as HttpOnly cookie.
+- Refresh token plaintext is never stored in database; only hash is stored in `RefreshToken.tokenHash`.
+- Refresh token rotation is enabled.
+- On revoked-token reuse detection, active refresh sessions for the same user are revoked.
+- Seed password hashing moved to `bcryptjs`.
+- Legacy `seed-sha256` hashes are temporarily supported and upgraded to bcrypt on successful login.
+
+Authorization baseline:
+- Added `JwtAuthGuard` and `CurrentUser` decorator.
+- Added `RequirePermissions` decorator and `PermissionsGuard` skeleton for domain rollout.
+- `/auth/me` is protected with backend guard and returns role + resolved permissions (+ `ClientProfile` for client users).
+
+Reason:
+Establishes secure, production-aligned auth mechanics early while preserving phased delivery for frontend integration and broader domain authorization.
+
+Operational verification:
+- `npm run prisma:generate` passed
+- `npm run prisma:seed` passed
+- `npm run build` passed
+- `npm run check` passed
+- Manual auth flow checks passed (`login`, `me`, `refresh`, `logout`, `logout -> refresh=401`)
+
+Affected files:
+- `server/src/auth/auth.controller.ts`
+- `server/src/auth/auth.service.ts`
+- `server/src/auth/auth.module.ts`
+- `server/src/auth/authorization.service.ts`
+- `server/src/auth/dto/login.dto.ts`
+- `server/src/auth/dto/refresh-token.dto.ts`
+- `server/src/auth/dto/logout.dto.ts`
+- `server/src/auth/guards/jwt-auth.guard.ts`
+- `server/src/auth/guards/permissions.guard.ts`
+- `server/src/auth/decorators/current-user.decorator.ts`
+- `server/src/auth/decorators/permissions.decorator.ts`
+- `server/src/auth/types/*`
+- `server/src/config/env.validation.ts`
+- `server/src/main.ts`
+- `server/prisma/seed.ts`
+- `server/.env.example`
+- `server/package.json`
+- `server/package-lock.json`

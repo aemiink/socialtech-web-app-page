@@ -2,7 +2,7 @@
 
 ## Product Summary
 
-Social Tech is a premium digital growth agency. This repository contains multiple Vite + React SPAs for agency operations and client visibility: an Admin Panel, an Employee Panel (role-based), a public/marketing client site, and a Client Portal. The UI is in Turkish. All data is currently mock/static (no live backend).
+Social Tech is a premium digital growth agency. This repository contains multiple Vite + React SPAs for agency operations and client visibility: an Admin Panel, an Employee Panel (role-based), a public/marketing client site, and a Client Portal. The UI is in Turkish. Frontend business data is still mostly mock/static while backend API/auth integration is phased in.
 
 ## Tech Stack
 
@@ -16,9 +16,10 @@ Social Tech is a premium digital growth agency. This repository contains multipl
 - Drag-and-drop: react-dnd
 - Notifications: Sonner
 - Theming: next-themes
-- Package manager: pnpm in `adminandemployeePanel/`; `clientPanel/` currently has npm scripts and `package-lock.json`
+- Package manager: npm (canonical) in `adminandemployeePanel/`, `clientPanel/`, and `server/` (`packageManager: npm@11.8.0`)
 - TypeScript: Yes (strict expected per CLAUDE.md)
-- No backend / no database — all data is mock
+- Backend: NestJS + TypeScript in `server/` (single shared API with implemented auth endpoints; frontend integration is still pending)
+- Frontend business data is still mock/static until API integration phases
 
 ## Main User Roles
 
@@ -59,14 +60,20 @@ Portal areas:
 
 ## Auth & RBAC Summary
 
-- Auth: Demo only — no backend authentication, JWT, session, API, or database.
-- Admin + Employee login: single `/login` route in `adminandemployeePanel/` with email/password demo credentials.
-- Demo users are defined in `RoleContext.tsx`; the authenticated demo account is stored by email in browser `localStorage` and rehydrated from the static demo user list.
-- RBAC: `RoleContext` stores `currentUser`, `selectedRole`, account type, login, and logout helpers. Employee role comes from the demo email map, not from a free-form role picker.
-- Guards: `RootLayout` redirects unauthenticated users to `/login` and only allows admin accounts. `EmployeeLayout` redirects unauthenticated users to `/login` and only allows employee accounts.
-- Old `RoleAccessLogin.tsx` role picker was removed from active flow.
-- Client Portal login: `clientPanel/` shows a frontend demo login gate before service selection. Demo auth is stored in browser `localStorage`.
-- No backend permission checks exist (frontend-only, demo state).
+- Frontend auth remains demo/local in both SPAs:
+  - Admin + Employee login via `/login` in `adminandemployeePanel/` (`RoleContext` + `localStorage`)
+  - Client Portal login gate in `clientPanel/` (`localStorage`)
+- Backend auth is now implemented under `server/`:
+  - `POST /api/v1/auth/login`
+  - `POST /api/v1/auth/refresh`
+  - `POST /api/v1/auth/logout`
+  - `GET /api/v1/auth/me`
+- Access token is returned in response body and used as Bearer token.
+- Refresh token is stored as HttpOnly cookie; token plaintext is never stored in DB (`RefreshToken.tokenHash`).
+- Refresh token rotation is enabled; revoked-token reuse attempt triggers bulk revocation of active sessions for that user.
+- `JwtAuthGuard` and `CurrentUser` decorator are active; `RequirePermissions` + `PermissionsGuard` exist as backend authorization scaffolding.
+- `/auth/me` is guard-protected and returns role + resolved permission set + `ClientProfile` for client users.
+- Full domain endpoint authorization rollout is still pending (planned phase).
 
 ## Frontend Architecture
 
@@ -112,18 +119,71 @@ Portal areas:
 
 ## Backend Architecture
 
-None currently. Admin/Employee data is hardcoded in `mockData.ts`; Client Portal data is hardcoded in `clientPanel/src/app/data/service-pages.ts` and browser `localStorage` action history. No API routes, no server, no database.
+Backend now exists at `server/` as a single shared NestJS REST API for Admin/Employee Panel and Client Portal integration.
+
+Current backend baseline includes:
+- Global API prefix: `/api/v1`
+- Config/env validation: `@nestjs/config` + Joi schema validation
+- Global request validation: `ValidationPipe` with `whitelist`, `transform`, `forbidNonWhitelisted`
+- Global error handling: centralized exception filter with consistent JSON error shape
+- CORS: env-driven whitelist (`CLIENT_ORIGIN_ADMIN`, `CLIENT_ORIGIN_PORTAL`) with local dev defaults
+- Database access foundation: global `DatabaseModule` + `PrismaService`
+- Prisma/PostgreSQL schema foundation expanded with hybrid RBAC-ready models:
+  - Core: `User`, `RefreshToken`, `ClientProfile`, `AuditLog`
+  - Authorization: `Permission`, `RolePermission`
+- Hybrid RBAC strategy selected: fixed `User.role` enum is kept, permission expansion is modeled via `Permission` + `RolePermission`
+- Demo seed foundation exists at `server/prisma/seed.ts`:
+  - Seeds demo admin/employee/client accounts
+  - Seeds permission catalog and role-permission mappings
+  - Seeds demo client profile (`Acme E-ticaret`) and links `client@socialtech.com`
+- Auth implementation:
+  - `POST /api/v1/auth/login` (email/password validation, bcrypt verify, legacy seed hash upgrade path)
+  - `POST /api/v1/auth/refresh` (refresh JWT verification, DB hash check, rotation)
+  - `POST /api/v1/auth/logout` (refresh token revoke)
+  - `GET /api/v1/auth/me` (guarded user profile + permissions)
+- Token strategy:
+  - access token in response body (Bearer usage)
+  - refresh token in HttpOnly cookie
+  - refresh token persistence as hash only (`RefreshToken.tokenHash`)
+- Foundation modules: `health`, `auth`, `users`, `clients`
+- Health endpoint: `GET /api/v1/health`
+- Validation status:
+  - `npm run prisma:generate` passed
+  - `npm run prisma:seed` passed
+  - `npm run build` passed
+  - `npm run check` passed
+  - manual auth flow tests passed (`login`, `me`, `refresh`, `logout`, `logout` sonrası `refresh=401`)
+
+Planned next backend phases:
+- Domain endpoint authorization rollout (`JwtAuthGuard` + `PermissionsGuard`)
+- Frontend API/auth integration for `adminandemployeePanel/` and `clientPanel/`
+- Migration-first Prisma workflow (replace current `db push` local flow)
+- Auth e2e test coverage
 
 ## Data Model Summary
 
-From `mockData.ts` (mock, no schema enforcement):
-- `clients` — id, name, industry, monthlyValue, contractStart/End, status, paymentStatus, services[], contactPerson, email, phone, activeProjects, totalSpent, riskLevel
-- `employees`, `projects`, `tasks`, `approvals` — also present in mockData (structure not fully read)
+Frontend mock data (still active until API integration):
+- From `adminandemployeePanel/src/app/data/mockData.ts` (mock, no schema enforcement):
+  - `clients` — id, name, industry, monthlyValue, contractStart/End, status, paymentStatus, services[], contactPerson, email, phone, activeProjects, totalSpent, riskLevel
+  - `employees`, `projects`, `tasks`, `approvals` — also present in mockData
+- From `clientPanel/src/app/data/service-pages.ts`:
+  - `serviceLabels` / `ServiceId` — 13 active portal services
+  - `profiles` — per-service mock KPIs, summaries, agency comments, action prompts, activity, and tab content
+  - Client action history is currently browser `localStorage` based (`client-actions.ts`)
 
-From `clientPanel/src/app/data/service-pages.ts`:
-- `serviceLabels` / `ServiceId` — 13 active portal services
-- `profiles` — per-service mock KPIs, summaries, agency comments, action prompts, activity, and tab content
-- Client action history is stored in browser `localStorage` by `clientPanel/src/app/lib/client-actions.ts`
+Backend Prisma data model (foundation scope):
+- `User`: account type (`ADMIN | EMPLOYEE | CLIENT`), fixed role enum, status, optional `clientProfileId`, optional `displayName`, optional `lastLoginAt`
+- `RefreshToken`: hashed refresh token persistence, expiration, and revocation metadata used by live refresh/logout flow
+- `ClientProfile`: client identity with unique `slug`
+- `AuditLog`: actor-based audit event records
+- `Permission`: permission catalog table (slug + description)
+- `RolePermission`: role-to-permission mapping table for hybrid RBAC expansion
+
+Demo seed snapshot (current local run):
+- `users=9`
+- `permissions=33`
+- `role_permissions=107`
+- `client_profiles=1`
 
 ## Important Conventions
 
@@ -146,15 +206,12 @@ From `clientPanel/src/app/data/service-pages.ts`:
 
 ## Common Commands
 
-From `adminandemployeePanel/package.json`:
+From `adminandemployeePanel/package.json` and `clientPanel/package.json`:
 ```
-pnpm dev       # start dev server (Vite)
-pnpm build     # production build
+npm run dev        # start dev server (Vite)
+npm run build      # production build
+npm run typecheck  # TypeScript project check (tsc --noEmit)
+npm run preview    # preview production build
+npm run check      # typecheck + build gate
 ```
-No test, lint, or typecheck scripts defined yet. If `pnpm` is unavailable, `npm run build` works with the existing package scripts.
-
-From `clientPanel/package.json`:
-```
-npm run dev    # start Client Portal dev server (Vite)
-npm run build  # production build
-```
+Lint/format scripts are intentionally not added yet in this pass (ESLint/Prettier deferred).

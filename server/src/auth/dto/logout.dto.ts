@@ -1,7 +1,10 @@
-import { IsString, MinLength } from "class-validator";
+import { Transform } from "class-transformer";
+import { IsOptional, IsString, MinLength } from "class-validator";
 
 export class LogoutDto {
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  @IsOptional()
   @IsString()
   @MinLength(10)
-  refreshToken!: string;
+  refreshToken?: string;
 }

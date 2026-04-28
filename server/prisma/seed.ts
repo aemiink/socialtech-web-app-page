@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import * as bcrypt from "bcryptjs";
 import { PrismaClient, AccountType, UserRole, UserStatus } from "@prisma/client";
 
 type PermissionSeed = {
@@ -17,6 +17,7 @@ type DemoUserSeed = {
 const prisma = new PrismaClient();
 
 const DEMO_PASSWORD = "demo123";
+const BCRYPT_SALT_ROUNDS = resolveBcryptSaltRounds();
 const CLIENT_PROFILE_SEED = {
   slug: "acme-e-ticaret",
   companyName: "Acme E-ticaret",
@@ -213,12 +214,26 @@ const DEMO_USERS: DemoUserSeed[] = [
   },
 ];
 
-function seedPasswordHash(email: string): string {
-  const digest = createHash("sha256")
-    .update(`socialtech-seed:${email}:${DEMO_PASSWORD}`)
-    .digest("hex");
+function resolveBcryptSaltRounds(): number {
+  const parsed = Number.parseInt(process.env.BCRYPT_SALT_ROUNDS ?? "12", 10);
+  if (!Number.isInteger(parsed)) {
+    return 12;
+  }
 
-  return `seed-sha256$${digest}`;
+  return Math.min(Math.max(parsed, 10), 14);
+}
+
+function isModernPasswordHash(hash: string): boolean {
+  return (
+    hash.startsWith("$2a$") ||
+    hash.startsWith("$2b$") ||
+    hash.startsWith("$2y$") ||
+    hash.startsWith("$argon2")
+  );
+}
+
+async function seedPasswordHash(): Promise<string> {
+  return bcrypt.hash(DEMO_PASSWORD, BCRYPT_SALT_ROUNDS);
 }
 
 async function seedPermissions(): Promise<Map<string, string>> {
@@ -288,12 +303,22 @@ async function seedUsers(clientProfileId: string): Promise<void> {
   for (const user of DEMO_USERS) {
     const resolvedClientProfileId =
       user.clientProfileSlug === CLIENT_PROFILE_SEED.slug ? clientProfileId : null;
+    const existingUser = await prisma.user.findUnique({
+      where: { email: user.email },
+      select: {
+        passwordHash: true,
+      },
+    });
+    const passwordHash =
+      existingUser && isModernPasswordHash(existingUser.passwordHash)
+        ? existingUser.passwordHash
+        : await seedPasswordHash();
 
     await prisma.user.upsert({
       where: { email: user.email },
       update: {
         displayName: user.displayName,
-        passwordHash: seedPasswordHash(user.email),
+        passwordHash,
         accountType: user.accountType,
         role: user.role,
         status: UserStatus.ACTIVE,
@@ -302,7 +327,7 @@ async function seedUsers(clientProfileId: string): Promise<void> {
       create: {
         email: user.email,
         displayName: user.displayName,
-        passwordHash: seedPasswordHash(user.email),
+        passwordHash,
         accountType: user.accountType,
         role: user.role,
         status: UserStatus.ACTIVE,
