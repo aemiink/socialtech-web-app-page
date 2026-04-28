@@ -39,11 +39,26 @@ type AdminUserBody = {
   role: UserRole;
   status: UserStatus;
   isActive: boolean;
+  createdAt: string;
   passwordHash?: unknown;
   tokenHash?: unknown;
   refreshToken?: unknown;
   refreshTokens?: unknown;
   accessToken?: unknown;
+};
+
+type AdminUsersListMeta = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+};
+
+type AdminUsersListBody = {
+  data: AdminUserBody[];
+  meta: AdminUsersListMeta;
 };
 
 type CookieResponse = {
@@ -112,26 +127,201 @@ describe("Admin Users Management Authorization (e2e)", () => {
     await app.close();
   });
 
-  it("admin users list returns 200 without sensitive fields", async () => {
+  it("admin default pagination response has data/meta without sensitive fields", async () => {
     const response = await request(app.getHttpServer())
       .get(ADMIN_USERS_PATH)
       .set("Authorization", `Bearer ${adminToken}`)
       .expect(200);
 
-    const users = response.body as AdminUserBody[];
-    expect(Array.isArray(users)).toBe(true);
+    const list = expectAdminUsersListResponse(response.body);
+    expect(list.data.length).toBeGreaterThan(0);
+    expectSanePaginationMeta(list.meta);
+    expect(list.meta.page).toBe(1);
+    expect(list.meta.total).toBeGreaterThanOrEqual(list.data.length);
+    for (const user of list.data) {
+      expectNoSensitiveUserFields(user);
+    }
+  });
 
-    const managedUser = users.find((user) => user.id === managedEmployeeId);
-    expect(managedUser).toEqual(
+  it("admin users list supports page and limit", async () => {
+    const response = await request(app.getHttpServer())
+      .get(ADMIN_USERS_PATH)
+      .query({ page: 1, limit: 2 })
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    const list = expectAdminUsersListResponse(response.body);
+    expect(list.data).toHaveLength(2);
+    expect(list.meta).toEqual(
+      expect.objectContaining({
+        page: 1,
+        limit: 2,
+        hasPreviousPage: false,
+      }),
+    );
+    expect(list.meta.total).toBeGreaterThanOrEqual(2);
+    expectSanePaginationMeta(list.meta);
+  });
+
+  it("admin users list pagination meta is sane on later pages", async () => {
+    const response = await request(app.getHttpServer())
+      .get(ADMIN_USERS_PATH)
+      .query({ page: 2, limit: 2 })
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    const list = expectAdminUsersListResponse(response.body);
+    expect(list.meta).toEqual(
+      expect.objectContaining({
+        page: 2,
+        limit: 2,
+        hasPreviousPage: true,
+      }),
+    );
+    expect(list.meta.totalPages).toBe(Math.ceil(list.meta.total / list.meta.limit));
+    expect(list.meta.hasNextPage).toBe(list.meta.page < list.meta.totalPages);
+    expect(list.meta.hasPreviousPage).toBe(list.meta.page > 1);
+  });
+
+  it("admin users list supports email sorting asc", async () => {
+    const response = await request(app.getHttpServer())
+      .get(ADMIN_USERS_PATH)
+      .query({ page: 1, limit: 100, sortBy: "email", sortOrder: "asc" })
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    const list = expectAdminUsersListResponse(response.body);
+    expect(list.data.length).toBeGreaterThan(1);
+    expectEmailsSortedAscending(list.data);
+  });
+
+  it("admin users list defaults to createdAt desc sorting", async () => {
+    const response = await request(app.getHttpServer())
+      .get(ADMIN_USERS_PATH)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    const list = expectAdminUsersListResponse(response.body);
+    expect(list.data.length).toBeGreaterThan(1);
+    expectCreatedAtSortedDescending(list.data);
+  });
+
+  it("invalid admin users sortBy returns 400", async () => {
+    const response = await request(app.getHttpServer())
+      .get(ADMIN_USERS_PATH)
+      .query({ sortBy: "passwordHash" })
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(400);
+
+    expectApiError(response.body);
+  });
+
+  it("invalid admin users sortOrder returns 400", async () => {
+    const response = await request(app.getHttpServer())
+      .get(ADMIN_USERS_PATH)
+      .query({ sortOrder: "sideways" })
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(400);
+
+    expectApiError(response.body);
+  });
+
+  it("admin users page=0 returns 400", async () => {
+    const response = await request(app.getHttpServer())
+      .get(ADMIN_USERS_PATH)
+      .query({ page: 0 })
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(400);
+
+    expectApiError(response.body);
+  });
+
+  it("admin users page=10001 returns 400", async () => {
+    const response = await request(app.getHttpServer())
+      .get(ADMIN_USERS_PATH)
+      .query({ page: 10001 })
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(400);
+
+    expectApiError(response.body);
+  });
+
+  it("admin users limit=0 returns 400", async () => {
+    const response = await request(app.getHttpServer())
+      .get(ADMIN_USERS_PATH)
+      .query({ limit: 0 })
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(400);
+
+    expectApiError(response.body);
+  });
+
+  it("admin users limit=101 returns 400", async () => {
+    const response = await request(app.getHttpServer())
+      .get(ADMIN_USERS_PATH)
+      .query({ limit: 101 })
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(400);
+
+    expectApiError(response.body);
+  });
+
+  it("admin users search filter still works", async () => {
+    const response = await request(app.getHttpServer())
+      .get(ADMIN_USERS_PATH)
+      .query({ search: managedEmployeeEmail, limit: 100 })
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    const list = expectAdminUsersListResponse(response.body);
+    expect(list.data).toHaveLength(1);
+    expect(list.meta.total).toBe(1);
+    expect(list.data[0]).toEqual(
       expect.objectContaining({
         id: managedEmployeeId,
         email: managedEmployeeEmail,
-        accountType: AccountType.EMPLOYEE,
-        status: UserStatus.ACTIVE,
-        isActive: true,
       }),
     );
-    expectNoSensitiveUserFields(managedUser);
+    expectNoSensitiveUserFields(list.data[0]);
+  });
+
+  it("admin users accountType, role, and isActive filters still work", async () => {
+    const response = await request(app.getHttpServer())
+      .get(ADMIN_USERS_PATH)
+      .query({
+        accountType: AccountType.EMPLOYEE,
+        role: UserRole.DEVELOPER,
+        isActive: true,
+        limit: 100,
+      })
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    const list = expectAdminUsersListResponse(response.body);
+    expect(list.data.length).toBeGreaterThan(0);
+    expect(list.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: managedEmployeeId,
+          email: managedEmployeeEmail,
+          accountType: AccountType.EMPLOYEE,
+          role: UserRole.DEVELOPER,
+          status: UserStatus.ACTIVE,
+          isActive: true,
+        }),
+      ]),
+    );
+    for (const user of list.data) {
+      expect(user).toEqual(
+        expect.objectContaining({
+          accountType: AccountType.EMPLOYEE,
+          role: UserRole.DEVELOPER,
+          status: UserStatus.ACTIVE,
+          isActive: true,
+        }),
+      );
+      expectNoSensitiveUserFields(user);
+    }
   });
 
   it("employee users list returns 403", async () => {
@@ -515,6 +705,72 @@ describe("Admin Users Management Authorization (e2e)", () => {
 
   function makeInvalidUuid(): string {
     return `invalid-${randomUUID()}`;
+  }
+
+  function expectAdminUsersListResponse(body: unknown): AdminUsersListBody {
+    if (!isRecord(body)) {
+      throw new Error("Expected admin users list response to be an object.");
+    }
+
+    if (!Array.isArray(body.data)) {
+      throw new Error("Expected admin users list response data to be an array.");
+    }
+
+    if (!isRecord(body.meta)) {
+      throw new Error("Expected admin users list response meta to be an object.");
+    }
+
+    const meta = body.meta;
+    expect(meta).toEqual(
+      expect.objectContaining({
+        page: expect.any(Number),
+        limit: expect.any(Number),
+        total: expect.any(Number),
+        totalPages: expect.any(Number),
+        hasNextPage: expect.any(Boolean),
+        hasPreviousPage: expect.any(Boolean),
+      }),
+    );
+
+    return body as AdminUsersListBody;
+  }
+
+  function expectSanePaginationMeta(meta: AdminUsersListMeta): void {
+    expect(Number.isInteger(meta.page)).toBe(true);
+    expect(Number.isInteger(meta.limit)).toBe(true);
+    expect(Number.isInteger(meta.total)).toBe(true);
+    expect(Number.isInteger(meta.totalPages)).toBe(true);
+    expect(meta.page).toBeGreaterThanOrEqual(1);
+    expect(meta.limit).toBeGreaterThanOrEqual(1);
+    expect(meta.total).toBeGreaterThanOrEqual(0);
+    expect(meta.totalPages).toBe(Math.ceil(meta.total / meta.limit));
+    expect(meta.hasNextPage).toBe(meta.page < meta.totalPages);
+    expect(meta.hasPreviousPage).toBe(meta.page > 1);
+  }
+
+  function expectEmailsSortedAscending(users: AdminUserBody[]): void {
+    const emails = users.map((user) => user.email.toLocaleLowerCase("en-US"));
+    const sortedEmails = [...emails].sort((left, right) => left.localeCompare(right));
+
+    expect(emails).toEqual(sortedEmails);
+  }
+
+  function expectCreatedAtSortedDescending(users: AdminUserBody[]): void {
+    for (let index = 1; index < users.length; index += 1) {
+      const previous = parseTimestamp(users[index - 1].createdAt);
+      const current = parseTimestamp(users[index].createdAt);
+
+      expect(previous).toBeGreaterThanOrEqual(current);
+    }
+  }
+
+  function parseTimestamp(value: string): number {
+    const timestamp = new Date(value).getTime();
+    if (Number.isNaN(timestamp)) {
+      throw new Error(`Expected a valid timestamp, received ${value}.`);
+    }
+
+    return timestamp;
   }
 
   function expectNoSensitiveUserFields(user: unknown): void {

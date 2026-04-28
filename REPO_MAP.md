@@ -138,6 +138,7 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - Assignment scope enum: `EmployeeClientAssignmentScope`
   - Delivery enums: `ProjectStatus`, `TaskStatus`, `Priority`
   - `User.role` enum remains the primary fixed role field
+  - `User.sessionInvalidatedAt` is used for access-token invalidation lifecycle
   - `ClientProfile.slug` is unique
   - `Project` slug uniqueness is client-scoped (`@@unique([clientProfileId, slug])`)
   - Assignment constraints and indexes:
@@ -150,6 +151,7 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
     - `Task`: `projectId`, `assigneeUserId`, `status`, `priority`
 - `server/src/database/prisma.service.ts` - Prisma client lifecycle management
 - `server/src/database/database.module.ts` - global database module
+- `server/prisma/migrations/20260428211614_add_session_invalidated_at/migration.sql` - adds `User.sessionInvalidatedAt` column
 - `server/prisma/seed.ts` - demo seed foundation:
   - seeds admin + 7 employee roles + 1 client owner
   - seeds permission catalog and role-permission mappings
@@ -169,13 +171,13 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 - `server/src/health/` - health service/controller/module (`GET /api/v1/health`)
 - `server/src/auth/` - implemented auth flow and authorization scaffolding:
   - `auth.controller.ts` - `/api/v1/auth/login|refresh|logout|me`
-  - `auth.service.ts` - login/refresh/logout/me logic, refresh rotation, revoke handling
+  - `auth.service.ts` - login/refresh/logout/me logic, refresh rotation, revoke handling, and session invalidation checks (`siv` + fallback `iat`)
   - `auth.module.ts` - exports `JwtModule` + auth providers for downstream guard injection
   - `authorization.service.ts` - role -> permission resolution
   - `dto/` - `LoginDto`, `RefreshTokenDto`, `LogoutDto`
-  - `guards/` - `JwtAuthGuard`, `PermissionsGuard`
+  - `guards/` - `JwtAuthGuard`, `PermissionsGuard` (`JwtAuthGuard` enforces DB session version checks)
   - `decorators/` - `CurrentUser`, `RequirePermissions`
-  - `types/` - auth response, token payload, authenticated user types
+  - `types/` - auth response, token payload (`siv` support), authenticated user types
 - `server/src/users/` - protected users foundation:
   - `users.controller.ts` - `GET /api/v1/users/me`, `GET /api/v1/users`, `GET /api/v1/users/:id`
   - `users.service.ts` - admin/full-scope checks + own-record object authorization for non-admin access
@@ -193,8 +195,8 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - `admin-assignments.module.ts` - module wiring
 - `server/src/admin-users/` - admin employee-user management module:
   - `admin-users.controller.ts` - `POST /api/v1/admin/users`, `GET /api/v1/admin/users`, `GET /api/v1/admin/users/:id`, `PATCH /api/v1/admin/users/:id`, `PATCH /api/v1/admin/users/:id/deactivate`, `PATCH /api/v1/admin/users/:id/activate`, `PATCH /api/v1/admin/users/:id/reset-password`
-  - `admin-users.service.ts` - admin-only employee lifecycle management (create/list/detail/update/deactivate/activate/reset-password), self-protection guards, refresh-token revocation on deactivate/reset-password
-  - `dto/admin-user-query.dto.ts` - list query validation (`accountType`, `role`, `isActive`, `search`)
+  - `admin-users.service.ts` - admin-only employee lifecycle management (create/list/detail/update/deactivate/activate/reset-password), self-protection guards, refresh-token revocation on deactivate/reset-password, and paginated/sorted list responses (`data` + `meta`)
+  - `dto/admin-user-query.dto.ts` - list query validation (`accountType`, `role`, `isActive`, `search`) + pagination (`page`, `limit`) + sorting (`sortBy`, `sortOrder`)
   - `dto/update-admin-user.dto.ts` - update payload validation (`displayName`, `role`, `isActive`)
   - `dto/reset-admin-user-password.dto.ts` - reset-password payload validation
   - `admin-users.module.ts` - module wiring
@@ -232,12 +234,13 @@ From `server/package.json`:
 - `server/test/authz.e2e-spec.ts` - users/clients/admin-assignment authorization matrix (30 scenarios, real AppModule + real guards, runtime assignment/client resolution, assignment CRUD negative cases)
 - `server/test/projects-tasks-authz.e2e-spec.ts` - projects/tasks authorization matrix + assignment deactivation regression coverage
 - `server/test/admin-users-password-authz.e2e-spec.ts` - admin employee create + own password change authz matrix
-- `server/test/admin-users-management-authz.e2e-spec.ts` - admin users management authz matrix (list/detail/update/deactivate/activate/reset-password + role restrictions)
+- `server/test/admin-users-management-authz.e2e-spec.ts` - admin users management authz matrix (list/detail/update/deactivate/activate/reset-password + role restrictions + list pagination/sorting/validation scenarios)
+- `server/test/access-token-invalidation-authz.e2e-spec.ts` - access-token invalidation matrix (password change/reset, deactivate/activate, role/displayName update behavior)
 - `server/package.json` test scripts:
   - `npm run test:e2e:prepare`
   - `npm run test:e2e`
   - `npm run test:e2e:authz`
-  - latest DB-connected authz pattern run: `4/4 suites`, `81/81` tests passed
+  - latest DB-connected authz pattern run: `5/5 suites`, `100/100` tests passed
 
 ### Styles
 

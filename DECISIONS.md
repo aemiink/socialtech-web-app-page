@@ -689,3 +689,130 @@ Affected files:
 - `server/src/admin-users/dto/update-admin-user.dto.ts`
 - `server/src/admin-users/dto/reset-admin-user-password.dto.ts`
 - `server/test/admin-users-management-authz.e2e-spec.ts`
+
+---
+
+## 2026-04-28 - Access Token Invalidation with sessionInvalidatedAt
+
+Context:
+Refresh-token rotation/revoke was already implemented, but access tokens were stateless and could remain valid until expiry after password reset/deactivation/role changes.
+
+Decision:
+Implemented access-token invalidation using `User.sessionInvalidatedAt` with JWT `siv` (session invalidation version) claim support.
+
+Implementation summary:
+- Prisma `User` model extended with nullable `sessionInvalidatedAt DateTime?`.
+- Migration-first flow used; no `db push`.
+- New migration:
+  - `server/prisma/migrations/20260428211614_add_session_invalidated_at/migration.sql`
+- JWT payload types extended with optional `siv` (ms timestamp snapshot) and existing `iat` compatibility.
+
+Guard/session validation:
+- `JwtAuthGuard` now fetches `sessionInvalidatedAt` from DB.
+- Validation order:
+  1) user active check
+  2) `siv` match check against current `sessionInvalidatedAt`
+  3) if `siv` absent, backward-compatible fallback: `iat <= sessionInvalidatedAt` invalidates token
+- Mismatch returns `401 Unauthorized`.
+
+Invalidation triggers:
+- `PATCH /api/v1/users/me/password`:
+  - updates password hash
+  - revokes active refresh tokens
+  - sets `sessionInvalidatedAt = now`
+- `PATCH /api/v1/admin/users/:id/reset-password`:
+  - updates password hash
+  - revokes active refresh tokens
+  - sets `sessionInvalidatedAt = now`
+- `PATCH /api/v1/admin/users/:id/deactivate`:
+  - sets `status = INACTIVE`
+  - revokes active refresh tokens
+  - sets `sessionInvalidatedAt = now`
+- `PATCH /api/v1/admin/users/:id`:
+  - role change -> `sessionInvalidatedAt = now`
+  - `isActive=false` -> `sessionInvalidatedAt = now`
+  - displayName-only update -> no session invalidation
+- `activate` does not clear `sessionInvalidatedAt`, so stale tokens do not become valid again.
+
+Refresh behavior:
+- Existing revoked-token reuse handling preserved; revoked check remains before session invalidation check.
+- Refresh tokens also validate session via `siv` (with `iat` fallback).
+
+Validation/testing:
+- Added e2e suite:
+  - `server/test/access-token-invalidation-authz.e2e-spec.ts`
+- Authz pattern run:
+  - `5/5` suites passed
+  - `88/88` tests passed
+- Verified:
+  - `npm run prisma:generate`
+  - `npm run prisma:migrate:dev -- --name add-session-invalidated-at`
+  - `npm run prisma:seed`
+  - `npm run build`
+  - `npm run check`
+  - `DATABASE_URL=postgresql://ahmeteminkaya@localhost:5432/socialtech_test?schema=public ALLOW_E2E_DB_RESET=true npm run test:e2e:authz`
+
+Known follow-up risks:
+- Admin users list pagination/sorting is still pending.
+- Admin user management audit logs are still pending.
+- Pre-`siv` legacy tokens rely on fallback `iat` evaluation.
+
+Reason:
+Provides deterministic invalidation of previously issued access tokens after security-sensitive account changes while preserving migration-first and existing RBAC behavior.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260428211614_add_session_invalidated_at/migration.sql`
+- `server/src/auth/types/token-payload.type.ts`
+- `server/src/auth/guards/jwt-auth.guard.ts`
+- `server/src/auth/auth.service.ts`
+- `server/src/users/users.service.ts`
+- `server/src/admin-users/admin-users.service.ts`
+- `server/test/access-token-invalidation-authz.e2e-spec.ts`
+
+---
+
+## 2026-04-28 - Admin Users Pagination and Sorting
+
+Context:
+`GET /api/v1/admin/users` existed under Admin Users Management API, but returned an unpaginated list. As user volume grows, list performance, predictable ordering, and frontend consumption shape needed a stable contract.
+
+Decision:
+Added strict pagination/sorting to `GET /api/v1/admin/users` while preserving existing auth and filter behavior.
+
+Implemented contract:
+- Pagination:
+  - `page` default `1`, min `1`, max `10000`
+  - `limit` default `20`, min `1`, max `100`
+  - invalid values return `400`
+  - offset paging: `skip = (page - 1) * limit`, `take = limit`
+- Sorting:
+  - `sortBy`: `createdAt | updatedAt | displayName | email | lastLoginAt | role | status`
+  - `sortOrder`: `asc | desc`
+  - default: `createdAt desc`
+  - Prisma `orderBy` is built from a whitelist map (no raw query field passthrough)
+  - stable secondary sort: `id asc`
+- Response shape changed from array to paginated envelope:
+  - `data: AdminUserResponse[]`
+  - `meta: { page, limit, total, totalPages, hasNextPage, hasPreviousPage }`
+- Existing filters preserved:
+  - `accountType`, `role`, `isActive`, `search`
+  - `search` is trimmed; empty search is ignored; email/displayName case-insensitive search remains
+- Authorization and safety preserved:
+  - `JwtAuthGuard` + `PermissionsGuard` + `users.manage`
+  - employee/client still `403`, unauthenticated still `401`
+  - sensitive fields remain excluded from responses
+
+Validation:
+- `npm run prisma:generate` passed
+- `npm run build` passed
+- `npm run check` passed
+- DB-connected authz suite re-run passed on `socialtech_test`: `5/5` suites, `100/100` tests
+
+Reason:
+Establishes a scalable and frontend-friendly admin users list contract without widening scope to schema changes or new domain behavior.
+
+Affected files:
+- `server/src/admin-users/dto/admin-user-query.dto.ts`
+- `server/src/admin-users/admin-users.service.ts`
+- `server/test/admin-users-management-authz.e2e-spec.ts`

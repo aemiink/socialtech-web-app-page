@@ -71,6 +71,9 @@ Portal areas:
 - Access token is returned in response body and used as Bearer token.
 - Refresh token is stored as HttpOnly cookie; token plaintext is never stored in DB (`RefreshToken.tokenHash`).
 - Refresh token rotation is enabled; revoked-token reuse attempt triggers bulk revocation of active sessions for that user.
+- Access-token invalidation is active via `User.sessionInvalidatedAt` + JWT `siv` claim checks in `JwtAuthGuard` (with backward-compatible `iat` fallback for pre-rollout tokens).
+- Invalidation triggers: own password change, admin reset-password, admin deactivate, admin role change, admin `isActive=false` updates.
+- Activate does not clear `sessionInvalidatedAt`, so stale access tokens do not become valid again.
 - `JwtAuthGuard` and `CurrentUser` decorator are active; `RequirePermissions` + `PermissionsGuard` exist as backend authorization scaffolding.
 - `/auth/me` is guard-protected and returns role + resolved permission set + `ClientProfile` for client users.
 - Protected domain API foundation is now active for `users` and `clients`:
@@ -96,7 +99,7 @@ Portal areas:
 - Employee users can read only active-assignment-scope projects/tasks and can update only `status` on tasks assigned to them within active assignment scope.
 - Client users can read only own `clientProfileId`-scope projects/tasks; out-of-scope detail access resolves as safe `404`.
 - Assignment admin endpoints are admin-only via `JwtAuthGuard` + `PermissionsGuard` + `RequirePermissions`, plus service-level `ADMIN` account/role and permission checks (`assignments.read`, `assignments.manage`).
-- Authz e2e matrix is now automated in backend tests (`server/test/authz.e2e-spec.ts`, `server/test/projects-tasks-authz.e2e-spec.ts`) and validated with real guard chain behavior (`45/45`).
+- Authz e2e matrix is now automated in backend tests and validated with real guard chain behavior (`5/5 suites`, `100/100` tests).
 - Full domain endpoint authorization rollout beyond users/clients/admin-assignments/projects/tasks remains pending.
 
 ## Frontend Architecture
@@ -179,6 +182,18 @@ Current backend baseline includes:
   - Admin Users Management:
     - Existing: `POST /api/v1/admin/users`
     - Added: `GET /api/v1/admin/users`, `GET /api/v1/admin/users/:id`, `PATCH /api/v1/admin/users/:id`, `PATCH /api/v1/admin/users/:id/deactivate`, `PATCH /api/v1/admin/users/:id/activate`, `PATCH /api/v1/admin/users/:id/reset-password`
+    - `GET /api/v1/admin/users` now supports strict pagination/sorting:
+      - `page` (default `1`, min `1`, max `10000`)
+      - `limit` (default `20`, min `1`, max `100`)
+      - `sortBy` (`createdAt`, `updatedAt`, `displayName`, `email`, `lastLoginAt`, `role`, `status`)
+      - `sortOrder` (`asc`, `desc`; default `desc` on `createdAt`)
+      - paginated response envelope: `data[]` + `meta{ page, limit, total, totalPages, hasNextPage, hasPreviousPage }`
+      - stable order via secondary `id asc`
+  - Access-token invalidation:
+    - `User.sessionInvalidatedAt` is active in auth/session flow
+    - JWT `siv` claim snapshot is validated against DB session version
+    - Backward-compatible fallback keeps pre-`siv` tokens checked by `iat <= sessionInvalidatedAt`
+    - Old access tokens are invalidated after password change/reset, deactivate, role change, and `isActive=false` transitions
   - Controller-level guards: `JwtAuthGuard` + `PermissionsGuard`
   - Service-level authorization for owner/admin scope isolation and admin assignment management checks
   - Employee clients scope uses active assignment filtering (`clients.read.assigned`)
@@ -190,7 +205,7 @@ Current backend baseline includes:
   - DB safety guard in runner: strict test DB-name check (`_test`, `test_`, `testing`) with delimiter-aware matching
   - `ALLOW_E2E_DB_RESET=true` no longer bypasses DB-name safety check
   - Matrix suite currently covers users/clients/admin-assignments/projects/tasks/admin-user flows
-  - Latest authz pattern run: `4/4` suites, `81/81` tests passed
+  - Latest authz pattern run: `5/5` suites, `100/100` tests passed
 - Token strategy:
   - access token in response body (Bearer usage)
   - refresh token in HttpOnly cookie
@@ -203,15 +218,13 @@ Current backend baseline includes:
   - `npm run build` passed
   - `npm run check` passed
   - `npm run typecheck:spec` passed
-  - `ALLOW_E2E_DB_RESET=true npm run test:e2e:authz` passed (`3/3 suites`, `64/64 tests`, test DB name: `socialtech_test`)
+  - `ALLOW_E2E_DB_RESET=true npm run test:e2e:authz` passed (`5/5 suites`, `100/100 tests`, test DB name: `socialtech_test`)
   - manual auth flow tests passed (`login`, `me`, `refresh`, `logout`, `logout` sonrası `refresh=401`)
 
 Planned next backend phases:
 - Broader domain endpoint authorization rollout (beyond users/clients/admin-assignments/projects/tasks)
 - Frontend API/auth integration for `adminandemployeePanel/` and `clientPanel/`
 - Forced password change on first login flow
-- Access-token invalidation via `tokenVersion`/`sessionInvalidatedAt`
-- Admin users pagination (`GET /api/v1/admin/users`)
 - Admin user audit logs for management actions
 - Frontend admin employee management integration
 - Project-manager project/task manage policy decision
@@ -230,7 +243,7 @@ Frontend mock data (still active until API integration):
   - Client action history is currently browser `localStorage` based (`client-actions.ts`)
 
 Backend Prisma data model (foundation scope):
-- `User`: account type (`ADMIN | EMPLOYEE | CLIENT`), fixed role enum, status, optional `clientProfileId`, optional `displayName`, optional `lastLoginAt`
+- `User`: account type (`ADMIN | EMPLOYEE | CLIENT`), fixed role enum, status, optional `clientProfileId`, optional `displayName`, optional `lastLoginAt`, optional `sessionInvalidatedAt`
   - Admin user activation/deactivation is handled via `User.status` (`ACTIVE`/`INACTIVE`) and API-level `isActive` mapping in admin users management responses
 - `RefreshToken`: hashed refresh token persistence, expiration, and revocation metadata used by live refresh/logout flow
 - `ClientProfile`: client identity with unique `slug`

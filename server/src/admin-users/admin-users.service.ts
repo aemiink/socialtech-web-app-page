@@ -10,7 +10,11 @@ import { AuthService } from "../auth/auth.service";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { PrismaService } from "../database/prisma.service";
 import { CreateAdminEmployeeUserDto } from "../users/dto/create-admin-employee-user.dto";
-import { AdminUserQueryDto } from "./dto/admin-user-query.dto";
+import {
+  AdminUserQueryDto,
+  type AdminUserSortBy,
+  type AdminUserSortOrder,
+} from "./dto/admin-user-query.dto";
 import { ResetAdminUserPasswordDto } from "./dto/reset-admin-user-password.dto";
 import { UpdateAdminUserDto } from "./dto/update-admin-user.dto";
 
@@ -51,6 +55,20 @@ const USERS_MANAGE_PERMISSION = "users.manage";
 
 type AdminUserReadModel = Prisma.UserGetPayload<{ select: typeof adminUserReadSelect }>;
 
+type AdminUserOrderByFactory = (
+  sortOrder: AdminUserSortOrder,
+) => Prisma.UserOrderByWithRelationInput;
+
+const ADMIN_USER_ORDER_BY_FACTORIES = {
+  createdAt: (sortOrder) => ({ createdAt: sortOrder }),
+  updatedAt: (sortOrder) => ({ updatedAt: sortOrder }),
+  displayName: (sortOrder) => ({ displayName: sortOrder }),
+  email: (sortOrder) => ({ email: sortOrder }),
+  lastLoginAt: (sortOrder) => ({ lastLoginAt: sortOrder }),
+  role: (sortOrder) => ({ role: sortOrder }),
+  status: (sortOrder) => ({ status: sortOrder }),
+} satisfies Record<AdminUserSortBy, AdminUserOrderByFactory>;
+
 type AdminUserResponse = {
   id: string;
   email: string;
@@ -71,6 +89,18 @@ type AdminUserResponse = {
   } | null;
 };
 
+type AdminUsersListResponse = {
+  data: AdminUserResponse[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+  };
+};
+
 @Injectable()
 export class AdminUsersService {
   constructor(
@@ -81,7 +111,7 @@ export class AdminUsersService {
   async getAdminUsers(
     currentUser: AuthenticatedUser,
     query: AdminUserQueryDto,
-  ): Promise<AdminUserResponse[]> {
+  ): Promise<AdminUsersListResponse> {
     this.assertCanManageUsers(currentUser);
 
     const where: Prisma.UserWhereInput = {
@@ -100,13 +130,30 @@ export class AdminUsersService {
         : {}),
     };
 
-    const users = await this.prisma.user.findMany({
-      where,
-      select: adminUserReadSelect,
-      orderBy: { createdAt: "desc" },
-    });
+    const [users, total] = await this.prisma.$transaction([
+      this.prisma.user.findMany({
+        where,
+        select: adminUserReadSelect,
+        orderBy: this.getAdminUserOrderBy(query.sortBy, query.sortOrder),
+        skip: (query.page - 1) * query.limit,
+        take: query.limit,
+      }),
+      this.prisma.user.count({ where }),
+    ]);
 
-    return users.map((user) => this.toAdminUserResponse(user));
+    const totalPages = Math.ceil(total / query.limit);
+
+    return {
+      data: users.map((user) => this.toAdminUserResponse(user)),
+      meta: {
+        page: query.page,
+        limit: query.limit,
+        total,
+        totalPages,
+        hasNextPage: query.page < totalPages,
+        hasPreviousPage: query.page > 1,
+      },
+    };
   }
 
   async createEmployeeUser(
@@ -346,6 +393,13 @@ export class AdminUsersService {
     return (
       error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
     );
+  }
+
+  private getAdminUserOrderBy(
+    sortBy: AdminUserSortBy,
+    sortOrder: AdminUserSortOrder,
+  ): Prisma.UserOrderByWithRelationInput[] {
+    return [ADMIN_USER_ORDER_BY_FACTORIES[sortBy](sortOrder), { id: "asc" }];
   }
 
   private toAdminUserResponse(user: AdminUserReadModel): AdminUserResponse {
