@@ -1,5 +1,11 @@
 import * as bcrypt from "bcryptjs";
-import { PrismaClient, AccountType, UserRole, UserStatus } from "@prisma/client";
+import {
+  PrismaClient,
+  AccountType,
+  EmployeeClientAssignmentScope,
+  UserRole,
+  UserStatus,
+} from "@prisma/client";
 
 type PermissionSeed = {
   slug: string;
@@ -14,15 +20,78 @@ type DemoUserSeed = {
   clientProfileSlug?: string;
 };
 
+type ClientProfileSeed = {
+  slug: string;
+  companyName: string;
+  contactEmail: string;
+};
+
+type EmployeeClientAssignmentSeed = {
+  employeeEmail: string;
+  clientSlug: string;
+  scope: EmployeeClientAssignmentScope;
+  isActive?: boolean;
+};
+
 const prisma = new PrismaClient();
 
 const DEMO_PASSWORD = "demo123";
 const BCRYPT_SALT_ROUNDS = resolveBcryptSaltRounds();
-const CLIENT_PROFILE_SEED = {
-  slug: "acme-e-ticaret",
-  companyName: "Acme E-ticaret",
-  contactEmail: "client@socialtech.com",
-};
+const CLIENT_PROFILE_SEEDS: ClientProfileSeed[] = [
+  {
+    slug: "acme-e-ticaret",
+    companyName: "Acme E-ticaret",
+    contactEmail: "client@socialtech.com",
+  },
+  {
+    slug: "nova-performance",
+    companyName: "Nova Performance",
+    contactEmail: "contact@novaperformance.com",
+  },
+  {
+    slug: "mavi-sosyal",
+    companyName: "Mavi Sosyal",
+    contactEmail: "hello@mavisosyal.com",
+  },
+];
+
+const EMPLOYEE_CLIENT_ASSIGNMENTS: EmployeeClientAssignmentSeed[] = [
+  {
+    employeeEmail: "project@socialtech.com",
+    clientSlug: "acme-e-ticaret",
+    scope: EmployeeClientAssignmentScope.PROJECT,
+  },
+  {
+    employeeEmail: "project@socialtech.com",
+    clientSlug: "nova-performance",
+    scope: EmployeeClientAssignmentScope.PROJECT,
+  },
+  {
+    employeeEmail: "project@socialtech.com",
+    clientSlug: "mavi-sosyal",
+    scope: EmployeeClientAssignmentScope.PROJECT,
+  },
+  {
+    employeeEmail: "performance@socialtech.com",
+    clientSlug: "acme-e-ticaret",
+    scope: EmployeeClientAssignmentScope.PERFORMANCE,
+  },
+  {
+    employeeEmail: "performance@socialtech.com",
+    clientSlug: "nova-performance",
+    scope: EmployeeClientAssignmentScope.PERFORMANCE,
+  },
+  {
+    employeeEmail: "social@socialtech.com",
+    clientSlug: "acme-e-ticaret",
+    scope: EmployeeClientAssignmentScope.SOCIAL_MEDIA,
+  },
+  {
+    employeeEmail: "social@socialtech.com",
+    clientSlug: "mavi-sosyal",
+    scope: EmployeeClientAssignmentScope.SOCIAL_MEDIA,
+  },
+];
 
 const PERMISSIONS: PermissionSeed[] = [
   { slug: "dashboard.read", description: "Read dashboard summaries." },
@@ -64,7 +133,6 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
   ADMIN: PERMISSIONS.map((permission) => permission.slug),
   PROJECT_MANAGER: [
     "dashboard.read",
-    "clients.read",
     "clients.read.assigned",
     "projects.read",
     "projects.manage",
@@ -210,7 +278,7 @@ const DEMO_USERS: DemoUserSeed[] = [
     displayName: "Demo Client Owner",
     accountType: AccountType.CLIENT,
     role: UserRole.CLIENT_OWNER,
-    clientProfileSlug: CLIENT_PROFILE_SEED.slug,
+    clientProfileSlug: "acme-e-ticaret",
   },
 ];
 
@@ -285,24 +353,35 @@ async function seedRolePermissions(permissionIdBySlug: Map<string, string>): Pro
   }
 }
 
-async function seedClientProfile(): Promise<string> {
-  const clientProfile = await prisma.clientProfile.upsert({
-    where: { slug: CLIENT_PROFILE_SEED.slug },
-    update: {
-      companyName: CLIENT_PROFILE_SEED.companyName,
-      contactEmail: CLIENT_PROFILE_SEED.contactEmail,
-    },
-    create: CLIENT_PROFILE_SEED,
-    select: { id: true },
-  });
+async function seedClientProfiles(): Promise<Map<string, string>> {
+  const clientProfileIdBySlug = new Map<string, string>();
 
-  return clientProfile.id;
+  for (const profile of CLIENT_PROFILE_SEEDS) {
+    const clientProfile = await prisma.clientProfile.upsert({
+      where: { slug: profile.slug },
+      update: {
+        companyName: profile.companyName,
+        contactEmail: profile.contactEmail,
+      },
+      create: profile,
+      select: { id: true, slug: true },
+    });
+
+    clientProfileIdBySlug.set(clientProfile.slug, clientProfile.id);
+  }
+
+  return clientProfileIdBySlug;
 }
 
-async function seedUsers(clientProfileId: string): Promise<void> {
+async function seedUsers(clientProfileIdBySlug: Map<string, string>): Promise<void> {
   for (const user of DEMO_USERS) {
-    const resolvedClientProfileId =
-      user.clientProfileSlug === CLIENT_PROFILE_SEED.slug ? clientProfileId : null;
+    const resolvedClientProfileId = user.clientProfileSlug
+      ? clientProfileIdBySlug.get(user.clientProfileSlug)
+      : null;
+    if (user.clientProfileSlug && !resolvedClientProfileId) {
+      throw new Error(`Missing client profile for slug: ${user.clientProfileSlug}`);
+    }
+
     const existingUser = await prisma.user.findUnique({
       where: { email: user.email },
       select: {
@@ -337,11 +416,74 @@ async function seedUsers(clientProfileId: string): Promise<void> {
   }
 }
 
+async function seedEmployeeClientAssignments(
+  clientProfileIdBySlug: Map<string, string>,
+): Promise<void> {
+  const demoEmployeeEmails = DEMO_USERS.filter((user) => user.accountType === AccountType.EMPLOYEE).map(
+    (user) => user.email,
+  );
+  const employeeRows = await prisma.user.findMany({
+    where: {
+      email: { in: demoEmployeeEmails },
+    },
+    select: {
+      id: true,
+      email: true,
+      accountType: true,
+    },
+  });
+
+  const employeeByEmail = new Map(employeeRows.map((employee) => [employee.email, employee]));
+
+  await prisma.employeeClientAssignment.deleteMany({
+    where: {
+      employeeUserId: {
+        in: employeeRows.map((employee) => employee.id),
+      },
+    },
+  });
+
+  for (const assignment of EMPLOYEE_CLIENT_ASSIGNMENTS) {
+    const employee = employeeByEmail.get(assignment.employeeEmail);
+    if (!employee) {
+      throw new Error(`Missing employee user for assignment: ${assignment.employeeEmail}`);
+    }
+    if (employee.accountType !== AccountType.EMPLOYEE) {
+      throw new Error(`Assignment user is not employee: ${assignment.employeeEmail}`);
+    }
+
+    const clientProfileId = clientProfileIdBySlug.get(assignment.clientSlug);
+    if (!clientProfileId) {
+      throw new Error(`Missing client profile for assignment slug: ${assignment.clientSlug}`);
+    }
+
+    await prisma.employeeClientAssignment.upsert({
+      where: {
+        employeeUserId_clientProfileId_scope: {
+          employeeUserId: employee.id,
+          clientProfileId,
+          scope: assignment.scope,
+        },
+      },
+      update: {
+        isActive: assignment.isActive ?? true,
+      },
+      create: {
+        employeeUserId: employee.id,
+        clientProfileId,
+        scope: assignment.scope,
+        isActive: assignment.isActive ?? true,
+      },
+    });
+  }
+}
+
 async function main(): Promise<void> {
   const permissionIdBySlug = await seedPermissions();
   await seedRolePermissions(permissionIdBySlug);
-  const clientProfileId = await seedClientProfile();
-  await seedUsers(clientProfileId);
+  const clientProfileIdBySlug = await seedClientProfiles();
+  await seedUsers(clientProfileIdBySlug);
+  await seedEmployeeClientAssignments(clientProfileIdBySlug);
 }
 
 main()

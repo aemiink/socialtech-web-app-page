@@ -33,9 +33,9 @@ export class ClientsService {
       return [ownProfile];
     }
 
-    if (this.hasPermission(currentUser, "clients.read.assigned")) {
-      // Assignment model does not exist yet; deny by returning an empty scoped result.
-      return [];
+    if (this.isEmployee(currentUser)) {
+      this.assertHasPermission(currentUser, "clients.read.assigned");
+      return this.getAssignedClientProfiles(currentUser.id);
     }
 
     throw new ForbiddenException("You are not allowed to access client profiles.");
@@ -56,8 +56,9 @@ export class ClientsService {
       return this.getClientProfileOrFail(clientId);
     }
 
-    if (this.hasPermission(currentUser, "clients.read.assigned")) {
-      throw new ForbiddenException("Client assignment scope is not available yet.");
+    if (this.isEmployee(currentUser)) {
+      this.assertHasPermission(currentUser, "clients.read.assigned");
+      return this.getAssignedClientProfileById(currentUser.id, clientId);
     }
 
     throw new ForbiddenException("You are not allowed to access this client profile.");
@@ -93,6 +94,45 @@ export class ClientsService {
     return clientProfile;
   }
 
+  private async getAssignedClientProfiles(employeeUserId: string): Promise<ClientReadModel[]> {
+    return this.prisma.clientProfile.findMany({
+      where: {
+        employeeAssignments: {
+          some: {
+            employeeUserId,
+            isActive: true,
+          },
+        },
+      },
+      select: clientReadSelect,
+      orderBy: { companyName: "asc" },
+    });
+  }
+
+  private async getAssignedClientProfileById(
+    employeeUserId: string,
+    clientId: string,
+  ): Promise<ClientReadModel> {
+    const clientProfile = await this.prisma.clientProfile.findFirst({
+      where: {
+        id: clientId,
+        employeeAssignments: {
+          some: {
+            employeeUserId,
+            isActive: true,
+          },
+        },
+      },
+      select: clientReadSelect,
+    });
+
+    if (!clientProfile) {
+      throw new NotFoundException("Client profile not found.");
+    }
+
+    return clientProfile;
+  }
+
   private assertHasPermission(currentUser: AuthenticatedUser, permission: string): void {
     if (!this.hasPermission(currentUser, permission)) {
       throw new ForbiddenException(`Missing required permission: ${permission}.`);
@@ -109,5 +149,9 @@ export class ClientsService {
 
   private isClient(currentUser: AuthenticatedUser): boolean {
     return currentUser.accountType === AccountType.CLIENT;
+  }
+
+  private isEmployee(currentUser: AuthenticatedUser): boolean {
+    return currentUser.accountType === AccountType.EMPLOYEE;
   }
 }

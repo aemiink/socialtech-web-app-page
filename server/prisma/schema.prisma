@@ -31,6 +31,16 @@ enum UserStatus {
   INACTIVE
 }
 
+enum EmployeeClientAssignmentScope {
+  PROJECT
+  PERFORMANCE
+  SOCIAL_MEDIA
+  DESIGN
+  DEVELOPMENT
+  SUPPORT
+  SEO
+}
+
 model Permission {
   id              String           @id @default(uuid()) @db.Uuid
   slug            String           @unique
@@ -68,6 +78,7 @@ model User {
 
   refreshTokens   RefreshToken[]
   clientProfile   ClientProfile? @relation(fields: [clientProfileId], references: [id], onDelete: SetNull)
+  employeeClientAssignments EmployeeClientAssignment[] @relation("EmployeeClientAssignments")
   auditLogs       AuditLog[]     @relation("AuditActor")
 
   @@index([accountType, role])
@@ -99,7 +110,8 @@ model ClientProfile {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  users        User[]
+  users                User[]
+  employeeAssignments  EmployeeClientAssignment[]
 }
 
 model AuditLog {
@@ -118,4 +130,22 @@ model AuditLog {
   @@index([actorUserId])
   @@index([entityType, entityId])
   @@index([createdAt])
+}
+
+model EmployeeClientAssignment {
+  id              String                        @id @default(uuid()) @db.Uuid
+  employeeUserId  String                        @db.Uuid
+  clientProfileId String                        @db.Uuid
+  scope           EmployeeClientAssignmentScope
+  isActive        Boolean                       @default(true)
+  createdAt       DateTime                      @default(now())
+  updatedAt       DateTime                      @updatedAt
+
+  employeeUser    User                          @relation("EmployeeClientAssignments", fields: [employeeUserId], references: [id], onDelete: Cascade)
+  clientProfile   ClientProfile                 @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeUserId, clientProfileId, scope])
+  @@index([employeeUserId, isActive])
+  @@index([clientProfileId, isActive])
+  @@index([scope, isActive])
 }
