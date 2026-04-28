@@ -2,6 +2,7 @@ import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Test, TestingModule } from "@nestjs/testing";
 import { EmployeeClientAssignmentScope, PrismaClient } from "@prisma/client";
+import { randomUUID } from "crypto";
 import * as cookieParser from "cookie-parser";
 import * as bcrypt from "bcryptjs";
 import request = require("supertest");
@@ -56,6 +57,7 @@ describe("Authorization Matrix (e2e)", () => {
   let employeeAssignedClientId = "";
   let employeeUnassignedClientId = "";
   let employeeUserId = "";
+  let clientUserId = "";
   let employeeAssignedAssignmentId = "";
   let assignmentCreatePayload: AssignmentPayload;
   let createdAssignmentId = "";
@@ -109,11 +111,12 @@ describe("Authorization Matrix (e2e)", () => {
 
     const clientUser = await prisma.user.findUnique({
       where: { email: "client@socialtech.com" },
-      select: { clientProfileId: true },
+      select: { id: true, clientProfileId: true },
     });
     if (!clientUser?.clientProfileId) {
       throw new Error("Client demo user must have a linked clientProfileId.");
     }
+    clientUserId = clientUser.id;
     clientOwnProfileId = clientUser.clientProfileId;
 
     const employeeUser = await prisma.user.findUnique({
@@ -290,6 +293,102 @@ describe("Authorization Matrix (e2e)", () => {
     await request(app.getHttpServer()).get(ASSIGNMENT_BASE_PATH).expect(401);
   });
 
+  it("admin assignment create invalid employeeUserId UUID için 400 alır", async () => {
+    const response = await request(app.getHttpServer())
+      .post(ASSIGNMENT_BASE_PATH)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        ...assignmentCreatePayload,
+        employeeUserId: makeInvalidUuid(),
+      })
+      .expect(400);
+
+    expectApiError(response.body, /employeeUserId|uuid/i);
+  });
+
+  it("admin assignment create invalid clientProfileId UUID için 400 alır", async () => {
+    const response = await request(app.getHttpServer())
+      .post(ASSIGNMENT_BASE_PATH)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        ...assignmentCreatePayload,
+        clientProfileId: makeInvalidUuid(),
+      })
+      .expect(400);
+
+    expectApiError(response.body, /clientProfileId|uuid/i);
+  });
+
+  it("admin assignment create invalid scope enum için 400 alır", async () => {
+    const response = await request(app.getHttpServer())
+      .post(ASSIGNMENT_BASE_PATH)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        ...assignmentCreatePayload,
+        scope: `${assignmentCreatePayload.scope}_INVALID`,
+      })
+      .expect(400);
+
+    expectApiError(response.body, /scope/i);
+  });
+
+  it("admin assignment create missing required body fields için 400 alır", async () => {
+    const response = await request(app.getHttpServer())
+      .post(ASSIGNMENT_BASE_PATH)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({})
+      .expect(400);
+
+    expectApiError(response.body, /employeeUserId|clientProfileId|scope/i);
+  });
+
+  it("admin assignment create non-existent employeeUserId için meaningful error döner", async () => {
+    const missingEmployeeUserId = await generateMissingUuid((id) =>
+      prisma.user.findUnique({ where: { id }, select: { id: true } }),
+    );
+
+    const response = await request(app.getHttpServer())
+      .post(ASSIGNMENT_BASE_PATH)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        ...assignmentCreatePayload,
+        employeeUserId: missingEmployeeUserId,
+      })
+      .expect(400);
+
+    expectApiError(response.body, /employee|not found|not an employee|inactive/i);
+  });
+
+  it("admin assignment create non-existent clientProfileId için meaningful error döner", async () => {
+    const missingClientProfileId = await generateMissingUuid((id) =>
+      prisma.clientProfile.findUnique({ where: { id }, select: { id: true } }),
+    );
+
+    const response = await request(app.getHttpServer())
+      .post(ASSIGNMENT_BASE_PATH)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        ...assignmentCreatePayload,
+        clientProfileId: missingClientProfileId,
+      })
+      .expect(400);
+
+    expectApiError(response.body, /client profile|not found/i);
+  });
+
+  it("admin assignment create CLIENT account employeeUserId ile oluşturamaz", async () => {
+    const response = await request(app.getHttpServer())
+      .post(ASSIGNMENT_BASE_PATH)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        ...assignmentCreatePayload,
+        employeeUserId: clientUserId,
+      })
+      .expect(400);
+
+    expectApiError(response.body, /employee|not an employee|inactive|not found/i);
+  });
+
   it("admin assignment oluşturabilir", async () => {
     const response = await request(app.getHttpServer())
       .post(ASSIGNMENT_BASE_PATH)
@@ -323,6 +422,31 @@ describe("Authorization Matrix (e2e)", () => {
     expect(message).toEqual(expect.stringMatching(/assigned|assignment|already|conflict|duplicate|exists/i));
   });
 
+  it("admin assignment update invalid UUID için 400 alır", async () => {
+    const response = await request(app.getHttpServer())
+      .patch(`${ASSIGNMENT_BASE_PATH}/${makeInvalidUuid()}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ isActive: false })
+      .expect(400);
+
+    expectApiError(response.body, /uuid/i);
+  });
+
+  it("admin assignment update null payload için 400 alır", async () => {
+    await ensureCreatedAssignmentByAdmin();
+    const assignmentId = getCreatedAssignmentId();
+    const nullPayload = null as unknown as Record<string, never>;
+
+    const response = await request(app.getHttpServer())
+      .patch(`${ASSIGNMENT_BASE_PATH}/${assignmentId}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .set("Content-Type", "application/json")
+      .send(nullPayload)
+      .expect(400);
+
+    expectApiError(response.body, /scope|isActive|update|json|unexpected token|null/i);
+  });
+
   it("non-admin assignment update/deactivate yapamaz", async () => {
     await ensureCreatedAssignmentByAdmin();
     const assignmentId = getCreatedAssignmentId();
@@ -348,6 +472,32 @@ describe("Authorization Matrix (e2e)", () => {
       .patch(`${ASSIGNMENT_BASE_PATH}/${assignmentId}/deactivate`)
       .set("Authorization", `Bearer ${clientToken}`)
       .expect(403);
+  });
+
+  it("admin assignment deactivate non-existent assignment için 404 alır", async () => {
+    const missingAssignmentId = await generateMissingUuid((id) =>
+      prisma.employeeClientAssignment.findUnique({ where: { id }, select: { id: true } }),
+    );
+
+    const response = await request(app.getHttpServer())
+      .patch(`${ASSIGNMENT_BASE_PATH}/${missingAssignmentId}/deactivate`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(404);
+
+    expectApiError(response.body, /assignment|not found/i);
+  });
+
+  it("admin assignment activate non-existent assignment için 404 alır", async () => {
+    const missingAssignmentId = await generateMissingUuid((id) =>
+      prisma.employeeClientAssignment.findUnique({ where: { id }, select: { id: true } }),
+    );
+
+    const response = await request(app.getHttpServer())
+      .patch(`${ASSIGNMENT_BASE_PATH}/${missingAssignmentId}/activate`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(404);
+
+    expectApiError(response.body, /assignment|not found/i);
   });
 
   it("admin assignment deactivate edebilir ve employee client detail erişimini kaybeder", async () => {
@@ -473,6 +623,40 @@ describe("Authorization Matrix (e2e)", () => {
     }
 
     return "";
+  }
+
+  function expectApiError(body: unknown, expectedMessage: RegExp): void {
+    expect(isRecord(body)).toBe(true);
+    if (!isRecord(body)) {
+      return;
+    }
+
+    expect(body.success).toBe(false);
+    expect(isRecord(body.error)).toBe(true);
+    if (!isRecord(body.error)) {
+      return;
+    }
+
+    expect(body.error.code).toEqual(expect.any(String));
+    expect(extractApiErrorMessage(body)).toEqual(expect.stringMatching(expectedMessage));
+  }
+
+  function makeInvalidUuid(): string {
+    return randomUUID().replace(/-/g, "");
+  }
+
+  async function generateMissingUuid(
+    findRecord: (id: string) => Promise<{ id: string } | null>,
+  ): Promise<string> {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const candidate = randomUUID();
+      const existing = await findRecord(candidate);
+      if (!existing) {
+        return candidate;
+      }
+    }
+
+    throw new Error("Could not generate a missing UUID for authz e2e tests.");
   }
 
   function isRecord(value: unknown): value is Record<string, unknown> {

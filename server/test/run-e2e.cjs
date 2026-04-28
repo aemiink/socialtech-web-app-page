@@ -49,6 +49,10 @@ function extractDatabaseName(urlString) {
   }
 }
 
+function isAllowedE2eDatabaseName(databaseName) {
+  return /(?:^test_|_test(?:_|$)|(?:^|_)testing(?:_|$))/i.test(databaseName);
+}
+
 function runCommand(command, args, env) {
   const result = spawnSync(command, args, {
     stdio: "inherit",
@@ -65,7 +69,6 @@ function runCommand(command, args, env) {
 }
 
 const databaseUrl = process.env.DATABASE_URL ?? readDatabaseUrlFromEnvFiles();
-const allowUnsafeReset = process.env.ALLOW_E2E_DB_RESET === "true";
 
 if (!databaseUrl) {
   console.error("DATABASE_URL is required for e2e test preparation.");
@@ -73,15 +76,16 @@ if (!databaseUrl) {
 }
 
 const databaseName = extractDatabaseName(databaseUrl);
-const looksLikeTestDatabase = databaseName
-  ? /(?:^|[_-])test(?:$|[_-])/i.test(databaseName)
-  : /(?:^|[_-])test(?:$|[_-])/i.test(databaseUrl);
+const looksLikeTestDatabase = databaseName ? isAllowedE2eDatabaseName(databaseName) : false;
 
-if (!looksLikeTestDatabase && !allowUnsafeReset) {
+if (!looksLikeTestDatabase) {
   console.error(
     [
-      `Refusing to run e2e against a non-test DATABASE_URL (resolved db: ${databaseName ?? "unknown"}).`,
-      "Use a *_test database name or set ALLOW_E2E_DB_RESET=true to override intentionally.",
+      "Refusing to run e2e because DATABASE_URL does not point to an allowed test database.",
+      `Resolved database name: ${databaseName ?? "unknown"}.`,
+      'The database name must include one of "_test", "test_", or "testing".',
+      "ALLOW_E2E_DB_RESET=true cannot bypass this guard.",
+      "Example: postgresql://user:password@localhost:5432/socialtech_test?schema=public",
     ].join(" "),
   );
   process.exit(1);
