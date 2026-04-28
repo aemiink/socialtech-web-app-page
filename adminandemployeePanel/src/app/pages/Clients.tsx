@@ -34,7 +34,7 @@ const clientsFormatted = clientData.map(client => ({
 }));
 
 export function Clients() {
-  const [selectedClient, setSelectedClient] = useState<typeof clients[0] | null>(null);
+  const [selectedClient, setSelectedClient] = useState<typeof clientsFormatted[0] | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [packageFilter, setPackageFilter] = useState<string>("all");
 
@@ -207,7 +207,7 @@ export function Clients() {
                   >
                     {selectedClient.status}
                   </Badge>
-                  <Badge variant="outline">{selectedClient.package}</Badge>
+                  <Badge variant="outline">{selectedClient.activeProjects} aktif proje</Badge>
                 </div>
               </SheetHeader>
 
