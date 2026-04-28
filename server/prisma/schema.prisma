@@ -1,0 +1,93 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AccountType {
+  ADMIN
+  EMPLOYEE
+  CLIENT
+}
+
+enum UserRole {
+  ADMIN
+  PROJECT_MANAGER
+  PERFORMANCE_SPECIALIST
+  SOCIAL_MEDIA_SPECIALIST
+  DESIGNER
+  DEVELOPER
+  SUPPORT_SPECIALIST
+  SEO_SPECIALIST
+  CLIENT_OWNER
+  CLIENT_MEMBER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model User {
+  id            String         @id @default(uuid()) @db.Uuid
+  email         String         @unique
+  passwordHash  String
+  accountType   AccountType
+  role          UserRole
+  clientProfileId String?      @db.Uuid
+  status        UserStatus     @default(ACTIVE)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  refreshTokens RefreshToken[]
+  clientProfile ClientProfile?  @relation(fields: [clientProfileId], references: [id], onDelete: SetNull)
+  auditLogs     AuditLog[]     @relation("AuditActor")
+
+  @@index([accountType, role])
+  @@index([clientProfileId])
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model ClientProfile {
+  id           String   @id @default(uuid()) @db.Uuid
+  companyName  String
+  contactEmail String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  users        User[]
+}
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  actorUserId String?  @db.Uuid
+  action      String
+  entityType  String
+  entityId    String?
+  metadata    Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  actor       User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
