@@ -176,6 +176,9 @@ Current backend baseline includes:
   - Admin Assignments: `GET /api/v1/admin/assignments`, `POST /api/v1/admin/assignments`, `PATCH /api/v1/admin/assignments/:id`, `PATCH /api/v1/admin/assignments/:id/deactivate`, `PATCH /api/v1/admin/assignments/:id/activate`
   - Projects: `GET /api/v1/projects`, `GET /api/v1/projects/:id`, `POST /api/v1/projects`, `PATCH /api/v1/projects/:id`
   - Tasks: `GET /api/v1/tasks`, `GET /api/v1/tasks/:id`, `POST /api/v1/tasks`, `PATCH /api/v1/tasks/:id`
+  - Admin Users Management:
+    - Existing: `POST /api/v1/admin/users`
+    - Added: `GET /api/v1/admin/users`, `GET /api/v1/admin/users/:id`, `PATCH /api/v1/admin/users/:id`, `PATCH /api/v1/admin/users/:id/deactivate`, `PATCH /api/v1/admin/users/:id/activate`, `PATCH /api/v1/admin/users/:id/reset-password`
   - Controller-level guards: `JwtAuthGuard` + `PermissionsGuard`
   - Service-level authorization for owner/admin scope isolation and admin assignment management checks
   - Employee clients scope uses active assignment filtering (`clients.read.assigned`)
@@ -186,7 +189,8 @@ Current backend baseline includes:
   - E2E runner: `server/test/run-e2e.cjs` (Prisma prepare + Jest execution)
   - DB safety guard in runner: strict test DB-name check (`_test`, `test_`, `testing`) with delimiter-aware matching
   - `ALLOW_E2E_DB_RESET=true` no longer bypasses DB-name safety check
-  - Matrix suite currently covers 64 users/clients/admin-assignment/projects/tasks/admin-user-password authorization scenarios
+  - Matrix suite currently covers users/clients/admin-assignments/projects/tasks/admin-user flows
+  - Latest authz pattern run: `4/4` suites, `81/81` tests passed
 - Token strategy:
   - access token in response body (Bearer usage)
   - refresh token in HttpOnly cookie
@@ -205,8 +209,11 @@ Current backend baseline includes:
 Planned next backend phases:
 - Broader domain endpoint authorization rollout (beyond users/clients/admin-assignments/projects/tasks)
 - Frontend API/auth integration for `adminandemployeePanel/` and `clientPanel/`
-- Admin users management expansion (`/api/v1/admin/users/:id` update/deactivate/activate)
 - Forced password change on first login flow
+- Access-token invalidation via `tokenVersion`/`sessionInvalidatedAt`
+- Admin users pagination (`GET /api/v1/admin/users`)
+- Admin user audit logs for management actions
+- Frontend admin employee management integration
 - Project-manager project/task manage policy decision
 - Assignment concurrency/race-condition e2e coverage (parallel create/update conflict scenarios)
 - Broader backend e2e/integration coverage beyond current authz matrix
@@ -224,6 +231,7 @@ Frontend mock data (still active until API integration):
 
 Backend Prisma data model (foundation scope):
 - `User`: account type (`ADMIN | EMPLOYEE | CLIENT`), fixed role enum, status, optional `clientProfileId`, optional `displayName`, optional `lastLoginAt`
+  - Admin user activation/deactivation is handled via `User.status` (`ACTIVE`/`INACTIVE`) and API-level `isActive` mapping in admin users management responses
 - `RefreshToken`: hashed refresh token persistence, expiration, and revocation metadata used by live refresh/logout flow
 - `ClientProfile`: client identity with unique `slug`
 - `AuditLog`: actor-based audit event records

@@ -192,8 +192,11 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - `dto/assignment-query.dto.ts` - list query filter validation (`employeeUserId`, `clientProfileId`, `isActive`, `scope`)
   - `admin-assignments.module.ts` - module wiring
 - `server/src/admin-users/` - admin employee-user management module:
-  - `admin-users.controller.ts` - `POST /api/v1/admin/users`
-  - `admin-users.service.ts` - admin-only employee create flow, accountType/role constraints, unique email enforcement, sanitized response
+  - `admin-users.controller.ts` - `POST /api/v1/admin/users`, `GET /api/v1/admin/users`, `GET /api/v1/admin/users/:id`, `PATCH /api/v1/admin/users/:id`, `PATCH /api/v1/admin/users/:id/deactivate`, `PATCH /api/v1/admin/users/:id/activate`, `PATCH /api/v1/admin/users/:id/reset-password`
+  - `admin-users.service.ts` - admin-only employee lifecycle management (create/list/detail/update/deactivate/activate/reset-password), self-protection guards, refresh-token revocation on deactivate/reset-password
+  - `dto/admin-user-query.dto.ts` - list query validation (`accountType`, `role`, `isActive`, `search`)
+  - `dto/update-admin-user.dto.ts` - update payload validation (`displayName`, `role`, `isActive`)
+  - `dto/reset-admin-user-password.dto.ts` - reset-password payload validation
   - `admin-users.module.ts` - module wiring
 - `server/src/projects/` - projects API foundation:
   - `projects.controller.ts` - `GET /api/v1/projects`, `GET /api/v1/projects/:id`, `POST /api/v1/projects`, `PATCH /api/v1/projects/:id`
@@ -229,11 +232,12 @@ From `server/package.json`:
 - `server/test/authz.e2e-spec.ts` - users/clients/admin-assignment authorization matrix (30 scenarios, real AppModule + real guards, runtime assignment/client resolution, assignment CRUD negative cases)
 - `server/test/projects-tasks-authz.e2e-spec.ts` - projects/tasks authorization matrix + assignment deactivation regression coverage
 - `server/test/admin-users-password-authz.e2e-spec.ts` - admin employee create + own password change authz matrix
+- `server/test/admin-users-management-authz.e2e-spec.ts` - admin users management authz matrix (list/detail/update/deactivate/activate/reset-password + role restrictions)
 - `server/package.json` test scripts:
   - `npm run test:e2e:prepare`
   - `npm run test:e2e`
   - `npm run test:e2e:authz`
-  - latest DB-connected authz run: `3/3 suites`, `64/64` tests passed
+  - latest DB-connected authz pattern run: `4/4 suites`, `81/81` tests passed
 
 ### Styles
 

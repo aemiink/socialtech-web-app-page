@@ -42,12 +42,15 @@ export class JwtAuthGuard implements CanActivate {
         role: true,
         clientProfileId: true,
         status: true,
+        sessionInvalidatedAt: true,
       },
     });
 
     if (!user || user.status !== UserStatus.ACTIVE) {
       throw new UnauthorizedException("User session is no longer valid.");
     }
+
+    this.assertAccessTokenSessionIsValid(payload, user.sessionInvalidatedAt);
 
     const permissions = await this.authorizationService.getPermissionsForRole(user.role);
 
@@ -94,6 +97,34 @@ export class JwtAuthGuard implements CanActivate {
       }
 
       throw new UnauthorizedException("Invalid or expired access token.");
+    }
+  }
+
+  private assertAccessTokenSessionIsValid(
+    payload: AccessTokenPayload,
+    sessionInvalidatedAt: Date | null,
+  ): void {
+    if (!sessionInvalidatedAt) {
+      return;
+    }
+
+    const sessionInvalidatedAtVersion = sessionInvalidatedAt.getTime();
+    if (typeof payload.siv === "number" && Number.isFinite(payload.siv)) {
+      if (Math.floor(payload.siv) !== sessionInvalidatedAtVersion) {
+        throw new UnauthorizedException("Access token session is no longer valid.");
+      }
+      return;
+    }
+
+    if (typeof payload.iat !== "number" || !Number.isFinite(payload.iat)) {
+      throw new UnauthorizedException("Access token session is no longer valid.");
+    }
+
+    // Backward-compatible fallback for tokens minted before `siv` claim rollout.
+    const tokenIssuedAtSeconds = Math.floor(payload.iat);
+    const sessionInvalidatedAtSeconds = Math.floor(sessionInvalidatedAt.getTime() / 1000);
+    if (tokenIssuedAtSeconds <= sessionInvalidatedAtSeconds) {
+      throw new UnauthorizedException("Access token session is no longer valid.");
     }
   }
 }

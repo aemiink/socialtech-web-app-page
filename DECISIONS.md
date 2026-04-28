@@ -619,3 +619,73 @@ Affected files:
 - `server/src/projects/*`
 - `server/src/tasks/*`
 - `server/test/projects-tasks-authz.e2e-spec.ts`
+
+---
+
+## 2026-04-28 - Admin Users Management API
+
+Context:
+Backend auth, protected users/clients/assignments/projects/tasks foundations, and admin employee creation were already implemented. Admin-side employee lifecycle operations (list, detail, update, deactivate, activate, reset-password) were still incomplete.
+
+Decision:
+Completed Admin Users Management API under `server/src/admin-users/` while preserving existing `POST /api/v1/admin/users`.
+
+Implemented endpoints:
+- `GET /api/v1/admin/users`
+- `GET /api/v1/admin/users/:id`
+- `PATCH /api/v1/admin/users/:id`
+- `PATCH /api/v1/admin/users/:id/deactivate`
+- `PATCH /api/v1/admin/users/:id/activate`
+- `PATCH /api/v1/admin/users/:id/reset-password`
+
+Authorization design:
+- Route-level: `JwtAuthGuard` + `PermissionsGuard` + `RequirePermissions("users.manage")`
+- Service-level: explicit `ADMIN` account type + `ADMIN` role + `users.manage` checks
+
+Behavior and safety:
+- List query filters: `accountType`, `role`, `isActive`, `search`
+- Update scope restricted to: `displayName`, `role`, `isActive`
+- `email` and `accountType` updates are intentionally blocked
+- Mutation endpoints are intentionally restricted to `EMPLOYEE` targets
+- Self-protection:
+  - admin cannot deactivate self
+  - admin cannot change own `role` / activation status through management update
+- Deactivate uses soft status transition: `User.status = INACTIVE`
+- Deactivate revokes active refresh tokens for target user
+- Activate sets `User.status = ACTIVE`
+- Reset-password uses bcrypt hashing and revokes active refresh tokens
+- Response payloads remain sanitized (no `passwordHash`, refresh token internals, or token hashes)
+
+Validation/testing:
+- Added DTOs:
+  - `AdminUserQueryDto`
+  - `UpdateAdminUserDto`
+  - `ResetAdminUserPasswordDto`
+- Added e2e suite:
+  - `server/test/admin-users-management-authz.e2e-spec.ts`
+- Authz pattern run:
+  - `4/4` suites passed
+  - `81/81` tests passed
+- Verified:
+  - `npm run prisma:generate`
+  - `npm run prisma:migrate:deploy`
+  - `npm run prisma:seed`
+  - `npm run build`
+  - `npm run check`
+  - `ALLOW_E2E_DB_RESET=true npm run test:e2e:authz` (with `socialtech_test`)
+
+Known follow-up risks:
+- Access tokens are stateless and may remain valid until expiry after deactivate/reset-password.
+- `GET /admin/users` currently has no pagination.
+- Admin user management actions are not yet written to audit logs.
+
+Reason:
+Completes backend employee lifecycle management for admins with controlled scope and RBAC enforcement before frontend management integration.
+
+Affected files:
+- `server/src/admin-users/admin-users.controller.ts`
+- `server/src/admin-users/admin-users.service.ts`
+- `server/src/admin-users/dto/admin-user-query.dto.ts`
+- `server/src/admin-users/dto/update-admin-user.dto.ts`
+- `server/src/admin-users/dto/reset-admin-user-password.dto.ts`
+- `server/test/admin-users-management-authz.e2e-spec.ts`

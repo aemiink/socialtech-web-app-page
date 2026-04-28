@@ -8,9 +8,12 @@
 ## Planned
 
 - Frontend auth integration for `adminandemployeePanel/` and `clientPanel/` against `server/` auth endpoints
+- Frontend admin employee management integration against Admin Users Management API
 - Broader domain endpoint authorization rollout (next modules beyond users/clients with `JwtAuthGuard` + `PermissionsGuard`)
-- Admin users management expansion (`/api/v1/admin/users/:id` update/deactivate/activate)
 - Forced password change on first login flow
+- Access-token invalidation via `tokenVersion` / `sessionInvalidatedAt`
+- Admin users pagination for `GET /api/v1/admin/users`
+- Admin user audit logs for management actions
 - Assignment concurrency/race-condition authz e2e tests
 - Project-manager project/task manage policy decision (currently admin-only write behavior)
 - Persistent role/session storage (localStorage or server session)
@@ -46,6 +49,7 @@ None identified.
 - E2E DB guard hardening completed under `server/test/run-e2e.cjs`: strict test DB-name enforcement (`_test`, `test_`, `testing`), delimiter-aware pattern matching, and no bypass via `ALLOW_E2E_DB_RESET=true`.
 - Assignment negative-case authz coverage completed under `server/test/authz.e2e-spec.ts`: invalid UUID/enum/required-body cases, non-existent employee/client checks, client-account-as-employee rejection, duplicate create conflict, invalid update UUID/null payload, and non-existent activate/deactivate checks; expanded suite now passes `30/30`.
 - DB access restored and migration-first validation finalized: `npm run prisma:seed` succeeded and authz e2e suites passed on `socialtech_test` (`test/authz.e2e-spec.ts`, `test/projects-tasks-authz.e2e-spec.ts`, `test/admin-users-password-authz.e2e-spec.ts`) with `3/3` suites and `64/64` tests.
+- Admin Users Management API completed under `server/`: existing `POST /api/v1/admin/users` preserved and full management endpoints added (`GET list/detail`, `PATCH update/deactivate/activate/reset-password`), employee-targeted mutation scope, self-protection guards, refresh-token revocation on deactivate/reset-password, and dedicated e2e suite (`server/test/admin-users-management-authz.e2e-spec.ts`). Latest authz pattern run: `4/4` suites, `81/81` tests passed.
 
 ## Blocked
 

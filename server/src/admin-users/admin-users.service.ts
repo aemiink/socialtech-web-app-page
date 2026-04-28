@@ -168,7 +168,7 @@ export class AdminUsersService {
     this.assertCanManageUsers(currentUser);
     this.assertHasUpdatePayload(dto);
     this.assertNoDangerousSelfUpdate(currentUser, userId, dto);
-    await this.getManageableEmployeeOrFail(userId);
+    const manageableUser = await this.getManageableEmployeeOrFail(userId);
 
     if (dto.role !== undefined) {
       this.assertEmployeeRole(dto.role);
@@ -182,9 +182,10 @@ export class AdminUsersService {
         : { status: dto.isActive ? UserStatus.ACTIVE : UserStatus.INACTIVE }),
     };
 
-    const shouldRevokeActiveRefreshTokens = dto.isActive === false;
-    const updatedUser = shouldRevokeActiveRefreshTokens
-      ? await this.updateUserAndRevokeRefreshTokens(userId, data)
+    const roleChanged = dto.role !== undefined && dto.role !== manageableUser.role;
+    const shouldInvalidateSessions = roleChanged || dto.isActive === false;
+    const updatedUser = shouldInvalidateSessions
+      ? await this.updateUserAndInvalidateSessions(userId, data)
       : await this.prisma.user.update({
           where: { id: userId },
           data,
@@ -201,13 +202,8 @@ export class AdminUsersService {
     this.assertCanManageUsers(currentUser);
     this.assertNotSelfDeactivation(currentUser, userId);
 
-    const user = await this.getManageableEmployeeOrFail(userId);
-    if (user.status === UserStatus.INACTIVE) {
-      await this.authService.revokeActiveRefreshTokensForUser(userId);
-      return this.toAdminUserResponse(user);
-    }
-
-    const deactivatedUser = await this.updateUserAndRevokeRefreshTokens(userId, {
+    await this.getManageableEmployeeOrFail(userId);
+    const deactivatedUser = await this.updateUserAndInvalidateSessions(userId, {
       status: UserStatus.INACTIVE,
     });
 
@@ -243,7 +239,7 @@ export class AdminUsersService {
     await this.getManageableEmployeeOrFail(userId);
 
     const passwordHash = await this.authService.hashUserPassword(dto.newPassword);
-    const updatedUser = await this.updateUserAndRevokeRefreshTokens(userId, { passwordHash });
+    const updatedUser = await this.updateUserAndInvalidateSessions(userId, { passwordHash });
 
     return this.toAdminUserResponse(updatedUser);
   }
@@ -270,16 +266,19 @@ export class AdminUsersService {
     return user;
   }
 
-  private async updateUserAndRevokeRefreshTokens(
+  private async updateUserAndInvalidateSessions(
     userId: string,
     data: Prisma.UserUpdateInput,
   ): Promise<AdminUserReadModel> {
-    const revokedAt = new Date();
+    const sessionInvalidatedAt = new Date();
 
     return this.prisma.$transaction(async (tx) => {
       const updatedUser = await tx.user.update({
         where: { id: userId },
-        data,
+        data: {
+          ...data,
+          sessionInvalidatedAt,
+        },
         select: adminUserReadSelect,
       });
 
@@ -288,7 +287,7 @@ export class AdminUsersService {
           userId,
           revokedAt: null,
         },
-        data: { revokedAt },
+        data: { revokedAt: sessionInvalidatedAt },
       });
 
       return updatedUser;

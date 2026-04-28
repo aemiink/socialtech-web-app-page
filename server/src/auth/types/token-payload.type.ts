@@ -6,6 +6,9 @@ type BaseTokenPayload = {
   role: UserRole;
   accountType: AccountType;
   clientProfileId: string | null;
+  iat?: number;
+  exp?: number;
+  siv?: number;
 };
 
 export type AccessTokenPayload = BaseTokenPayload & {

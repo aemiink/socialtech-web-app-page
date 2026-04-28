@@ -128,6 +128,8 @@ export class AuthService {
       throw new UnauthorizedException("Refresh token has expired.");
     }
 
+    this.assertRefreshTokenSessionIsValid(refreshPayload, storedRefreshToken.user.sessionInvalidatedAt);
+
     const tokenPair = await this.prisma.$transaction(async (tx) => {
       const revocationResult = await tx.refreshToken.updateMany({
         where: {
@@ -229,6 +231,8 @@ export class AuthService {
     user: UserWithClientProfile,
     tx: Prisma.TransactionClient,
   ): Promise<IssuedTokenPair> {
+    const sessionInvalidationVersion = user.sessionInvalidatedAt?.getTime() ?? 0;
+
     const accessPayload: AccessTokenPayload = {
       sub: user.id,
       email: user.email,
@@ -236,6 +240,7 @@ export class AuthService {
       role: user.role,
       clientProfileId: user.clientProfileId,
       tokenType: "access",
+      siv: sessionInvalidationVersion,
     };
 
     const refreshTokenId = randomUUID();
@@ -247,6 +252,7 @@ export class AuthService {
       clientProfileId: user.clientProfileId,
       tokenType: "refresh",
       jti: refreshTokenId,
+      siv: sessionInvalidationVersion,
     };
 
     const accessToken = await this.jwtService.signAsync(accessPayload, {
@@ -302,6 +308,34 @@ export class AuthService {
       }
 
       throw new UnauthorizedException("Invalid or expired refresh token.");
+    }
+  }
+
+  private assertRefreshTokenSessionIsValid(
+    payload: RefreshTokenPayload,
+    sessionInvalidatedAt: Date | null,
+  ): void {
+    if (!sessionInvalidatedAt) {
+      return;
+    }
+
+    const sessionInvalidatedAtVersion = sessionInvalidatedAt.getTime();
+    if (typeof payload.siv === "number" && Number.isFinite(payload.siv)) {
+      if (Math.floor(payload.siv) !== sessionInvalidatedAtVersion) {
+        throw new UnauthorizedException("Refresh token session is no longer valid.");
+      }
+      return;
+    }
+
+    if (typeof payload.iat !== "number" || !Number.isFinite(payload.iat)) {
+      throw new UnauthorizedException("Refresh token session is no longer valid.");
+    }
+
+    // Backward-compatible fallback for tokens minted before `siv` claim rollout.
+    const tokenIssuedAtSeconds = Math.floor(payload.iat);
+    const sessionInvalidatedAtSeconds = Math.floor(sessionInvalidatedAt.getTime() / 1000);
+    if (tokenIssuedAtSeconds <= sessionInvalidatedAtSeconds) {
+      throw new UnauthorizedException("Refresh token session is no longer valid.");
     }
   }
 
