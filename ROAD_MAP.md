@@ -2,15 +2,17 @@
 
 ## Current Focus
 
-- Backend auth + assignment-scoped clients access + authz e2e matrix are now implemented under `server/`; next phases are assignment management APIs, broader domain authorization rollout, migration-first Prisma flow, and frontend integration
+- Backend auth + assignment-scoped clients access + admin assignment management API + projects/tasks API foundation + expanded authz e2e matrix are now implemented under `server/`; next phases are broader domain authorization rollout, migration-first Prisma flow, and frontend integration
 - Client Portal is mapped at `clientPanel/`; Admin + Employee prototype UI remains feature-rich at mock level
 
 ## Planned
 
 - Frontend auth integration for `adminandemployeePanel/` and `clientPanel/` against `server/` auth endpoints
 - Broader domain endpoint authorization rollout (next modules beyond users/clients with `JwtAuthGuard` + `PermissionsGuard`)
-- Assignment admin CRUD endpoints (manage employee-client assignment lifecycle)
 - Database migration pipeline (migration-first Prisma workflow for PostgreSQL, migration files not created yet)
+- Prisma config migration (`package.json#prisma` -> `prisma.config.ts`)
+- Assignment concurrency/race-condition authz e2e tests
+- Project-manager project/task manage policy decision (currently admin-only write behavior)
 - Persistent role/session storage (localStorage or server session)
 - ESLint / Prettier standardization (intentionally deferred in workflow pass)
 - Broader backend test infrastructure (beyond current authz matrix)
@@ -37,7 +39,12 @@ None identified.
 - Backend auth implementation completed under `server/`: `POST /api/v1/auth/login`, `POST /api/v1/auth/refresh`, `POST /api/v1/auth/logout`, `GET /api/v1/auth/me`; access token in response body, refresh token in HttpOnly cookie, hashed refresh token persistence (`RefreshToken.tokenHash`), refresh rotation, revoked-token reuse handling, bcrypt-based seed auth readiness, and guard/decorator baseline (`JwtAuthGuard`, `CurrentUser`, `RequirePermissions`, `PermissionsGuard` skeleton). Validation/build checks and manual auth flow tests passed.
 - Protected users/clients API foundation completed under `server/`: `GET /api/v1/users/me`, `GET /api/v1/users`, `GET /api/v1/users/:id`, `GET /api/v1/clients`, `GET /api/v1/clients/:id`, `GET /api/v1/clients/me`; controller-level `JwtAuthGuard` + `PermissionsGuard`, `users.read` check on users list, service-level object authorization, admin full-scope reads, client own-scope reads, and constrained employee behavior for unmodeled assignment scope.
 - Employee-client assignment model completed under `server/`: `EmployeeClientAssignment` + `EmployeeClientAssignmentScope` added to Prisma schema with assignment indexes/uniqueness, seed expanded to 3 client profiles and active demo assignments, and `clients.read.assigned` now enforced with active assignment filtering for employee list/detail access (`GET /clients`, `GET /clients/:id` with safe `404` on unassigned access). Admin and client behaviors remain intact.
-- Authorization e2e test matrix completed under `server/`: Jest + ts-jest + supertest infrastructure, real AppModule + real guard chain tests (no mock/override guards), runtime assigned/unassigned client resolution from seeded data, safe e2e runner (`server/test/run-e2e.cjs`) with DB guard + explicit override, and passing users/clients authz suite (`10/10`).
+- Admin assignment management API completed under `server/`: `admin-assignments` module added with admin-only CRUD-style lifecycle endpoints (`GET`, `POST`, `PATCH`, `deactivate`, `activate`), permission-based route protection (`assignments.read`, `assignments.manage`), service-level admin authorization checks, filterable listing, duplicate-safe create/reactivate behavior, and sanitized response payloads.
+- Projects + Tasks API foundation completed under `server/`: Prisma `Project`/`Task` models + delivery enums (`ProjectStatus`, `TaskStatus`, `Priority`), client-scoped project slug uniqueness, project/task seed dataset (3 projects, 7 tasks), role-scoped endpoints (`/api/v1/projects*`, `/api/v1/tasks*`), and object-level authorization (admin full scope, employee active-assignment scope, client own scope).
+- Authorization e2e test matrix expanded and completed under `server/`: Jest + ts-jest + supertest infrastructure, real AppModule + real guard chain tests (no mock/override guards), runtime assignment/client resolution from seeded data, safe e2e runner (`server/test/run-e2e.cjs`) with DB guard + explicit override, and passing users/clients/admin-assignment authz suite (`30/30`).
+- Projects/tasks authorization e2e coverage completed under `server/test/projects-tasks-authz.e2e-spec.ts`, including assignment-deactivation regression checks; combined authz suites now pass `45/45`.
+- E2E DB guard hardening completed under `server/test/run-e2e.cjs`: strict test DB-name enforcement (`_test`, `test_`, `testing`), delimiter-aware pattern matching, and no bypass via `ALLOW_E2E_DB_RESET=true`.
+- Assignment negative-case authz coverage completed under `server/test/authz.e2e-spec.ts`: invalid UUID/enum/required-body cases, non-existent employee/client checks, client-account-as-employee rejection, duplicate create conflict, invalid update UUID/null payload, and non-existent activate/deactivate checks; expanded suite now passes `30/30`.
 
 ## Blocked
 
@@ -53,5 +60,5 @@ None identified.
 - `npm install` currently reports 1 high severity vulnerability in each app; `npm audit fix --force` is intentionally out of scope for this pass
 - Backend auth endpoints are implemented; frontend integration and domain-wide guard/permission rollout remain planned
 - Users/clients protected read foundation is implemented; assignment-aware employee client access is now active
-- Authz e2e matrix is implemented; broader endpoint coverage and assignment management API tests remain planned
+- Authz e2e matrix is implemented and expanded to include admin assignment management and negative-case flows; remaining e2e gaps focus on concurrency/race-condition scenarios
 - Prisma schema sync currently uses `db push`; migration files remain planned

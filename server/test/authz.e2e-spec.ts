@@ -3,7 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { Test, TestingModule } from "@nestjs/testing";
 import { EmployeeClientAssignmentScope, PrismaClient } from "@prisma/client";
 import { randomUUID } from "crypto";
-import * as cookieParser from "cookie-parser";
+import cookieParser from "cookie-parser";
 import * as bcrypt from "bcryptjs";
 import request = require("supertest");
 import { AppModule } from "../src/app.module";

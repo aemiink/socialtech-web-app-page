@@ -430,3 +430,194 @@ Affected files:
 - `server/test/jest.env.ts`
 - `server/test/run-e2e.cjs`
 - `server/test/authz.e2e-spec.ts`
+
+---
+
+## 2026-04-28 - Admin Assignment Management API
+
+Context:
+Auth flow, protected users/clients endpoints, and assignment-based employee client visibility were implemented, but admins could not yet manage employee-client assignments via API. Authorization e2e coverage also needed to expand beyond users/clients matrix cases.
+
+Decision:
+Implemented a dedicated admin assignment management module under `server/src/admin-assignments/` and wired it into `AppModule`.
+
+Added endpoints:
+- `GET /api/v1/admin/assignments`
+- `POST /api/v1/admin/assignments`
+- `PATCH /api/v1/admin/assignments/:id`
+- `PATCH /api/v1/admin/assignments/:id/deactivate`
+- `PATCH /api/v1/admin/assignments/:id/activate`
+
+Authorization design:
+- Route-level: `JwtAuthGuard` + `PermissionsGuard` + `RequirePermissions`
+- Service-level: explicit `ADMIN` account type + `ADMIN` role check and permission check
+- Admin permissions: `assignments.read`, `assignments.manage`
+
+Seed updates:
+- Added permissions `assignments.read` and `assignments.manage`
+- Admin role receives these permissions
+- Non-admin stale mappings for these permissions are cleaned idempotently during seed
+
+Behavior and safety:
+- Query filtering support on list endpoint (`employeeUserId`, `clientProfileId`, `isActive`, `scope`)
+- Employee/client existence validation on create
+- Active duplicate assignment create returns conflict
+- Inactive duplicate assignment is reactivated instead of creating a duplicate row
+- Responses are sanitized (no password hashes, token hashes, refresh token internals)
+- Prisma schema was not changed; existing `EmployeeClientAssignment` model is reused
+
+Testing:
+- Expanded authz e2e matrix to include admin assignment management scenarios
+- Authz suite now passes `19/19`
+- Verified:
+  - `npm run prisma:generate`
+  - `npm run prisma:seed`
+  - `npm run build`
+  - `npm run check`
+  - `ALLOW_E2E_DB_RESET=true npm run test:e2e:authz`
+
+Reason:
+Completes the first admin-managed assignment lifecycle foundation and extends backend authorization regression coverage before frontend API integration and broader domain endpoint rollout.
+
+Affected files:
+- `server/src/app.module.ts`
+- `server/src/admin-assignments/admin-assignments.module.ts`
+- `server/src/admin-assignments/admin-assignments.controller.ts`
+- `server/src/admin-assignments/admin-assignments.service.ts`
+- `server/src/admin-assignments/dto/create-assignment.dto.ts`
+- `server/src/admin-assignments/dto/update-assignment.dto.ts`
+- `server/src/admin-assignments/dto/assignment-query.dto.ts`
+- `server/prisma/seed.ts`
+- `server/test/authz.e2e-spec.ts`
+
+---
+
+## 2026-04-28 - Hardened E2E Database Guard and Assignment Negative Tests
+
+Context:
+Authorization e2e coverage existed for users/clients/admin-assignment happy-path and core access matrix, and the e2e runner had a safety check. However, DB guard bypass risk and missing assignment negative-case coverage still remained.
+
+Decision:
+Hardened the e2e runner database guard and expanded assignment authorization negative-case test coverage.
+
+Runner hardening (`server/test/run-e2e.cjs`):
+- E2E execution now strictly requires a test-like DB name in `DATABASE_URL`.
+- Allowed DB name patterns:
+  - `_test`
+  - `test_`
+  - `testing`
+- `ALLOW_E2E_DB_RESET=true` no longer bypasses the DB-name guard.
+- Guard matching was made delimiter-aware to reduce false-positive risk.
+- Non-test URL + `ALLOW_E2E_DB_RESET=true` was smoke-tested and correctly rejected.
+
+Authz e2e expansion (`server/test/authz.e2e-spec.ts`):
+- Added assignment admin CRUD negative-case scenarios:
+  - invalid `employeeUserId` UUID -> `400`
+  - invalid `clientProfileId` UUID -> `400`
+  - invalid `scope` enum -> `400`
+  - missing required fields -> `400`
+  - non-existent `employeeUserId` -> `400`
+  - non-existent `clientProfileId` -> `400`
+  - `employeeUserId` from client account -> `400`
+  - duplicate create -> `409`
+  - update invalid UUID -> `400`
+  - update null payload -> `400`
+  - deactivate non-existent assignment -> `404`
+  - activate non-existent assignment -> `404`
+- Runtime UUID resolution remains dynamic (no hardcoded UUIDs).
+- Existing matrix behavior was preserved.
+- Total authz suite result: `30/30` passing.
+
+Validation:
+- `npm run typecheck:spec` passed
+- `npm run check` passed
+- `ALLOW_E2E_DB_RESET=true npm run test:e2e:authz` passed (using test DB name `socialtech_test`)
+
+Reason:
+Reduces accidental non-test DB mutation risk and strengthens authorization regression coverage for assignment management edge cases before broader domain rollout.
+
+Affected files:
+- `server/test/run-e2e.cjs`
+- `server/test/authz.e2e-spec.ts`
+
+---
+
+## 2026-04-28 - Projects and Tasks API Foundation
+
+Context:
+Backend auth, users/clients protected APIs, employee-client assignment model, and admin assignment management were completed. Project/task operations were still mock-only and not yet protected with backend object-level authorization.
+
+Decision:
+Implemented `projects` and `tasks` domain API foundations under `server/` with role-scoped authorization and assignment-aware object-level checks.
+
+Data model updates:
+- Added Prisma models: `Project`, `Task`
+- Added enums: `ProjectStatus`, `TaskStatus`, `Priority`
+- Added relations:
+  - `ClientProfile -> Project[]`
+  - `Project -> Task[]`
+  - `Task -> assignee User?`
+  - `User -> assignedTasks[]`
+- Added indexes:
+  - Project: `clientProfileId`, `status`, `priority`
+  - Task: `projectId`, `assigneeUserId`, `status`, `priority`
+- Enforced client-scoped slug uniqueness for projects: `@@unique([clientProfileId, slug])`
+
+Seed updates:
+- Seeded 3 client-scoped projects:
+  - `acme-e-ticaret/growth-hub-launch`
+  - `nova-performance/paid-acquisition-optimization`
+  - `mavi-sosyal/social-calendar-refresh`
+- Seeded 7 realistic tasks
+- Assignee resolution is idempotent and natural-key based (email), no brittle hardcoded UUID dependency
+
+API endpoints added:
+- Projects:
+  - `GET /api/v1/projects`
+  - `GET /api/v1/projects/:id`
+  - `POST /api/v1/projects`
+  - `PATCH /api/v1/projects/:id`
+- Tasks:
+  - `GET /api/v1/tasks`
+  - `GET /api/v1/tasks/:id`
+  - `POST /api/v1/tasks`
+  - `PATCH /api/v1/tasks/:id`
+
+Authorization behavior:
+- Admin: full project/task read-write scope
+- Employee:
+  - read only active-assignment-scoped projects/tasks
+  - update only `status` on own assigned tasks within active assignment scope
+- Client:
+  - read only own `clientProfileId`-scoped projects/tasks
+- Out-of-scope detail access preserves safe `404` behavior
+
+Validation/testing:
+- Added DTO/query validation for projects/tasks
+- Added e2e suite: `server/test/projects-tasks-authz.e2e-spec.ts`
+- Added regression coverage to ensure assignment deactivation removes employee task visibility in that client scope
+- Authz e2e suites now pass `45/45`
+- Verified:
+  - `npm run prisma:generate`
+  - `npm run prisma:push`
+  - `npm run prisma:seed`
+  - `npm run build`
+  - `npm run check`
+  - `ALLOW_E2E_DB_RESET=true npm run test:e2e:authz`
+
+Known follow-up risks left intentionally out of this milestone:
+- Project-manager project/task manage policy is currently admin-only behavior and needs explicit product decision
+- Prisma `package.json#prisma` deprecation migration to `prisma.config.ts` remains pending
+- Assignment CRUD concurrency/race-condition e2e coverage remains pending
+- Migration-first Prisma workflow remains pending
+
+Reason:
+Establishes secure, RBAC-aware backend foundations for project/task data before frontend API integration and broader domain rollout.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/seed.ts`
+- `server/src/app.module.ts`
+- `server/src/projects/*`
+- `server/src/tasks/*`
+- `server/test/projects-tasks-authz.e2e-spec.ts`

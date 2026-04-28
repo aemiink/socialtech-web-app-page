@@ -3,7 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { Test, TestingModule } from "@nestjs/testing";
 import { Prisma, PrismaClient, Priority, ProjectStatus, TaskStatus } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
-import * as cookieParser from "cookie-parser";
+import cookieParser from "cookie-parser";
 import request = require("supertest");
 import { AppModule } from "../src/app.module";
 import { GlobalExceptionFilter } from "../src/common/filters/global-exception.filter";

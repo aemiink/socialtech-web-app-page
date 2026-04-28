@@ -80,12 +80,24 @@ Portal areas:
   - `GET /api/v1/clients`
   - `GET /api/v1/clients/:id`
   - `GET /api/v1/clients/me`
+- Admin assignment management API is now active:
+  - `GET /api/v1/admin/assignments`
+  - `POST /api/v1/admin/assignments`
+  - `PATCH /api/v1/admin/assignments/:id`
+  - `PATCH /api/v1/admin/assignments/:id/deactivate`
+  - `PATCH /api/v1/admin/assignments/:id/activate`
+- Projects and tasks API foundation is now active:
+  - Projects: `GET /api/v1/projects`, `GET /api/v1/projects/:id`, `POST /api/v1/projects`, `PATCH /api/v1/projects/:id`
+  - Tasks: `GET /api/v1/tasks`, `GET /api/v1/tasks/:id`, `POST /api/v1/tasks`, `PATCH /api/v1/tasks/:id`
 - `GET /users` enforces `users.read`; service-level object authorization protects `/users/:id` and `/clients/:id`.
 - Admin can read full users/client profile scopes; client users are limited to their own `ClientProfile` scope.
 - Employee assignment scope is now modeled via `EmployeeClientAssignment` + active assignment checks.
 - Employee users with `clients.read.assigned` can read only assigned client profiles (`GET /clients`) and assigned profile detail (`GET /clients/:id`); unassigned detail resolves as safe `404`.
-- Authz e2e matrix is now automated in backend tests (`server/test/authz.e2e-spec.ts`) and validated with real guard chain behavior.
-- Full domain endpoint authorization rollout beyond users/clients remains pending.
+- Employee users can read only active-assignment-scope projects/tasks and can update only `status` on tasks assigned to them within active assignment scope.
+- Client users can read only own `clientProfileId`-scope projects/tasks; out-of-scope detail access resolves as safe `404`.
+- Assignment admin endpoints are admin-only via `JwtAuthGuard` + `PermissionsGuard` + `RequirePermissions`, plus service-level `ADMIN` account/role and permission checks (`assignments.read`, `assignments.manage`).
+- Authz e2e matrix is now automated in backend tests (`server/test/authz.e2e-spec.ts`, `server/test/projects-tasks-authz.e2e-spec.ts`) and validated with real guard chain behavior (`45/45`).
+- Full domain endpoint authorization rollout beyond users/clients/admin-assignments/projects/tasks remains pending.
 
 ## Frontend Architecture
 
@@ -144,6 +156,7 @@ Current backend baseline includes:
   - Core: `User`, `RefreshToken`, `ClientProfile`, `AuditLog`
   - Authorization: `Permission`, `RolePermission`
   - Assignment scope: `EmployeeClientAssignment` + `EmployeeClientAssignmentScope`
+  - Project tracking: `Project`, `Task` + enums (`ProjectStatus`, `TaskStatus`, `Priority`)
 - Hybrid RBAC strategy selected: fixed `User.role` enum is kept, permission expansion is modeled via `Permission` + `RolePermission`
 - Demo seed foundation exists at `server/prisma/seed.ts`:
   - Seeds demo admin/employee/client accounts
@@ -151,27 +164,34 @@ Current backend baseline includes:
   - Seeds 3 demo client profiles (`acme-e-ticaret`, `nova-performance`, `mavi-sosyal`)
   - Links `client@socialtech.com` to `acme-e-ticaret`
   - Seeds active employee-client assignments for `project@socialtech.com`, `performance@socialtech.com`, and `social@socialtech.com`
+  - Seeds 3 projects and 7 tasks mapped to seeded clients and employee assignees
 - Auth implementation:
   - `POST /api/v1/auth/login` (email/password validation, bcrypt verify, legacy seed hash upgrade path)
   - `POST /api/v1/auth/refresh` (refresh JWT verification, DB hash check, rotation)
   - `POST /api/v1/auth/logout` (refresh token revoke)
   - `GET /api/v1/auth/me` (guarded user profile + permissions)
-- Protected users/clients foundation:
+- Protected users/clients/admin-assignments/projects/tasks foundation:
   - Users: `GET /api/v1/users/me`, `GET /api/v1/users`, `GET /api/v1/users/:id`
   - Clients: `GET /api/v1/clients`, `GET /api/v1/clients/:id`, `GET /api/v1/clients/me`
+  - Admin Assignments: `GET /api/v1/admin/assignments`, `POST /api/v1/admin/assignments`, `PATCH /api/v1/admin/assignments/:id`, `PATCH /api/v1/admin/assignments/:id/deactivate`, `PATCH /api/v1/admin/assignments/:id/activate`
+  - Projects: `GET /api/v1/projects`, `GET /api/v1/projects/:id`, `POST /api/v1/projects`, `PATCH /api/v1/projects/:id`
+  - Tasks: `GET /api/v1/tasks`, `GET /api/v1/tasks/:id`, `POST /api/v1/tasks`, `PATCH /api/v1/tasks/:id`
   - Controller-level guards: `JwtAuthGuard` + `PermissionsGuard`
-  - Service-level object authorization for owner/admin scope isolation
+  - Service-level authorization for owner/admin scope isolation and admin assignment management checks
   - Employee clients scope uses active assignment filtering (`clients.read.assigned`)
+  - Employee project/task scope uses active assignment filtering; employee task updates are status-only for own assigned tasks in active assignment scope
+  - Assignment API supports query filters (`employeeUserId`, `clientProfileId`, `isActive`, `scope`) and duplicate-safe create/reactivate behavior
 - Authz e2e testing foundation:
   - Jest + ts-jest + supertest under `server/test/`
   - E2E runner: `server/test/run-e2e.cjs` (Prisma prepare + Jest execution)
-  - DB safety guard in runner: test-scoped DB check + optional `ALLOW_E2E_DB_RESET=true` override
-  - Matrix suite currently covers 10 users/clients authorization scenarios
+  - DB safety guard in runner: strict test DB-name check (`_test`, `test_`, `testing`) with delimiter-aware matching
+  - `ALLOW_E2E_DB_RESET=true` no longer bypasses DB-name safety check
+  - Matrix suite currently covers 45 users/clients/admin-assignment/projects/tasks authorization scenarios
 - Token strategy:
   - access token in response body (Bearer usage)
   - refresh token in HttpOnly cookie
   - refresh token persistence as hash only (`RefreshToken.tokenHash`)
-- Foundation modules: `health`, `auth`, `users`, `clients`
+- Foundation modules: `health`, `auth`, `users`, `clients`, `admin-assignments`, `projects`, `tasks`
 - Health endpoint: `GET /api/v1/health`
 - Validation status:
   - `npm run prisma:generate` passed
@@ -180,14 +200,16 @@ Current backend baseline includes:
   - `npm run build` passed
   - `npm run check` passed
   - `npm run typecheck:spec` passed
-  - `ALLOW_E2E_DB_RESET=true npm run test:e2e:authz` passed (`10/10`)
+  - `ALLOW_E2E_DB_RESET=true npm run test:e2e:authz` passed (`45/45`, test DB name: `socialtech_test`)
   - manual auth flow tests passed (`login`, `me`, `refresh`, `logout`, `logout` sonrası `refresh=401`)
 
 Planned next backend phases:
-- Broader domain endpoint authorization rollout (beyond users/clients)
-- Assignment admin CRUD endpoints (manage employee-client links and assignment activation)
+- Broader domain endpoint authorization rollout (beyond users/clients/admin-assignments/projects/tasks)
 - Frontend API/auth integration for `adminandemployeePanel/` and `clientPanel/`
 - Migration-first Prisma workflow (replace current `db push` local flow)
+- Prisma config migration (`package.json#prisma` -> `prisma.config.ts`)
+- Project-manager project/task manage policy decision
+- Assignment concurrency/race-condition e2e coverage (parallel create/update conflict scenarios)
 - Broader backend e2e/integration coverage beyond current authz matrix
 
 ## Data Model Summary
@@ -210,18 +232,30 @@ Backend Prisma data model (foundation scope):
 - `RolePermission`: role-to-permission mapping table for hybrid RBAC expansion
 - `EmployeeClientAssignment`: employee-to-client assignment mapping with `scope`, `isActive`, and indexed lookup fields
 - `EmployeeClientAssignmentScope`: assignment scope enum (`PROJECT`, `PERFORMANCE`, `SOCIAL_MEDIA`, `DESIGN`, `DEVELOPMENT`, `SUPPORT`, `SEO`)
+- `Project`: client-linked project entity with lifecycle/status/priority/date fields and client-scoped slug uniqueness
+- `Task`: project-linked task entity with status/priority/assignee fields
+- `ProjectStatus`: `PLANNED | IN_PROGRESS | REVIEW | COMPLETED | ON_HOLD`
+- `TaskStatus`: `TODO | IN_PROGRESS | REVIEW | DONE | BLOCKED`
+- `Priority`: `LOW | MEDIUM | HIGH | URGENT`
 
 Current protected read behavior:
 - User/client responses are sanitized; auth-sensitive fields are excluded (`passwordHash`, refresh token/hash fields).
 - Object-level authorization is enforced in services for `users/:id`, `clients/:id`, and `clients/me`.
 - Employee access to `/clients` and `/clients/:id` is assignment-based (`isActive=true`) for accounts with `clients.read.assigned`.
+- Admin assignment responses are sanitized to minimal employee/client summaries; auth-sensitive fields are excluded.
+- Project/task responses are authorization-scoped by role:
+  - admin: full project/task scope
+  - employee: active-assignment-scope read, own-assigned status-only task update
+  - client: own-client-scope read
 
 Demo seed snapshot (current local run):
 - `users=9`
-- `permissions=33`
-- `role_permissions=107`
+- `permissions=35`
+- `role_permissions=109`
 - `client_profiles=3`
 - `active_employee_client_assignments=7`
+- `projects=3`
+- `tasks=7`
 
 ## Important Conventions
 
@@ -260,5 +294,6 @@ npm run check                  # typecheck + seed typecheck + spec typecheck + b
 npm run test:e2e:prepare       # e2e db safety check + prisma generate/push/seed
 npm run test:e2e               # full backend e2e suite
 npm run test:e2e:authz         # users/clients authorization matrix suite
-ALLOW_E2E_DB_RESET=true npm run test:e2e:authz  # explicit override for non-test DB names
+DATABASE_URL=postgresql://user:pass@localhost:5432/socialtech_test?schema=public ALLOW_E2E_DB_RESET=true npm run test:e2e:authz
 ```
+`run-e2e.cjs` now requires test DB naming (`_test`, `test_`, or `testing` in DB name); `ALLOW_E2E_DB_RESET=true` does not bypass this requirement.

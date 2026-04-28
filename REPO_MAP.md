@@ -124,7 +124,7 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 ### App Bootstrap
 
 - `server/src/main.ts` - Nest bootstrap, `/api/v1` global prefix, global ValidationPipe, global exception filter, CORS setup
-- `server/src/app.module.ts` - root module imports for config/database/health/auth/users/clients
+- `server/src/app.module.ts` - root module imports for config/database/health/auth/users/clients/admin-assignments/projects/tasks
 - `server/src/config/env.validation.ts` - Joi env validation schema
 - `server/src/config/cors.config.ts` - env-based CORS whitelist
 - `server/src/common/filters/global-exception.filter.ts` - centralized error response format
@@ -133,15 +133,21 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 
 - `server/prisma/schema.prisma` - Prisma schema foundation:
   - Core models: `User`, `RefreshToken`, `ClientProfile`, `AuditLog`, `EmployeeClientAssignment`
+  - Delivery models: `Project`, `Task`
   - Hybrid RBAC models: `Permission`, `RolePermission`
   - Assignment scope enum: `EmployeeClientAssignmentScope`
+  - Delivery enums: `ProjectStatus`, `TaskStatus`, `Priority`
   - `User.role` enum remains the primary fixed role field
   - `ClientProfile.slug` is unique
+  - `Project` slug uniqueness is client-scoped (`@@unique([clientProfileId, slug])`)
   - Assignment constraints and indexes:
     - `@@unique([employeeUserId, clientProfileId, scope])`
     - `@@index([employeeUserId, isActive])`
     - `@@index([clientProfileId, isActive])`
     - `@@index([scope, isActive])`
+  - Project/task indexes:
+    - `Project`: `clientProfileId`, `status`, `priority`
+    - `Task`: `projectId`, `assigneeUserId`, `status`, `priority`
 - `server/src/database/prisma.service.ts` - Prisma client lifecycle management
 - `server/src/database/database.module.ts` - global database module
 - `server/prisma/seed.ts` - demo seed foundation:
@@ -150,6 +156,11 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - seeds client profiles: `acme-e-ticaret`, `nova-performance`, `mavi-sosyal`
   - links `client@socialtech.com` to `acme-e-ticaret`
   - seeds active employee-client assignments for `project@socialtech.com`, `performance@socialtech.com`, `social@socialtech.com`
+  - seeds projects:
+    - `acme-e-ticaret/growth-hub-launch`
+    - `nova-performance/paid-acquisition-optimization`
+    - `mavi-sosyal/social-calendar-refresh`
+  - seeds 7 project tasks with idempotent assignee resolution via email/natural keys
   - uses `bcryptjs` hashes for demo passwords
 - `server/tsconfig.seed.json` - TypeScript check config for seed files
 
@@ -173,7 +184,24 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - `clients.controller.ts` - `GET /api/v1/clients`, `GET /api/v1/clients/:id`, `GET /api/v1/clients/me`
   - `clients.service.ts` - admin/client scope checks + assignment-based employee scope (`clients.read.assigned`) + object-level ownership/assignment checks
   - `clients.module.ts` - imports `AuthModule` for guard wiring
-- `users/clients` are now protected read foundations; broader domain CRUD and assignment management endpoints remain planned.
+- `server/src/admin-assignments/` - admin assignment management module:
+  - `admin-assignments.controller.ts` - `GET /api/v1/admin/assignments`, `POST /api/v1/admin/assignments`, `PATCH /api/v1/admin/assignments/:id`, `PATCH /api/v1/admin/assignments/:id/deactivate`, `PATCH /api/v1/admin/assignments/:id/activate`
+  - `admin-assignments.service.ts` - admin-only service authorization, assignment query filters, duplicate-safe create/reactivate flow, and sanitized assignment responses
+  - `dto/create-assignment.dto.ts` - create payload validation
+  - `dto/update-assignment.dto.ts` - update payload validation
+  - `dto/assignment-query.dto.ts` - list query filter validation (`employeeUserId`, `clientProfileId`, `isActive`, `scope`)
+  - `admin-assignments.module.ts` - module wiring
+- `server/src/projects/` - projects API foundation:
+  - `projects.controller.ts` - `GET /api/v1/projects`, `GET /api/v1/projects/:id`, `POST /api/v1/projects`, `PATCH /api/v1/projects/:id`
+  - `projects.service.ts` - admin full write scope, employee assignment-scope read, client own-scope read, object-level visibility checks
+  - `dto/create-project.dto.ts`, `dto/update-project.dto.ts`, `dto/project-query.dto.ts` - payload/query validation
+  - `projects.module.ts` - module wiring
+- `server/src/tasks/` - tasks API foundation:
+  - `tasks.controller.ts` - `GET /api/v1/tasks`, `GET /api/v1/tasks/:id`, `POST /api/v1/tasks`, `PATCH /api/v1/tasks/:id`
+  - `tasks.service.ts` - admin full write scope, employee assignment-scope read + own-assigned status-only update, client own-scope read
+  - `dto/create-task.dto.ts`, `dto/update-task.dto.ts`, `dto/task-query.dto.ts` - payload/query validation
+  - `tasks.module.ts` - module wiring
+- `users/clients/admin-assignments/projects/tasks` are now protected foundations; broader domain CRUD remains planned.
 
 ### Seed And Prisma Commands
 
@@ -187,12 +215,14 @@ From `server/package.json`:
 
 - `server/test/run-e2e.cjs` - unified e2e runner:
   - resolves `DATABASE_URL`
-  - validates test DB safety (or explicit `ALLOW_E2E_DB_RESET=true` override)
+  - enforces strict test DB naming in DB name (`_test`, `test_`, `testing`) with delimiter-aware matching
+  - rejects non-test DB names even when `ALLOW_E2E_DB_RESET=true`
   - runs Prisma prepare (`generate`, `db push`, `db seed`)
   - runs Jest e2e suite
 - `server/test/jest-e2e.config.cjs` - Jest configuration for e2e files
 - `server/test/jest.env.ts` - test env defaults for JWT and auth runtime
-- `server/test/authz.e2e-spec.ts` - users/clients authorization matrix (10 scenarios, real AppModule + real guards, runtime assigned/unassigned client resolution)
+- `server/test/authz.e2e-spec.ts` - users/clients/admin-assignment authorization matrix (30 scenarios, real AppModule + real guards, runtime assignment/client resolution, assignment CRUD negative cases)
+- `server/test/projects-tasks-authz.e2e-spec.ts` - projects/tasks authorization matrix + assignment deactivation regression coverage
 - `server/package.json` test scripts:
   - `npm run test:e2e:prepare`
   - `npm run test:e2e`
