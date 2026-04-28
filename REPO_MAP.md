@@ -114,11 +114,12 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 
 ### Config And Runtime
 
-- `server/package.json` - npm scripts (`dev`, `start`, `build`, `typecheck`, `check`, `prisma:*`) and `packageManager: npm@11.8.0`
+- `server/package.json` - npm scripts (`dev`, `start`, `build`, `typecheck`, `typecheck:spec`, `check`, `prisma:*`, `test:e2e*`) and `packageManager: npm@11.8.0`
 - `server/.env.example` - backend env variable template
 - `server/nest-cli.json`
 - `server/tsconfig.json`
 - `server/tsconfig.build.json`
+- `server/tsconfig.spec.json` - TypeScript config for e2e/spec compilation
 
 ### App Bootstrap
 
@@ -131,16 +132,24 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 ### Database Foundation
 
 - `server/prisma/schema.prisma` - Prisma schema foundation:
-  - Core models: `User`, `RefreshToken`, `ClientProfile`, `AuditLog`
+  - Core models: `User`, `RefreshToken`, `ClientProfile`, `AuditLog`, `EmployeeClientAssignment`
   - Hybrid RBAC models: `Permission`, `RolePermission`
+  - Assignment scope enum: `EmployeeClientAssignmentScope`
   - `User.role` enum remains the primary fixed role field
   - `ClientProfile.slug` is unique
+  - Assignment constraints and indexes:
+    - `@@unique([employeeUserId, clientProfileId, scope])`
+    - `@@index([employeeUserId, isActive])`
+    - `@@index([clientProfileId, isActive])`
+    - `@@index([scope, isActive])`
 - `server/src/database/prisma.service.ts` - Prisma client lifecycle management
 - `server/src/database/database.module.ts` - global database module
 - `server/prisma/seed.ts` - demo seed foundation:
   - seeds admin + 7 employee roles + 1 client owner
   - seeds permission catalog and role-permission mappings
-  - links `client@socialtech.com` to `Acme E-ticaret` client profile
+  - seeds client profiles: `acme-e-ticaret`, `nova-performance`, `mavi-sosyal`
+  - links `client@socialtech.com` to `acme-e-ticaret`
+  - seeds active employee-client assignments for `project@socialtech.com`, `performance@socialtech.com`, `social@socialtech.com`
   - uses `bcryptjs` hashes for demo passwords
 - `server/tsconfig.seed.json` - TypeScript check config for seed files
 
@@ -150,6 +159,7 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 - `server/src/auth/` - implemented auth flow and authorization scaffolding:
   - `auth.controller.ts` - `/api/v1/auth/login|refresh|logout|me`
   - `auth.service.ts` - login/refresh/logout/me logic, refresh rotation, revoke handling
+  - `auth.module.ts` - exports `JwtModule` + auth providers for downstream guard injection
   - `authorization.service.ts` - role -> permission resolution
   - `dto/` - `LoginDto`, `RefreshTokenDto`, `LogoutDto`
   - `guards/` - `JwtAuthGuard`, `PermissionsGuard`
@@ -161,9 +171,9 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - `users.module.ts` - imports `AuthModule` for guard wiring
 - `server/src/clients/` - protected clients foundation:
   - `clients.controller.ts` - `GET /api/v1/clients`, `GET /api/v1/clients/:id`, `GET /api/v1/clients/me`
-  - `clients.service.ts` - admin/client scope checks + object-level client profile ownership checks
+  - `clients.service.ts` - admin/client scope checks + assignment-based employee scope (`clients.read.assigned`) + object-level ownership/assignment checks
   - `clients.module.ts` - imports `AuthModule` for guard wiring
-- `users/clients` are now protected read foundations; broader domain CRUD and assignment-aware scopes remain planned.
+- `users/clients` are now protected read foundations; broader domain CRUD and assignment management endpoints remain planned.
 
 ### Seed And Prisma Commands
 
@@ -172,6 +182,21 @@ From `server/package.json`:
 - `npm run prisma:push` (currently used for local schema sync)
 - `npm run prisma:seed`
 - `npm run prisma:migrate` (planned for migration-first workflow)
+
+### E2E Test Foundation
+
+- `server/test/run-e2e.cjs` - unified e2e runner:
+  - resolves `DATABASE_URL`
+  - validates test DB safety (or explicit `ALLOW_E2E_DB_RESET=true` override)
+  - runs Prisma prepare (`generate`, `db push`, `db seed`)
+  - runs Jest e2e suite
+- `server/test/jest-e2e.config.cjs` - Jest configuration for e2e files
+- `server/test/jest.env.ts` - test env defaults for JWT and auth runtime
+- `server/test/authz.e2e-spec.ts` - users/clients authorization matrix (10 scenarios, real AppModule + real guards, runtime assigned/unassigned client resolution)
+- `server/package.json` test scripts:
+  - `npm run test:e2e:prepare`
+  - `npm run test:e2e`
+  - `npm run test:e2e:authz`
 
 ### Styles
 

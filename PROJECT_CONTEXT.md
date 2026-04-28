@@ -82,7 +82,9 @@ Portal areas:
   - `GET /api/v1/clients/me`
 - `GET /users` enforces `users.read`; service-level object authorization protects `/users/:id` and `/clients/:id`.
 - Admin can read full users/client profile scopes; client users are limited to their own `ClientProfile` scope.
-- Employee assignment scope is not modeled yet; `clients.read.assigned` currently remains intentionally constrained.
+- Employee assignment scope is now modeled via `EmployeeClientAssignment` + active assignment checks.
+- Employee users with `clients.read.assigned` can read only assigned client profiles (`GET /clients`) and assigned profile detail (`GET /clients/:id`); unassigned detail resolves as safe `404`.
+- Authz e2e matrix is now automated in backend tests (`server/test/authz.e2e-spec.ts`) and validated with real guard chain behavior.
 - Full domain endpoint authorization rollout beyond users/clients remains pending.
 
 ## Frontend Architecture
@@ -141,11 +143,14 @@ Current backend baseline includes:
 - Prisma/PostgreSQL schema foundation expanded with hybrid RBAC-ready models:
   - Core: `User`, `RefreshToken`, `ClientProfile`, `AuditLog`
   - Authorization: `Permission`, `RolePermission`
+  - Assignment scope: `EmployeeClientAssignment` + `EmployeeClientAssignmentScope`
 - Hybrid RBAC strategy selected: fixed `User.role` enum is kept, permission expansion is modeled via `Permission` + `RolePermission`
 - Demo seed foundation exists at `server/prisma/seed.ts`:
   - Seeds demo admin/employee/client accounts
   - Seeds permission catalog and role-permission mappings
-  - Seeds demo client profile (`Acme E-ticaret`) and links `client@socialtech.com`
+  - Seeds 3 demo client profiles (`acme-e-ticaret`, `nova-performance`, `mavi-sosyal`)
+  - Links `client@socialtech.com` to `acme-e-ticaret`
+  - Seeds active employee-client assignments for `project@socialtech.com`, `performance@socialtech.com`, and `social@socialtech.com`
 - Auth implementation:
   - `POST /api/v1/auth/login` (email/password validation, bcrypt verify, legacy seed hash upgrade path)
   - `POST /api/v1/auth/refresh` (refresh JWT verification, DB hash check, rotation)
@@ -156,6 +161,12 @@ Current backend baseline includes:
   - Clients: `GET /api/v1/clients`, `GET /api/v1/clients/:id`, `GET /api/v1/clients/me`
   - Controller-level guards: `JwtAuthGuard` + `PermissionsGuard`
   - Service-level object authorization for owner/admin scope isolation
+  - Employee clients scope uses active assignment filtering (`clients.read.assigned`)
+- Authz e2e testing foundation:
+  - Jest + ts-jest + supertest under `server/test/`
+  - E2E runner: `server/test/run-e2e.cjs` (Prisma prepare + Jest execution)
+  - DB safety guard in runner: test-scoped DB check + optional `ALLOW_E2E_DB_RESET=true` override
+  - Matrix suite currently covers 10 users/clients authorization scenarios
 - Token strategy:
   - access token in response body (Bearer usage)
   - refresh token in HttpOnly cookie
@@ -164,17 +175,20 @@ Current backend baseline includes:
 - Health endpoint: `GET /api/v1/health`
 - Validation status:
   - `npm run prisma:generate` passed
+  - `npm run prisma:push` passed
   - `npm run prisma:seed` passed
   - `npm run build` passed
   - `npm run check` passed
+  - `npm run typecheck:spec` passed
+  - `ALLOW_E2E_DB_RESET=true npm run test:e2e:authz` passed (`10/10`)
   - manual auth flow tests passed (`login`, `me`, `refresh`, `logout`, `logout` sonrası `refresh=401`)
 
 Planned next backend phases:
 - Broader domain endpoint authorization rollout (beyond users/clients)
-- Employee-client assignment model for `clients.read.assigned`
+- Assignment admin CRUD endpoints (manage employee-client links and assignment activation)
 - Frontend API/auth integration for `adminandemployeePanel/` and `clientPanel/`
 - Migration-first Prisma workflow (replace current `db push` local flow)
-- Auth e2e test coverage
+- Broader backend e2e/integration coverage beyond current authz matrix
 
 ## Data Model Summary
 
@@ -194,17 +208,20 @@ Backend Prisma data model (foundation scope):
 - `AuditLog`: actor-based audit event records
 - `Permission`: permission catalog table (slug + description)
 - `RolePermission`: role-to-permission mapping table for hybrid RBAC expansion
+- `EmployeeClientAssignment`: employee-to-client assignment mapping with `scope`, `isActive`, and indexed lookup fields
+- `EmployeeClientAssignmentScope`: assignment scope enum (`PROJECT`, `PERFORMANCE`, `SOCIAL_MEDIA`, `DESIGN`, `DEVELOPMENT`, `SUPPORT`, `SEO`)
 
 Current protected read behavior:
 - User/client responses are sanitized; auth-sensitive fields are excluded (`passwordHash`, refresh token/hash fields).
 - Object-level authorization is enforced in services for `users/:id`, `clients/:id`, and `clients/me`.
-- Employee-to-client assignment relation does not exist yet, so assignment-based client scope is intentionally limited.
+- Employee access to `/clients` and `/clients/:id` is assignment-based (`isActive=true`) for accounts with `clients.read.assigned`.
 
 Demo seed snapshot (current local run):
 - `users=9`
 - `permissions=33`
 - `role_permissions=107`
-- `client_profiles=1`
+- `client_profiles=3`
+- `active_employee_client_assignments=7`
 
 ## Important Conventions
 
@@ -236,3 +253,12 @@ npm run preview    # preview production build
 npm run check      # typecheck + build gate
 ```
 Lint/format scripts are intentionally not added yet in this pass (ESLint/Prettier deferred).
+
+From `server/package.json`:
+```bash
+npm run check                  # typecheck + seed typecheck + spec typecheck + build
+npm run test:e2e:prepare       # e2e db safety check + prisma generate/push/seed
+npm run test:e2e               # full backend e2e suite
+npm run test:e2e:authz         # users/clients authorization matrix suite
+ALLOW_E2E_DB_RESET=true npm run test:e2e:authz  # explicit override for non-test DB names
+```

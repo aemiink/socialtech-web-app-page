@@ -328,3 +328,105 @@ Affected files:
 - `server/src/clients/clients.module.ts`
 - `server/src/clients/clients.controller.ts`
 - `server/src/clients/clients.service.ts`
+
+---
+
+## 2026-04-28 - Employee Client Assignment Model
+
+Context:
+Protected users/clients endpoints were implemented, but employee client access was still placeholder-scoped because assignment relations were not modeled yet. `clients.read.assigned` existed in permissions but could not be enforced against real data.
+
+Decision:
+Implemented assignment-based employee client access with a dedicated Prisma model and updated clients authorization flow:
+- Added `EmployeeClientAssignment` model
+- Added `EmployeeClientAssignmentScope` enum
+- Added `User.employeeClientAssignments` relation
+- Added `ClientProfile.employeeAssignments` relation
+- Added assignment uniqueness and query indexes:
+  - `@@unique([employeeUserId, clientProfileId, scope])`
+  - `@@index([employeeUserId, isActive])`
+  - `@@index([clientProfileId, isActive])`
+  - `@@index([scope, isActive])`
+
+Seed updates:
+- Expanded demo client profiles to 3:
+  - `acme-e-ticaret`
+  - `nova-performance`
+  - `mavi-sosyal`
+- Seeded active employee-client assignments:
+  - `project@socialtech.com` -> 3 clients (`PROJECT`)
+  - `performance@socialtech.com` -> 2 clients (`PERFORMANCE`)
+  - `social@socialtech.com` -> 2 clients (`SOCIAL_MEDIA`)
+
+Authorization behavior changes:
+- `GET /api/v1/clients` now returns only actively assigned client profiles for employee accounts with `clients.read.assigned`.
+- `GET /api/v1/clients/:id` now allows employee access only when there is an active assignment; otherwise returns safe `404`.
+- Admin and client account behavior remains unchanged.
+- `JwtAuthGuard` + `PermissionsGuard` + service-level object authorization remain in place.
+
+Operational and runtime notes:
+- Exported `JwtModule` from `AuthModule` to resolve runtime DI availability for guard dependencies in feature modules.
+- Verified successfully:
+  - `npm run prisma:generate`
+  - `npm run prisma:push`
+  - `npm run prisma:seed`
+  - `npm run build`
+  - `npm run check`
+
+Reason:
+Moves employee client visibility from placeholder behavior to enforceable backend authorization scope, while preserving phased rollout for assignment management APIs and test coverage.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/seed.ts`
+- `server/src/clients/clients.service.ts`
+- `server/src/auth/auth.module.ts`
+
+---
+
+## 2026-04-28 - Authorization E2E Test Matrix
+
+Context:
+Auth flow, users/clients protected endpoints, and employee assignment scope were implemented, but backend authorization behavior still relied on manual validation. A repeatable e2e verification layer was required before broader domain rollout.
+
+Decision:
+Added a Jest + ts-jest + supertest based e2e test foundation under `server/test/` and implemented an authorization matrix suite for users/clients endpoints.
+
+Implemented test characteristics:
+- Tests run against real `AppModule` bootstrapping and real guards (`JwtAuthGuard`, `PermissionsGuard`).
+- No guard mocking/override is used.
+- Runtime setup derives assigned/unassigned client IDs from seeded DB data (no hardcoded UUID dependency).
+
+Added safe e2e runner:
+- `server/test/run-e2e.cjs` prepares Prisma (`generate`, `db push`, `db seed`) and runs Jest in one controlled flow.
+- Runner validates `DATABASE_URL` against test-style naming and blocks unsafe targets by default.
+- Explicit override is possible via `ALLOW_E2E_DB_RESET=true`.
+
+Authorization matrix coverage (10 tests):
+- admin users list -> `200`
+- client users list -> `403`
+- employee users list -> `403`
+- admin clients list -> `200`
+- client clients/me -> `200`
+- client another client id -> `403`
+- employee assigned clients list -> `200`
+- employee assigned client detail -> `200`
+- employee unassigned client detail -> `404`
+- unauthenticated protected request -> `401`
+
+Validation:
+- `npm run typecheck:spec` passed
+- `npm run check` passed
+- `ALLOW_E2E_DB_RESET=true npm run test:e2e:authz` passed (`10/10`)
+
+Reason:
+Creates a reliable backend authz regression gate before frontend integration and broader domain endpoint expansion.
+
+Affected files:
+- `server/package.json`
+- `server/package-lock.json`
+- `server/tsconfig.spec.json`
+- `server/test/jest-e2e.config.cjs`
+- `server/test/jest.env.ts`
+- `server/test/run-e2e.cjs`
+- `server/test/authz.e2e-spec.ts`
