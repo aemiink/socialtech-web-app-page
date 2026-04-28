@@ -3,6 +3,9 @@ import {
   PrismaClient,
   AccountType,
   EmployeeClientAssignmentScope,
+  Priority,
+  ProjectStatus,
+  TaskStatus,
   UserRole,
   UserStatus,
 } from "@prisma/client";
@@ -31,6 +34,28 @@ type EmployeeClientAssignmentSeed = {
   clientSlug: string;
   scope: EmployeeClientAssignmentScope;
   isActive?: boolean;
+};
+
+type ProjectSeed = {
+  clientSlug: string;
+  slug: string;
+  name: string;
+  description?: string;
+  status: ProjectStatus;
+  priority: Priority;
+  startDate?: Date;
+  dueDate?: Date;
+};
+
+type TaskSeed = {
+  projectClientSlug: string;
+  projectSlug: string;
+  title: string;
+  description?: string;
+  status: TaskStatus;
+  priority: Priority;
+  assigneeEmail?: string;
+  dueDate?: Date;
 };
 
 const prisma = new PrismaClient();
@@ -93,6 +118,112 @@ const EMPLOYEE_CLIENT_ASSIGNMENTS: EmployeeClientAssignmentSeed[] = [
   },
 ];
 
+const PROJECT_SEEDS: ProjectSeed[] = [
+  {
+    clientSlug: "acme-e-ticaret",
+    slug: "growth-hub-launch",
+    name: "Growth Hub Launch",
+    description: "Launch foundation for Acme E-ticaret growth operations.",
+    status: ProjectStatus.IN_PROGRESS,
+    priority: Priority.HIGH,
+    startDate: new Date("2026-04-15T00:00:00.000Z"),
+    dueDate: new Date("2026-06-15T00:00:00.000Z"),
+  },
+  {
+    clientSlug: "nova-performance",
+    slug: "paid-acquisition-optimization",
+    name: "Paid Acquisition Optimization",
+    description: "Performance sprint covering paid media audit, tracking, and optimization.",
+    status: ProjectStatus.REVIEW,
+    priority: Priority.URGENT,
+    startDate: new Date("2026-04-01T00:00:00.000Z"),
+    dueDate: new Date("2026-05-20T00:00:00.000Z"),
+  },
+  {
+    clientSlug: "mavi-sosyal",
+    slug: "social-calendar-refresh",
+    name: "Social Calendar Refresh",
+    description: "Monthly social content workflow and approval foundation.",
+    status: ProjectStatus.PLANNED,
+    priority: Priority.MEDIUM,
+    startDate: new Date("2026-05-01T00:00:00.000Z"),
+    dueDate: new Date("2026-06-01T00:00:00.000Z"),
+  },
+];
+
+const TASK_SEEDS: TaskSeed[] = [
+  {
+    projectClientSlug: "acme-e-ticaret",
+    projectSlug: "growth-hub-launch",
+    title: "Confirm kickoff scope and milestones",
+    description: "Align Acme launch scope, milestone owners, and delivery checkpoints.",
+    status: TaskStatus.IN_PROGRESS,
+    priority: Priority.HIGH,
+    assigneeEmail: "project@socialtech.com",
+    dueDate: new Date("2026-05-05T00:00:00.000Z"),
+  },
+  {
+    projectClientSlug: "acme-e-ticaret",
+    projectSlug: "growth-hub-launch",
+    title: "Prepare performance tracking plan",
+    description: "Define campaign measurement events and reporting dimensions.",
+    status: TaskStatus.TODO,
+    priority: Priority.HIGH,
+    assigneeEmail: "performance@socialtech.com",
+    dueDate: new Date("2026-05-10T00:00:00.000Z"),
+  },
+  {
+    projectClientSlug: "acme-e-ticaret",
+    projectSlug: "growth-hub-launch",
+    title: "Draft launch content calendar",
+    description: "Prepare launch-week social captions, post themes, and approval dates.",
+    status: TaskStatus.TODO,
+    priority: Priority.MEDIUM,
+    assigneeEmail: "social@socialtech.com",
+    dueDate: new Date("2026-05-12T00:00:00.000Z"),
+  },
+  {
+    projectClientSlug: "nova-performance",
+    projectSlug: "paid-acquisition-optimization",
+    title: "Review paid media audit findings",
+    description: "Validate channel findings and prepare optimization recommendations.",
+    status: TaskStatus.REVIEW,
+    priority: Priority.URGENT,
+    assigneeEmail: "performance@socialtech.com",
+    dueDate: new Date("2026-05-03T00:00:00.000Z"),
+  },
+  {
+    projectClientSlug: "nova-performance",
+    projectSlug: "paid-acquisition-optimization",
+    title: "Coordinate optimization approval",
+    description: "Collect client approval requirements and package next-step recommendations.",
+    status: TaskStatus.IN_PROGRESS,
+    priority: Priority.HIGH,
+    assigneeEmail: "project@socialtech.com",
+    dueDate: new Date("2026-05-08T00:00:00.000Z"),
+  },
+  {
+    projectClientSlug: "mavi-sosyal",
+    projectSlug: "social-calendar-refresh",
+    title: "Build May social calendar",
+    description: "Create content themes, caption briefs, and posting cadence for May.",
+    status: TaskStatus.TODO,
+    priority: Priority.HIGH,
+    assigneeEmail: "social@socialtech.com",
+    dueDate: new Date("2026-05-07T00:00:00.000Z"),
+  },
+  {
+    projectClientSlug: "mavi-sosyal",
+    projectSlug: "social-calendar-refresh",
+    title: "Set approval workflow checkpoints",
+    description: "Confirm review dates and responsible contacts for calendar approval.",
+    status: TaskStatus.TODO,
+    priority: Priority.MEDIUM,
+    assigneeEmail: "project@socialtech.com",
+    dueDate: new Date("2026-05-09T00:00:00.000Z"),
+  },
+];
+
 const PERMISSIONS: PermissionSeed[] = [
   { slug: "dashboard.read", description: "Read dashboard summaries." },
   { slug: "users.read", description: "Read user list and user details." },
@@ -105,10 +236,17 @@ const PERMISSIONS: PermissionSeed[] = [
   { slug: "assignments.manage", description: "Create/update/deactivate employee-client assignments." },
   { slug: "projects.read", description: "Read projects." },
   { slug: "projects.manage", description: "Create and update projects." },
+  { slug: "projects.read.any", description: "Read all client projects." },
+  { slug: "projects.manage.any", description: "Create and update all client projects." },
   { slug: "projects.read.assigned", description: "Read assigned projects." },
+  { slug: "projects.read.own", description: "Read own client projects." },
   { slug: "tasks.read", description: "Read tasks." },
   { slug: "tasks.manage", description: "Manage all tasks." },
+  { slug: "tasks.read.any", description: "Read all project tasks." },
+  { slug: "tasks.manage.any", description: "Create and update all project tasks." },
   { slug: "tasks.read.assigned", description: "Read assigned tasks." },
+  { slug: "tasks.update.assigned", description: "Update assigned tasks." },
+  { slug: "tasks.read.own", description: "Read own client tasks." },
   { slug: "tasks.update.own", description: "Update owned tasks." },
   { slug: "approvals.read", description: "Read approval requests." },
   { slug: "approvals.manage", description: "Manage approval requests." },
@@ -136,10 +274,9 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
   PROJECT_MANAGER: [
     "dashboard.read",
     "clients.read.assigned",
-    "projects.read",
-    "projects.manage",
-    "tasks.read",
-    "tasks.manage",
+    "projects.read.assigned",
+    "tasks.read.assigned",
+    "tasks.update.assigned",
     "approvals.read",
     "approvals.manage",
     "reports.read",
@@ -153,6 +290,7 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
     "clients.read.assigned",
     "projects.read.assigned",
     "tasks.read.assigned",
+    "tasks.update.assigned",
     "tasks.update.own",
     "reports.read",
     "reports.manage",
@@ -163,6 +301,7 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
     "clients.read.assigned",
     "projects.read.assigned",
     "tasks.read.assigned",
+    "tasks.update.assigned",
     "tasks.update.own",
     "approvals.read",
     "reports.read",
@@ -174,6 +313,7 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
     "clients.read.assigned",
     "projects.read.assigned",
     "tasks.read.assigned",
+    "tasks.update.assigned",
     "tasks.update.own",
     "approvals.read",
     "settings.read",
@@ -183,13 +323,16 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
     "clients.read.assigned",
     "projects.read.assigned",
     "tasks.read.assigned",
+    "tasks.update.assigned",
     "tasks.update.own",
     "settings.read",
   ],
   SUPPORT_SPECIALIST: [
     "dashboard.read",
     "clients.read.assigned",
+    "projects.read.assigned",
     "tasks.read.assigned",
+    "tasks.update.assigned",
     "tasks.update.own",
     "settings.read",
   ],
@@ -198,6 +341,7 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
     "clients.read.assigned",
     "projects.read.assigned",
     "tasks.read.assigned",
+    "tasks.update.assigned",
     "tasks.update.own",
     "reports.read",
     "reports.manage",
@@ -206,6 +350,8 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
   CLIENT_OWNER: [
     "portal.read.own",
     "clients.read.own",
+    "projects.read.own",
+    "tasks.read.own",
     "approvals.respond.own",
     "reports.read.own",
     "meetings.read.own",
@@ -217,6 +363,8 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
   CLIENT_MEMBER: [
     "portal.read.own",
     "clients.read.own",
+    "projects.read.own",
+    "tasks.read.own",
     "approvals.respond.own",
     "reports.read.own",
     "meetings.read.own",
@@ -225,8 +373,6 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
     "settings.manage.own",
   ],
 };
-
-const ASSIGNMENT_ADMIN_PERMISSION_SLUGS = ["assignments.read", "assignments.manage"] as const;
 
 const DEMO_USERS: DemoUserSeed[] = [
   {
@@ -326,51 +472,47 @@ async function seedPermissions(): Promise<Map<string, string>> {
 }
 
 async function seedRolePermissions(permissionIdBySlug: Map<string, string>): Promise<void> {
-  const rolePermissionRows = Object.entries(ROLE_PERMISSIONS).flatMap(([role, permissionSlugs]) =>
-    permissionSlugs.map((slug) => {
+  const rolePermissionIdsByRole = new Map<UserRole, string[]>();
+
+  for (const [role, permissionSlugs] of Object.entries(ROLE_PERMISSIONS)) {
+    const normalizedRole = role as UserRole;
+    const permissionIds = permissionSlugs.map((slug) => {
       const permissionId = permissionIdBySlug.get(slug);
       if (!permissionId) {
         throw new Error(`Missing permission id for slug: ${slug}`);
       }
 
-      return {
-        role: role as UserRole,
-        permissionId,
-      };
-    }),
-  );
-
-  for (const row of rolePermissionRows) {
-    await prisma.rolePermission.upsert({
-      where: {
-        role_permissionId: {
-          role: row.role,
-          permissionId: row.permissionId,
-        },
-      },
-      update: {},
-      create: {
-        role: row.role,
-        permissionId: row.permissionId,
-      },
+      return permissionId;
     });
+
+    rolePermissionIdsByRole.set(normalizedRole, Array.from(new Set(permissionIds)));
   }
 
-  const assignmentAdminPermissionIds = ASSIGNMENT_ADMIN_PERMISSION_SLUGS.map((slug) => {
-    const permissionId = permissionIdBySlug.get(slug);
-    if (!permissionId) {
-      throw new Error(`Missing assignment admin permission id for slug: ${slug}`);
+  for (const role of Object.values(UserRole)) {
+    const desiredPermissionIds = rolePermissionIdsByRole.get(role) ?? [];
+
+    if (desiredPermissionIds.length === 0) {
+      await prisma.rolePermission.deleteMany({
+        where: { role },
+      });
+      continue;
     }
 
-    return permissionId;
-  });
+    await prisma.rolePermission.deleteMany({
+      where: {
+        role,
+        permissionId: { notIn: desiredPermissionIds },
+      },
+    });
 
-  await prisma.rolePermission.deleteMany({
-    where: {
-      role: { not: UserRole.ADMIN },
-      permissionId: { in: assignmentAdminPermissionIds },
-    },
-  });
+    await prisma.rolePermission.createMany({
+      data: desiredPermissionIds.map((permissionId) => ({
+        role,
+        permissionId,
+      })),
+      skipDuplicates: true,
+    });
+  }
 }
 
 async function seedClientProfiles(): Promise<Map<string, string>> {
@@ -498,12 +640,135 @@ async function seedEmployeeClientAssignments(
   }
 }
 
+function projectSeedKey(clientSlug: string, projectSlug: string): string {
+  return `${clientSlug}:${projectSlug}`;
+}
+
+async function seedProjects(clientProfileIdBySlug: Map<string, string>): Promise<Map<string, string>> {
+  const projectIdByKey = new Map<string, string>();
+
+  for (const project of PROJECT_SEEDS) {
+    const clientProfileId = clientProfileIdBySlug.get(project.clientSlug);
+    if (!clientProfileId) {
+      throw new Error(`Missing client profile for project slug: ${project.clientSlug}`);
+    }
+
+    const result = await prisma.project.upsert({
+      where: {
+        clientProfileId_slug: {
+          clientProfileId,
+          slug: project.slug,
+        },
+      },
+      update: {
+        name: project.name,
+        description: project.description ?? null,
+        status: project.status,
+        priority: project.priority,
+        startDate: project.startDate ?? null,
+        dueDate: project.dueDate ?? null,
+      },
+      create: {
+        clientProfileId,
+        name: project.name,
+        slug: project.slug,
+        description: project.description ?? null,
+        status: project.status,
+        priority: project.priority,
+        startDate: project.startDate ?? null,
+        dueDate: project.dueDate ?? null,
+      },
+      select: {
+        id: true,
+        slug: true,
+      },
+    });
+
+    projectIdByKey.set(projectSeedKey(project.clientSlug, result.slug), result.id);
+  }
+
+  return projectIdByKey;
+}
+
+async function seedTasks(projectIdByKey: Map<string, string>): Promise<void> {
+  const assigneeEmails = Array.from(
+    new Set(
+      TASK_SEEDS.flatMap((task) => (task.assigneeEmail ? [task.assigneeEmail] : [])),
+    ),
+  );
+  const assigneeRows = await prisma.user.findMany({
+    where: {
+      email: { in: assigneeEmails },
+    },
+    select: {
+      id: true,
+      email: true,
+      accountType: true,
+    },
+  });
+  const assigneeByEmail = new Map(assigneeRows.map((assignee) => [assignee.email, assignee]));
+
+  for (const task of TASK_SEEDS) {
+    const projectId = projectIdByKey.get(projectSeedKey(task.projectClientSlug, task.projectSlug));
+    if (!projectId) {
+      throw new Error(
+        `Missing project for task seed: ${task.projectClientSlug}/${task.projectSlug}`,
+      );
+    }
+
+    const assignee = task.assigneeEmail ? assigneeByEmail.get(task.assigneeEmail) : null;
+    if (task.assigneeEmail && !assignee) {
+      throw new Error(`Missing assignee user for task: ${task.assigneeEmail}`);
+    }
+    if (assignee && assignee.accountType !== AccountType.EMPLOYEE) {
+      throw new Error(`Task assignee is not employee: ${assignee.email}`);
+    }
+
+    const existingTask = await prisma.task.findFirst({
+      where: {
+        projectId,
+        title: task.title,
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true },
+    });
+
+    if (existingTask) {
+      await prisma.task.update({
+        where: { id: existingTask.id },
+        data: {
+          description: task.description ?? null,
+          status: task.status,
+          priority: task.priority,
+          assigneeUserId: assignee?.id ?? null,
+          dueDate: task.dueDate ?? null,
+        },
+      });
+      continue;
+    }
+
+    await prisma.task.create({
+      data: {
+        projectId,
+        title: task.title,
+        description: task.description ?? null,
+        status: task.status,
+        priority: task.priority,
+        assigneeUserId: assignee?.id ?? null,
+        dueDate: task.dueDate ?? null,
+      },
+    });
+  }
+}
+
 async function main(): Promise<void> {
   const permissionIdBySlug = await seedPermissions();
   await seedRolePermissions(permissionIdBySlug);
   const clientProfileIdBySlug = await seedClientProfiles();
   await seedUsers(clientProfileIdBySlug);
   await seedEmployeeClientAssignments(clientProfileIdBySlug);
+  const projectIdByKey = await seedProjects(clientProfileIdBySlug);
+  await seedTasks(projectIdByKey);
 }
 
 main()

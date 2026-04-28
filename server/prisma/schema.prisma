@@ -41,22 +41,45 @@ enum EmployeeClientAssignmentScope {
   SEO
 }
 
+enum ProjectStatus {
+  PLANNED
+  IN_PROGRESS
+  REVIEW
+  COMPLETED
+  ON_HOLD
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  REVIEW
+  DONE
+  BLOCKED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
 model Permission {
-  id              String           @id @default(uuid()) @db.Uuid
-  slug            String           @unique
-  description     String?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  id          String   @id @default(uuid()) @db.Uuid
+  slug        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   rolePermissions RolePermission[]
 }
 
 model RolePermission {
   role         UserRole
-  permissionId String    @db.Uuid
-  createdAt    DateTime  @default(now())
+  permissionId String   @db.Uuid
+  createdAt    DateTime @default(now())
 
-  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
   @@id([role, permissionId])
   @@index([role])
@@ -64,22 +87,23 @@ model RolePermission {
 }
 
 model User {
-  id              String         @id @default(uuid()) @db.Uuid
-  email           String         @unique
+  id              String      @id @default(uuid()) @db.Uuid
+  email           String      @unique
   displayName     String?
   passwordHash    String
   accountType     AccountType
   role            UserRole
-  clientProfileId String?        @db.Uuid
-  status          UserStatus     @default(ACTIVE)
+  clientProfileId String?     @db.Uuid
+  status          UserStatus  @default(ACTIVE)
   lastLoginAt     DateTime?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
-  refreshTokens   RefreshToken[]
-  clientProfile   ClientProfile? @relation(fields: [clientProfileId], references: [id], onDelete: SetNull)
+  refreshTokens             RefreshToken[]
+  clientProfile             ClientProfile?             @relation(fields: [clientProfileId], references: [id], onDelete: SetNull)
   employeeClientAssignments EmployeeClientAssignment[] @relation("EmployeeClientAssignments")
-  auditLogs       AuditLog[]     @relation("AuditActor")
+  assignedTasks             Task[]                     @relation("TaskAssignee")
+  auditLogs                 AuditLog[]                 @relation("AuditActor")
 
   @@index([accountType, role])
   @@index([accountType, status])
@@ -95,7 +119,7 @@ model RefreshToken {
   revokedAt DateTime?
   createdAt DateTime  @default(now())
 
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
@@ -110,8 +134,52 @@ model ClientProfile {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  users                User[]
-  employeeAssignments  EmployeeClientAssignment[]
+  users               User[]
+  employeeAssignments EmployeeClientAssignment[]
+  projects            Project[]
+}
+
+model Project {
+  id              String        @id @default(uuid()) @db.Uuid
+  clientProfileId String        @db.Uuid
+  name            String
+  slug            String
+  description     String?
+  status          ProjectStatus @default(PLANNED)
+  priority        Priority      @default(MEDIUM)
+  startDate       DateTime?
+  dueDate         DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  tasks         Task[]
+
+  @@unique([clientProfileId, slug])
+  @@index([clientProfileId])
+  @@index([status])
+  @@index([priority])
+}
+
+model Task {
+  id             String     @id @default(uuid()) @db.Uuid
+  projectId      String     @db.Uuid
+  title          String
+  description    String?
+  status         TaskStatus @default(TODO)
+  priority       Priority   @default(MEDIUM)
+  assigneeUserId String?    @db.Uuid
+  dueDate        DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  project  Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignee User?   @relation("TaskAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([assigneeUserId])
+  @@index([status])
+  @@index([priority])
 }
 
 model AuditLog {
@@ -125,7 +193,7 @@ model AuditLog {
   userAgent   String?
   createdAt   DateTime @default(now())
 
-  actor       User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  actor User? @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([actorUserId])
   @@index([entityType, entityId])
@@ -141,8 +209,8 @@ model EmployeeClientAssignment {
   createdAt       DateTime                      @default(now())
   updatedAt       DateTime                      @updatedAt
 
-  employeeUser    User                          @relation("EmployeeClientAssignments", fields: [employeeUserId], references: [id], onDelete: Cascade)
-  clientProfile   ClientProfile                 @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  employeeUser  User          @relation("EmployeeClientAssignments", fields: [employeeUserId], references: [id], onDelete: Cascade)
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
 
   @@unique([employeeUserId, clientProfileId, scope])
   @@index([employeeUserId, isActive])

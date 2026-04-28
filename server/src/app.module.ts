@@ -6,6 +6,8 @@ import { ClientsModule } from "./clients/clients.module";
 import { envValidationSchema } from "./config/env.validation";
 import { DatabaseModule } from "./database/database.module";
 import { HealthModule } from "./health/health.module";
+import { ProjectsModule } from "./projects/projects.module";
+import { TasksModule } from "./tasks/tasks.module";
 import { UsersModule } from "./users/users.module";
 
 @Module({
@@ -25,6 +27,8 @@ import { UsersModule } from "./users/users.module";
     UsersModule,
     ClientsModule,
     AdminAssignmentsModule,
+    ProjectsModule,
+    TasksModule,
   ],
 })
 export class AppModule {}
