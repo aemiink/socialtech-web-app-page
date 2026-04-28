@@ -1,13 +1,15 @@
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Test, TestingModule } from "@nestjs/testing";
-import { PrismaClient } from "@prisma/client";
+import { EmployeeClientAssignmentScope, PrismaClient } from "@prisma/client";
 import * as cookieParser from "cookie-parser";
 import * as bcrypt from "bcryptjs";
 import request = require("supertest");
 import { AppModule } from "../src/app.module";
 import { GlobalExceptionFilter } from "../src/common/filters/global-exception.filter";
 import { createCorsOptions } from "../src/config/cors.config";
+
+const ASSIGNMENT_BASE_PATH = "/api/v1/admin/assignments";
 
 type LoginBody = {
   accessToken: string;
@@ -26,6 +28,20 @@ type ClientListItem = {
   slug: string;
 };
 
+type AssignmentListItem = {
+  id: string;
+  employeeUserId: string;
+  clientProfileId: string;
+  scope: EmployeeClientAssignmentScope;
+  isActive: boolean;
+};
+
+type AssignmentPayload = {
+  employeeUserId: string;
+  clientProfileId: string;
+  scope: EmployeeClientAssignmentScope;
+};
+
 describe("Authorization Matrix (e2e)", () => {
   let app: INestApplication;
   let prisma: PrismaClient;
@@ -39,6 +55,10 @@ describe("Authorization Matrix (e2e)", () => {
   let employeeAssignedClientIds: string[] = [];
   let employeeAssignedClientId = "";
   let employeeUnassignedClientId = "";
+  let employeeUserId = "";
+  let employeeAssignedAssignmentId = "";
+  let assignmentCreatePayload: AssignmentPayload;
+  let createdAssignmentId = "";
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -103,13 +123,14 @@ describe("Authorization Matrix (e2e)", () => {
     if (!employeeUser) {
       throw new Error("Performance demo employee not found.");
     }
+    employeeUserId = employeeUser.id;
 
     const assignmentRows = await prisma.employeeClientAssignment.findMany({
       where: {
         employeeUserId: employeeUser.id,
         isActive: true,
       },
-      select: { clientProfileId: true },
+      select: { id: true, clientProfileId: true },
       orderBy: { clientProfileId: "asc" },
     });
 
@@ -118,15 +139,31 @@ describe("Authorization Matrix (e2e)", () => {
       throw new Error("Expected performance demo employee to have active assignments.");
     }
 
+    employeeAssignedAssignmentId = assignmentRows[0].id;
     employeeAssignedClientId = employeeAssignedClientIds[0];
     const unassigned = allClientIds.find((clientId) => !employeeAssignedClientIds.includes(clientId));
     if (!unassigned) {
       throw new Error("Expected at least one unassigned client profile for performance employee.");
     }
     employeeUnassignedClientId = unassigned;
+
+    assignmentCreatePayload = {
+      employeeUserId,
+      clientProfileId: employeeUnassignedClientId,
+      scope: EmployeeClientAssignmentScope.PERFORMANCE,
+    };
+    await prisma.employeeClientAssignment.deleteMany({
+      where: assignmentCreatePayload,
+    });
   });
 
   afterAll(async () => {
+    if (createdAssignmentId) {
+      await prisma.employeeClientAssignment.deleteMany({
+        where: { id: createdAssignmentId },
+      });
+    }
+
     await prisma.$disconnect();
     await app.close();
   });
@@ -224,6 +261,141 @@ describe("Authorization Matrix (e2e)", () => {
     await request(app.getHttpServer()).get("/api/v1/clients").expect(401);
   });
 
+  it("admin assignments list görebilir", async () => {
+    const response = await request(app.getHttpServer())
+      .get(ASSIGNMENT_BASE_PATH)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    const assignments = response.body as AssignmentListItem[];
+    expect(Array.isArray(assignments)).toBe(true);
+    expect(assignments.some((assignment) => assignment.id === employeeAssignedAssignmentId)).toBe(true);
+  });
+
+  it("employee assignments list göremez", async () => {
+    await request(app.getHttpServer())
+      .get(ASSIGNMENT_BASE_PATH)
+      .set("Authorization", `Bearer ${employeeToken}`)
+      .expect(403);
+  });
+
+  it("client assignments list göremez", async () => {
+    await request(app.getHttpServer())
+      .get(ASSIGNMENT_BASE_PATH)
+      .set("Authorization", `Bearer ${clientToken}`)
+      .expect(403);
+  });
+
+  it("unauthenticated assignment request 401 alır", async () => {
+    await request(app.getHttpServer()).get(ASSIGNMENT_BASE_PATH).expect(401);
+  });
+
+  it("admin assignment oluşturabilir", async () => {
+    const response = await request(app.getHttpServer())
+      .post(ASSIGNMENT_BASE_PATH)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send(assignmentCreatePayload)
+      .expect(201);
+
+    const assignment = response.body as AssignmentListItem;
+    expect(assignment.employeeUserId).toBe(assignmentCreatePayload.employeeUserId);
+    expect(assignment.clientProfileId).toBe(assignmentCreatePayload.clientProfileId);
+    expect(assignment.scope).toBe(assignmentCreatePayload.scope);
+    expect(assignment.isActive).toBe(true);
+    createdAssignmentId = assignment.id;
+
+    await request(app.getHttpServer())
+      .get(`/api/v1/clients/${assignmentCreatePayload.clientProfileId}`)
+      .set("Authorization", `Bearer ${employeeToken}`)
+      .expect(200);
+  });
+
+  it("duplicate assignment meaningful conflict döner", async () => {
+    await ensureCreatedAssignmentByAdmin();
+
+    const response = await request(app.getHttpServer())
+      .post(ASSIGNMENT_BASE_PATH)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send(assignmentCreatePayload)
+      .expect(409);
+
+    const message = extractApiErrorMessage(response.body);
+    expect(message).toEqual(expect.stringMatching(/assigned|assignment|already|conflict|duplicate|exists/i));
+  });
+
+  it("non-admin assignment update/deactivate yapamaz", async () => {
+    await ensureCreatedAssignmentByAdmin();
+    const assignmentId = getCreatedAssignmentId();
+
+    await request(app.getHttpServer())
+      .patch(`${ASSIGNMENT_BASE_PATH}/${assignmentId}`)
+      .set("Authorization", `Bearer ${employeeToken}`)
+      .send({ isActive: false })
+      .expect(403);
+
+    await request(app.getHttpServer())
+      .patch(`${ASSIGNMENT_BASE_PATH}/${assignmentId}`)
+      .set("Authorization", `Bearer ${clientToken}`)
+      .send({ isActive: false })
+      .expect(403);
+
+    await request(app.getHttpServer())
+      .patch(`${ASSIGNMENT_BASE_PATH}/${assignmentId}/deactivate`)
+      .set("Authorization", `Bearer ${employeeToken}`)
+      .expect(403);
+
+    await request(app.getHttpServer())
+      .patch(`${ASSIGNMENT_BASE_PATH}/${assignmentId}/deactivate`)
+      .set("Authorization", `Bearer ${clientToken}`)
+      .expect(403);
+  });
+
+  it("admin assignment deactivate edebilir ve employee client detail erişimini kaybeder", async () => {
+    await ensureCreatedAssignmentByAdmin();
+    const assignmentId = getCreatedAssignmentId();
+
+    const response = await request(app.getHttpServer())
+      .patch(`${ASSIGNMENT_BASE_PATH}/${assignmentId}/deactivate`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    expect([200, 204]).toContain(response.status);
+    if (response.status !== 204) {
+      const assignment = response.body as AssignmentListItem;
+      expect(assignment.isActive).toBe(false);
+    }
+
+    await request(app.getHttpServer())
+      .get(`/api/v1/clients/${assignmentCreatePayload.clientProfileId}`)
+      .set("Authorization", `Bearer ${employeeToken}`)
+      .expect(404);
+  });
+
+  it("activate endpoint varsa employee client detail erişimini geri kazanır", async () => {
+    await ensureCreatedAssignmentByAdmin();
+    const assignmentId = getCreatedAssignmentId();
+
+    const deactivateResponse = await request(app.getHttpServer())
+      .patch(`${ASSIGNMENT_BASE_PATH}/${assignmentId}/deactivate`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    expect([200, 204]).toContain(deactivateResponse.status);
+
+    const response = await request(app.getHttpServer())
+      .patch(`${ASSIGNMENT_BASE_PATH}/${assignmentId}/activate`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    expect([200, 204]).toContain(response.status);
+    if (response.status !== 204) {
+      const assignment = response.body as AssignmentListItem;
+      expect(assignment.isActive).toBe(true);
+    }
+
+    await request(app.getHttpServer())
+      .get(`/api/v1/clients/${assignmentCreatePayload.clientProfileId}`)
+      .set("Authorization", `Bearer ${employeeToken}`)
+      .expect(200);
+  });
+
   async function loginWithDemoUser(email: string): Promise<string> {
     const response = await request(app.getHttpServer()).post("/api/v1/auth/login").send({
       email,
@@ -237,5 +409,73 @@ describe("Authorization Matrix (e2e)", () => {
     }
 
     return body.accessToken;
+  }
+
+  function getCreatedAssignmentId(): string {
+    if (!createdAssignmentId) {
+      throw new Error("Expected assignment creation test to run before mutation checks.");
+    }
+
+    return createdAssignmentId;
+  }
+
+  async function ensureCreatedAssignmentByAdmin(): Promise<string> {
+    if (createdAssignmentId) {
+      return createdAssignmentId;
+    }
+
+    const response = await request(app.getHttpServer())
+      .post(ASSIGNMENT_BASE_PATH)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send(assignmentCreatePayload);
+
+    if (response.status === 201) {
+      const assignment = response.body as AssignmentListItem;
+      createdAssignmentId = assignment.id;
+      return createdAssignmentId;
+    }
+
+    if (response.status === 409) {
+      const existing = await prisma.employeeClientAssignment.findUnique({
+        where: {
+          employeeUserId_clientProfileId_scope: assignmentCreatePayload,
+        },
+        select: { id: true },
+      });
+      if (!existing) {
+        throw new Error("Expected existing assignment after 409 conflict response.");
+      }
+
+      createdAssignmentId = existing.id;
+      return createdAssignmentId;
+    }
+
+    throw new Error(`Unexpected status while ensuring assignment creation: ${response.status}`);
+  }
+
+  function extractApiErrorMessage(body: unknown): string {
+    if (!isRecord(body)) {
+      return "";
+    }
+
+    const error = body.error;
+    if (!isRecord(error)) {
+      return "";
+    }
+
+    const message = error.message;
+    if (typeof message === "string") {
+      return message;
+    }
+
+    if (Array.isArray(message)) {
+      return message.filter((item): item is string => typeof item === "string").join(" ");
+    }
+
+    return "";
+  }
+
+  function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null;
   }
 });

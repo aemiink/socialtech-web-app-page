@@ -101,6 +101,8 @@ const PERMISSIONS: PermissionSeed[] = [
   { slug: "clients.manage", description: "Create and update client data." },
   { slug: "clients.read.assigned", description: "Read assigned client data." },
   { slug: "clients.read.own", description: "Read own client profile data." },
+  { slug: "assignments.read", description: "Read employee-client assignments." },
+  { slug: "assignments.manage", description: "Create/update/deactivate employee-client assignments." },
   { slug: "projects.read", description: "Read projects." },
   { slug: "projects.manage", description: "Create and update projects." },
   { slug: "projects.read.assigned", description: "Read assigned projects." },
@@ -223,6 +225,8 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
     "settings.manage.own",
   ],
 };
+
+const ASSIGNMENT_ADMIN_PERMISSION_SLUGS = ["assignments.read", "assignments.manage"] as const;
 
 const DEMO_USERS: DemoUserSeed[] = [
   {
@@ -351,6 +355,22 @@ async function seedRolePermissions(permissionIdBySlug: Map<string, string>): Pro
       },
     });
   }
+
+  const assignmentAdminPermissionIds = ASSIGNMENT_ADMIN_PERMISSION_SLUGS.map((slug) => {
+    const permissionId = permissionIdBySlug.get(slug);
+    if (!permissionId) {
+      throw new Error(`Missing assignment admin permission id for slug: ${slug}`);
+    }
+
+    return permissionId;
+  });
+
+  await prisma.rolePermission.deleteMany({
+    where: {
+      role: { not: UserRole.ADMIN },
+      permissionId: { in: assignmentAdminPermissionIds },
+    },
+  });
 }
 
 async function seedClientProfiles(): Promise<Map<string, string>> {
