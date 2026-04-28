@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { AdminAssignmentsModule } from "./admin-assignments/admin-assignments.module";
+import { AdminUsersModule } from "./admin-users/admin-users.module";
 import { AuthModule } from "./auth/auth.module";
 import { ClientsModule } from "./clients/clients.module";
 import { envValidationSchema } from "./config/env.validation";
@@ -27,6 +28,7 @@ import { UsersModule } from "./users/users.module";
     UsersModule,
     ClientsModule,
     AdminAssignmentsModule,
+    AdminUsersModule,
     ProjectsModule,
     TasksModule,
   ],

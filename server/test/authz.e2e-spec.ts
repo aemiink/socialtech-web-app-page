@@ -5,7 +5,7 @@ import { EmployeeClientAssignmentScope, PrismaClient } from "@prisma/client";
 import { randomUUID } from "crypto";
 import cookieParser from "cookie-parser";
 import * as bcrypt from "bcryptjs";
-import request = require("supertest");
+import request from "supertest";
 import { AppModule } from "../src/app.module";
 import { GlobalExceptionFilter } from "../src/common/filters/global-exception.filter";
 import { createCorsOptions } from "../src/config/cors.config";

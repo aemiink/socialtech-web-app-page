@@ -1,9 +1,16 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { AccountType, Prisma, UserRole } from "@prisma/client";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from "@nestjs/common";
+import { AccountType, Prisma, UserRole, UserStatus } from "@prisma/client";
 import { AuthService } from "../auth/auth.service";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { AuthUserProfile } from "../auth/types/auth-response.type";
 import { PrismaService } from "../database/prisma.service";
+import { ChangeOwnPasswordDto } from "./dto/change-own-password.dto";
 
 const clientProfileSummarySelect = {
   id: true,
@@ -39,6 +46,60 @@ export class UsersService {
 
   async getMe(currentUser: AuthenticatedUser): Promise<AuthUserProfile> {
     return this.authService.me(currentUser);
+  }
+
+  async changeOwnPassword(
+    currentUser: AuthenticatedUser,
+    dto: ChangeOwnPasswordDto,
+  ): Promise<{ success: true }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: currentUser.id },
+      select: {
+        id: true,
+        email: true,
+        passwordHash: true,
+        status: true,
+      },
+    });
+
+    if (!user || user.status !== UserStatus.ACTIVE) {
+      throw new UnauthorizedException("User session is no longer valid.");
+    }
+
+    const currentPasswordIsValid = await this.authService.verifyUserPassword(
+      user.email,
+      dto.currentPassword,
+      user.passwordHash,
+    );
+    if (!currentPasswordIsValid) {
+      throw new UnauthorizedException("Current password is invalid.");
+    }
+
+    const newPasswordMatchesOldPassword = await this.authService.verifyUserPassword(
+      user.email,
+      dto.newPassword,
+      user.passwordHash,
+    );
+    if (newPasswordMatchesOldPassword) {
+      throw new BadRequestException("New password must be different from the current password.");
+    }
+
+    const passwordHash = await this.authService.hashUserPassword(dto.newPassword);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: { passwordHash },
+      });
+      await tx.refreshToken.updateMany({
+        where: {
+          userId: user.id,
+          revokedAt: null,
+        },
+        data: { revokedAt: new Date() },
+      });
+    });
+
+    return { success: true };
   }
 
   async getUsers(currentUser: AuthenticatedUser): Promise<UserReadModel[]> {

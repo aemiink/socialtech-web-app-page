@@ -4,7 +4,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { Prisma, PrismaClient, Priority, ProjectStatus, TaskStatus } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 import cookieParser from "cookie-parser";
-import request = require("supertest");
+import request from "supertest";
 import { AppModule } from "../src/app.module";
 import { GlobalExceptionFilter } from "../src/common/filters/global-exception.filter";
 import { createCorsOptions } from "../src/config/cors.config";

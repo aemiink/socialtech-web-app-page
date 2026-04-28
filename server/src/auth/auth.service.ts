@@ -177,6 +177,23 @@ export class AuthService {
     return this.buildUserProfile(currentUser.id);
   }
 
+  async hashUserPassword(plainPassword: string): Promise<string> {
+    return this.hashPassword(plainPassword);
+  }
+
+  async verifyUserPassword(
+    email: string,
+    plainPassword: string,
+    storedHash: string,
+  ): Promise<boolean> {
+    const passwordVerification = await this.verifyPassword(email, plainPassword, storedHash);
+    return passwordVerification.isValid;
+  }
+
+  async revokeActiveRefreshTokensForUser(userId: string): Promise<void> {
+    await this.revokeAllActiveRefreshTokens(userId, new Date());
+  }
+
   private async buildUserProfile(userId: string): Promise<AuthUserProfile> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
