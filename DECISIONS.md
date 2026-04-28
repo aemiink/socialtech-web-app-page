@@ -286,3 +286,45 @@ Affected files:
 - `server/.env.example`
 - `server/package.json`
 - `server/package-lock.json`
+
+---
+
+## 2026-04-28 - Protected Users and Clients API Foundation
+
+Context:
+Auth foundation and JWT refresh rotation were completed, but domain-level protected endpoints were still limited. `users` and `clients` modules needed their first real protected read APIs with backend authorization and object-level scope checks.
+
+Decision:
+Implemented protected users/clients read foundation under `/api/v1`:
+- `GET /users/me`
+- `GET /users`
+- `GET /users/:id`
+- `GET /clients`
+- `GET /clients/:id`
+- `GET /clients/me`
+
+Authorization design in this milestone:
+- `JwtAuthGuard` + `PermissionsGuard` are used at controller level.
+- `GET /users` is guarded with `users.read` permission.
+- Service-level object authorization is enforced for user/client ownership scope.
+- Admin can read full users/client profile scopes.
+- Client can read only own `clientProfile` scope.
+- Employee assignment model is not implemented yet; `clients.read.assigned` is intentionally constrained (safe empty/limited behavior).
+
+Security behavior:
+- No sensitive auth fields are exposed by these responses (`passwordHash`, refresh token plaintext/hash, and token internals are not returned).
+
+Operational verification:
+- `npm run build` passed
+- `npm run check` passed
+
+Reason:
+Creates the first production-shaped protected domain API layer after auth, while keeping tenant isolation and incremental delivery before assignment modeling and frontend integration.
+
+Affected files:
+- `server/src/users/users.module.ts`
+- `server/src/users/users.controller.ts`
+- `server/src/users/users.service.ts`
+- `server/src/clients/clients.module.ts`
+- `server/src/clients/clients.controller.ts`
+- `server/src/clients/clients.service.ts`

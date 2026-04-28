@@ -73,7 +73,17 @@ Portal areas:
 - Refresh token rotation is enabled; revoked-token reuse attempt triggers bulk revocation of active sessions for that user.
 - `JwtAuthGuard` and `CurrentUser` decorator are active; `RequirePermissions` + `PermissionsGuard` exist as backend authorization scaffolding.
 - `/auth/me` is guard-protected and returns role + resolved permission set + `ClientProfile` for client users.
-- Full domain endpoint authorization rollout is still pending (planned phase).
+- Protected domain API foundation is now active for `users` and `clients`:
+  - `GET /api/v1/users/me`
+  - `GET /api/v1/users`
+  - `GET /api/v1/users/:id`
+  - `GET /api/v1/clients`
+  - `GET /api/v1/clients/:id`
+  - `GET /api/v1/clients/me`
+- `GET /users` enforces `users.read`; service-level object authorization protects `/users/:id` and `/clients/:id`.
+- Admin can read full users/client profile scopes; client users are limited to their own `ClientProfile` scope.
+- Employee assignment scope is not modeled yet; `clients.read.assigned` currently remains intentionally constrained.
+- Full domain endpoint authorization rollout beyond users/clients remains pending.
 
 ## Frontend Architecture
 
@@ -141,6 +151,11 @@ Current backend baseline includes:
   - `POST /api/v1/auth/refresh` (refresh JWT verification, DB hash check, rotation)
   - `POST /api/v1/auth/logout` (refresh token revoke)
   - `GET /api/v1/auth/me` (guarded user profile + permissions)
+- Protected users/clients foundation:
+  - Users: `GET /api/v1/users/me`, `GET /api/v1/users`, `GET /api/v1/users/:id`
+  - Clients: `GET /api/v1/clients`, `GET /api/v1/clients/:id`, `GET /api/v1/clients/me`
+  - Controller-level guards: `JwtAuthGuard` + `PermissionsGuard`
+  - Service-level object authorization for owner/admin scope isolation
 - Token strategy:
   - access token in response body (Bearer usage)
   - refresh token in HttpOnly cookie
@@ -155,7 +170,8 @@ Current backend baseline includes:
   - manual auth flow tests passed (`login`, `me`, `refresh`, `logout`, `logout` sonrası `refresh=401`)
 
 Planned next backend phases:
-- Domain endpoint authorization rollout (`JwtAuthGuard` + `PermissionsGuard`)
+- Broader domain endpoint authorization rollout (beyond users/clients)
+- Employee-client assignment model for `clients.read.assigned`
 - Frontend API/auth integration for `adminandemployeePanel/` and `clientPanel/`
 - Migration-first Prisma workflow (replace current `db push` local flow)
 - Auth e2e test coverage
@@ -178,6 +194,11 @@ Backend Prisma data model (foundation scope):
 - `AuditLog`: actor-based audit event records
 - `Permission`: permission catalog table (slug + description)
 - `RolePermission`: role-to-permission mapping table for hybrid RBAC expansion
+
+Current protected read behavior:
+- User/client responses are sanitized; auth-sensitive fields are excluded (`passwordHash`, refresh token/hash fields).
+- Object-level authorization is enforced in services for `users/:id`, `clients/:id`, and `clients/me`.
+- Employee-to-client assignment relation does not exist yet, so assignment-based client scope is intentionally limited.
 
 Demo seed snapshot (current local run):
 - `users=9`

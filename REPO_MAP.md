@@ -155,9 +155,15 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - `guards/` - `JwtAuthGuard`, `PermissionsGuard`
   - `decorators/` - `CurrentUser`, `RequirePermissions`
   - `types/` - auth response, token payload, authenticated user types
-- `server/src/users/` - users module skeleton
-- `server/src/clients/` - clients module skeleton
-- `users` and `clients` modules are still skeleton scope; domain CRUD and authorization rollout is pending.
+- `server/src/users/` - protected users foundation:
+  - `users.controller.ts` - `GET /api/v1/users/me`, `GET /api/v1/users`, `GET /api/v1/users/:id`
+  - `users.service.ts` - admin/full-scope checks + own-record object authorization for non-admin access
+  - `users.module.ts` - imports `AuthModule` for guard wiring
+- `server/src/clients/` - protected clients foundation:
+  - `clients.controller.ts` - `GET /api/v1/clients`, `GET /api/v1/clients/:id`, `GET /api/v1/clients/me`
+  - `clients.service.ts` - admin/client scope checks + object-level client profile ownership checks
+  - `clients.module.ts` - imports `AuthModule` for guard wiring
+- `users/clients` are now protected read foundations; broader domain CRUD and assignment-aware scopes remain planned.
 
 ### Seed And Prisma Commands
 
