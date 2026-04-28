@@ -191,6 +191,10 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - `dto/update-assignment.dto.ts` - update payload validation
   - `dto/assignment-query.dto.ts` - list query filter validation (`employeeUserId`, `clientProfileId`, `isActive`, `scope`)
   - `admin-assignments.module.ts` - module wiring
+- `server/src/admin-users/` - admin employee-user management module:
+  - `admin-users.controller.ts` - `POST /api/v1/admin/users`
+  - `admin-users.service.ts` - admin-only employee create flow, accountType/role constraints, unique email enforcement, sanitized response
+  - `admin-users.module.ts` - module wiring
 - `server/src/projects/` - projects API foundation:
   - `projects.controller.ts` - `GET /api/v1/projects`, `GET /api/v1/projects/:id`, `POST /api/v1/projects`, `PATCH /api/v1/projects/:id`
   - `projects.service.ts` - admin full write scope, employee assignment-scope read, client own-scope read, object-level visibility checks
@@ -207,9 +211,10 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 
 From `server/package.json`:
 - `npm run prisma:generate`
-- `npm run prisma:push` (currently used for local schema sync)
+- `npm run prisma:migrate:dev`
+- `npm run prisma:migrate:deploy`
 - `npm run prisma:seed`
-- `npm run prisma:migrate` (planned for migration-first workflow)
+- `npm run prisma:studio`
 
 ### E2E Test Foundation
 
@@ -217,16 +222,18 @@ From `server/package.json`:
   - resolves `DATABASE_URL`
   - enforces strict test DB naming in DB name (`_test`, `test_`, `testing`) with delimiter-aware matching
   - rejects non-test DB names even when `ALLOW_E2E_DB_RESET=true`
-  - runs Prisma prepare (`generate`, `db push`, `db seed`)
+  - runs Prisma prepare (`generate`, `migrate deploy` or guarded `migrate reset`, `db seed`)
   - runs Jest e2e suite
 - `server/test/jest-e2e.config.cjs` - Jest configuration for e2e files
 - `server/test/jest.env.ts` - test env defaults for JWT and auth runtime
 - `server/test/authz.e2e-spec.ts` - users/clients/admin-assignment authorization matrix (30 scenarios, real AppModule + real guards, runtime assignment/client resolution, assignment CRUD negative cases)
 - `server/test/projects-tasks-authz.e2e-spec.ts` - projects/tasks authorization matrix + assignment deactivation regression coverage
+- `server/test/admin-users-password-authz.e2e-spec.ts` - admin employee create + own password change authz matrix
 - `server/package.json` test scripts:
   - `npm run test:e2e:prepare`
   - `npm run test:e2e`
   - `npm run test:e2e:authz`
+  - latest DB-connected authz run: `3/3 suites`, `64/64` tests passed
 
 ### Styles
 

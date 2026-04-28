@@ -2,15 +2,15 @@
 
 ## Current Focus
 
-- Backend auth + assignment-scoped clients access + admin assignment management API + projects/tasks API foundation + expanded authz e2e matrix are now implemented under `server/`; next phases are broader domain authorization rollout, migration-first Prisma flow, and frontend integration
+- Backend auth + assignment-scoped clients access + admin assignment management API + projects/tasks API foundation + expanded authz e2e matrix are now implemented under `server/`; next phases are broader domain authorization rollout and frontend integration
 - Client Portal is mapped at `clientPanel/`; Admin + Employee prototype UI remains feature-rich at mock level
 
 ## Planned
 
 - Frontend auth integration for `adminandemployeePanel/` and `clientPanel/` against `server/` auth endpoints
 - Broader domain endpoint authorization rollout (next modules beyond users/clients with `JwtAuthGuard` + `PermissionsGuard`)
-- Database migration pipeline (migration-first Prisma workflow for PostgreSQL, migration files not created yet)
-- Prisma config migration (`package.json#prisma` -> `prisma.config.ts`)
+- Admin users management expansion (`/api/v1/admin/users/:id` update/deactivate/activate)
+- Forced password change on first login flow
 - Assignment concurrency/race-condition authz e2e tests
 - Project-manager project/task manage policy decision (currently admin-only write behavior)
 - Persistent role/session storage (localStorage or server session)
@@ -45,6 +45,7 @@ None identified.
 - Projects/tasks authorization e2e coverage completed under `server/test/projects-tasks-authz.e2e-spec.ts`, including assignment-deactivation regression checks; combined authz suites now pass `45/45`.
 - E2E DB guard hardening completed under `server/test/run-e2e.cjs`: strict test DB-name enforcement (`_test`, `test_`, `testing`), delimiter-aware pattern matching, and no bypass via `ALLOW_E2E_DB_RESET=true`.
 - Assignment negative-case authz coverage completed under `server/test/authz.e2e-spec.ts`: invalid UUID/enum/required-body cases, non-existent employee/client checks, client-account-as-employee rejection, duplicate create conflict, invalid update UUID/null payload, and non-existent activate/deactivate checks; expanded suite now passes `30/30`.
+- DB access restored and migration-first validation finalized: `npm run prisma:seed` succeeded and authz e2e suites passed on `socialtech_test` (`test/authz.e2e-spec.ts`, `test/projects-tasks-authz.e2e-spec.ts`, `test/admin-users-password-authz.e2e-spec.ts`) with `3/3` suites and `64/64` tests.
 
 ## Blocked
 
@@ -61,4 +62,4 @@ None identified.
 - Backend auth endpoints are implemented; frontend integration and domain-wide guard/permission rollout remain planned
 - Users/clients protected read foundation is implemented; assignment-aware employee client access is now active
 - Authz e2e matrix is implemented and expanded to include admin assignment management and negative-case flows; remaining e2e gaps focus on concurrency/race-condition scenarios
-- Prisma schema sync currently uses `db push`; migration files remain planned
+- Migration-first Prisma workflow is active; seed + authz e2e validation completed on test DB (`socialtech_test`)

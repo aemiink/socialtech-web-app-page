@@ -186,7 +186,7 @@ Current backend baseline includes:
   - E2E runner: `server/test/run-e2e.cjs` (Prisma prepare + Jest execution)
   - DB safety guard in runner: strict test DB-name check (`_test`, `test_`, `testing`) with delimiter-aware matching
   - `ALLOW_E2E_DB_RESET=true` no longer bypasses DB-name safety check
-  - Matrix suite currently covers 45 users/clients/admin-assignment/projects/tasks authorization scenarios
+  - Matrix suite currently covers 64 users/clients/admin-assignment/projects/tasks/admin-user-password authorization scenarios
 - Token strategy:
   - access token in response body (Bearer usage)
   - refresh token in HttpOnly cookie
@@ -195,19 +195,18 @@ Current backend baseline includes:
 - Health endpoint: `GET /api/v1/health`
 - Validation status:
   - `npm run prisma:generate` passed
-  - `npm run prisma:push` passed
   - `npm run prisma:seed` passed
   - `npm run build` passed
   - `npm run check` passed
   - `npm run typecheck:spec` passed
-  - `ALLOW_E2E_DB_RESET=true npm run test:e2e:authz` passed (`45/45`, test DB name: `socialtech_test`)
+  - `ALLOW_E2E_DB_RESET=true npm run test:e2e:authz` passed (`3/3 suites`, `64/64 tests`, test DB name: `socialtech_test`)
   - manual auth flow tests passed (`login`, `me`, `refresh`, `logout`, `logout` sonrası `refresh=401`)
 
 Planned next backend phases:
 - Broader domain endpoint authorization rollout (beyond users/clients/admin-assignments/projects/tasks)
 - Frontend API/auth integration for `adminandemployeePanel/` and `clientPanel/`
-- Migration-first Prisma workflow (replace current `db push` local flow)
-- Prisma config migration (`package.json#prisma` -> `prisma.config.ts`)
+- Admin users management expansion (`/api/v1/admin/users/:id` update/deactivate/activate)
+- Forced password change on first login flow
 - Project-manager project/task manage policy decision
 - Assignment concurrency/race-condition e2e coverage (parallel create/update conflict scenarios)
 - Broader backend e2e/integration coverage beyond current authz matrix
@@ -291,9 +290,9 @@ Lint/format scripts are intentionally not added yet in this pass (ESLint/Prettie
 From `server/package.json`:
 ```bash
 npm run check                  # typecheck + seed typecheck + spec typecheck + build
-npm run test:e2e:prepare       # e2e db safety check + prisma generate/push/seed
+npm run test:e2e:prepare       # e2e db safety check + prisma generate/migrate/seed
 npm run test:e2e               # full backend e2e suite
-npm run test:e2e:authz         # users/clients authorization matrix suite
+npm run test:e2e:authz         # backend authz e2e suites (users/clients, projects/tasks, admin-user/password)
 DATABASE_URL=postgresql://user:pass@localhost:5432/socialtech_test?schema=public ALLOW_E2E_DB_RESET=true npm run test:e2e:authz
 ```
 `run-e2e.cjs` now requires test DB naming (`_test`, `test_`, or `testing` in DB name); `ALLOW_E2E_DB_RESET=true` does not bypass this requirement.

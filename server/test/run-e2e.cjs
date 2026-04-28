@@ -53,18 +53,56 @@ function isAllowedE2eDatabaseName(databaseName) {
   return /(?:^test_|_test(?:_|$)|(?:^|_)testing(?:_|$))/i.test(databaseName);
 }
 
-function runCommand(command, args, env) {
+function runCommand(command, args, env, onFailureMessage) {
   const result = spawnSync(command, args, {
     stdio: "inherit",
     env,
   });
 
   if (typeof result.status === "number" && result.status !== 0) {
+    if (onFailureMessage) {
+      console.error(onFailureMessage);
+    }
     process.exit(result.status);
   }
 
   if (result.error) {
     throw result.error;
+  }
+}
+
+function assertMigrationsExist() {
+  const migrationsPath = path.resolve(process.cwd(), "prisma", "migrations");
+
+  if (!fs.existsSync(migrationsPath)) {
+    console.error(
+      [
+        "Refusing to prepare e2e database because Prisma migrations were not found.",
+        "The e2e runner is migration-first and no longer uses prisma db push.",
+        `Expected migrations directory: ${migrationsPath}.`,
+      ].join(" "),
+    );
+    process.exit(1);
+  }
+
+  const entries = fs.readdirSync(migrationsPath, { withFileTypes: true });
+  const hasAtLeastOneMigration = entries.some((entry) => {
+    if (!entry.isDirectory()) {
+      return false;
+    }
+
+    const migrationSqlPath = path.join(migrationsPath, entry.name, "migration.sql");
+    return fs.existsSync(migrationSqlPath);
+  });
+
+  if (!hasAtLeastOneMigration) {
+    console.error(
+      [
+        "Refusing to prepare e2e database because no migration.sql file was found.",
+        "Create an initial Prisma migration under prisma/migrations/<timestamp>_name/migration.sql first.",
+      ].join(" "),
+    );
+    process.exit(1);
   }
 }
 
@@ -94,6 +132,7 @@ if (!looksLikeTestDatabase) {
 const args = process.argv.slice(2);
 const prepareOnly = args.includes("--prepare-only");
 const jestArgs = args.filter((arg) => arg !== "--prepare-only");
+const allowE2eDbReset = process.env.ALLOW_E2E_DB_RESET === "true";
 
 const commandEnv = {
   ...process.env,
@@ -101,8 +140,29 @@ const commandEnv = {
   DATABASE_URL: databaseUrl,
 };
 
+assertMigrationsExist();
+
 runCommand("npx", ["prisma", "generate"], commandEnv);
-runCommand("npx", ["prisma", "db", "push"], commandEnv);
+
+if (allowE2eDbReset) {
+  runCommand(
+    "npx",
+    ["prisma", "migrate", "reset", "--force", "--skip-seed", "--skip-generate"],
+    commandEnv,
+  );
+} else {
+  runCommand(
+    "npx",
+    ["prisma", "migrate", "deploy"],
+    commandEnv,
+    [
+      "Prisma migrate deploy failed on test DB.",
+      "If this DB was previously created via prisma db push (without migration history),",
+      "re-run with ALLOW_E2E_DB_RESET=true to rebuild from migrations safely on test DB only.",
+    ].join(" "),
+  );
+}
+
 runCommand("npx", ["prisma", "db", "seed"], commandEnv);
 
 if (!prepareOnly) {

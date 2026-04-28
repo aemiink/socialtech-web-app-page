@@ -398,7 +398,7 @@ Implemented test characteristics:
 - Runtime setup derives assigned/unassigned client IDs from seeded DB data (no hardcoded UUID dependency).
 
 Added safe e2e runner:
-- `server/test/run-e2e.cjs` prepares Prisma (`generate`, `db push`, `db seed`) and runs Jest in one controlled flow.
+- `server/test/run-e2e.cjs` prepares Prisma and runs Jest in one controlled flow (migration-first flow now in use).
 - Runner validates `DATABASE_URL` against test-style naming and blocks unsafe targets by default.
 - Explicit override is possible via `ALLOW_E2E_DB_RESET=true`.
 
@@ -418,6 +418,7 @@ Validation:
 - `npm run typecheck:spec` passed
 - `npm run check` passed
 - `ALLOW_E2E_DB_RESET=true npm run test:e2e:authz` passed (`10/10`)
+- Final DB-connected validation after migration-first + test DB access fix: `3/3` suites and `64/64` tests passed on `socialtech_test` (`authz`, `projects-tasks-authz`, `admin-users-password-authz`).
 
 Reason:
 Creates a reliable backend authz regression gate before frontend integration and broader domain endpoint expansion.
@@ -596,10 +597,9 @@ Validation/testing:
 - Added DTO/query validation for projects/tasks
 - Added e2e suite: `server/test/projects-tasks-authz.e2e-spec.ts`
 - Added regression coverage to ensure assignment deactivation removes employee task visibility in that client scope
-- Authz e2e suites now pass `45/45`
+- Authz e2e suites now pass `64/64` (`3/3` suites) after DB access fix and full suite re-run on `socialtech_test`
 - Verified:
   - `npm run prisma:generate`
-  - `npm run prisma:push`
   - `npm run prisma:seed`
   - `npm run build`
   - `npm run check`
@@ -607,9 +607,7 @@ Validation/testing:
 
 Known follow-up risks left intentionally out of this milestone:
 - Project-manager project/task manage policy is currently admin-only behavior and needs explicit product decision
-- Prisma `package.json#prisma` deprecation migration to `prisma.config.ts` remains pending
 - Assignment CRUD concurrency/race-condition e2e coverage remains pending
-- Migration-first Prisma workflow remains pending
 
 Reason:
 Establishes secure, RBAC-aware backend foundations for project/task data before frontend API integration and broader domain rollout.
