@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { AdminAssignmentsModule } from "./admin-assignments/admin-assignments.module";
+import { AdminAuditLogsModule } from "./admin-audit-logs/admin-audit-logs.module";
 import { AdminUsersModule } from "./admin-users/admin-users.module";
 import { AuthModule } from "./auth/auth.module";
 import { ClientsModule } from "./clients/clients.module";
@@ -28,6 +29,7 @@ import { UsersModule } from "./users/users.module";
     UsersModule,
     ClientsModule,
     AdminAssignmentsModule,
+    AdminAuditLogsModule,
     AdminUsersModule,
     ProjectsModule,
     TasksModule,
