@@ -2,21 +2,28 @@
 
 ## Current Focus
 
-- Backend auth + assignment-scoped clients access + admin assignment management API + projects/tasks API foundation + expanded authz e2e matrix are now implemented under `server/`; next phases are broader domain authorization rollout and frontend integration
-- Client Portal is mapped at `clientPanel/`; Admin + Employee prototype UI remains feature-rich at mock level
+- Backend auth + protected domain foundations + expanded authz e2e matrix are implemented under `server/`; next phases are broader domain authorization rollout and frontend domain data integration
+- Frontend auth integration is completed in `adminandemployeePanel/` and `clientPanel/`; next frontend phase is runtime QA plus domain API consumption rollout
 
 ## Planned
 
-- Frontend auth integration for `adminandemployeePanel/` and `clientPanel/` against `server/` auth endpoints
+- Runtime manual QA for frontend/backend auth integration (login/refresh/logout/session-restore flows) - needs manual validation
+- Frontend domain data integration via RTK Query
+- Client Portal service data API integration in `clientPanel/`
 - Frontend admin employee management integration against Admin Users Management API
+- Frontend audit logs UI backend integration
 - Broader domain endpoint authorization rollout (next modules beyond users/clients with `JwtAuthGuard` + `PermissionsGuard`)
 - Forced password change on first login flow
-- Admin user audit logs for management actions
 - Assignment concurrency/race-condition authz e2e tests
 - Project-manager project/task manage policy decision (currently admin-only write behavior)
-- Persistent role/session storage (localStorage or server session)
 - ESLint / Prettier standardization (intentionally deferred in workflow pass)
 - Broader backend test infrastructure (beyond current authz matrix)
+- Audit log actor/target summary join
+- Audit log export endpointleri
+- Audit retention/purge policy
+- Frontend audit log view
+- Proxy-aware IP extraction / trust proxy configuration
+- Audit logging for broader domain actions
 
 ## In Progress
 
@@ -49,8 +56,15 @@ None identified.
 - DB access restored and migration-first validation finalized: `npm run prisma:seed` succeeded and authz e2e suites passed on `socialtech_test` (`test/authz.e2e-spec.ts`, `test/projects-tasks-authz.e2e-spec.ts`, `test/admin-users-password-authz.e2e-spec.ts`) with `3/3` suites and `64/64` tests.
 - Admin Users Management API completed under `server/`: existing `POST /api/v1/admin/users` preserved and full management endpoints added (`GET list/detail`, `PATCH update/deactivate/activate/reset-password`), employee-targeted mutation scope, self-protection guards, refresh-token revocation on deactivate/reset-password, and dedicated e2e suite (`server/test/admin-users-management-authz.e2e-spec.ts`).
 - Admin Users pagination/sorting completed for `GET /api/v1/admin/users`: strict query validation (`page`, `limit`, `sortBy`, `sortOrder`), whitelist-based Prisma ordering with stable secondary `id asc`, preserved filters (`accountType`, `role`, `isActive`, `search`), and paginated response envelope (`data` + `meta`).
+- Admin User Management Audit Logging completed: centralized `AuditLogService` + `AuditLogModule`, transactional audit writes on admin user mutations (`ADMIN_USER_CREATED`, `ADMIN_USER_UPDATED`, `ADMIN_USER_DEACTIVATED`, `ADMIN_USER_ACTIVATED`, `ADMIN_USER_PASSWORD_RESET`), request-context capture (`ipAddress`, `userAgent`), recursive metadata sanitization on write, and forbidden non-admin calls producing no audit rows.
+- Admin Audit Logs Read API completed: `GET /api/v1/admin/audit-logs` and `GET /api/v1/admin/audit-logs/:id` with admin+permission checks (`audit_logs.read`), pagination/sorting/filtering/date-range validation, and recursive metadata sanitization on read.
 - Access-token invalidation completed under `server/`: `User.sessionInvalidatedAt` + JWT `siv` claim enforcement in `JwtAuthGuard` (fallback `iat` for pre-rollout tokens), invalidation triggers wired to own password change, admin reset-password, deactivate, role change, and `isActive=false`. Activate keeps prior invalidation state (old tokens stay invalid). Added suite `server/test/access-token-invalidation-authz.e2e-spec.ts`.
-- Latest DB-connected authz pattern run now passes `5/5` suites and `100/100` tests.
+- Latest DB-connected authz pattern run now passes `6/6` suites and `123/123` tests.
+- Frontend backend auth integration completed for both SPAs:
+  - `adminandemployeePanel`: Redux Toolkit + RTK Query auth flow (`/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/me`), role-aware route guards, RoleContext no longer source of truth
+  - `clientPanel`: Redux Toolkit + RTK Query auth flow with CLIENT-only access guard, AuthBootstrap session restore, state-based service selection flow preserved
+  - access token stays in Redux memory; refresh token remains backend-managed HttpOnly cookie
+- Nest build incremental output fix completed under `server/`: `tsconfig.build.json` uses `incremental: false` to prevent runtime missing-module output issues.
 
 ## Blocked
 
@@ -64,7 +78,7 @@ None identified.
 - Client Portal directory confirmed as `clientPanel/`
 - `client/` is the public/marketing Social Tech website, not the Client Portal
 - `npm install` currently reports 1 high severity vulnerability in each app; `npm audit fix --force` is intentionally out of scope for this pass
-- Backend auth endpoints are implemented; frontend integration and domain-wide guard/permission rollout remain planned
+- Backend auth endpoints and frontend auth integration are implemented; broader domain UI/API integration remains planned
 - Users/clients protected read foundation is implemented; assignment-aware employee client access is now active
 - Authz e2e matrix is implemented and expanded to include admin assignment management and negative-case flows; remaining e2e gaps focus on concurrency/race-condition scenarios
 - Migration-first Prisma workflow is active; seed + authz e2e validation completed on test DB (`socialtech_test`)

@@ -1,5 +1,4 @@
 import { Outlet, Link, useLocation, Navigate, useNavigate } from "react-router";
-import { useRole, EmployeeRole } from "../contexts/RoleContext";
 import {
   LayoutDashboard, CheckSquare, Users, Calendar, Bell, Folder, Settings,
   FileText, ThumbsUp, UserCheck, FolderKanban, TrendingUp, Zap, Image,
@@ -10,6 +9,16 @@ import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
+import { useAppDispatch, useAppSelector } from "../store/hooks";
+import { useLogoutMutation } from "../features/auth/authApi";
+import { clearAuth } from "../features/auth/authSlice";
+import {
+  selectCurrentEmployeeRole,
+  selectCurrentUser,
+  selectIsAuthenticated,
+  selectIsBootstrapping,
+} from "../features/auth/authSelectors";
+import { EmployeePanelRole, getBackendRoleLabel, getUserDisplayName, getUserInitials } from "../features/auth/roleMapping";
 
 type SidebarItem = {
   path: string;
@@ -17,18 +26,7 @@ type SidebarItem = {
   icon: LucideIcon;
 };
 
-const roleMenus: Record<EmployeeRole, SidebarItem[]> = {
-  admin: [
-    { path: "/employee/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { path: "/employee/gorevlerim", label: "Görevlerim", icon: CheckSquare },
-    { path: "/employee/musterilerim", label: "Müşterilerim", icon: Users },
-    { path: "/employee/onaylar", label: "Onaylar", icon: ThumbsUp },
-    { path: "/employee/ekip", label: "Ekip", icon: UserCheck },
-    { path: "/employee/takvim", label: "Takvim", icon: Calendar },
-    { path: "/employee/bildirimler", label: "Bildirimler", icon: Bell },
-    { path: "/employee/dosyalar", label: "Dosyalar", icon: Folder },
-    { path: "/employee/ayarlar", label: "Ayarlar", icon: Settings },
-  ],
+const roleMenus: Record<EmployeePanelRole, SidebarItem[]> = {
   "project-manager": [
     { path: "/employee/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { path: "/employee/gorevlerim", label: "Görevlerim", icon: CheckSquare },
@@ -136,28 +134,36 @@ const roleMenus: Record<EmployeeRole, SidebarItem[]> = {
   ],
 };
 
-const roleNames: Record<EmployeeRole, string> = {
-  admin: "Admin",
-  "project-manager": "Project Manager",
-  "performance-specialist": "Performance Specialist",
-  "social-media-specialist": "Social Media Specialist",
-  designer: "Designer",
-  developer: "Developer",
-  "support-specialist": "Support Specialist",
-  "seo-specialist": "SEO Specialist",
-};
-
 export function EmployeeLayout() {
-  const { selectedRole, currentUser, logout } = useRole();
+  const dispatch = useAppDispatch();
   const location = useLocation();
   const navigate = useNavigate();
+  const currentUser = useAppSelector(selectCurrentUser);
+  const isAuthenticated = useAppSelector(selectIsAuthenticated);
+  const isBootstrapping = useAppSelector(selectIsBootstrapping);
+  const selectedRole = useAppSelector(selectCurrentEmployeeRole);
+  const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
 
-  if (!currentUser) {
+  if (isBootstrapping) {
+    return (
+      <div className="min-h-screen bg-[#131313] text-white flex items-center justify-center p-6">
+        <div className="rounded-xl border border-white/[0.08] bg-[#1A1A1A] px-6 py-4 text-sm text-[#A0A0A0]">
+          Yetki kontrol ediliyor...
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated || !currentUser) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
-  if (currentUser.accountType !== "employee") {
+  if (currentUser.accountType === "ADMIN") {
     return <Navigate to="/" replace />;
+  }
+
+  if (currentUser.accountType !== "EMPLOYEE") {
+    return <Navigate to="/login" replace />;
   }
 
   if (!selectedRole) {
@@ -165,10 +171,19 @@ export function EmployeeLayout() {
   }
 
   const menuItems = roleMenus[selectedRole] || [];
+  const displayName = getUserDisplayName(currentUser);
+  const initials = getUserInitials(currentUser);
+  const roleLabel = getBackendRoleLabel(currentUser.role);
 
-  const handleLogout = () => {
-    logout();
-    navigate("/login", { replace: true });
+  const handleLogout = async () => {
+    try {
+      await logout().unwrap();
+    } catch {
+      // Local state cleanup is still required even if backend logout fails.
+    } finally {
+      dispatch(clearAuth());
+      navigate("/login", { replace: true });
+    }
   };
 
   return (
@@ -219,9 +234,9 @@ export function EmployeeLayout() {
           </div>
 
           <div className="flex items-center gap-4">
-            <Badge className="bg-[#AAFF01] text-[#131313]">{roleNames[selectedRole]}</Badge>
+            <Badge className="bg-[#AAFF01] text-[#131313]">{roleLabel}</Badge>
 
-            <div className="text-sm text-[#A0A0A0]">27 Nisan 2026</div>
+            <div className="text-sm text-[#A0A0A0]">29 Nisan 2026</div>
 
             <Button className="bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90 gap-2 h-9">
               <Plus className="w-4 h-4" />
@@ -236,6 +251,7 @@ export function EmployeeLayout() {
             <Button
               variant="ghost"
               onClick={handleLogout}
+              disabled={isLoggingOut}
               className="h-9 rounded-lg text-[#A0A0A0] hover:bg-[#1A1A1A] hover:text-white"
             >
               <LogOut className="w-4 h-4" />
@@ -244,11 +260,11 @@ export function EmployeeLayout() {
 
             <div className="flex items-center gap-3 pl-4 border-l border-white/[0.06]">
               <div className="text-right">
-                <p className="text-sm text-white">{currentUser.name}</p>
+                <p className="text-sm text-white">{displayName}</p>
                 <p className="text-xs text-[#A0A0A0]">{currentUser.email}</p>
               </div>
               <Avatar className="w-9 h-9 bg-[#AAFF01] text-[#131313]">
-                <AvatarFallback>{currentUser.initials}</AvatarFallback>
+                <AvatarFallback>{initials}</AvatarFallback>
               </Avatar>
             </div>
           </div>

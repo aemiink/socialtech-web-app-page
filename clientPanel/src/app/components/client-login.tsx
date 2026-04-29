@@ -11,16 +11,20 @@ export interface DemoClient {
 
 interface ClientLoginProps {
   demoClient: DemoClient;
-  onLogin: (email: string, password: string) => boolean;
+  onLogin: (email: string, password: string) => Promise<{
+    success: boolean;
+    message?: string;
+  }>;
+  notice?: string | null;
 }
 
-export function ClientLogin({ demoClient, onLogin }: ClientLoginProps) {
+export function ClientLogin({ demoClient, onLogin, notice = null }: ClientLoginProps) {
   const [email, setEmail] = useState(demoClient.email);
   const [password, setPassword] = useState(demoClient.password);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (!email.trim()) {
@@ -34,11 +38,15 @@ export function ClientLogin({ demoClient, onLogin }: ClientLoginProps) {
     }
 
     setIsSubmitting(true);
-    const isValid = onLogin(email, password);
-    setIsSubmitting(false);
+    setError(null);
 
-    if (!isValid) {
-      setError('Demo bilgileri eşleşmiyor.');
+    try {
+      const result = await onLogin(email, password);
+      if (!result.success) {
+        setError(result.message ?? 'Giriş başarısız.');
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -66,8 +74,8 @@ export function ClientLogin({ demoClient, onLogin }: ClientLoginProps) {
           <div className="grid gap-3">
             {[
               'Giriş sonrası mevcut hizmet seçimi akışı korunur.',
-              'Demo müşteri bilgisi yalnızca frontend state olarak tutulur.',
-              'Gerçek JWT, session, API veya database bu aşamada yoktur.',
+              'Refresh token HttpOnly cookie ile session restore yapılır.',
+              'Client erişimleri backend yetkisine göre korunur.',
             ].map((item) => (
               <div key={item} className="flex items-center gap-3 text-sm text-[#A0A0A0]">
                 <CheckCircle2 className="h-4 w-4 text-[#AAFF01]" />
@@ -93,6 +101,12 @@ export function ClientLogin({ demoClient, onLogin }: ClientLoginProps) {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
+            {notice && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                {notice}
+              </div>
+            )}
+
             {error && (
               <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
                 {error}
@@ -151,7 +165,7 @@ export function ClientLogin({ demoClient, onLogin }: ClientLoginProps) {
 
           <div className="mt-6 rounded-xl border border-white/[0.08] bg-[#202020] p-4">
             <div className="mb-3 inline-flex rounded-full border border-[#AAFF01]/20 bg-[#AAFF01]/10 px-3 py-1 text-xs text-[#AAFF01]">
-              Demo erişim
+              Seed demo erişim
             </div>
             <div className="space-y-1 text-sm">
               <p className="text-white">{demoClient.email}</p>

@@ -2,7 +2,7 @@
 
 ## Product Summary
 
-Social Tech is a premium digital growth agency. This repository contains multiple Vite + React SPAs for agency operations and client visibility: an Admin Panel, an Employee Panel (role-based), a public/marketing client site, and a Client Portal. The UI is in Turkish. Frontend business data is still mostly mock/static while backend API/auth integration is phased in.
+Social Tech is a premium digital growth agency. This repository contains multiple Vite + React SPAs for agency operations and client visibility: an Admin Panel, an Employee Panel (role-based), a public/marketing client site, and a Client Portal. The UI is in Turkish. Frontend auth is backend-integrated, while domain/business data integration is still being phased from mock/static to API-driven flows.
 
 ## Tech Stack
 
@@ -16,14 +16,16 @@ Social Tech is a premium digital growth agency. This repository contains multipl
 - Drag-and-drop: react-dnd
 - Notifications: Sonner
 - Theming: next-themes
+- State management: Redux Toolkit + React Redux
+- API state/cache: RTK Query
 - Package manager: npm (canonical) in `adminandemployeePanel/`, `clientPanel/`, and `server/` (`packageManager: npm@11.8.0`)
 - TypeScript: Yes (strict expected per CLAUDE.md)
-- Backend: NestJS + TypeScript in `server/` (single shared API with implemented auth endpoints; frontend integration is still pending)
-- Frontend business data is still mock/static until API integration phases
+- Backend: NestJS + TypeScript in `server/` (single shared API with implemented auth endpoints and frontend auth integration)
+- Frontend business domain data is still partially mock/static while domain-by-domain API integration is phased in
 
 ## Main User Roles
 
-Defined in `RoleContext.tsx`:
+Backend role enum values are mapped in frontend via `roleMapping.ts`:
 - `admin` — full access to all modules
 - `project-manager` — client processes, tasks, approvals, deliverables
 - `performance-specialist` — ad campaigns, optimizations, pixel tracking
@@ -34,8 +36,8 @@ Defined in `RoleContext.tsx`:
 - `seo-specialist` — SEO audit, keyword tracking, index status, Search Console
 
 There are two panel types:
-- Admin Panel (protected by frontend demo login, flat navigation)
-- Employee Panel (protected by frontend demo login, role-gated sidebar via `RoleContext`)
+- Admin Panel (protected by backend auth via Redux/RTK Query)
+- Employee Panel (protected by backend auth via Redux/RTK Query with role-gated sidebar)
 
 There is also a Client Portal as a separate sub-app at `clientPanel/`.
 
@@ -51,7 +53,7 @@ Role-based sidebar. Common pages: Dashboard, Gorevlerim, Musterilerim, Takvim, B
 Separate Vite + React SPA at `clientPanel/`. It is a customer-facing visibility panel, not a public SaaS product.
 
 Portal areas:
-- Frontend demo client login gate
+- Backend-authenticated client login gate (Redux/RTK Query)
 - Service selection screen with 13 active Social Tech services
 - Service-specific dashboards for Growth & Hub, Social Media, Media Hub, Meta/TikTok/Google/Amazon Ads, Web App, Mobile App, Landing Pages, Web & Mobile Design, Technical Support, and SEO Audit
 - Generic service tab workspace for service-specific sections
@@ -60,9 +62,22 @@ Portal areas:
 
 ## Auth & RBAC Summary
 
-- Frontend auth remains demo/local in both SPAs:
-  - Admin + Employee login via `/login` in `adminandemployeePanel/` (`RoleContext` + `localStorage`)
-  - Client Portal login gate in `clientPanel/` (`localStorage`)
+- Frontend auth is integrated with backend in both SPAs using Redux Toolkit + RTK Query.
+- Access token is kept in Redux memory state (not localStorage).
+- Refresh token is managed as backend HttpOnly cookie and sent with `credentials: include`.
+- RTK Query base API in both apps handles:
+  - Bearer token header injection
+  - `401 -> refresh -> retry`
+  - refresh single-flight lock to prevent parallel refresh storms
+- `adminandemployeePanel` route behavior:
+  - `ADMIN` + `ADMIN` role => admin shell access
+  - `EMPLOYEE` => employee shell access
+  - `CLIENT` => rejected from this app
+- `clientPanel` route behavior:
+  - only `CLIENT` accounts can enter
+  - state-based navigation in `App.tsx` is preserved
+  - service selection restore remains localStorage-backed
+- `RoleContext` is no longer the auth source of truth in `adminandemployeePanel`; Redux auth state is canonical.
 - Backend auth is now implemented under `server/`:
   - `POST /api/v1/auth/login`
   - `POST /api/v1/auth/refresh`
@@ -99,7 +114,7 @@ Portal areas:
 - Employee users can read only active-assignment-scope projects/tasks and can update only `status` on tasks assigned to them within active assignment scope.
 - Client users can read only own `clientProfileId`-scope projects/tasks; out-of-scope detail access resolves as safe `404`.
 - Assignment admin endpoints are admin-only via `JwtAuthGuard` + `PermissionsGuard` + `RequirePermissions`, plus service-level `ADMIN` account/role and permission checks (`assignments.read`, `assignments.manage`).
-- Authz e2e matrix is now automated in backend tests and validated with real guard chain behavior (`5/5 suites`, `100/100` tests).
+- Authz e2e matrix is now automated in backend tests and validated with real guard chain behavior (`6/6 suites`, `123/123` tests).
 - Full domain endpoint authorization rollout beyond users/clients/admin-assignments/projects/tasks remains pending.
 
 ## Frontend Architecture
@@ -108,10 +123,21 @@ Portal areas:
 - App root: `adminandemployeePanel/src/app/App.tsx`
 - Router: `adminandemployeePanel/src/app/routes.tsx` (createBrowserRouter)
 - Login page: `adminandemployeePanel/src/app/pages/Login.tsx`
+- Auth bootstrap: `adminandemployeePanel/src/app/features/auth/AuthBootstrap.tsx`
+- Redux store:
+  - `adminandemployeePanel/src/app/store/store.ts`
+  - `adminandemployeePanel/src/app/store/hooks.ts`
+- RTK Query base API: `adminandemployeePanel/src/app/services/baseApi.ts`
+- Auth feature:
+  - `adminandemployeePanel/src/app/features/auth/authApi.ts`
+  - `adminandemployeePanel/src/app/features/auth/authSlice.ts`
+  - `adminandemployeePanel/src/app/features/auth/authSelectors.ts`
+  - `adminandemployeePanel/src/app/features/auth/authTypes.ts`
+  - `adminandemployeePanel/src/app/features/auth/roleMapping.ts`
 - Layouts:
   - `RootLayout` — Admin Panel shell (sidebar + topbar + `<Outlet />`)
   - `EmployeeLayout` — Employee Panel shell (role-aware sidebar + topbar + `<Outlet />`)
-- Contexts: `adminandemployeePanel/src/app/contexts/RoleContext.tsx`
+- Contexts: `adminandemployeePanel/src/app/contexts/RoleContext.tsx` (compatibility layer; auth source of truth is Redux)
 - Pages: `adminandemployeePanel/src/app/pages/` (admin pages)
 - Employee pages: `adminandemployeePanel/src/app/employee/pages/`
 - Employee dashboards: `adminandemployeePanel/src/app/employee/dashboards/`
@@ -125,11 +151,22 @@ Portal areas:
 - Location: `clientPanel/`
 - Entry: `clientPanel/src/main.tsx`
 - App root: `clientPanel/src/app/App.tsx`
-- Login: `clientPanel/src/app/components/client-login.tsx`
-- Navigation: frontend demo login gate, then state-based in-app navigation using `selectedService` and `currentPage` in `App.tsx`; no current React Router route file
+- Login: `clientPanel/src/app/components/client-login.tsx` (backend `/auth/login`)
+- Auth bootstrap: `clientPanel/src/app/features/auth/AuthBootstrap.tsx`
+- Redux store:
+  - `clientPanel/src/app/store/store.ts`
+  - `clientPanel/src/app/store/hooks.ts`
+- RTK Query base API: `clientPanel/src/app/services/baseApi.ts`
+- Auth feature:
+  - `clientPanel/src/app/features/auth/authApi.ts`
+  - `clientPanel/src/app/features/auth/authSlice.ts`
+  - `clientPanel/src/app/features/auth/authSelectors.ts`
+  - `clientPanel/src/app/features/auth/authTypes.ts`
+  - `clientPanel/src/app/features/auth/roleMapping.ts`
+- Navigation: backend-authenticated gate, then existing state-based flow in `App.tsx` (`selectedService`, `currentPage`); no current React Router route file
 - Core components:
   - `clientPanel/src/app/components/sidebar.tsx` — service-specific sidebar menu
-  - `clientPanel/src/app/components/topbar.tsx` — selected service and demo client identity
+  - `clientPanel/src/app/components/topbar.tsx` — selected service + authenticated client identity + logout
   - `clientPanel/src/app/components/client-action-center.tsx` — floating action center and history drawer
 - Pages:
   - `clientPanel/src/app/pages/service-selection.tsx`
@@ -142,6 +179,7 @@ Portal areas:
 - Portal data:
   - `clientPanel/src/app/data/service-pages.ts` — mock service profiles, KPIs, tabs, tables, timelines, agency comments, and client actions
   - `clientPanel/src/app/lib/client-actions.ts` — localStorage-backed action history and action event dispatch
+  - Service selection restore remains localStorage-backed during current state-based navigation
 - Portal styles: `clientPanel/src/styles/`
 
 ## Backend Architecture
@@ -189,6 +227,19 @@ Current backend baseline includes:
       - `sortOrder` (`asc`, `desc`; default `desc` on `createdAt`)
       - paginated response envelope: `data[]` + `meta{ page, limit, total, totalPages, hasNextPage, hasPreviousPage }`
       - stable order via secondary `id asc`
+  - Admin user management actions are audit-logged via centralized `AuditLogService`:
+    - `ADMIN_USER_CREATED`
+    - `ADMIN_USER_UPDATED`
+    - `ADMIN_USER_DEACTIVATED`
+    - `ADMIN_USER_ACTIVATED`
+    - `ADMIN_USER_PASSWORD_RESET`
+    - write path is transactional with business mutation
+  - Admin Audit Logs Read API is active:
+    - `GET /api/v1/admin/audit-logs`
+    - `GET /api/v1/admin/audit-logs/:id`
+    - admin-only, permission-protected (`audit_logs.read`)
+    - filterable + paginated + sorted list response (`data + meta`)
+    - sanitized metadata on read
   - Access-token invalidation:
     - `User.sessionInvalidatedAt` is active in auth/session flow
     - JWT `siv` claim snapshot is validated against DB session version
@@ -205,12 +256,12 @@ Current backend baseline includes:
   - DB safety guard in runner: strict test DB-name check (`_test`, `test_`, `testing`) with delimiter-aware matching
   - `ALLOW_E2E_DB_RESET=true` no longer bypasses DB-name safety check
   - Matrix suite currently covers users/clients/admin-assignments/projects/tasks/admin-user flows
-  - Latest authz pattern run: `5/5` suites, `100/100` tests passed
+  - Latest authz pattern run: `6/6` suites, `123/123` tests passed
 - Token strategy:
   - access token in response body (Bearer usage)
   - refresh token in HttpOnly cookie
   - refresh token persistence as hash only (`RefreshToken.tokenHash`)
-- Foundation modules: `health`, `auth`, `users`, `clients`, `admin-assignments`, `projects`, `tasks`
+- Foundation modules: `health`, `auth`, `users`, `clients`, `audit-log`, `admin-audit-logs`, `admin-assignments`, `admin-users`, `projects`, `tasks`
 - Health endpoint: `GET /api/v1/health`
 - Validation status:
   - `npm run prisma:generate` passed
@@ -218,14 +269,19 @@ Current backend baseline includes:
   - `npm run build` passed
   - `npm run check` passed
   - `npm run typecheck:spec` passed
-  - `ALLOW_E2E_DB_RESET=true npm run test:e2e:authz` passed (`5/5 suites`, `100/100 tests`, test DB name: `socialtech_test`)
+  - `ALLOW_E2E_DB_RESET=true npm run test:e2e:authz` passed (`6/6 suites`, `123/123 tests`, test DB name: `socialtech_test`)
   - manual auth flow tests passed (`login`, `me`, `refresh`, `logout`, `logout` sonrası `refresh=401`)
+  - `server/tsconfig.build.json` uses `incremental: false` to avoid missing-module runtime issues from stale/incomplete dist output
 
 Planned next backend phases:
 - Broader domain endpoint authorization rollout (beyond users/clients/admin-assignments/projects/tasks)
-- Frontend API/auth integration for `adminandemployeePanel/` and `clientPanel/`
 - Forced password change on first login flow
-- Admin user audit logs for management actions
+- Frontend audit log view integration for admin panel
+- Audit log actor/target summary join on read API
+- Audit log export endpoints
+- Audit retention/purge policy
+- Proxy-aware IP extraction / trust proxy configuration
+- Audit logging rollout for broader domain actions
 - Frontend admin employee management integration
 - Project-manager project/task manage policy decision
 - Assignment concurrency/race-condition e2e coverage (parallel create/update conflict scenarios)
@@ -248,6 +304,7 @@ Backend Prisma data model (foundation scope):
 - `RefreshToken`: hashed refresh token persistence, expiration, and revocation metadata used by live refresh/logout flow
 - `ClientProfile`: client identity with unique `slug`
 - `AuditLog`: actor-based audit event records
+- `AuditLog` write path is active for admin user lifecycle actions (transactional with mutation path) and read path is active via admin-only audit endpoints.
 - `Permission`: permission catalog table (slug + description)
 - `RolePermission`: role-to-permission mapping table for hybrid RBAC expansion
 - `EmployeeClientAssignment`: employee-to-client assignment mapping with `scope`, `isActive`, and indexed lookup fields
@@ -307,6 +364,7 @@ npm run preview    # preview production build
 npm run check      # typecheck + build gate
 ```
 Lint/format scripts are intentionally not added yet in this pass (ESLint/Prettier deferred).
+Frontend auth integration dependency baseline includes `@reduxjs/toolkit`, `react-redux`, and `redux@5` in both frontend apps.
 
 From `server/package.json`:
 ```bash
@@ -317,3 +375,4 @@ npm run test:e2e:authz         # backend authz e2e suites (users/clients, projec
 DATABASE_URL=postgresql://user:pass@localhost:5432/socialtech_test?schema=public ALLOW_E2E_DB_RESET=true npm run test:e2e:authz
 ```
 `run-e2e.cjs` now requires test DB naming (`_test`, `test_`, or `testing` in DB name); `ALLOW_E2E_DB_RESET=true` does not bypass this requirement.
+Latest reported checks: `adminandemployeePanel npm run check`, `clientPanel npm run check`, and `server npm run build/check` passed. End-to-end runtime UI QA remains a manual validation step.

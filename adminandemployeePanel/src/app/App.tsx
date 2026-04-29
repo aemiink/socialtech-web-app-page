@@ -1,11 +1,11 @@
 import { RouterProvider } from "react-router";
 import { router } from "./routes";
-import { RoleProvider } from "./contexts/RoleContext";
+import { AuthBootstrap } from "./features/auth/AuthBootstrap";
 
 export default function App() {
   return (
-    <RoleProvider>
+    <AuthBootstrap>
       <RouterProvider router={router} />
-    </RoleProvider>
+    </AuthBootstrap>
   );
 }

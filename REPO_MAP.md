@@ -20,9 +20,21 @@ Location: `adminandemployeePanel/`
 - App root: `adminandemployeePanel/src/app/App.tsx`
 - Router: `adminandemployeePanel/src/app/routes.tsx`
 - Login page: `adminandemployeePanel/src/app/pages/Login.tsx`
+- Auth bootstrap: `adminandemployeePanel/src/app/features/auth/AuthBootstrap.tsx`
+- Redux store:
+  - `adminandemployeePanel/src/app/store/store.ts`
+  - `adminandemployeePanel/src/app/store/hooks.ts`
+- RTK Query base API:
+  - `adminandemployeePanel/src/app/services/baseApi.ts`
+- Auth feature:
+  - `adminandemployeePanel/src/app/features/auth/authApi.ts`
+  - `adminandemployeePanel/src/app/features/auth/authSlice.ts`
+  - `adminandemployeePanel/src/app/features/auth/authSelectors.ts`
+  - `adminandemployeePanel/src/app/features/auth/authTypes.ts`
+  - `adminandemployeePanel/src/app/features/auth/roleMapping.ts`
 - Admin layout: `adminandemployeePanel/src/app/components/RootLayout.tsx`
 - Employee layout: `adminandemployeePanel/src/app/employee/EmployeeLayout.tsx`
-- Role context: `adminandemployeePanel/src/app/contexts/RoleContext.tsx`
+- Role context: `adminandemployeePanel/src/app/contexts/RoleContext.tsx` (compatibility layer; Redux auth state is source of truth)
 - Admin pages: `adminandemployeePanel/src/app/pages/`
 - Employee pages: `adminandemployeePanel/src/app/employee/pages/`
 - Employee dashboards: `adminandemployeePanel/src/app/employee/dashboards/`
@@ -35,6 +47,7 @@ Location: `adminandemployeePanel/`
   - `adminandemployeePanel/package-lock.json`
   - `adminandemployeePanel/tsconfig.json`
   - npm scripts: `dev`, `build`, `typecheck`, `preview`, `check`
+  - backend auth integration dependencies: `@reduxjs/toolkit`, `react-redux`, `redux@5`
 
 ## Client Portal
 
@@ -53,11 +66,24 @@ Purpose: customer-facing visibility panel for purchased Social Tech services, re
 - HTML entry: `clientPanel/index.html`
 - React entry: `clientPanel/src/main.tsx`
 - App root: `clientPanel/src/app/App.tsx`
+- Auth bootstrap: `clientPanel/src/app/features/auth/AuthBootstrap.tsx`
+- Redux store:
+  - `clientPanel/src/app/store/store.ts`
+  - `clientPanel/src/app/store/hooks.ts`
+- RTK Query base API:
+  - `clientPanel/src/app/services/baseApi.ts`
+- Auth feature:
+  - `clientPanel/src/app/features/auth/authApi.ts`
+  - `clientPanel/src/app/features/auth/authSlice.ts`
+  - `clientPanel/src/app/features/auth/authSelectors.ts`
+  - `clientPanel/src/app/features/auth/authTypes.ts`
+  - `clientPanel/src/app/features/auth/roleMapping.ts`
 
 ### Navigation
 
-- The Client Portal shows `clientPanel/src/app/components/client-login.tsx` before the portal workspace when demo auth is missing.
-- The Client Portal currently uses local React state in `clientPanel/src/app/App.tsx`.
+- The Client Portal authenticates against backend auth endpoints; `clientPanel/src/app/components/client-login.tsx` is the login gate.
+- Session restore is handled by `clientPanel/src/app/features/auth/AuthBootstrap.tsx` (`/auth/refresh` + `/auth/me`).
+- The Client Portal keeps state-based navigation in `clientPanel/src/app/App.tsx`.
 - `selectedService` controls whether the service selection screen or the selected service workspace is visible.
 - `currentPage` controls shared pages, service dashboards, and service tab workspaces.
 - There is no current React Router route file in `clientPanel/`.
@@ -65,8 +91,8 @@ Purpose: customer-facing visibility panel for purchased Social Tech services, re
 ### Core Components
 
 - `clientPanel/src/app/components/sidebar.tsx` - service-specific navigation, shared bottom items, collapse state, service switching.
-- `clientPanel/src/app/components/topbar.tsx` - selected service title, demo client identity, and logout.
-- `clientPanel/src/app/components/client-login.tsx` - frontend demo client login screen.
+- `clientPanel/src/app/components/topbar.tsx` - selected service title, authenticated client identity, and backend logout.
+- `clientPanel/src/app/components/client-login.tsx` - backend client login screen (`/auth/login`).
 - `clientPanel/src/app/components/client-action-center.tsx` - floating action button, toast, action history drawer.
 - `clientPanel/src/app/components/button.tsx` - local portal button abstraction.
 - `clientPanel/src/app/components/metric-card.tsx` - reusable metric display.
@@ -103,8 +129,9 @@ Additional portal pages exist under `clientPanel/src/app/pages/` and `clientPane
 
 - `clientPanel/src/app/data/service-pages.ts` - service labels, service profiles, KPIs, tab content, tables, timelines, agency comments, and client action prompts.
 - `clientPanel/src/app/lib/client-actions.ts` - browser `localStorage` action history, action type inference, action event dispatch, and local text-file download behavior.
-- `clientPanel/src/app/App.tsx` stores demo client auth in browser `localStorage` and resets selected service/page on logout.
-- Client Portal data flow is still mock/static in frontend. Backend API foundation exists in `server/` but frontend integration has not started yet.
+- `clientPanel/src/app/App.tsx` keeps service-selection/page state behavior; auth state is Redux-managed.
+- `selectedService` restore remains localStorage-backed.
+- Client Portal auth flow is backend-integrated; service/domain data is still partially mock/static.
 
 ## Backend API
 
@@ -118,13 +145,13 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 - `server/.env.example` - backend env variable template
 - `server/nest-cli.json`
 - `server/tsconfig.json`
-- `server/tsconfig.build.json`
+- `server/tsconfig.build.json` (`incremental: false` to avoid dist output omissions)
 - `server/tsconfig.spec.json` - TypeScript config for e2e/spec compilation
 
 ### App Bootstrap
 
 - `server/src/main.ts` - Nest bootstrap, `/api/v1` global prefix, global ValidationPipe, global exception filter, CORS setup
-- `server/src/app.module.ts` - root module imports for config/database/health/auth/users/clients/admin-assignments/projects/tasks
+- `server/src/app.module.ts` - root module imports for config/database/health/auth/users/clients/admin-assignments/admin-users/admin-audit-logs/projects/tasks/audit-log
 - `server/src/config/env.validation.ts` - Joi env validation schema
 - `server/src/config/cors.config.ts` - env-based CORS whitelist
 - `server/src/common/filters/global-exception.filter.ts` - centralized error response format
@@ -178,6 +205,9 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - `guards/` - `JwtAuthGuard`, `PermissionsGuard` (`JwtAuthGuard` enforces DB session version checks)
   - `decorators/` - `CurrentUser`, `RequirePermissions`
   - `types/` - auth response, token payload (`siv` support), authenticated user types
+- `server/src/audit-log/` - centralized audit write module:
+  - `audit-log.module.ts` - exports shared audit service
+  - `audit-log.service.ts` - transactional audit write helper + recursive metadata sanitization before persistence
 - `server/src/users/` - protected users foundation:
   - `users.controller.ts` - `GET /api/v1/users/me`, `GET /api/v1/users`, `GET /api/v1/users/:id`
   - `users.service.ts` - admin/full-scope checks + own-record object authorization for non-admin access
@@ -193,9 +223,14 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - `dto/update-assignment.dto.ts` - update payload validation
   - `dto/assignment-query.dto.ts` - list query filter validation (`employeeUserId`, `clientProfileId`, `isActive`, `scope`)
   - `admin-assignments.module.ts` - module wiring
+- `server/src/admin-audit-logs/` - admin audit read module:
+  - `admin-audit-logs.controller.ts` - `GET /api/v1/admin/audit-logs`, `GET /api/v1/admin/audit-logs/:id`
+  - `admin-audit-logs.service.ts` - admin-only audit log reads with pagination/sorting/filtering and read-time metadata sanitization
+  - `dto/audit-log-query.dto.ts` - query validation (`page`, `limit`, `sortBy`, `sortOrder`, `action`, `actorUserId`, `targetUserId`, `targetClientProfileId`, `entityType`, `entityId`, `dateFrom`, `dateTo`, `search`)
+  - `admin-audit-logs.module.ts` - module wiring
 - `server/src/admin-users/` - admin employee-user management module:
   - `admin-users.controller.ts` - `POST /api/v1/admin/users`, `GET /api/v1/admin/users`, `GET /api/v1/admin/users/:id`, `PATCH /api/v1/admin/users/:id`, `PATCH /api/v1/admin/users/:id/deactivate`, `PATCH /api/v1/admin/users/:id/activate`, `PATCH /api/v1/admin/users/:id/reset-password`
-  - `admin-users.service.ts` - admin-only employee lifecycle management (create/list/detail/update/deactivate/activate/reset-password), self-protection guards, refresh-token revocation on deactivate/reset-password, and paginated/sorted list responses (`data` + `meta`)
+  - `admin-users.service.ts` - admin-only employee lifecycle management (create/list/detail/update/deactivate/activate/reset-password), self-protection guards, refresh-token revocation on deactivate/reset-password, paginated/sorted list responses (`data` + `meta`), and transactional admin action audit writes
   - `dto/admin-user-query.dto.ts` - list query validation (`accountType`, `role`, `isActive`, `search`) + pagination (`page`, `limit`) + sorting (`sortBy`, `sortOrder`)
   - `dto/update-admin-user.dto.ts` - update payload validation (`displayName`, `role`, `isActive`)
   - `dto/reset-admin-user-password.dto.ts` - reset-password payload validation
@@ -210,7 +245,7 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - `tasks.service.ts` - admin full write scope, employee assignment-scope read + own-assigned status-only update, client own-scope read
   - `dto/create-task.dto.ts`, `dto/update-task.dto.ts`, `dto/task-query.dto.ts` - payload/query validation
   - `tasks.module.ts` - module wiring
-- `users/clients/admin-assignments/projects/tasks` are now protected foundations; broader domain CRUD remains planned.
+- `users/clients/admin-assignments/admin-users/admin-audit-logs/projects/tasks` are now protected foundations; broader domain CRUD remains planned.
 
 ### Seed And Prisma Commands
 
@@ -234,13 +269,14 @@ From `server/package.json`:
 - `server/test/authz.e2e-spec.ts` - users/clients/admin-assignment authorization matrix (30 scenarios, real AppModule + real guards, runtime assignment/client resolution, assignment CRUD negative cases)
 - `server/test/projects-tasks-authz.e2e-spec.ts` - projects/tasks authorization matrix + assignment deactivation regression coverage
 - `server/test/admin-users-password-authz.e2e-spec.ts` - admin employee create + own password change authz matrix
-- `server/test/admin-users-management-authz.e2e-spec.ts` - admin users management authz matrix (list/detail/update/deactivate/activate/reset-password + role restrictions + list pagination/sorting/validation scenarios)
+- `server/test/admin-users-management-authz.e2e-spec.ts` - admin users management authz matrix (list/detail/update/deactivate/activate/reset-password + role restrictions + list pagination/sorting/validation + audit write assertions)
+- `server/test/admin-audit-logs-authz.e2e-spec.ts` - admin audit logs read authz matrix (list/detail authorization + pagination/sorting/filter/date/search + metadata sensitivity checks)
 - `server/test/access-token-invalidation-authz.e2e-spec.ts` - access-token invalidation matrix (password change/reset, deactivate/activate, role/displayName update behavior)
 - `server/package.json` test scripts:
   - `npm run test:e2e:prepare`
   - `npm run test:e2e`
   - `npm run test:e2e:authz`
-  - latest DB-connected authz pattern run: `5/5 suites`, `100/100` tests passed
+  - latest DB-connected authz pattern run: `6/6 suites`, `123/123` tests passed
 
 ### Styles
 
@@ -276,6 +312,6 @@ The `client/` directory is the public/marketing Social Tech website, not the Cli
 
 - `adminandemployeePanel/vite.config.ts` and `clientPanel/vite.config.ts` - both include Figma asset resolver behavior.
 - `adminandemployeePanel/src/app/routes.tsx` - Admin and Employee Panel route definitions.
-- `adminandemployeePanel/src/app/contexts/RoleContext.tsx` - Admin/Employee demo auth and RBAC foundation.
+- `adminandemployeePanel/src/app/contexts/RoleContext.tsx` - role compatibility layer; Redux auth state is authoritative.
 - `clientPanel/src/app/App.tsx` - Client Portal navigation state lives here until a router is introduced.
 - `clientPanel/src/app/data/service-pages.ts` - dense mock service content used across portal tabs.

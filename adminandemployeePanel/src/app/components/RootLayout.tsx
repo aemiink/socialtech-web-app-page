@@ -8,7 +8,15 @@ import {
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Avatar, AvatarFallback } from "./ui/avatar";
-import { useRole } from "../contexts/RoleContext";
+import { useAppDispatch, useAppSelector } from "../store/hooks";
+import { useLogoutMutation } from "../features/auth/authApi";
+import { clearAuth } from "../features/auth/authSlice";
+import {
+  selectCurrentUser,
+  selectIsAuthenticated,
+  selectIsBootstrapping,
+} from "../features/auth/authSelectors";
+import { getUserDisplayName, getUserInitials } from "../features/auth/roleMapping";
 
 const menuItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -28,21 +36,48 @@ const menuItems = [
 ];
 
 export function RootLayout() {
+  const dispatch = useAppDispatch();
   const location = useLocation();
   const navigate = useNavigate();
-  const { currentUser, logout } = useRole();
+  const currentUser = useAppSelector(selectCurrentUser);
+  const isAuthenticated = useAppSelector(selectIsAuthenticated);
+  const isBootstrapping = useAppSelector(selectIsBootstrapping);
+  const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
 
-  if (!currentUser) {
+  if (isBootstrapping) {
+    return (
+      <div className="min-h-screen bg-[#131313] text-white flex items-center justify-center p-6">
+        <div className="rounded-xl border border-white/[0.08] bg-[#1A1A1A] px-6 py-4 text-sm text-[#A0A0A0]">
+          Yetki kontrol ediliyor...
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated || !currentUser) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
-  if (currentUser.accountType !== "admin") {
+  if (currentUser.accountType === "EMPLOYEE") {
     return <Navigate to="/employee/dashboard" replace />;
   }
 
-  const handleLogout = () => {
-    logout();
-    navigate("/login", { replace: true });
+  if (currentUser.accountType !== "ADMIN" || currentUser.role !== "ADMIN") {
+    return <Navigate to="/login" replace />;
+  }
+
+  const displayName = getUserDisplayName(currentUser);
+  const initials = getUserInitials(currentUser);
+
+  const handleLogout = async () => {
+    try {
+      await logout().unwrap();
+    } catch {
+      // Local state cleanup is still required even if backend logout fails.
+    } finally {
+      dispatch(clearAuth());
+      navigate("/login", { replace: true });
+    }
   };
 
   return (
@@ -106,6 +141,7 @@ export function RootLayout() {
             <Button
               variant="ghost"
               onClick={handleLogout}
+              disabled={isLoggingOut}
               className="h-9 rounded-lg text-[#A0A0A0] hover:bg-[#1A1A1A] hover:text-white"
             >
               <LogOut className="w-4 h-4" />
@@ -114,11 +150,11 @@ export function RootLayout() {
 
             <div className="flex items-center gap-3 pl-4 border-l border-white/[0.06]">
               <div className="text-right">
-                <p className="text-sm">{currentUser.name}</p>
-                <p className="text-xs text-[#A0A0A0]">{currentUser.title}</p>
+                <p className="text-sm">{displayName}</p>
+                <p className="text-xs text-[#A0A0A0]">Yönetici</p>
               </div>
               <Avatar className="w-9 h-9 bg-[#AAFF01] text-[#131313]">
-                <AvatarFallback>{currentUser.initials}</AvatarFallback>
+                <AvatarFallback>{initials}</AvatarFallback>
               </Avatar>
             </div>
           </div>

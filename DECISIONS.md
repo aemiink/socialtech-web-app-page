@@ -772,6 +772,92 @@ Affected files:
 
 ---
 
+## 2026-04-28 - Admin User Management Audit Logging
+
+Context:
+Admin user lifecycle endpoints were already implemented (`create`, `update`, `deactivate`, `activate`, `reset-password`) but actions were not yet persisted as durable audit trail entries.
+
+Decision:
+Implemented centralized audit write infrastructure for admin user management actions using existing `AuditLog` model (no schema change). Added `AuditLogService` + `AuditLogModule` and integrated admin user mutation flows to write audit entries in the same Prisma transaction as the business mutation.
+
+Audit actions written:
+- `ADMIN_USER_CREATED`
+- `ADMIN_USER_UPDATED`
+- `ADMIN_USER_DEACTIVATED`
+- `ADMIN_USER_ACTIVATED`
+- `ADMIN_USER_PASSWORD_RESET`
+
+Operational behavior:
+- Controller passes request context (`ipAddress`, `userAgent`) to service layer.
+- Audit metadata includes safe fields (`actorUserId`, `targetUserId`, `changedFields`, and where applicable role/status transitions).
+- Sensitive key fragments (`password`, `passwordHash`, `token`, `secret`, `authorization`) are recursively removed before persistence.
+- Forbidden employee/client calls do not create audit rows.
+- Audit failure fails the parent mutation (transactional consistency).
+
+Validation:
+- `npm run prisma:generate` passed
+- `npm run prisma:seed` passed
+- `npm run build` passed
+- `npm run check` passed
+- authz pattern passed: `5/5 suites`, `102/102 tests`
+
+Reason:
+Provides traceability and tamper-resistant operational history for privileged admin user management actions.
+
+Affected files:
+- `server/src/audit-log/audit-log.module.ts`
+- `server/src/audit-log/audit-log.service.ts`
+- `server/src/admin-users/admin-users.module.ts`
+- `server/src/admin-users/admin-users.controller.ts`
+- `server/src/admin-users/admin-users.service.ts`
+- `server/test/admin-users-management-authz.e2e-spec.ts`
+
+---
+
+## 2026-04-28 - Admin Audit Logs Read API
+
+Context:
+Audit log writes were active, but there was no backend read API for admin-side “operation history / audit logs” screens.
+
+Decision:
+Added admin-only audit log read endpoints under `/api/v1/admin/audit-logs` with validation, filtering, pagination, sorting, and metadata sanitization:
+- `GET /api/v1/admin/audit-logs`
+- `GET /api/v1/admin/audit-logs/:id`
+
+Authorization:
+- Route-level: `JwtAuthGuard` + `PermissionsGuard` + `RequirePermissions("audit_logs.read")`
+- Service-level: `AccountType.ADMIN` + `UserRole.ADMIN` + permission assertion
+- No seed/catalog change needed because `audit_logs.read` was already present and mapped for admin role.
+
+Query/response behavior:
+- Pagination: `page` default `1` (min `1`, max `10000`), `limit` default `20` (min `1`, max `100`)
+- Sorting: `sortBy` (`createdAt`, `action`, `entityType`), `sortOrder` (`asc`, `desc`), default `createdAt desc`, stable secondary `id asc`
+- Filters: `action`, `actorUserId`, `targetUserId`, `targetClientProfileId`, `entityType`, `entityId`, `dateFrom`, `dateTo`, `search`
+- `dateFrom > dateTo` => `400`
+- List response: `data + meta` envelope
+- Detail response: single sanitized log row or `404`
+- Metadata is recursively sanitized on read (`password`, `token`, `secret`, `authorization`, `apikey`, `credential`, `cookie` key fragments removed)
+
+Validation:
+- `npm run prisma:generate` passed
+- `npm run prisma:seed` passed
+- `npm run build` passed
+- `npm run check` passed
+- authz pattern passed: `6/6 suites`, `123/123 tests`
+
+Reason:
+Enables secure and filterable admin-facing audit log consumption without exposing sensitive operational data.
+
+Affected files:
+- `server/src/admin-audit-logs/admin-audit-logs.module.ts`
+- `server/src/admin-audit-logs/admin-audit-logs.controller.ts`
+- `server/src/admin-audit-logs/admin-audit-logs.service.ts`
+- `server/src/admin-audit-logs/dto/audit-log-query.dto.ts`
+- `server/src/app.module.ts`
+- `server/test/admin-audit-logs-authz.e2e-spec.ts`
+
+---
+
 ## 2026-04-28 - Admin Users Pagination and Sorting
 
 Context:
@@ -816,3 +902,67 @@ Affected files:
 - `server/src/admin-users/dto/admin-user-query.dto.ts`
 - `server/src/admin-users/admin-users.service.ts`
 - `server/test/admin-users-management-authz.e2e-spec.ts`
+
+---
+
+## 2026-04-29 - Frontend Auth Integration with Redux Toolkit and RTK Query
+
+Context:
+`adminandemployeePanel/` and `clientPanel/` were still using frontend-only/demo auth gates while backend auth endpoints (`/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/me`) were already productionized in `server/`.
+
+Decision:
+Integrated both frontend apps to backend auth using Redux Toolkit + RTK Query.
+- Added shared auth stack in both apps: `@reduxjs/toolkit`, `react-redux`, `redux@5`
+- Implemented Redux auth state + RTK Query `baseApi` with:
+  - `credentials: include`
+  - Bearer token header from Redux memory state
+  - `401 -> refresh -> retry` flow
+  - refresh single-flight lock
+- Access token remains in Redux memory only; refresh token lifecycle remains backend-managed via HttpOnly cookie.
+- `adminandemployeePanel`: `ADMIN` users route to admin shell, `EMPLOYEE` users route to employee shell, `CLIENT` accounts are blocked from this app.
+- `clientPanel`: accepts only `CLIENT` accounts; state-based portal navigation remains intact and service selection restore stays localStorage-backed.
+- `RoleContext` in `adminandemployeePanel` is no longer auth source of truth; Redux auth state is canonical.
+
+Validation:
+- `adminandemployeePanel npm run check` passed
+- `clientPanel npm run check` passed
+- `server npm run build` and `npm run check` passed
+- Runtime manual QA remains a separate validation step.
+
+Reason:
+Aligns both SPAs with the backend auth model while keeping integration incremental and preserving existing UI/navigation structure.
+
+Affected files:
+- `adminandemployeePanel/src/app/store/*`
+- `adminandemployeePanel/src/app/services/baseApi.ts`
+- `adminandemployeePanel/src/app/features/auth/*`
+- `adminandemployeePanel/src/app/pages/Login.tsx`
+- `adminandemployeePanel/src/app/components/RootLayout.tsx`
+- `adminandemployeePanel/src/app/employee/EmployeeLayout.tsx`
+- `adminandemployeePanel/src/main.tsx`
+- `clientPanel/src/app/store/*`
+- `clientPanel/src/app/services/baseApi.ts`
+- `clientPanel/src/app/features/auth/*`
+- `clientPanel/src/app/components/client-login.tsx`
+- `clientPanel/src/app/components/topbar.tsx`
+- `clientPanel/src/app/App.tsx`
+
+---
+
+## 2026-04-29 - Nest Build Incremental Output Fix
+
+Context:
+Backend runtime experienced intermittent `dist` output/module resolution issues during watch/build cycles.
+
+Decision:
+Disabled incremental build for Nest build config via `server/tsconfig.build.json` (`"incremental": false`) to force full deterministic output generation in `dist`.
+
+Validation:
+- `server npm run build` passed
+- `server npm run check` passed
+
+Reason:
+Prioritizes runtime reliability over incremental build speed for current backend development flow.
+
+Affected files:
+- `server/tsconfig.build.json`

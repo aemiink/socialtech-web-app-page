@@ -1,5 +1,7 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router";
+import type { SerializedError } from "@reduxjs/toolkit";
+import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import {
   ArrowRight,
   Briefcase,
@@ -14,75 +16,111 @@ import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import {
-  AccountType,
-  DEMO_PASSWORD,
-  DEMO_USERS,
-  DemoUser,
-  useRole,
-} from "../contexts/RoleContext";
+import { useAppDispatch, useAppSelector } from "../store/hooks";
+import { clearAuth, setAuthError, setCredentials } from "../features/auth/authSlice";
+import { selectCurrentUser, selectIsAuthenticated } from "../features/auth/authSelectors";
+import { useLoginMutation, useLogoutMutation } from "../features/auth/authApi";
+import type { AccountType, UserRole } from "../features/auth/authTypes";
+import { getBackendRoleLabel } from "../features/auth/roleMapping";
 
-const accountTypeLabels: Record<AccountType, string> = {
-  admin: "Admin",
-  employee: "Çalışan",
+type LoginAccountType = Exclude<AccountType, "CLIENT">;
+
+type DemoSeedUser = {
+  email: string;
+  accountType: LoginAccountType;
+  role: UserRole;
 };
 
-const accountTypeDescriptions: Record<AccountType, string> = {
-  admin: "Ajans operasyon, müşteri ve finans yönetimi",
-  employee: "Rol bazlı görev, müşteri ve uzmanlık panelleri",
+const DEMO_PASSWORD = "demo123";
+
+const SEEDED_DEMO_USERS: DemoSeedUser[] = [
+  { email: "admin@socialtech.com", accountType: "ADMIN", role: "ADMIN" },
+  { email: "project@socialtech.com", accountType: "EMPLOYEE", role: "PROJECT_MANAGER" },
+  {
+    email: "performance@socialtech.com",
+    accountType: "EMPLOYEE",
+    role: "PERFORMANCE_SPECIALIST",
+  },
+  {
+    email: "social@socialtech.com",
+    accountType: "EMPLOYEE",
+    role: "SOCIAL_MEDIA_SPECIALIST",
+  },
+  { email: "designer@socialtech.com", accountType: "EMPLOYEE", role: "DESIGNER" },
+  { email: "developer@socialtech.com", accountType: "EMPLOYEE", role: "DEVELOPER" },
+  { email: "support@socialtech.com", accountType: "EMPLOYEE", role: "SUPPORT_SPECIALIST" },
+  { email: "seo@socialtech.com", accountType: "EMPLOYEE", role: "SEO_SPECIALIST" },
+];
+
+const accountTypeLabels: Record<LoginAccountType, string> = {
+  ADMIN: "Admin",
+  EMPLOYEE: "Çalışan",
 };
 
-const roleLabels: Record<DemoUser["role"], string> = {
-  admin: "Admin",
-  "project-manager": "Project Manager",
-  "performance-specialist": "Performance Specialist",
-  "social-media-specialist": "Social Media Specialist",
-  designer: "Designer",
-  developer: "Developer",
-  "support-specialist": "Support Specialist",
-  "seo-specialist": "SEO Specialist",
+const accountTypeDescriptions: Record<LoginAccountType, string> = {
+  ADMIN: "Ajans operasyon, müşteri ve finans yönetimi",
+  EMPLOYEE: "Rol bazlı görev, müşteri ve uzmanlık panelleri",
 };
 
 export function Login() {
-  const { currentUser, login } = useRole();
+  const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const location = useLocation();
-  const [accountType, setAccountType] = useState<AccountType>("admin");
+  const currentUser = useAppSelector(selectCurrentUser);
+  const isAuthenticated = useAppSelector(selectIsAuthenticated);
+  const [login] = useLoginMutation();
+  const [logout, { isLoading: isLogoutLoading }] = useLogoutMutation();
+  const [accountType, setAccountType] = useState<LoginAccountType>("ADMIN");
   const [email, setEmail] = useState("admin@socialtech.com");
   const [password, setPassword] = useState(DEMO_PASSWORD);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const visibleUsers = useMemo(
-    () => DEMO_USERS.filter((user) => user.accountType === accountType),
+    () => SEEDED_DEMO_USERS.filter((user) => user.accountType === accountType),
     [accountType],
   );
 
-  if (currentUser) {
+  useEffect(() => {
+    if (!currentUser || !isAuthenticated || currentUser.accountType !== "CLIENT") {
+      return;
+    }
+
+    void logout()
+      .unwrap()
+      .catch(() => undefined)
+      .finally(() => {
+        dispatch(clearAuth());
+        dispatch(setAuthError(null));
+        setError("Client hesapları bu panelde kullanılamaz. Lütfen Client Portal üzerinden giriş yapın.");
+      });
+  }, [currentUser, dispatch, isAuthenticated, logout]);
+
+  if (currentUser && isAuthenticated && currentUser.accountType !== "CLIENT") {
     return (
       <Navigate
-        to={currentUser.accountType === "admin" ? "/" : "/employee/dashboard"}
+        to={currentUser.accountType === "ADMIN" ? "/" : "/employee/dashboard"}
         replace
       />
     );
   }
 
-  const handleAccountTypeChange = (type: AccountType) => {
-    const firstUser = DEMO_USERS.find((user) => user.accountType === type);
+  const handleAccountTypeChange = (type: LoginAccountType) => {
+    const firstUser = SEEDED_DEMO_USERS.find((user) => user.accountType === type);
     setAccountType(type);
     setEmail(firstUser?.email ?? "");
     setPassword(DEMO_PASSWORD);
     setError(null);
   };
 
-  const handleDemoUserSelect = (user: DemoUser) => {
+  const handleDemoUserSelect = (user: DemoSeedUser) => {
     setAccountType(user.accountType);
     setEmail(user.email);
     setPassword(DEMO_PASSWORD);
     setError(null);
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (!email.trim()) {
@@ -96,15 +134,39 @@ export function Login() {
     }
 
     setIsSubmitting(true);
-    const result = login(email, password);
-    setIsSubmitting(false);
+    setError(null);
 
-    if (!result.success) {
-      setError(result.message);
-      return;
+    try {
+      const normalizedEmail = email.trim().toLowerCase();
+      const result = await login({ email: normalizedEmail, password }).unwrap();
+
+      if (result.user.accountType === "CLIENT") {
+        await logout().unwrap().catch(() => undefined);
+        dispatch(clearAuth());
+        setError("Client hesapları bu panelde kullanılamaz. Lütfen Client Portal üzerinden giriş yapın.");
+        return;
+      }
+
+      if (result.user.accountType !== "ADMIN" && result.user.accountType !== "EMPLOYEE") {
+        dispatch(clearAuth());
+        setError("Bu hesap tipi Admin + Employee panelinde desteklenmiyor.");
+        return;
+      }
+
+      dispatch(
+        setCredentials({
+          accessToken: result.accessToken,
+          currentUser: result.user,
+        }),
+      );
+      dispatch(setAuthError(null));
+      navigate(getRedirectPath(result.user.accountType, location.state), { replace: true });
+    } catch (apiError) {
+      dispatch(clearAuth());
+      setError(getAuthErrorMessage(apiError));
+    } finally {
+      setIsSubmitting(false);
     }
-
-    navigate(getRedirectPath(result.user.accountType, location.state), { replace: true });
   };
 
   return (
@@ -116,22 +178,22 @@ export function Login() {
               ST
             </div>
             <Badge className="mb-5 border-[#AAFF01]/20 bg-[#AAFF01]/10 text-[#AAFF01]">
-              Demo güvenli erişim
+              Güvenli panel erişimi
             </Badge>
             <h1 className="mb-4 text-4xl font-semibold leading-tight">
               Social Tech operasyon panellerine tek giriş.
             </h1>
             <p className="max-w-md text-sm leading-6 text-[#A0A0A0]">
-              Admin ve çalışan ekipleri aynı premium giriş deneyiminden geçer;
-              yetki ve rol demo kullanıcı e-postasına göre atanır.
+              Admin ve çalışan ekipleri aynı premium giriş deneyiminden geçer; erişim
+              backend auth + role yetkisine göre belirlenir.
             </p>
           </div>
 
           <div className="grid gap-3">
             {[
-              "Admin paneli artık login olmadan açılmaz.",
-              "Çalışan rolleri demo kullanıcı hesabından atanır.",
-              "Bu akış frontend demo state kullanır; gerçek auth değildir.",
+              "Admin paneli login olmadan açılmaz.",
+              "Çalışan menüleri backend rol bilgisine göre şekillenir.",
+              "Oturum yenileme HttpOnly refresh cookie ile yapılır.",
             ].map((item) => (
               <div key={item} className="flex items-center gap-3 text-sm text-[#A0A0A0]">
                 <CheckCircle2 className="h-4 w-4 text-[#AAFF01]" />
@@ -150,15 +212,15 @@ export function Login() {
               <div>
                 <h1 className="text-2xl font-semibold">Social Tech Panel Girişi</h1>
                 <p className="text-sm text-[#A0A0A0]">
-                  Demo bilgilerinizle panel erişimini başlatın.
+                  Seed kullanıcılar veya kendi backend hesabınızla giriş yapın.
                 </p>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-2 rounded-xl border border-white/[0.08] bg-[#131313] p-1">
-              {(["admin", "employee"] as const).map((type) => {
+              {(["ADMIN", "EMPLOYEE"] as const).map((type) => {
                 const isActive = accountType === type;
-                const Icon = type === "admin" ? ShieldCheck : UserCheck;
+                const Icon = type === "ADMIN" ? ShieldCheck : UserCheck;
 
                 return (
                   <button
@@ -231,7 +293,7 @@ export function Login() {
 
             <Button
               type="submit"
-              disabled={isSubmitting || !email.trim() || !password.trim()}
+              disabled={isSubmitting || isLogoutLoading || !email.trim() || !password.trim()}
               className="h-12 w-full rounded-xl bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
             >
               {isSubmitting ? "Giriş yapılıyor..." : "Panele Giriş Yap"}
@@ -242,7 +304,7 @@ export function Login() {
           <div className="mt-6 rounded-xl border border-white/[0.08] bg-[#202020] p-4">
             <div className="mb-3 flex items-center justify-between gap-3">
               <Badge className="border-[#AAFF01]/20 bg-[#AAFF01]/10 text-[#AAFF01]">
-                Demo erişim
+                Seed demo erişim
               </Badge>
               <span className="text-xs text-[#A0A0A0]">Şifre: {DEMO_PASSWORD}</span>
             </div>
@@ -261,7 +323,7 @@ export function Login() {
                   <span className="min-w-0">
                     <span className="block truncate text-sm text-white">{user.email}</span>
                     <span className="block text-xs text-[#A0A0A0]">
-                      {roleLabels[user.role]}
+                      {getBackendRoleLabel(user.role)}
                     </span>
                   </span>
                   <Briefcase className="h-4 w-4 flex-shrink-0 text-[#AAFF01]" />
@@ -275,17 +337,17 @@ export function Login() {
   );
 }
 
-function getRedirectPath(accountType: AccountType, locationState: unknown) {
-  const fallback = accountType === "admin" ? "/" : "/employee/dashboard";
+function getRedirectPath(accountType: LoginAccountType, locationState: unknown) {
+  const fallback = accountType === "ADMIN" ? "/" : "/employee/dashboard";
 
   if (!isRedirectState(locationState)) return fallback;
 
   const from = locationState.from;
-  if (accountType === "admin" && !from.startsWith("/employee") && from !== "/login") {
+  if (accountType === "ADMIN" && !from.startsWith("/employee") && from !== "/login") {
     return from;
   }
 
-  if (accountType === "employee" && from.startsWith("/employee") && from !== "/employee/login") {
+  if (accountType === "EMPLOYEE" && from.startsWith("/employee") && from !== "/employee/login") {
     return from;
   }
 
@@ -299,4 +361,71 @@ function isRedirectState(value: unknown): value is { from: string } {
     "from" in value &&
     typeof (value as { from?: unknown }).from === "string"
   );
+}
+
+function getAuthErrorMessage(error: unknown): string {
+  if (isFetchBaseQueryError(error)) {
+    const message = extractMessageFromErrorData(error.data);
+    if (message) {
+      return message;
+    }
+
+    if (error.status === 401) {
+      return "E-posta veya şifre hatalı.";
+    }
+
+    if (error.status === 403) {
+      return "Hesabınız pasif durumda. Yöneticinizle iletişime geçin.";
+    }
+  }
+
+  if (isSerializedError(error) && typeof error.message === "string" && error.message.length > 0) {
+    return error.message;
+  }
+
+  return "Giriş sırasında bir hata oluştu. Lütfen tekrar deneyin.";
+}
+
+function isFetchBaseQueryError(error: unknown): error is FetchBaseQueryError {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "status" in error &&
+    typeof (error as { status?: unknown }).status !== "undefined"
+  );
+}
+
+function isSerializedError(error: unknown): error is SerializedError {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    ("message" in error || "code" in error || "name" in error)
+  );
+}
+
+function extractMessageFromErrorData(data: unknown): string | null {
+  if (typeof data === "string" && data.length > 0) {
+    return data;
+  }
+
+  if (typeof data !== "object" || data === null) {
+    return null;
+  }
+
+  const candidate = data as { message?: unknown };
+  if (typeof candidate.message === "string" && candidate.message.length > 0) {
+    return candidate.message;
+  }
+
+  if (Array.isArray(candidate.message)) {
+    const textMessages = candidate.message.filter(
+      (value): value is string => typeof value === "string" && value.length > 0,
+    );
+
+    if (textMessages.length > 0) {
+      return textMessages.join(", ");
+    }
+  }
+
+  return null;
 }
