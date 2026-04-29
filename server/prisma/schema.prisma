@@ -31,6 +31,12 @@ enum UserStatus {
   INACTIVE
 }
 
+enum ClientStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
 enum EmployeeClientAssignmentScope {
   PROJECT
   PERFORMANCE
@@ -87,18 +93,18 @@ model RolePermission {
 }
 
 model User {
-  id              String      @id @default(uuid()) @db.Uuid
-  email           String      @unique
-  displayName     String?
-  passwordHash    String
-  accountType     AccountType
-  role            UserRole
-  clientProfileId String?     @db.Uuid
-  status          UserStatus  @default(ACTIVE)
+  id                   String      @id @default(uuid()) @db.Uuid
+  email                String      @unique
+  displayName          String?
+  passwordHash         String
+  accountType          AccountType
+  role                 UserRole
+  clientProfileId      String?     @db.Uuid
+  status               UserStatus  @default(ACTIVE)
   sessionInvalidatedAt DateTime?
-  lastLoginAt     DateTime?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  lastLoginAt          DateTime?
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
 
   refreshTokens             RefreshToken[]
   clientProfile             ClientProfile?             @relation(fields: [clientProfileId], references: [id], onDelete: SetNull)
@@ -128,16 +134,19 @@ model RefreshToken {
 }
 
 model ClientProfile {
-  id           String   @id @default(uuid()) @db.Uuid
-  slug         String   @unique
+  id           String       @id @default(uuid()) @db.Uuid
+  slug         String       @unique
   companyName  String
   contactEmail String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  status       ClientStatus @default(ACTIVE)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
   users               User[]
   employeeAssignments EmployeeClientAssignment[]
   projects            Project[]
+
+  @@index([status])
 }
 
 model Project {

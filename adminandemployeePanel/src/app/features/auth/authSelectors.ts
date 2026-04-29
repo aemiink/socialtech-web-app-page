@@ -1,5 +1,6 @@
 import { mapBackendRoleToEmployeeRole } from "./roleMapping";
 import type { RootState } from "../../store/store";
+import type { AuthUserProfile } from "./authTypes";
 
 export const selectAuthState = (state: RootState) => state.auth;
 export const selectAccessToken = (state: RootState) => state.auth.accessToken;
@@ -16,3 +17,14 @@ export const selectCurrentEmployeeRole = (state: RootState) => {
 
   return mapBackendRoleToEmployeeRole(user.role);
 };
+
+export function hasAdminPermission(
+  user: AuthUserProfile | null,
+  permissions: readonly string[],
+): boolean {
+  if (!user || user.accountType !== "ADMIN" || user.role !== "ADMIN") {
+    return false;
+  }
+
+  return permissions.some((permission) => user.permissions.includes(permission));
+}

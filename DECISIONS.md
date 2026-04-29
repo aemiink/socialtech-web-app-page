@@ -966,3 +966,76 @@ Prioritizes runtime reliability over incremental build speed for current backend
 
 Affected files:
 - `server/tsconfig.build.json`
+
+---
+
+## 2026-04-30 - Admin Summary Endpoint and Client List Server-Side Query Contract
+
+Context:
+Admin dashboard KPIs were being derived from multiple list endpoints, increasing frontend request cost and coupling. `GET /api/v1/clients` also lacked a unified server-side pagination/filter/sort contract for growing datasets.
+
+Decision:
+Implemented two backend contract changes:
+1. Added dedicated admin KPI endpoint:
+   - `GET /api/v1/admin/summary`
+   - admin-only (`JwtAuthGuard` + `PermissionsGuard` + `RequirePermissions("admin.summary.read")`)
+   - service-level `ADMIN` account/role + permission enforcement
+   - count/aggregate style response for users, clients, projects, tasks, audit logs
+2. Standardized `GET /api/v1/clients` to server-side query + envelope response:
+   - query: `page`, `limit`, `sortBy`, `sortOrder`, `status`, `search`
+   - validated and whitelist-mapped sorting
+   - response shape: `data[] + meta`
+   - role/object-scope behavior preserved for admin/employee/client
+
+Reason:
+Reduces dashboard integration overhead, improves API consistency for frontend pagination/filter UX, and keeps authorization guarantees intact.
+
+Affected files:
+- `server/src/admin-summary/admin-summary.module.ts`
+- `server/src/admin-summary/admin-summary.controller.ts`
+- `server/src/admin-summary/admin-summary.service.ts`
+- `server/src/clients/dto/client-query.dto.ts`
+- `server/src/clients/clients.controller.ts`
+- `server/src/clients/clients.service.ts`
+- `server/src/app.module.ts`
+- `server/prisma/schema.prisma`
+- `server/prisma/seed.ts`
+- `server/prisma/migrations/20260430000000_add_client_profile_status/migration.sql`
+- `server/test/authz.e2e-spec.ts`
+
+---
+
+## 2026-04-30 - Admin Panel Dashboard/Clients/ClientDetail Backend Integration and Test Hardening
+
+Context:
+`adminandemployeePanel` auth integration was complete, but dashboard KPIs and some domain pages still needed stronger backend-driven contracts and resilient test coverage.
+
+Decision:
+Connected core admin pages fully to backend API contracts using existing Redux Toolkit + RTK Query architecture:
+- Dashboard now consumes `GET /admin/summary` via dedicated feature slice (`dashboardApi`).
+- Clients list now consumes server-side paginated/filterable/sortable `GET /clients` envelope.
+- Client detail now includes related projects/tasks overview via existing projects/tasks query filters.
+- Strengthened frontend test coverage and resiliency:
+  - Dashboard and ClientDetail backend-state tests
+  - Projects/Tasks permission-path checks
+  - Combobox interactions moved to label/ARIA-oriented selectors for lower brittleness.
+
+Reason:
+Improves runtime performance and maintainability, removes dependency on multi-list KPI derivation, and increases confidence in permission-aware UI behavior.
+
+Affected files:
+- `adminandemployeePanel/src/app/services/baseApi.ts`
+- `adminandemployeePanel/src/app/features/dashboard/*`
+- `adminandemployeePanel/src/app/features/clients/*`
+- `adminandemployeePanel/src/app/features/projects/*`
+- `adminandemployeePanel/src/app/features/tasks/*`
+- `adminandemployeePanel/src/app/pages/Dashboard.tsx`
+- `adminandemployeePanel/src/app/pages/Clients.tsx`
+- `adminandemployeePanel/src/app/pages/ClientDetail.tsx`
+- `adminandemployeePanel/src/app/pages/Projects.tsx`
+- `adminandemployeePanel/src/app/pages/ProjectDetail.tsx`
+- `adminandemployeePanel/src/app/pages/Tasks.tsx`
+- `adminandemployeePanel/src/app/pages/TaskDetail.tsx`
+- `adminandemployeePanel/src/app/pages/EmployeeDetail.test.tsx`
+- `adminandemployeePanel/src/app/pages/AuditLogs.test.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/*`

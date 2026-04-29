@@ -1,7 +1,15 @@
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Test, TestingModule } from "@nestjs/testing";
-import { EmployeeClientAssignmentScope, PrismaClient } from "@prisma/client";
+import {
+  ClientStatus,
+  EmployeeClientAssignmentScope,
+  Priority,
+  PrismaClient,
+  ProjectStatus,
+  TaskStatus,
+  UserRole,
+} from "@prisma/client";
 import { randomUUID } from "crypto";
 import cookieParser from "cookie-parser";
 import * as bcrypt from "bcryptjs";
@@ -11,6 +19,7 @@ import { GlobalExceptionFilter } from "../src/common/filters/global-exception.fi
 import { createCorsOptions } from "../src/config/cors.config";
 
 const ASSIGNMENT_BASE_PATH = "/api/v1/admin/assignments";
+const ADMIN_SUMMARY_READ_PERMISSION = "admin.summary.read";
 
 type LoginBody = {
   accessToken: string;
@@ -27,6 +36,114 @@ type UserListItem = {
 type ClientListItem = {
   id: string;
   slug: string;
+  companyName: string;
+  status: ClientStatus;
+};
+
+type PaginatedResponse<T> = {
+  data: T[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+  };
+};
+
+type AdminSummaryResponse = {
+  users: {
+    total: number;
+    active: number;
+    inactive: number;
+    employees: number;
+    clients: number;
+    admins: number;
+  };
+  clients: {
+    total: number;
+    active: number;
+    inactive: number;
+    suspended: number;
+  };
+  projects: {
+    total: number;
+    planned: number;
+    inProgress: number;
+    review: number;
+    completed: number;
+    onHold: number;
+  };
+  tasks: {
+    total: number;
+    unassigned: number;
+    todo: number;
+    inProgress: number;
+    review: number;
+    done: number;
+    blocked: number;
+  };
+  auditLogs: {
+    total: number;
+    last24Hours: number;
+    lastActionAt: string | null;
+  };
+  meta: {
+    generatedAt: string;
+    resourceCount: number;
+  };
+};
+
+type RecentProjectSummary = {
+  id: string;
+  name: string;
+  status: ProjectStatus;
+  priority: Priority;
+  dueDate: string | null;
+  updatedAt: string;
+};
+
+type RecentTaskSummary = {
+  id: string;
+  title: string;
+  status: TaskStatus;
+  priority: Priority;
+  dueDate: string | null;
+  updatedAt: string;
+  projectId: string;
+};
+
+type ClientSummaryResponse = {
+  client: {
+    id: string;
+    name: string;
+    slug: string;
+    status: ClientStatus;
+    createdAt: string;
+    updatedAt: string;
+  };
+  projects: {
+    total: number;
+    planned: number;
+    inProgress: number;
+    review: number;
+    completed: number;
+    onHold: number;
+    recent: RecentProjectSummary[];
+  };
+  tasks: {
+    total: number;
+    todo: number;
+    inProgress: number;
+    review: number;
+    done: number;
+    blocked: number;
+    recent: RecentTaskSummary[];
+  };
+  meta: {
+    generatedAt: string;
+  };
 };
 
 type AssignmentListItem = {
@@ -95,13 +212,14 @@ describe("Authorization Matrix (e2e)", () => {
       },
       data: { passwordHash: deterministicPasswordHash },
     });
+    await ensureAdminSummaryPermission();
 
     adminToken = await loginWithDemoUser("admin@socialtech.com");
     employeeToken = await loginWithDemoUser("performance@socialtech.com");
     clientToken = await loginWithDemoUser("client@socialtech.com");
 
     const clientProfiles = await prisma.clientProfile.findMany({
-      select: { id: true },
+      select: { id: true, slug: true },
       orderBy: { companyName: "asc" },
     });
     allClientIds = clientProfiles.map((item) => item.id);
@@ -199,14 +317,129 @@ describe("Authorization Matrix (e2e)", () => {
       .expect(403);
   });
 
-  it("admin tüm clients listesini görebilir", async () => {
+  it("admin summary endpointini görebilir", async () => {
+    const response = await request(app.getHttpServer())
+      .get("/api/v1/admin/summary")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    const summary = response.body as AdminSummaryResponse;
+    expect(summary).toEqual(
+      expect.objectContaining({
+        users: expect.objectContaining({
+          total: expect.any(Number),
+          active: expect.any(Number),
+          inactive: expect.any(Number),
+          employees: expect.any(Number),
+          clients: expect.any(Number),
+          admins: expect.any(Number),
+        }),
+        clients: expect.objectContaining({
+          total: expect.any(Number),
+          active: expect.any(Number),
+          inactive: expect.any(Number),
+          suspended: expect.any(Number),
+        }),
+        projects: expect.objectContaining({
+          total: expect.any(Number),
+          planned: expect.any(Number),
+          inProgress: expect.any(Number),
+          review: expect.any(Number),
+          completed: expect.any(Number),
+          onHold: expect.any(Number),
+        }),
+        tasks: expect.objectContaining({
+          total: expect.any(Number),
+          unassigned: expect.any(Number),
+          todo: expect.any(Number),
+          inProgress: expect.any(Number),
+          review: expect.any(Number),
+          done: expect.any(Number),
+          blocked: expect.any(Number),
+        }),
+        auditLogs: expect.objectContaining({
+          total: expect.any(Number),
+          last24Hours: expect.any(Number),
+        }),
+        meta: expect.objectContaining({
+          generatedAt: expect.any(String),
+          resourceCount: expect.any(Number),
+        }),
+      }),
+    );
+    expect(
+      summary.auditLogs.lastActionAt === null ||
+        typeof summary.auditLogs.lastActionAt === "string",
+    ).toBe(true);
+    expect(JSON.stringify(summary)).not.toMatch(/password|token|secret|hash/i);
+  });
+
+  it("admin summary permission kaldırılırsa route-level guard 403 döner", async () => {
+    await removeRolePermission(UserRole.ADMIN, ADMIN_SUMMARY_READ_PERMISSION);
+
+    try {
+      const response = await request(app.getHttpServer())
+        .get("/api/v1/admin/summary")
+        .set("Authorization", `Bearer ${adminToken}`)
+        .expect(403);
+
+      expectApiError(response.body, /permission/i);
+    } finally {
+      await ensureRolePermission(UserRole.ADMIN, ADMIN_SUMMARY_READ_PERMISSION);
+    }
+  });
+
+  it("employee summary endpointini göremez", async () => {
+    await request(app.getHttpServer())
+      .get("/api/v1/admin/summary")
+      .set("Authorization", `Bearer ${employeeToken}`)
+      .expect(403);
+  });
+
+  it("employee geçici izne sahip olsa bile service-level admin check ile summary göremez", async () => {
+    await ensureRolePermission(UserRole.PERFORMANCE_SPECIALIST, ADMIN_SUMMARY_READ_PERMISSION);
+
+    try {
+      const response = await request(app.getHttpServer())
+        .get("/api/v1/admin/summary")
+        .set("Authorization", `Bearer ${employeeToken}`)
+        .expect(403);
+
+      expectApiError(response.body, /Only admin users|admin summary/i);
+    } finally {
+      await removeRolePermission(UserRole.PERFORMANCE_SPECIALIST, ADMIN_SUMMARY_READ_PERMISSION);
+    }
+  });
+
+  it("client summary endpointini göremez", async () => {
+    await request(app.getHttpServer())
+      .get("/api/v1/admin/summary")
+      .set("Authorization", `Bearer ${clientToken}`)
+      .expect(403);
+  });
+
+  it("unauthenticated summary endpointi 401 döner", async () => {
+    await request(app.getHttpServer()).get("/api/v1/admin/summary").expect(401);
+  });
+
+  it("admin tüm clients listesini meta/data envelope ile görebilir", async () => {
     const response = await request(app.getHttpServer())
       .get("/api/v1/clients")
       .set("Authorization", `Bearer ${adminToken}`)
       .expect(200);
 
-    const clients = response.body as ClientListItem[];
-    const returnedIds = clients.map((client) => client.id).sort();
+    const clientsResponse = response.body as PaginatedResponse<ClientListItem>;
+    expect(clientsResponse.meta).toEqual(
+      expect.objectContaining({
+        page: 1,
+        limit: 20,
+        total: expect.any(Number),
+        totalPages: expect.any(Number),
+        hasNextPage: expect.any(Boolean),
+        hasPreviousPage: expect.any(Boolean),
+      }),
+    );
+    const returnedIds = clientsResponse.data.map((client) => client.id).sort();
     const expectedIds = [...allClientIds].sort();
     expect(returnedIds).toEqual(expectedIds);
   });
@@ -221,6 +454,54 @@ describe("Authorization Matrix (e2e)", () => {
     expect(ownProfile.id).toBe(clientOwnProfileId);
   });
 
+  it("client clients list sadece kendi profilini envelope içinde görür", async () => {
+    const response = await request(app.getHttpServer())
+      .get("/api/v1/clients")
+      .set("Authorization", `Bearer ${clientToken}`)
+      .expect(200);
+
+    const clientsResponse = response.body as PaginatedResponse<ClientListItem>;
+    expect(clientsResponse.data.map((client) => client.id)).toEqual([clientOwnProfileId]);
+    expect(clientsResponse.meta.total).toBe(1);
+  });
+
+  it("admin client summary endpointini görebilir", async () => {
+    const response = await request(app.getHttpServer())
+      .get(`/api/v1/clients/${employeeAssignedClientId}/summary`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    const summary = response.body as ClientSummaryResponse;
+    expectClientSummaryShape(summary, employeeAssignedClientId);
+    await expectClientSummaryMatchesClientScope(summary, employeeAssignedClientId);
+  });
+
+  it("admin client summary için tasks.read.any permission yoksa 403 alır", async () => {
+    await removeRolePermission(UserRole.ADMIN, "tasks.read.any");
+
+    try {
+      const response = await request(app.getHttpServer())
+        .get(`/api/v1/clients/${employeeAssignedClientId}/summary`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .expect(403);
+
+      expectApiError(response.body, /tasks\.read\.any|permission/i);
+    } finally {
+      await ensureRolePermission(UserRole.ADMIN, "tasks.read.any");
+    }
+  });
+
+  it("client kendi client summary endpointini görebilir", async () => {
+    const response = await request(app.getHttpServer())
+      .get(`/api/v1/clients/${clientOwnProfileId}/summary`)
+      .set("Authorization", `Bearer ${clientToken}`)
+      .expect(200);
+
+    const summary = response.body as ClientSummaryResponse;
+    expectClientSummaryShape(summary, clientOwnProfileId);
+    await expectClientSummaryMatchesClientScope(summary, clientOwnProfileId);
+  });
+
   it("client başka client id'ye erişemez", async () => {
     const otherClientId = allClientIds.find((clientId) => clientId !== clientOwnProfileId);
     expect(otherClientId).toBeDefined();
@@ -231,16 +512,150 @@ describe("Authorization Matrix (e2e)", () => {
       .expect(403);
   });
 
+  it("client başka client summary id'ye erişemez", async () => {
+    const otherClientId = allClientIds.find((clientId) => clientId !== clientOwnProfileId);
+    expect(otherClientId).toBeDefined();
+
+    const response = await request(app.getHttpServer())
+      .get(`/api/v1/clients/${otherClientId as string}/summary`)
+      .set("Authorization", `Bearer ${clientToken}`)
+      .expect(403);
+
+    expect(response.body).not.toHaveProperty("client");
+    expect(response.body).not.toHaveProperty("projects");
+    expect(response.body).not.toHaveProperty("tasks");
+  });
+
   it("employee sadece assigned clients list görebilir", async () => {
     const response = await request(app.getHttpServer())
       .get("/api/v1/clients")
       .set("Authorization", `Bearer ${employeeToken}`)
       .expect(200);
 
-    const clients = response.body as ClientListItem[];
-    const returnedIds = clients.map((client) => client.id).sort();
+    const clientsResponse = response.body as PaginatedResponse<ClientListItem>;
+    const returnedIds = clientsResponse.data.map((client) => client.id).sort();
     const expectedIds = [...employeeAssignedClientIds].sort();
     expect(returnedIds).toEqual(expectedIds);
+  });
+
+  it("employee assigned client summary görebilir", async () => {
+    const response = await request(app.getHttpServer())
+      .get(`/api/v1/clients/${employeeAssignedClientId}/summary`)
+      .set("Authorization", `Bearer ${employeeToken}`)
+      .expect(200);
+
+    const summary = response.body as ClientSummaryResponse;
+    expectClientSummaryShape(summary, employeeAssignedClientId);
+    await expectClientSummaryMatchesClientScope(summary, employeeAssignedClientId);
+  });
+
+  it("employee unassigned client summary için güvenli 404/403 alır", async () => {
+    const response = await request(app.getHttpServer())
+      .get(`/api/v1/clients/${employeeUnassignedClientId}/summary`)
+      .set("Authorization", `Bearer ${employeeToken}`);
+
+    expect([403, 404]).toContain(response.status);
+    expect(response.body).not.toHaveProperty("client");
+    expect(response.body).not.toHaveProperty("projects");
+    expect(response.body).not.toHaveProperty("tasks");
+  });
+
+  it("admin clients pagination çalışır", async () => {
+    const response = await request(app.getHttpServer())
+      .get("/api/v1/clients?page=1&limit=2")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    const clientsResponse = response.body as PaginatedResponse<ClientListItem>;
+    expect(clientsResponse.meta.page).toBe(1);
+    expect(clientsResponse.meta.limit).toBe(2);
+    expect(clientsResponse.data.length).toBeLessThanOrEqual(2);
+  });
+
+  it("admin clients sort çalışır", async () => {
+    const response = await request(app.getHttpServer())
+      .get("/api/v1/clients?sortBy=slug&sortOrder=asc&limit=100")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    const clientsResponse = response.body as PaginatedResponse<ClientListItem>;
+    const slugs = clientsResponse.data.map((client) => client.slug);
+    expect(slugs).toEqual([...slugs].sort((first, second) => first.localeCompare(second)));
+  });
+
+  it("admin clients invalid page için 400 alır", async () => {
+    const response = await request(app.getHttpServer())
+      .get("/api/v1/clients?page=0")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(400);
+
+    expectApiError(response.body, /page/i);
+  });
+
+  it("admin clients invalid limit için 400 alır", async () => {
+    const response = await request(app.getHttpServer())
+      .get("/api/v1/clients?limit=101")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(400);
+
+    expectApiError(response.body, /limit/i);
+  });
+
+  it("admin clients invalid sortBy için 400 alır", async () => {
+    const response = await request(app.getHttpServer())
+      .get("/api/v1/clients?sortBy=invalid")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(400);
+
+    expectApiError(response.body, /sortBy/i);
+  });
+
+  it("admin clients invalid sortOrder için 400 alır", async () => {
+    const response = await request(app.getHttpServer())
+      .get("/api/v1/clients?sortOrder=sideways")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(400);
+
+    expectApiError(response.body, /sortOrder/i);
+  });
+
+  it("admin clients invalid status için 400 alır", async () => {
+    const response = await request(app.getHttpServer())
+      .get("/api/v1/clients?status=ARCHIVED")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(400);
+
+    expectApiError(response.body, /status/i);
+  });
+
+  it("admin clients status filter çalışır", async () => {
+    const response = await request(app.getHttpServer())
+      .get(`/api/v1/clients?status=${ClientStatus.INACTIVE}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    const clientsResponse = response.body as PaginatedResponse<ClientListItem>;
+    expect(clientsResponse.data.length).toBeGreaterThan(0);
+    expect(clientsResponse.data.every((client) => client.status === ClientStatus.INACTIVE)).toBe(
+      true,
+    );
+  });
+
+  it("admin clients search filter çalışır", async () => {
+    const response = await request(app.getHttpServer())
+      .get("/api/v1/clients?search=nova")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    const clientsResponse = response.body as PaginatedResponse<ClientListItem>;
+    expect(clientsResponse.data.length).toBeGreaterThan(0);
+    expect(
+      clientsResponse.data.every(
+        (client) =>
+          client.companyName.toLowerCase().includes("nova") ||
+          client.slug.toLowerCase().includes("nova"),
+      ),
+    ).toBe(true);
   });
 
   it("employee assigned client detail görebilir", async () => {
@@ -260,8 +675,35 @@ describe("Authorization Matrix (e2e)", () => {
       .expect(404);
   });
 
+  it("client summary recent alanlarında cross-tenant veri sızdırmaz", async () => {
+    const response = await request(app.getHttpServer())
+      .get(`/api/v1/clients/${employeeAssignedClientId}/summary`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    const summary = response.body as ClientSummaryResponse;
+    const projectIds = await prisma.project.findMany({
+      where: { clientProfileId: employeeAssignedClientId },
+      select: { id: true },
+    });
+    const allowedProjectIds = new Set(projectIds.map((project) => project.id));
+
+    expect(
+      summary.projects.recent.every((project) => allowedProjectIds.has(project.id)),
+    ).toBe(true);
+    expect(summary.tasks.recent.every((task) => allowedProjectIds.has(task.projectId))).toBe(
+      true,
+    );
+  });
+
   it("unauthenticated request 401 alır", async () => {
     await request(app.getHttpServer()).get("/api/v1/clients").expect(401);
+  });
+
+  it("unauthenticated client summary request 401 alır", async () => {
+    await request(app.getHttpServer())
+      .get(`/api/v1/clients/${employeeAssignedClientId}/summary`)
+      .expect(401);
   });
 
   it("admin assignments list görebilir", async () => {
@@ -561,6 +1003,50 @@ describe("Authorization Matrix (e2e)", () => {
     return body.accessToken;
   }
 
+  async function ensureAdminSummaryPermission(): Promise<void> {
+    await ensureRolePermission(UserRole.ADMIN, ADMIN_SUMMARY_READ_PERMISSION);
+  }
+
+  async function ensureRolePermission(role: UserRole, permissionSlug: string): Promise<void> {
+    const permissionId = await ensurePermission(permissionSlug);
+    await prisma.rolePermission.createMany({
+      data: [{ role, permissionId }],
+      skipDuplicates: true,
+    });
+  }
+
+  async function removeRolePermission(role: UserRole, permissionSlug: string): Promise<void> {
+    const permission = await prisma.permission.findUnique({
+      where: { slug: permissionSlug },
+      select: { id: true },
+    });
+
+    if (!permission) {
+      return;
+    }
+
+    await prisma.rolePermission.deleteMany({
+      where: {
+        role,
+        permissionId: permission.id,
+      },
+    });
+  }
+
+  async function ensurePermission(permissionSlug: string): Promise<string> {
+    const permission = await prisma.permission.upsert({
+      where: { slug: permissionSlug },
+      update: {},
+      create: {
+        slug: permissionSlug,
+        description: "Read admin summary counts.",
+      },
+      select: { id: true },
+    });
+
+    return permission.id;
+  }
+
   function getCreatedAssignmentId(): string {
     if (!createdAssignmentId) {
       throw new Error("Expected assignment creation test to run before mutation checks.");
@@ -601,6 +1087,218 @@ describe("Authorization Matrix (e2e)", () => {
     }
 
     throw new Error(`Unexpected status while ensuring assignment creation: ${response.status}`);
+  }
+
+  function expectClientSummaryShape(
+    summary: ClientSummaryResponse,
+    expectedClientId: string,
+  ): void {
+    expect(summary.client).toEqual(
+      expect.objectContaining({
+        id: expectedClientId,
+        name: expect.any(String),
+        slug: expect.any(String),
+        status: expect.any(String),
+        createdAt: expect.any(String),
+        updatedAt: expect.any(String),
+      }),
+    );
+    expect(Object.values(ClientStatus)).toContain(summary.client.status);
+    expectValidIsoDate(summary.client.createdAt);
+    expectValidIsoDate(summary.client.updatedAt);
+
+    expect(summary.projects.recent.length).toBeLessThanOrEqual(5);
+    expectNonNegativeCount(summary.projects.total);
+    expectNonNegativeCount(summary.projects.planned);
+    expectNonNegativeCount(summary.projects.inProgress);
+    expectNonNegativeCount(summary.projects.review);
+    expectNonNegativeCount(summary.projects.completed);
+    expectNonNegativeCount(summary.projects.onHold);
+
+    expect(summary.tasks.recent.length).toBeLessThanOrEqual(5);
+    expectNonNegativeCount(summary.tasks.total);
+    expectNonNegativeCount(summary.tasks.todo);
+    expectNonNegativeCount(summary.tasks.inProgress);
+    expectNonNegativeCount(summary.tasks.review);
+    expectNonNegativeCount(summary.tasks.done);
+    expectNonNegativeCount(summary.tasks.blocked);
+
+    expect(summary.meta).toEqual(
+      expect.objectContaining({
+        generatedAt: expect.any(String),
+      }),
+    );
+    expectValidIsoDate(summary.meta.generatedAt);
+    expect(JSON.stringify(summary)).not.toMatch(
+      /password|token|secret|hash|contactEmail|description|assignee/i,
+    );
+  }
+
+  async function expectClientSummaryMatchesClientScope(
+    summary: ClientSummaryResponse,
+    clientProfileId: string,
+  ): Promise<void> {
+    const [
+      clientProfile,
+      projectTotal,
+      projectPlanned,
+      projectInProgress,
+      projectReview,
+      projectCompleted,
+      projectOnHold,
+      taskTotal,
+      taskTodo,
+      taskInProgress,
+      taskReview,
+      taskDone,
+      taskBlocked,
+      recentProjects,
+      recentTasks,
+    ] =
+      await prisma.$transaction([
+        prisma.clientProfile.findUnique({
+          where: { id: clientProfileId },
+          select: {
+            id: true,
+            slug: true,
+            companyName: true,
+            status: true,
+          },
+        }),
+        prisma.project.count({
+          where: { clientProfileId },
+        }),
+        prisma.project.count({
+          where: { clientProfileId, status: ProjectStatus.PLANNED },
+        }),
+        prisma.project.count({
+          where: { clientProfileId, status: ProjectStatus.IN_PROGRESS },
+        }),
+        prisma.project.count({
+          where: { clientProfileId, status: ProjectStatus.REVIEW },
+        }),
+        prisma.project.count({
+          where: { clientProfileId, status: ProjectStatus.COMPLETED },
+        }),
+        prisma.project.count({
+          where: { clientProfileId, status: ProjectStatus.ON_HOLD },
+        }),
+        prisma.task.count({
+          where: {
+            project: {
+              clientProfileId,
+            },
+          },
+        }),
+        prisma.task.count({
+          where: {
+            status: TaskStatus.TODO,
+            project: {
+              clientProfileId,
+            },
+          },
+        }),
+        prisma.task.count({
+          where: {
+            status: TaskStatus.IN_PROGRESS,
+            project: {
+              clientProfileId,
+            },
+          },
+        }),
+        prisma.task.count({
+          where: {
+            status: TaskStatus.REVIEW,
+            project: {
+              clientProfileId,
+            },
+          },
+        }),
+        prisma.task.count({
+          where: {
+            status: TaskStatus.DONE,
+            project: {
+              clientProfileId,
+            },
+          },
+        }),
+        prisma.task.count({
+          where: {
+            status: TaskStatus.BLOCKED,
+            project: {
+              clientProfileId,
+            },
+          },
+        }),
+        prisma.project.findMany({
+          where: { clientProfileId },
+          select: { id: true },
+          orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+          take: 5,
+        }),
+        prisma.task.findMany({
+          where: {
+            project: {
+              clientProfileId,
+            },
+          },
+          select: { id: true, projectId: true },
+          orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+          take: 5,
+        }),
+      ]);
+
+    if (!clientProfile) {
+      throw new Error("Expected client profile to exist while validating summary scope.");
+    }
+
+    expect(summary.client.id).toBe(clientProfile.id);
+    expect(summary.client.name).toBe(clientProfile.companyName);
+    expect(summary.client.slug).toBe(clientProfile.slug);
+    expect(summary.client.status).toBe(clientProfile.status);
+
+    expect(summary.projects.total).toBe(projectTotal);
+    expect(summary.projects.planned).toBe(projectPlanned);
+    expect(summary.projects.inProgress).toBe(projectInProgress);
+    expect(summary.projects.review).toBe(projectReview);
+    expect(summary.projects.completed).toBe(projectCompleted);
+    expect(summary.projects.onHold).toBe(projectOnHold);
+    expect(summary.projects.recent.map((project) => project.id)).toEqual(
+      recentProjects.map((project) => project.id),
+    );
+
+    expect(summary.tasks.total).toBe(taskTotal);
+    expect(summary.tasks.todo).toBe(taskTodo);
+    expect(summary.tasks.inProgress).toBe(taskInProgress);
+    expect(summary.tasks.review).toBe(taskReview);
+    expect(summary.tasks.done).toBe(taskDone);
+    expect(summary.tasks.blocked).toBe(taskBlocked);
+    expect(summary.tasks.recent.map((task) => task.id)).toEqual(
+      recentTasks.map((task) => task.id),
+    );
+
+    const recentTaskProjectIds = Array.from(
+      new Set(summary.tasks.recent.map((task) => task.projectId)),
+    );
+    const scopedRecentTaskProjectCount =
+      recentTaskProjectIds.length === 0
+        ? 0
+        : await prisma.project.count({
+            where: {
+              id: { in: recentTaskProjectIds },
+              clientProfileId,
+            },
+          });
+    expect(scopedRecentTaskProjectCount).toBe(recentTaskProjectIds.length);
+  }
+
+  function expectNonNegativeCount(value: number): void {
+    expect(Number.isInteger(value)).toBe(true);
+    expect(value).toBeGreaterThanOrEqual(0);
+  }
+
+  function expectValidIsoDate(value: string): void {
+    expect(Number.isNaN(Date.parse(value))).toBe(false);
   }
 
   function extractApiErrorMessage(body: unknown): string {

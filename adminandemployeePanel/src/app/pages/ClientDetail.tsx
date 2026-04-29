@@ -1,282 +1,386 @@
-import { useParams, Link } from "react-router";
-import { Card } from "../components/ui/card";
+import type { ReactNode } from "react";
+import { Link, useParams } from "react-router";
+import {
+  ArrowLeft,
+  Building2,
+  Calendar,
+  ExternalLink,
+  FolderKanban,
+  ListChecks,
+  RefreshCw,
+} from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { ArrowLeft, Mail, Phone, Building2, Calendar, FileText, CheckSquare, AlertCircle, Edit, Plus, ExternalLink, DollarSign, Users } from "lucide-react";
+import { Card } from "../components/ui/card";
+import { useGetClientSummaryQuery } from "../features/clients/clientsApi";
+import type {
+  ClientSummaryRecentProject,
+  ClientSummaryRecentTask,
+} from "../features/clients/clientsTypes";
+import {
+  extractApiErrorMessage,
+  formatClientDate,
+  formatClientDateTime,
+  getClientPriorityBadgeClass,
+  getClientPriorityLabel,
+  getClientProjectStatusBadgeClass,
+  getClientProjectStatusLabel,
+  getClientStatusBadgeClass,
+  getClientStatusLabel,
+  getClientTaskStatusBadgeClass,
+  getClientTaskStatusLabel,
+  isNotFoundError,
+  isUuid,
+} from "../features/clients/clientsUtils";
 
 export function ClientDetail() {
   const { id } = useParams();
+  const clientProfileId = typeof id === "string" && isUuid(id) ? id : null;
+  const isValidId = clientProfileId !== null;
+
+  const {
+    data: summary,
+    error,
+    isError,
+    isFetching,
+    isLoading,
+    refetch,
+  } = useGetClientSummaryQuery(clientProfileId ?? "", {
+    skip: !isValidId,
+  });
+
+  if (!isValidId) {
+    return (
+      <div className="space-y-4">
+        <BackButton />
+        <Card className="border-orange-500/30 bg-orange-500/10 p-6 text-orange-200">
+          Geçersiz müşteri kimliği.
+        </Card>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <Card className="border-white/[0.08] bg-[#1A1A1A] p-6 text-[#A0A0A0]">
+        Müşteri özeti yükleniyor...
+      </Card>
+    );
+  }
+
+  if (isError && isNotFoundError(error)) {
+    return (
+      <div className="space-y-4">
+        <BackButton />
+        <Card className="border-white/[0.08] bg-[#1A1A1A] p-6 text-[#A0A0A0]">
+          Müşteri kaydı bulunamadı.
+        </Card>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="space-y-4">
+        <BackButton />
+        <Card className="border-red-500/30 bg-red-500/10 p-6 text-red-200">
+          {extractApiErrorMessage(error, "Müşteri özeti yüklenemedi. Lütfen tekrar deneyin.")}
+          <div className="mt-4">
+            <Button type="button" variant="outline" onClick={() => refetch()}>
+              Tekrar Dene
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!summary) {
+    return (
+      <div className="space-y-4">
+        <BackButton />
+        <Card className="border-white/[0.08] bg-[#1A1A1A] p-6 text-[#A0A0A0]">
+          Müşteri kaydı bulunamadı.
+        </Card>
+      </div>
+    );
+  }
+
+  const { client, projects, tasks } = summary;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Link to="/musteriler">
-          <Button variant="outline" size="icon">
-            <ArrowLeft className="w-4 h-4" />
-          </Button>
-        </Link>
-        <div className="flex-1">
-          <h1 className="text-2xl font-semibold mb-1">XYZ Holding</h1>
-          <p className="text-[#A0A0A0]">Growth Scale • Sorumlu: Ahmet K.</p>
-        </div>
-        <Badge className="bg-[#AAFF01] text-[#131313]">Aktif</Badge>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="gap-2">
-            <Edit className="w-4 h-4" />
-            Düzenle
-          </Button>
-          <Button variant="outline" size="sm" className="gap-2">
-            <Plus className="w-4 h-4" />
-            Görev Oluştur
-          </Button>
-          <Button size="sm" className="gap-2 bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90">
-            <ExternalLink className="w-4 h-4" />
-            Müşteri Panelini Görüntüle
-          </Button>
-        </div>
+      <div className="flex flex-wrap items-center gap-4">
+        <BackButton />
+        {isFetching && <span className="text-xs text-[#d2ff8a]">Güncelleniyor...</span>}
       </div>
 
-      {/* Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        <Card className="bg-[#1A1A1A] border-white/[0.06] p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <DollarSign className="w-5 h-5 text-[#AAFF01]" />
-            <span className="text-sm text-[#A0A0A0]">Aylık Değer</span>
+      <Card className="border-white/[0.08] bg-[#1A1A1A] p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="truncate text-2xl font-semibold text-white">{client.name}</h1>
+            <p className="mt-1 text-sm text-[#A0A0A0]">Backend Clients Summary API müşteri özeti</p>
           </div>
-          <div className="text-xl font-semibold text-[#AAFF01]">₺28,500</div>
-        </Card>
-        <Card className="bg-[#1A1A1A] border-white/[0.06] p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <Building2 className="w-5 h-5 text-[#AAFF01]" />
-            <span className="text-sm text-[#A0A0A0]">Paket</span>
+          <div className="flex flex-wrap gap-2">
+            <Badge className={getClientStatusBadgeClass(client.status)}>
+              {getClientStatusLabel(client.status)}
+            </Badge>
+            <Badge variant="outline" className="font-mono">
+              {client.slug}
+            </Badge>
           </div>
-          <div className="text-lg font-semibold">Growth Scale</div>
-        </Card>
-        <Card className="bg-[#1A1A1A] border-white/[0.06] p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <DollarSign className="w-5 h-5 text-[#AAFF01]" />
-            <span className="text-sm text-[#A0A0A0]">Ödeme Durumu</span>
-          </div>
-          <Badge className="bg-[#AAFF01] text-[#131313]">Ödendi</Badge>
-        </Card>
-        <Card className="bg-[#1A1A1A] border-white/[0.06] p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <FileText className="w-5 h-5 text-[#AAFF01]" />
-            <span className="text-sm text-[#A0A0A0]">Sözleşme</span>
-          </div>
-          <Badge variant="secondary">12 ay / Aktif</Badge>
-        </Card>
-        <Card className="bg-[#1A1A1A] border-white/[0.06] p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <Calendar className="w-5 h-5 text-[#AAFF01]" />
-            <span className="text-sm text-[#A0A0A0]">Başlangıç</span>
-          </div>
-          <div className="text-sm">15 Ocak 2024</div>
-        </Card>
+        </div>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <InfoCard icon={<Building2 className="h-5 w-5 text-[#AAFF01]" />} label="Firma" value={client.name} />
+        <InfoCard icon={<ExternalLink className="h-5 w-5 text-[#AAFF01]" />} label="Portal Slug" value={client.slug} mono />
+        <InfoCard icon={<Calendar className="h-5 w-5 text-[#AAFF01]" />} label="Oluşturulma" value={formatClientDate(client.createdAt)} />
+        <InfoCard icon={<Calendar className="h-5 w-5 text-[#AAFF01]" />} label="Son Güncelleme" value={formatClientDateTime(client.updatedAt)} />
       </div>
 
-      {/* Main Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          {/* Active Services */}
-          <Card className="bg-[#1A1A1A] border-white/[0.06] p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Aktif Hizmetler</h3>
-              <Button size="sm" variant="outline" className="gap-2">
-                <Plus className="w-4 h-4" />
-                Hizmet Ekle
-              </Button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-4 rounded-lg bg-white/5 border border-white/[0.06] hover:border-white/[0.12] transition-colors">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-medium">Meta ADS</h4>
-                  <Badge className="bg-[#AAFF01] text-[#131313]">Aktif</Badge>
-                </div>
-                <div className="space-y-2 text-sm mb-3">
-                  <div className="flex justify-between">
-                    <span className="text-[#A0A0A0]">Sorumlu</span>
-                    <span>Zeynep Y.</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-[#A0A0A0]">Son güncelleme</span>
-                    <span>2 saat önce</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-[#A0A0A0]">Bekleyen</span>
-                    <span className="text-orange-500">Kampanya optimizasyonu</span>
-                  </div>
-                </div>
-                <Button size="sm" variant="outline" className="w-full">Hizmeti Yönet</Button>
-              </div>
-              <div className="p-4 rounded-lg bg-white/5 border border-white/[0.06] hover:border-white/[0.12] transition-colors">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-medium">Sosyal Medya Yönetimi</h4>
-                  <Badge className="bg-[#AAFF01] text-[#131313]">Aktif</Badge>
-                </div>
-                <div className="space-y-2 text-sm mb-3">
-                  <div className="flex justify-between">
-                    <span className="text-[#A0A0A0]">Sorumlu</span>
-                    <span>Mehmet A.</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-[#A0A0A0]">Son güncelleme</span>
-                    <span>1 gün önce</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-[#A0A0A0]">Bekleyen</span>
-                    <span>-</span>
-                  </div>
-                </div>
-                <Button size="sm" variant="outline" className="w-full">Hizmeti Yönet</Button>
-              </div>
-            </div>
-          </Card>
-
-          {/* Client Panel Preview - CRITICAL SECTION */}
-          <Card className="bg-gradient-to-br from-[#1A1A1A] to-[#202020] border-[#AAFF01]/20 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-[#AAFF01]/10">
-                  <ExternalLink className="w-5 h-5 text-[#AAFF01]" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold">Müşteri Paneli Önizleme</h3>
-                  <p className="text-sm text-[#A0A0A0]">Müşterinin görebildikleri</p>
-                </div>
-              </div>
-              <Button className="gap-2 bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90">
-                <ExternalLink className="w-4 h-4" />
-                Paneli Görüntüle
-              </Button>
-            </div>
-
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card className="bg-[#202020] border-white/[0.06] p-4">
-                  <p className="text-xs text-[#A0A0A0] mb-2">Aktif Dashboard'lar</p>
-                  <ul className="space-y-1 text-sm">
-                    <li className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-[#AAFF01]" />
-                      Meta ADS Dashboard
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-[#AAFF01]" />
-                      Sosyal Medya Dashboard
-                    </li>
-                  </ul>
-                </Card>
-
-                <Card className="bg-[#202020] border-white/[0.06] p-4">
-                  <p className="text-xs text-[#A0A0A0] mb-2">Son Görünen Rapor</p>
-                  <p className="text-sm font-medium mb-1">Meta ADS - Nisan 2026</p>
-                  <p className="text-xs text-[#A0A0A0]">25 Nisan 2026 tarihinde gönderildi</p>
-                </Card>
-
-                <Card className="bg-[#202020] border-white/[0.06] p-4">
-                  <p className="text-xs text-[#A0A0A0] mb-2">Bekleyen Onaylar</p>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="text-xs">3 İçerik</Badge>
-                    <Badge variant="outline" className="text-xs">1 Tasarım</Badge>
-                  </div>
-                  <p className="text-xs text-[#A0A0A0] mt-2">Müşteri onayı bekleniyor</p>
-                </Card>
-              </div>
-
-              <div className="p-4 rounded-lg bg-[#202020] border border-white/[0.06]">
-                <p className="text-xs text-[#A0A0A0] mb-2">Müşteri Erişim Bilgileri</p>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">panel.socialtech.com/xyz-holding</p>
-                    <p className="text-xs text-[#A0A0A0]">Son giriş: 23 Nisan 2026, 14:32</p>
-                  </div>
-                  <Button size="sm" variant="outline">Giriş Bilgilerini Sıfırla</Button>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Timeline */}
-          <Card className="bg-[#1A1A1A] border-white/[0.06] p-6">
-            <h3 className="text-lg font-semibold mb-4">Müşteri Zaman Çizelgesi</h3>
-            <div className="space-y-4">
-              {[
-                { date: "25 Nisan 2026", type: "Toplantı", title: "Aylık performans raporu sunumu yapıldı", icon: Calendar },
-                { date: "20 Nisan 2026", type: "Rapor", title: "Meta ADS raporu gönderildi", icon: FileText },
-                { date: "18 Nisan 2026", type: "Onay", title: "İçerik onayı alındı", icon: CheckSquare },
-                { date: "15 Nisan 2026", type: "Ödeme", title: "Aylık ödeme alındı", icon: CheckSquare },
-              ].map((item, i) => {
-                const Icon = item.icon;
-                return (
-                  <div key={i} className="flex gap-4 pb-4 border-b border-white/[0.06] last:border-0">
-                    <div className="p-2 rounded-lg bg-[#AAFF01]/10 h-fit">
-                      <Icon className="w-4 h-4 text-[#AAFF01]" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Badge variant="outline" className="text-xs">{item.type}</Badge>
-                        <span className="text-xs text-[#A0A0A0]">{item.date}</span>
-                      </div>
-                      <p className="text-sm">{item.title}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
+      <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-white">Müşteri Profil Özeti</h2>
+          <Button type="button" variant="outline" size="sm" className="gap-2" onClick={() => refetch()}>
+            <RefreshCw className="h-4 w-4" />
+            Yenile
+          </Button>
         </div>
-
-        <div className="space-y-6">
-          {/* Tasks */}
-          <Card className="bg-[#1A1A1A] border-white/[0.06] p-6">
-            <h3 className="text-lg font-semibold mb-4">Görevler</h3>
-            <div className="space-y-3">
-              <div className="p-3 rounded-lg bg-white/5">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">Kampanya optimizasyonu</span>
-                  <Badge variant="secondary" className="text-xs">Devam Ediyor</Badge>
-                </div>
-                <p className="text-xs text-[#A0A0A0]">Zeynep Y. • Yarına kadar</p>
-              </div>
-              <div className="p-3 rounded-lg bg-white/5">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">Aylık rapor hazırlama</span>
-                  <Badge variant="outline" className="text-xs text-orange-500">Müşteri Bekleniyor</Badge>
-                </div>
-                <p className="text-xs text-[#A0A0A0]">Ahmet K. • 2 gün önce</p>
-              </div>
-            </div>
-            <Button variant="outline" className="w-full mt-4">Tüm Görevler</Button>
-          </Card>
-
-          {/* Pending Approvals */}
-          <Card className="bg-[#1A1A1A] border-white/[0.06] p-6">
-            <h3 className="text-lg font-semibold mb-4">Bekleyen Onaylar</h3>
-            <div className="space-y-3">
-              <div className="p-3 rounded-lg bg-white/5">
-                <div className="flex items-center gap-2 mb-2">
-                  <AlertCircle className="w-4 h-4 text-orange-500" />
-                  <span className="text-sm font-medium">Haftalık içerik onayı</span>
-                </div>
-                <p className="text-xs text-[#A0A0A0]">3 içerik • 2 gün bekliyor</p>
-              </div>
-            </div>
-          </Card>
-
-          {/* Internal Notes */}
-          <Card className="bg-[#1A1A1A] border-white/[0.06] p-6">
-            <h3 className="text-lg font-semibold mb-4">İç Notlar</h3>
-            <div className="space-y-3">
-              <div className="p-3 rounded-lg bg-white/5">
-                <p className="text-sm mb-2">Müşteri Meta ADS bütçe artışı istiyor. Önümüzdeki hafta görüşülecek.</p>
-                <p className="text-xs text-[#A0A0A0]">Ahmet K. • 3 gün önce</p>
-              </div>
-            </div>
-            <Button variant="outline" className="w-full mt-4">Not Ekle</Button>
-          </Card>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <DetailRow label="Müşteri kayıt ID" value={client.id} mono />
+          <DetailRow label="Portal slug" value={client.slug} mono />
+          <DetailRow label="Durum" value={getClientStatusLabel(client.status)} />
+          <DetailRow label="Oluşturulma tarihi" value={formatClientDateTime(client.createdAt)} />
+          <DetailRow label="Son güncelleme" value={formatClientDateTime(client.updatedAt)} />
         </div>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <CountSection
+          icon={<FolderKanban className="h-5 w-5 text-[#AAFF01]" />}
+          title="Proje Sayıları"
+          items={[
+            ["Toplam Proje", projects.total],
+            ["Planlandı", projects.planned],
+            ["Devam Eden", projects.inProgress],
+            ["İncelemede", projects.review],
+            ["Tamamlandı", projects.completed],
+            ["Beklemede", projects.onHold],
+          ]}
+        />
+        <CountSection
+          icon={<ListChecks className="h-5 w-5 text-[#AAFF01]" />}
+          title="Görev Sayıları"
+          items={[
+            ["Toplam Görev", tasks.total],
+            ["Yapılacak", tasks.todo],
+            ["Devam Eden", tasks.inProgress],
+            ["İncelemede", tasks.review],
+            ["Tamamlandı", tasks.done],
+            ["Bloke", tasks.blocked],
+          ]}
+        />
       </div>
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <RecentProjectsSection projects={projects.recent} />
+        <RecentTasksSection tasks={tasks.recent} />
+      </div>
+    </div>
+  );
+}
+
+function BackButton() {
+  return (
+    <Link to="/musteriler">
+      <Button variant="outline" className="gap-2">
+        <ArrowLeft className="h-4 w-4" />
+        Müşterilere Dön
+      </Button>
+    </Link>
+  );
+}
+
+function InfoCard({
+  icon,
+  label,
+  value,
+  mono = false,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <Card className="border-white/[0.06] bg-[#1A1A1A] p-5">
+      <div className="mb-3 flex items-center gap-3 text-sm text-[#A0A0A0]">
+        {icon}
+        <span>{label}</span>
+      </div>
+      <p className={`text-sm font-semibold text-white ${mono ? "break-all font-mono" : "break-words"}`}>
+        {value}
+      </p>
+    </Card>
+  );
+}
+
+function DetailRow({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] p-4">
+      <p className="mb-1 text-xs text-[#A0A0A0]">{label}</p>
+      <p className={`text-sm text-white ${mono ? "break-all font-mono" : "break-words"}`}>{value}</p>
+    </div>
+  );
+}
+
+function CountSection({
+  icon,
+  title,
+  items,
+}: {
+  icon: ReactNode;
+  title: string;
+  items: Array<[string, number]>;
+}) {
+  return (
+    <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
+      <div className="mb-4 flex items-center gap-3">
+        {icon}
+        <h2 className="text-lg font-semibold text-white">{title}</h2>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {items.map(([label, value]) => (
+          <div key={label} className="rounded-lg border border-white/[0.06] bg-white/[0.03] p-4">
+            <p className="mb-1 text-xs text-[#A0A0A0]">{label}</p>
+            <p className="text-2xl font-semibold text-white">{value.toLocaleString("tr-TR")}</p>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function RecentProjectsSection({ projects }: { projects: ClientSummaryRecentProject[] }) {
+  return (
+    <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
+      <SectionHeader
+        icon={<FolderKanban className="h-5 w-5 text-[#AAFF01]" />}
+        title="Son Projeler"
+      />
+      {projects.length === 0 ? (
+        <EmptyState>Bu müşteriye bağlı son proje bulunmuyor.</EmptyState>
+      ) : (
+        <div className="space-y-3">
+          {projects.map((project) => (
+            <div key={project.id} className="rounded-lg border border-white/[0.06] bg-white/[0.03] p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="break-words font-medium text-white">{project.name}</p>
+                  <p className="mt-1 text-xs text-[#A0A0A0]">
+                    Deadline: {formatClientDate(project.dueDate)} • Güncelleme: {formatClientDate(project.updatedAt)}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge className={getClientProjectStatusBadgeClass(project.status)}>
+                    {getClientProjectStatusLabel(project.status)}
+                  </Badge>
+                  <Badge className={getClientPriorityBadgeClass(project.priority)}>
+                    {getClientPriorityLabel(project.priority)}
+                  </Badge>
+                </div>
+              </div>
+              <div className="mt-4">
+                <Link to={`/projeler/${project.id}`}>
+                  <Button type="button" variant="outline" size="sm" className="gap-2">
+                    <ExternalLink className="h-4 w-4" />
+                    Projeyi Aç
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function RecentTasksSection({ tasks }: { tasks: ClientSummaryRecentTask[] }) {
+  return (
+    <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
+      <SectionHeader
+        icon={<ListChecks className="h-5 w-5 text-[#AAFF01]" />}
+        title="Son Görevler"
+      />
+      {tasks.length === 0 ? (
+        <EmptyState>Bu müşteriye bağlı son görev bulunmuyor.</EmptyState>
+      ) : (
+        <div className="space-y-3">
+          {tasks.map((task) => (
+            <div key={task.id} className="rounded-lg border border-white/[0.06] bg-white/[0.03] p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="break-words font-medium text-white">{task.title}</p>
+                  <p className="mt-1 text-xs text-[#A0A0A0]">
+                    Deadline: {formatClientDate(task.dueDate)} • Güncelleme: {formatClientDate(task.updatedAt)}
+                  </p>
+                  {task.projectId && (
+                    <Link
+                      to={`/projeler/${task.projectId}`}
+                      className="mt-2 inline-flex text-xs text-[#d2ff8a] hover:underline"
+                    >
+                      Projeye Git
+                    </Link>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge className={getClientTaskStatusBadgeClass(task.status)}>
+                    {getClientTaskStatusLabel(task.status)}
+                  </Badge>
+                  <Badge className={getClientPriorityBadgeClass(task.priority)}>
+                    {getClientPriorityLabel(task.priority)}
+                  </Badge>
+                </div>
+              </div>
+              <div className="mt-4">
+                <Link to={`/gorevler/${task.id}`}>
+                  <Button type="button" variant="outline" size="sm" className="gap-2">
+                    <ExternalLink className="h-4 w-4" />
+                    Görevi Aç
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function SectionHeader({ icon, title }: { icon: ReactNode; title: string }) {
+  return (
+    <div className="mb-4 flex items-center gap-3">
+      {icon}
+      <h2 className="text-lg font-semibold text-white">{title}</h2>
+    </div>
+  );
+}
+
+function EmptyState({ children }: { children: ReactNode }) {
+  return (
+    <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] p-4 text-sm text-[#A0A0A0]">
+      {children}
     </div>
   );
 }

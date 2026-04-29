@@ -16,7 +16,7 @@ For backend tasks, do not scan the whole project. Read only relevant route, cont
 
 Focus on:
 - Node.js
-- Express or Fastify
+- Express or Nestjs
 - REST API
 - controllers
 - services

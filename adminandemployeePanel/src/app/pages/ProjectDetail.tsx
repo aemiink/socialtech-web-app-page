@@ -1,186 +1,169 @@
-import { useParams, Link } from "react-router";
-import { Card } from "../components/ui/card";
+import { Link, useParams } from "react-router";
+import { ArrowLeft, FolderKanban } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
-import { Progress } from "../components/ui/progress";
-import { ArrowLeft, Calendar, User, AlertCircle, CheckCircle } from "lucide-react";
+import { Card } from "../components/ui/card";
+import { useAppSelector } from "../store/hooks";
+import {
+  hasAdminPermission,
+  selectCurrentUser,
+} from "../features/auth/authSelectors";
+import { useGetProjectQuery } from "../features/projects/projectsApi";
+import {
+  extractApiErrorMessage,
+  formatDate,
+  formatDateTime,
+  getPriorityBadgeClass,
+  getPriorityLabel,
+  getProjectClientName,
+  getProjectStatusBadgeClass,
+  getProjectStatusLabel,
+  isUuid,
+} from "../features/projects/projectsUtils";
 
 export function ProjectDetail() {
   const { id } = useParams();
+  const currentUser = useAppSelector(selectCurrentUser);
+  const canReadProjects = hasAdminPermission(currentUser, [
+    "projects.read.any",
+    "projects.manage.any",
+    "projects.read",
+  ]);
 
-  const phases = ["Brief", "Planlama", "Tasarım", "Geliştirme", "Test", "Yayın", "Teslim"];
-  const currentPhase = 3;
+  const isValidId = typeof id === "string" && isUuid(id);
+
+  const {
+    data: project,
+    error,
+    isError,
+    isLoading,
+    isFetching,
+    refetch,
+  } = useGetProjectQuery(id ?? "", {
+    skip: !canReadProjects || !isValidId,
+  });
+
+  if (!canReadProjects) {
+    return (
+      <Card className="border-red-500/30 bg-red-500/10 p-6 text-red-200">
+        Bu sayfaya erişim yetkiniz bulunmuyor.
+      </Card>
+    );
+  }
+
+  if (!isValidId) {
+    return (
+      <div className="space-y-4">
+        <Link to="/projeler">
+          <Button variant="outline" className="gap-2">
+            <ArrowLeft className="h-4 w-4" />
+            Projelere Dön
+          </Button>
+        </Link>
+        <Card className="border-orange-500/30 bg-orange-500/10 p-6 text-orange-200">
+          Geçersiz proje kimliği.
+        </Card>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <Card className="border-white/[0.08] bg-[#1A1A1A] p-6 text-[#A0A0A0]">
+        Proje detayı yükleniyor...
+      </Card>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="space-y-4">
+        <Link to="/projeler">
+          <Button variant="outline" className="gap-2">
+            <ArrowLeft className="h-4 w-4" />
+            Projelere Dön
+          </Button>
+        </Link>
+        <Card className="border-red-500/30 bg-red-500/10 p-6 text-red-200">
+          {extractApiErrorMessage(error, "Proje detayı yüklenemedi. Lütfen tekrar deneyin.")}
+          <div className="mt-4">
+            <Button variant="outline" onClick={() => refetch()}>
+              Tekrar Dene
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!project) {
+    return (
+      <div className="space-y-4">
+        <Link to="/projeler">
+          <Button variant="outline" className="gap-2">
+            <ArrowLeft className="h-4 w-4" />
+            Projelere Dön
+          </Button>
+        </Link>
+        <Card className="border-white/[0.08] bg-[#1A1A1A] p-6 text-[#A0A0A0]">
+          Proje kaydı bulunamadı.
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-4">
         <Link to="/projeler">
-          <Button variant="outline" size="icon">
-            <ArrowLeft className="w-4 h-4" />
+          <Button variant="outline" className="gap-2">
+            <ArrowLeft className="h-4 w-4" />
+            Projelere Dön
           </Button>
         </Link>
-        <div className="flex-1">
-          <h1 className="text-2xl font-semibold mb-1">E-Ticaret Web APP</h1>
-          <p className="text-[#A0A0A0]">XYZ Holding • Web APP</p>
-        </div>
-        <Badge className="bg-[#AAFF01] text-[#131313]">Geliştirme</Badge>
+        {isFetching && <span className="text-xs text-[#d2ff8a]">Güncelleniyor...</span>}
       </div>
 
-      {/* Project Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="bg-[#1A1A1A] border-white/[0.06] p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <Calendar className="w-5 h-5 text-[#AAFF01]" />
-            <span className="text-sm text-[#A0A0A0]">İlerleme</span>
+      <Card className="border-white/[0.08] bg-[#1A1A1A] p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="truncate text-2xl font-semibold text-white">{project.name}</h1>
+            <p className="mt-1 text-sm text-[#A0A0A0]">{getProjectClientName(project)}</p>
           </div>
-          <Progress value={65} className="mb-2" />
-          <div className="text-lg font-semibold">65%</div>
-        </Card>
-        <Card className="bg-[#1A1A1A] border-white/[0.06] p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <Calendar className="w-5 h-5 text-[#AAFF01]" />
-            <span className="text-sm text-[#A0A0A0]">Deadline</span>
+          <div className="flex flex-wrap gap-2">
+            <Badge className={getProjectStatusBadgeClass(project.status)}>
+              {getProjectStatusLabel(project.status)}
+            </Badge>
+            <Badge className={getPriorityBadgeClass(project.priority)}>
+              {getPriorityLabel(project.priority)}
+            </Badge>
           </div>
-          <div className="text-lg font-semibold">15 Mayıs 2026</div>
-        </Card>
-        <Card className="bg-[#1A1A1A] border-white/[0.06] p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <User className="w-5 h-5 text-[#AAFF01]" />
-            <span className="text-sm text-[#A0A0A0]">Sorumlu</span>
-          </div>
-          <div className="text-lg font-semibold">Can S.</div>
-        </Card>
-        <Card className="bg-[#1A1A1A] border-white/[0.06] p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <CheckCircle className="w-5 h-5 text-[#AAFF01]" />
-            <span className="text-sm text-[#A0A0A0]">Risk Durumu</span>
-          </div>
-          <div className="text-lg font-semibold">Normal</div>
-        </Card>
-      </div>
-
-      {/* Project Timeline */}
-      <Card className="bg-[#1A1A1A] border-white/[0.06] p-6">
-        <h3 className="text-lg font-semibold mb-4">Proje Aşamaları</h3>
-        <div className="flex items-center gap-2 overflow-x-auto pb-2">
-          {phases.map((phase, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <div className={`px-4 py-2 rounded-lg whitespace-nowrap ${
-                i < currentPhase ? "bg-[#AAFF01] text-[#131313]" :
-                i === currentPhase ? "bg-[#AAFF01]/20 text-[#AAFF01] border border-[#AAFF01]" :
-                "bg-white/5 text-[#A0A0A0]"
-              }`}>
-                {phase}
-              </div>
-              {i < phases.length - 1 && (
-                <div className={`w-8 h-0.5 ${i < currentPhase ? "bg-[#AAFF01]" : "bg-white/10"}`} />
-              )}
-            </div>
-          ))}
         </div>
+        {project.description && (
+          <p className="mt-4 whitespace-pre-wrap text-sm text-[#D8D8D8]">{project.description}</p>
+        )}
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          {/* Task Board */}
-          <Card className="bg-[#1A1A1A] border-white/[0.06] p-6">
-            <h3 className="text-lg font-semibold mb-4">Görev Panosu</h3>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              {["Planlanan", "Devam Ediyor", "Bloke", "Tamamlandı"].map((status, i) => (
-                <div key={status}>
-                  <h4 className="text-sm font-medium mb-3 text-[#A0A0A0]">{status}</h4>
-                  <div className="space-y-2">
-                    {i === 1 && (
-                      <>
-                        <div className="p-3 rounded-lg bg-white/5 border border-white/[0.06]">
-                          <p className="text-sm font-medium mb-1">Backend API geliştirme</p>
-                          <p className="text-xs text-[#A0A0A0]">Can S.</p>
-                        </div>
-                        <div className="p-3 rounded-lg bg-white/5 border border-white/[0.06]">
-                          <p className="text-sm font-medium mb-1">Frontend entegrasyonu</p>
-                          <p className="text-xs text-[#A0A0A0]">Ayşe D.</p>
-                        </div>
-                      </>
-                    )}
-                    {i === 3 && (
-                      <div className="p-3 rounded-lg bg-white/5 border border-white/[0.06]">
-                        <p className="text-sm font-medium mb-1">UI tasarım</p>
-                        <p className="text-xs text-[#A0A0A0]">Mehmet A.</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          {/* Deliverables */}
-          <Card className="bg-[#1A1A1A] border-white/[0.06] p-6">
-            <h3 className="text-lg font-semibold mb-4">Teslimatlar</h3>
-            <div className="space-y-2">
-              {[
-                { label: "UI Ekranları", completed: true },
-                { label: "Frontend Geliştirme", completed: true },
-                { label: "Backend/API", completed: false },
-                { label: "Admin Paneli", completed: false },
-                { label: "SEO Yapısı", completed: false },
-                { label: "Test", completed: false },
-                { label: "Deployment", completed: false },
-              ].map((item, i) => (
-                <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-white/5">
-                  <div className={`w-5 h-5 rounded border ${
-                    item.completed ? "bg-[#AAFF01] border-[#AAFF01]" : "border-white/20"
-                  } flex items-center justify-center`}>
-                    {item.completed && <CheckCircle className="w-3 h-3 text-[#131313]" />}
-                  </div>
-                  <span className={item.completed ? "text-[#A0A0A0] line-through" : ""}>{item.label}</span>
-                </div>
-              ))}
-            </div>
-          </Card>
-        </div>
-
-        <div className="space-y-6">
-          {/* Revisions */}
-          <Card className="bg-[#1A1A1A] border-white/[0.06] p-6">
-            <h3 className="text-lg font-semibold mb-4">Revizyonlar</h3>
-            <div className="space-y-3">
-              <div className="p-3 rounded-lg bg-white/5">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">Ödeme sayfası güncelleme</span>
-                  <Badge variant="destructive" className="text-xs">Yüksek</Badge>
-                </div>
-                <p className="text-xs text-[#A0A0A0] mb-2">Müşteri ödeme akışında değişiklik istedi</p>
-                <p className="text-xs text-[#A0A0A0]">Sorumlu: Can S.</p>
-              </div>
-            </div>
-          </Card>
-
-          {/* Files */}
-          <Card className="bg-[#1A1A1A] border-white/[0.06] p-6">
-            <h3 className="text-lg font-semibold mb-4">Dosyalar</h3>
-            <div className="space-y-2">
-              {["Figma Tasarım Linki", "Staging URL", "Teknik Dokümantasyon"].map((file, i) => (
-                <div key={i} className="p-3 rounded-lg bg-white/5 text-sm hover:bg-white/10 cursor-pointer transition-colors">
-                  {file}
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          {/* Internal Notes */}
-          <Card className="bg-[#1A1A1A] border-white/[0.06] p-6">
-            <h3 className="text-lg font-semibold mb-4">İç Notlar</h3>
-            <div className="space-y-3">
-              <div className="p-3 rounded-lg bg-white/5">
-                <p className="text-sm mb-2">Müşteri bir sonraki hafta demo görmek istiyor.</p>
-                <p className="text-xs text-[#A0A0A0]">Can S. • 1 gün önce</p>
-              </div>
-            </div>
-            <Button variant="outline" className="w-full mt-4">Not Ekle</Button>
-          </Card>
-        </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <InfoCard label="Slug" value={project.slug} />
+        <InfoCard label="Müşteri Profil ID" value={project.clientProfileId} mono />
+        <InfoCard label="Başlangıç" value={formatDate(project.startDate)} />
+        <InfoCard label="Deadline" value={formatDate(project.dueDate)} />
+        <InfoCard label="Oluşturulma" value={formatDateTime(project.createdAt)} />
+        <InfoCard label="Güncellenme" value={formatDateTime(project.updatedAt)} />
       </div>
     </div>
+  );
+}
+
+function InfoCard({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <Card className="border-white/[0.06] bg-[#1A1A1A] p-5">
+      <div className="mb-2 flex items-center gap-2 text-[#A0A0A0]">
+        <FolderKanban className="h-4 w-4 text-[#AAFF01]" />
+        {label}
+      </div>
+      <p className={`text-sm text-white ${mono ? "break-all font-mono" : "break-words"}`}>{value}</p>
+    </Card>
   );
 }

@@ -2,6 +2,7 @@ import * as bcrypt from "bcryptjs";
 import {
   PrismaClient,
   AccountType,
+  ClientStatus,
   EmployeeClientAssignmentScope,
   Priority,
   ProjectStatus,
@@ -27,6 +28,7 @@ type ClientProfileSeed = {
   slug: string;
   companyName: string;
   contactEmail: string;
+  status: ClientStatus;
 };
 
 type EmployeeClientAssignmentSeed = {
@@ -67,16 +69,19 @@ const CLIENT_PROFILE_SEEDS: ClientProfileSeed[] = [
     slug: "acme-e-ticaret",
     companyName: "Acme E-ticaret",
     contactEmail: "client@socialtech.com",
+    status: ClientStatus.ACTIVE,
   },
   {
     slug: "nova-performance",
     companyName: "Nova Performance",
     contactEmail: "contact@novaperformance.com",
+    status: ClientStatus.SUSPENDED,
   },
   {
     slug: "mavi-sosyal",
     companyName: "Mavi Sosyal",
     contactEmail: "hello@mavisosyal.com",
+    status: ClientStatus.INACTIVE,
   },
 ];
 
@@ -226,6 +231,7 @@ const TASK_SEEDS: TaskSeed[] = [
 
 const PERMISSIONS: PermissionSeed[] = [
   { slug: "dashboard.read", description: "Read dashboard summaries." },
+  { slug: "admin.summary.read", description: "Read admin summary dashboard data." },
   { slug: "users.read", description: "Read user list and user details." },
   { slug: "users.manage", description: "Create/update/deactivate users." },
   { slug: "clients.read", description: "Read client data in full scope." },
@@ -524,6 +530,7 @@ async function seedClientProfiles(): Promise<Map<string, string>> {
       update: {
         companyName: profile.companyName,
         contactEmail: profile.contactEmail,
+        status: profile.status,
       },
       create: profile,
       select: { id: true, slug: true },

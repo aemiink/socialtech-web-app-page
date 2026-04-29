@@ -1,44 +1,131 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { AccountType, Prisma, UserRole } from "@prisma/client";
+import { AccountType, Prisma, ProjectStatus, TaskStatus, UserRole } from "@prisma/client";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { PrismaService } from "../database/prisma.service";
+import {
+  ClientQueryDto,
+  type ClientSortBy,
+  type ClientSortOrder,
+} from "./dto/client-query.dto";
 
 const clientReadSelect = {
   id: true,
   slug: true,
   companyName: true,
   contactEmail: true,
+  status: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.ClientProfileSelect;
 
 type ClientReadModel = Prisma.ClientProfileGetPayload<{ select: typeof clientReadSelect }>;
 
+type ClientsListResponse = {
+  data: ClientReadModel[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+  };
+};
+
+type ClientSummaryResponse = {
+  client: {
+    id: string;
+    name: string;
+    slug: string;
+    status: ClientReadModel["status"];
+    createdAt: Date;
+    updatedAt: Date;
+  };
+  projects: {
+    total: number;
+    planned: number;
+    inProgress: number;
+    review: number;
+    completed: number;
+    onHold: number;
+    recent: Array<{
+      id: string;
+      name: string;
+      status: ProjectStatus;
+      priority: Prisma.ProjectGetPayload<{ select: { priority: true } }>["priority"];
+      dueDate: Date | null;
+      updatedAt: Date;
+    }>;
+  };
+  tasks: {
+    total: number;
+    todo: number;
+    inProgress: number;
+    review: number;
+    done: number;
+    blocked: number;
+    recent: Array<{
+      id: string;
+      title: string;
+      status: TaskStatus;
+      priority: Prisma.TaskGetPayload<{ select: { priority: true } }>["priority"];
+      dueDate: Date | null;
+      updatedAt: Date;
+      projectId: string;
+    }>;
+  };
+  meta: {
+    generatedAt: Date;
+  };
+};
+
+type ClientOrderByFactory = (
+  sortOrder: ClientSortOrder,
+) => Prisma.ClientProfileOrderByWithRelationInput;
+
+const CLIENT_ORDER_BY_FACTORIES = {
+  createdAt: (sortOrder) => ({ createdAt: sortOrder }),
+  updatedAt: (sortOrder) => ({ updatedAt: sortOrder }),
+  name: (sortOrder) => ({ companyName: sortOrder }),
+  slug: (sortOrder) => ({ slug: sortOrder }),
+  status: (sortOrder) => ({ status: sortOrder }),
+} satisfies Record<ClientSortBy, ClientOrderByFactory>;
+
 @Injectable()
 export class ClientsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getClients(currentUser: AuthenticatedUser): Promise<ClientReadModel[]> {
-    if (this.isAdmin(currentUser)) {
-      this.assertHasPermission(currentUser, "clients.read");
-      return this.prisma.clientProfile.findMany({
+  async getClients(
+    currentUser: AuthenticatedUser,
+    query: ClientQueryDto,
+  ): Promise<ClientsListResponse> {
+    const visibilityWhere = this.buildClientVisibilityWhere(currentUser);
+    const where = this.buildClientListWhere(visibilityWhere, query);
+
+    const [clients, total] = await this.prisma.$transaction([
+      this.prisma.clientProfile.findMany({
+        where,
         select: clientReadSelect,
-        orderBy: { companyName: "asc" },
-      });
-    }
+        orderBy: this.getClientOrderBy(query.sortBy, query.sortOrder),
+        skip: (query.page - 1) * query.limit,
+        take: query.limit,
+      }),
+      this.prisma.clientProfile.count({ where }),
+    ]);
 
-    if (this.isClient(currentUser)) {
-      this.assertHasPermission(currentUser, "clients.read.own");
-      const ownProfile = await this.getOwnProfileByUserContext(currentUser);
-      return [ownProfile];
-    }
+    const totalPages = total === 0 ? 0 : Math.ceil(total / query.limit);
 
-    if (this.isEmployee(currentUser)) {
-      this.assertHasPermission(currentUser, "clients.read.assigned");
-      return this.getAssignedClientProfiles(currentUser.id);
-    }
-
-    throw new ForbiddenException("You are not allowed to access client profiles.");
+    return {
+      data: clients,
+      meta: {
+        page: query.page,
+        limit: query.limit,
+        total,
+        totalPages,
+        hasNextPage: totalPages > 0 && query.page < totalPages,
+        hasPreviousPage: query.page > 1 && totalPages > 0,
+      },
+    };
   }
 
   async getClientById(currentUser: AuthenticatedUser, clientId: string): Promise<ClientReadModel> {
@@ -73,12 +160,251 @@ export class ClientsService {
     return this.getOwnProfileByUserContext(currentUser);
   }
 
-  private async getOwnProfileByUserContext(currentUser: AuthenticatedUser): Promise<ClientReadModel> {
+  async getClientSummary(
+    currentUser: AuthenticatedUser,
+    clientId: string,
+  ): Promise<ClientSummaryResponse> {
+    const clientProfile = await this.getClientById(currentUser, clientId);
+    this.assertCanReadClientSummaryData(currentUser);
+    const generatedAt = new Date();
+
+    const [
+      projectTotal,
+      projectPlanned,
+      projectInProgress,
+      projectReview,
+      projectCompleted,
+      projectOnHold,
+      recentProjects,
+      taskTotal,
+      taskTodo,
+      taskInProgress,
+      taskReview,
+      taskDone,
+      taskBlocked,
+      recentTasks,
+    ] = await this.prisma.$transaction([
+      this.prisma.project.count({
+        where: { clientProfileId: clientProfile.id },
+      }),
+      this.prisma.project.count({
+        where: { clientProfileId: clientProfile.id, status: ProjectStatus.PLANNED },
+      }),
+      this.prisma.project.count({
+        where: { clientProfileId: clientProfile.id, status: ProjectStatus.IN_PROGRESS },
+      }),
+      this.prisma.project.count({
+        where: { clientProfileId: clientProfile.id, status: ProjectStatus.REVIEW },
+      }),
+      this.prisma.project.count({
+        where: { clientProfileId: clientProfile.id, status: ProjectStatus.COMPLETED },
+      }),
+      this.prisma.project.count({
+        where: { clientProfileId: clientProfile.id, status: ProjectStatus.ON_HOLD },
+      }),
+      this.prisma.project.findMany({
+        where: { clientProfileId: clientProfile.id },
+        orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+        take: 5,
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          priority: true,
+          dueDate: true,
+          updatedAt: true,
+        },
+      }),
+      this.prisma.task.count({
+        where: {
+          project: {
+            clientProfileId: clientProfile.id,
+          },
+        },
+      }),
+      this.prisma.task.count({
+        where: {
+          status: TaskStatus.TODO,
+          project: {
+            clientProfileId: clientProfile.id,
+          },
+        },
+      }),
+      this.prisma.task.count({
+        where: {
+          status: TaskStatus.IN_PROGRESS,
+          project: {
+            clientProfileId: clientProfile.id,
+          },
+        },
+      }),
+      this.prisma.task.count({
+        where: {
+          status: TaskStatus.REVIEW,
+          project: {
+            clientProfileId: clientProfile.id,
+          },
+        },
+      }),
+      this.prisma.task.count({
+        where: {
+          status: TaskStatus.DONE,
+          project: {
+            clientProfileId: clientProfile.id,
+          },
+        },
+      }),
+      this.prisma.task.count({
+        where: {
+          status: TaskStatus.BLOCKED,
+          project: {
+            clientProfileId: clientProfile.id,
+          },
+        },
+      }),
+      this.prisma.task.findMany({
+        where: {
+          project: {
+            clientProfileId: clientProfile.id,
+          },
+        },
+        orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+        take: 5,
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          priority: true,
+          dueDate: true,
+          updatedAt: true,
+          projectId: true,
+        },
+      }),
+    ]);
+
+    return {
+      client: {
+        id: clientProfile.id,
+        name: clientProfile.companyName,
+        slug: clientProfile.slug,
+        status: clientProfile.status,
+        createdAt: clientProfile.createdAt,
+        updatedAt: clientProfile.updatedAt,
+      },
+      projects: {
+        total: projectTotal,
+        planned: projectPlanned,
+        inProgress: projectInProgress,
+        review: projectReview,
+        completed: projectCompleted,
+        onHold: projectOnHold,
+        recent: recentProjects,
+      },
+      tasks: {
+        total: taskTotal,
+        todo: taskTodo,
+        inProgress: taskInProgress,
+        review: taskReview,
+        done: taskDone,
+        blocked: taskBlocked,
+        recent: recentTasks,
+      },
+      meta: {
+        generatedAt,
+      },
+    };
+  }
+
+  private assertCanReadClientSummaryData(currentUser: AuthenticatedUser): void {
+    if (this.isAdmin(currentUser)) {
+      this.assertHasPermission(currentUser, "projects.read.any");
+      this.assertHasPermission(currentUser, "tasks.read.any");
+      return;
+    }
+
+    if (this.isEmployee(currentUser)) {
+      this.assertHasPermission(currentUser, "projects.read.assigned");
+      this.assertHasPermission(currentUser, "tasks.read.assigned");
+      return;
+    }
+
+    if (this.isClient(currentUser)) {
+      this.assertHasPermission(currentUser, "projects.read.own");
+      this.assertHasPermission(currentUser, "tasks.read.own");
+      return;
+    }
+
+    throw new ForbiddenException("You are not allowed to access client summary data.");
+  }
+
+  private buildClientVisibilityWhere(currentUser: AuthenticatedUser): Prisma.ClientProfileWhereInput {
+    if (this.isAdmin(currentUser)) {
+      this.assertHasPermission(currentUser, "clients.read");
+      return {};
+    }
+
+    if (this.isClient(currentUser)) {
+      this.assertHasPermission(currentUser, "clients.read.own");
+      return { id: this.getClientProfileIdOrFail(currentUser) };
+    }
+
+    if (this.isEmployee(currentUser)) {
+      this.assertHasPermission(currentUser, "clients.read.assigned");
+      return {
+        employeeAssignments: {
+          some: {
+            employeeUserId: currentUser.id,
+            isActive: true,
+          },
+        },
+      };
+    }
+
+    throw new ForbiddenException("You are not allowed to access client profiles.");
+  }
+
+  private buildClientListWhere(
+    visibilityWhere: Prisma.ClientProfileWhereInput,
+    query: ClientQueryDto,
+  ): Prisma.ClientProfileWhereInput {
+    const statusFilter: Prisma.ClientProfileWhereInput | null = query.status
+      ? { status: query.status }
+      : null;
+    const searchFilter: Prisma.ClientProfileWhereInput | null = query.search
+      ? {
+          OR: [
+            { companyName: { contains: query.search, mode: "insensitive" } },
+            { slug: { contains: query.search, mode: "insensitive" } },
+            { contactEmail: { contains: query.search, mode: "insensitive" } },
+          ],
+        }
+      : null;
+    const filters: Prisma.ClientProfileWhereInput[] = [
+      visibilityWhere,
+      ...(statusFilter ? [statusFilter] : []),
+      ...(searchFilter ? [searchFilter] : []),
+    ];
+
+    return { AND: filters };
+  }
+
+  private getClientOrderBy(
+    sortBy: ClientSortBy,
+    sortOrder: ClientSortOrder,
+  ): Prisma.ClientProfileOrderByWithRelationInput[] {
+    return [CLIENT_ORDER_BY_FACTORIES[sortBy](sortOrder), { id: "asc" }];
+  }
+
+  private getClientProfileIdOrFail(currentUser: AuthenticatedUser): string {
     if (!currentUser.clientProfileId) {
       throw new ForbiddenException("Client account is not linked to a client profile.");
     }
 
-    return this.getClientProfileOrFail(currentUser.clientProfileId);
+    return currentUser.clientProfileId;
+  }
+
+  private async getOwnProfileByUserContext(currentUser: AuthenticatedUser): Promise<ClientReadModel> {
+    return this.getClientProfileOrFail(this.getClientProfileIdOrFail(currentUser));
   }
 
   private async getClientProfileOrFail(clientId: string): Promise<ClientReadModel> {
@@ -92,21 +418,6 @@ export class ClientsService {
     }
 
     return clientProfile;
-  }
-
-  private async getAssignedClientProfiles(employeeUserId: string): Promise<ClientReadModel[]> {
-    return this.prisma.clientProfile.findMany({
-      where: {
-        employeeAssignments: {
-          some: {
-            employeeUserId,
-            isActive: true,
-          },
-        },
-      },
-      select: clientReadSelect,
-      orderBy: { companyName: "asc" },
-    });
   }
 
   private async getAssignedClientProfileById(

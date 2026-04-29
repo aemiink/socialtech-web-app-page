@@ -32,10 +32,40 @@ Location: `adminandemployeePanel/`
   - `adminandemployeePanel/src/app/features/auth/authSelectors.ts`
   - `adminandemployeePanel/src/app/features/auth/authTypes.ts`
   - `adminandemployeePanel/src/app/features/auth/roleMapping.ts`
+- Admin domain features (RTK Query inject endpoints):
+  - `adminandemployeePanel/src/app/features/dashboard/dashboardApi.ts`
+  - `adminandemployeePanel/src/app/features/dashboard/dashboardTypes.ts`
+  - `adminandemployeePanel/src/app/features/dashboard/dashboardUtils.ts`
+  - `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
+  - `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`
+  - `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
+  - `adminandemployeePanel/src/app/features/projects/projectsApi.ts`
+  - `adminandemployeePanel/src/app/features/projects/projectsTypes.ts`
+  - `adminandemployeePanel/src/app/features/projects/projectsUtils.ts`
+  - `adminandemployeePanel/src/app/features/tasks/tasksApi.ts`
+  - `adminandemployeePanel/src/app/features/tasks/tasksTypes.ts`
+  - `adminandemployeePanel/src/app/features/tasks/tasksUtils.ts`
 - Admin layout: `adminandemployeePanel/src/app/components/RootLayout.tsx`
 - Employee layout: `adminandemployeePanel/src/app/employee/EmployeeLayout.tsx`
 - Role context: `adminandemployeePanel/src/app/contexts/RoleContext.tsx` (compatibility layer; Redux auth state is source of truth)
 - Admin pages: `adminandemployeePanel/src/app/pages/`
+- Backend-integrated admin pages (core):
+  - `adminandemployeePanel/src/app/pages/Dashboard.tsx`
+  - `adminandemployeePanel/src/app/pages/Clients.tsx`
+  - `adminandemployeePanel/src/app/pages/ClientDetail.tsx`
+  - `adminandemployeePanel/src/app/pages/Projects.tsx`
+  - `adminandemployeePanel/src/app/pages/ProjectDetail.tsx`
+  - `adminandemployeePanel/src/app/pages/Tasks.tsx`
+  - `adminandemployeePanel/src/app/pages/TaskDetail.tsx`
+- Frontend tests (Vitest/RTL):
+  - `adminandemployeePanel/src/app/pages/EmployeeDetail.test.tsx`
+  - `adminandemployeePanel/src/app/pages/AuditLogs.test.tsx`
+  - `adminandemployeePanel/src/app/pages/__tests__/Dashboard.test.tsx`
+  - `adminandemployeePanel/src/app/pages/__tests__/ClientDetail.test.tsx`
+  - `adminandemployeePanel/src/app/pages/__tests__/Projects.test.tsx`
+  - `adminandemployeePanel/src/app/pages/__tests__/ProjectDetail.test.tsx`
+  - `adminandemployeePanel/src/app/pages/__tests__/Tasks.test.tsx`
+  - `adminandemployeePanel/src/app/pages/__tests__/TaskDetail.test.tsx`
 - Employee pages: `adminandemployeePanel/src/app/employee/pages/`
 - Employee dashboards: `adminandemployeePanel/src/app/employee/dashboards/`
 - UI primitives: `adminandemployeePanel/src/app/components/ui/`
@@ -151,7 +181,7 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 ### App Bootstrap
 
 - `server/src/main.ts` - Nest bootstrap, `/api/v1` global prefix, global ValidationPipe, global exception filter, CORS setup
-- `server/src/app.module.ts` - root module imports for config/database/health/auth/users/clients/admin-assignments/admin-users/admin-audit-logs/projects/tasks/audit-log
+- `server/src/app.module.ts` - root module imports for config/database/health/auth/users/clients/admin-summary/admin-assignments/admin-users/admin-audit-logs/projects/tasks/audit-log
 - `server/src/config/env.validation.ts` - Joi env validation schema
 - `server/src/config/cors.config.ts` - env-based CORS whitelist
 - `server/src/common/filters/global-exception.filter.ts` - centralized error response format
@@ -167,6 +197,7 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - `User.role` enum remains the primary fixed role field
   - `User.sessionInvalidatedAt` is used for access-token invalidation lifecycle
   - `ClientProfile.slug` is unique
+  - `ClientProfile.status` enum (`ACTIVE | INACTIVE | SUSPENDED`) and indexed
   - `Project` slug uniqueness is client-scoped (`@@unique([clientProfileId, slug])`)
   - Assignment constraints and indexes:
     - `@@unique([employeeUserId, clientProfileId, scope])`
@@ -179,6 +210,7 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 - `server/src/database/prisma.service.ts` - Prisma client lifecycle management
 - `server/src/database/database.module.ts` - global database module
 - `server/prisma/migrations/20260428211614_add_session_invalidated_at/migration.sql` - adds `User.sessionInvalidatedAt` column
+- `server/prisma/migrations/20260430000000_add_client_profile_status/migration.sql` - adds `ClientProfile.status` and `ClientProfile_status_idx`
 - `server/prisma/seed.ts` - demo seed foundation:
   - seeds admin + 7 employee roles + 1 client owner
   - seeds permission catalog and role-permission mappings
@@ -214,8 +246,13 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - `users.module.ts` - imports `AuthModule` for guard wiring
 - `server/src/clients/` - protected clients foundation:
   - `clients.controller.ts` - `GET /api/v1/clients`, `GET /api/v1/clients/:id`, `GET /api/v1/clients/me`
-  - `clients.service.ts` - admin/client scope checks + assignment-based employee scope (`clients.read.assigned`) + object-level ownership/assignment checks
+  - `clients.service.ts` - admin/client scope checks + assignment-based employee scope (`clients.read.assigned`) + object-level ownership/assignment checks + server-side pagination/filter/sorting (`data + meta` envelope)
+  - `dto/client-query.dto.ts` - list query validation (`page`, `limit`, `sortBy`, `sortOrder`, `status`, `search`)
   - `clients.module.ts` - imports `AuthModule` for guard wiring
+- `server/src/admin-summary/` - admin dashboard summary module:
+  - `admin-summary.controller.ts` - `GET /api/v1/admin/summary`
+  - `admin-summary.service.ts` - count-based KPI aggregation (`users`, `clients`, `projects`, `tasks`, `auditLogs`) with admin-only service checks
+  - `admin-summary.module.ts` - module wiring
 - `server/src/admin-assignments/` - admin assignment management module:
   - `admin-assignments.controller.ts` - `GET /api/v1/admin/assignments`, `POST /api/v1/admin/assignments`, `PATCH /api/v1/admin/assignments/:id`, `PATCH /api/v1/admin/assignments/:id/deactivate`, `PATCH /api/v1/admin/assignments/:id/activate`
   - `admin-assignments.service.ts` - admin-only service authorization, assignment query filters, duplicate-safe create/reactivate flow, and sanitized assignment responses
@@ -266,7 +303,7 @@ From `server/package.json`:
   - runs Jest e2e suite
 - `server/test/jest-e2e.config.cjs` - Jest configuration for e2e files
 - `server/test/jest.env.ts` - test env defaults for JWT and auth runtime
-- `server/test/authz.e2e-spec.ts` - users/clients/admin-assignment authorization matrix (30 scenarios, real AppModule + real guards, runtime assignment/client resolution, assignment CRUD negative cases)
+- `server/test/authz.e2e-spec.ts` - users/clients/admin-summary/admin-assignment authorization matrix, clients pagination/filter/sort coverage, and assignment negative cases
 - `server/test/projects-tasks-authz.e2e-spec.ts` - projects/tasks authorization matrix + assignment deactivation regression coverage
 - `server/test/admin-users-password-authz.e2e-spec.ts` - admin employee create + own password change authz matrix
 - `server/test/admin-users-management-authz.e2e-spec.ts` - admin users management authz matrix (list/detail/update/deactivate/activate/reset-password + role restrictions + list pagination/sorting/validation + audit write assertions)
@@ -276,7 +313,7 @@ From `server/package.json`:
   - `npm run test:e2e:prepare`
   - `npm run test:e2e`
   - `npm run test:e2e:authz`
-  - latest DB-connected authz pattern run: `6/6 suites`, `123/123` tests passed
+  - latest DB-connected authz pattern run: `6/6 suites`, `139/139` tests passed
 
 ### Styles
 
