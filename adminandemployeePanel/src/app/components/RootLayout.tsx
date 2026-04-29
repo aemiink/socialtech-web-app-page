@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, Briefcase, FolderKanban,
   CheckSquare, ThumbsUp, Megaphone, FileText,
   BarChart3, Calendar, UserCheck, DollarSign,
-  Zap, Settings, Search, Plus, Bell, LogOut
+  Zap, Settings, Search, Plus, Bell, LogOut, History
 } from "lucide-react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
@@ -30,6 +30,7 @@ const menuItems = [
   { path: "/raporlar", label: "Raporlar", icon: BarChart3 },
   { path: "/toplantilar", label: "Toplantılar", icon: Calendar },
   { path: "/calisanlar", label: "Çalışanlar", icon: UserCheck },
+  { path: "/audit-loglari", label: "İşlem Geçmişi", icon: History },
   { path: "/finans", label: "Finans", icon: DollarSign },
   { path: "/otomasyonlar", label: "Otomasyonlar", icon: Zap },
   { path: "/ayarlar", label: "Ayarlar", icon: Settings },
@@ -92,14 +93,13 @@ export function RootLayout() {
         <nav className="flex-1 overflow-y-auto p-4">
           {menuItems.map((item) => {
             const Icon = item.icon;
-            const isActive = location.pathname === item.path;
 
             return (
               <Link
                 key={item.path}
                 to={item.path}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl mb-1 transition-all ${
-                  isActive
+                  isMenuItemActive(item.path, location.pathname)
                     ? "bg-[#AAFF01] text-[#131313] shadow-[0_0_20px_rgba(170,255,1,0.3)]"
                     : "text-[#A0A0A0] hover:text-white hover:bg-[#1A1A1A]"
                 }`}
@@ -167,4 +167,12 @@ export function RootLayout() {
       </div>
     </div>
   );
+}
+
+function isMenuItemActive(itemPath: string, currentPath: string): boolean {
+  if (itemPath === "/") {
+    return currentPath === "/";
+  }
+
+  return currentPath === itemPath || currentPath.startsWith(`${itemPath}/`);
 }
