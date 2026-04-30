@@ -10,8 +10,22 @@ export const ADMIN_USER_AUDIT_ACTIONS = {
   passwordReset: "ADMIN_USER_PASSWORD_RESET",
 } as const;
 
+export const ADMIN_CLIENT_AUDIT_ACTIONS = {
+  created: "ADMIN_CLIENT_CREATED",
+  updated: "ADMIN_CLIENT_UPDATED",
+  deactivated: "ADMIN_CLIENT_DEACTIVATED",
+  activated: "ADMIN_CLIENT_ACTIVATED",
+  ownerCreated: "ADMIN_CLIENT_OWNER_CREATED",
+  ownerLinked: "ADMIN_CLIENT_OWNER_LINKED",
+} as const;
+
 export type AdminUserAuditAction =
   (typeof ADMIN_USER_AUDIT_ACTIONS)[keyof typeof ADMIN_USER_AUDIT_ACTIONS];
+
+export type AdminClientAuditAction =
+  (typeof ADMIN_CLIENT_AUDIT_ACTIONS)[keyof typeof ADMIN_CLIENT_AUDIT_ACTIONS];
+
+export type AuditLogAction = AdminUserAuditAction | AdminClientAuditAction;
 
 export type AuditLogRequestContext = {
   ipAddress: string | null;
@@ -22,7 +36,7 @@ type AuditLogWriteClient = Pick<Prisma.TransactionClient, "auditLog">;
 
 type RecordAuditLogInput = {
   actorUserId: string | null;
-  action: AdminUserAuditAction;
+  action: AuditLogAction;
   entityType: string;
   entityId: string | null;
   metadata: Prisma.InputJsonObject;
@@ -34,6 +48,10 @@ const SENSITIVE_METADATA_KEY_FRAGMENTS = [
   "token",
   "secret",
   "authorization",
+  "cookie",
+  "credential",
+  "apikey",
+  "api_key",
 ] as const;
 
 @Injectable()

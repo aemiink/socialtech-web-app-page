@@ -37,6 +37,7 @@ type ClientListItem = {
   id: string;
   slug: string;
   companyName: string;
+  contactEmail?: string | null;
   status: ClientStatus;
 };
 
@@ -449,16 +450,11 @@ describe("Authorization Matrix (e2e)", () => {
       .expect(200);
 
     const clientsResponse = response.body as PaginatedResponse<ClientListItem>;
-    expect(clientsResponse.meta).toEqual(
-      expect.objectContaining({
-        page: 1,
-        limit: 20,
-        total: expect.any(Number),
-        totalPages: expect.any(Number),
-        hasNextPage: expect.any(Boolean),
-        hasPreviousPage: expect.any(Boolean),
-      }),
-    );
+    expectClientListEnvelope(clientsResponse, {
+      page: 1,
+      limit: 20,
+      total: allClientIds.length,
+    });
     const returnedIds = clientsResponse.data.map((client) => client.id).sort();
     const expectedIds = [...allClientIds].sort();
     expect(returnedIds).toEqual(expectedIds);
@@ -481,8 +477,8 @@ describe("Authorization Matrix (e2e)", () => {
       .expect(200);
 
     const clientsResponse = response.body as PaginatedResponse<ClientListItem>;
+    expectClientListEnvelope(clientsResponse, { page: 1, limit: 20, total: 1 });
     expect(clientsResponse.data.map((client) => client.id)).toEqual([clientOwnProfileId]);
-    expect(clientsResponse.meta.total).toBe(1);
   });
 
   it("admin client summary endpointini görebilir", async () => {
@@ -553,9 +549,15 @@ describe("Authorization Matrix (e2e)", () => {
       .expect(200);
 
     const clientsResponse = response.body as PaginatedResponse<ClientListItem>;
+    expectClientListEnvelope(clientsResponse, {
+      page: 1,
+      limit: 20,
+      total: employeeAssignedClientIds.length,
+    });
     const returnedIds = clientsResponse.data.map((client) => client.id).sort();
     const expectedIds = [...employeeAssignedClientIds].sort();
     expect(returnedIds).toEqual(expectedIds);
+    expect(returnedIds).not.toContain(employeeUnassignedClientId);
   });
 
   it("employee assigned client summary görebilir", async () => {
@@ -587,9 +589,28 @@ describe("Authorization Matrix (e2e)", () => {
       .expect(200);
 
     const clientsResponse = response.body as PaginatedResponse<ClientListItem>;
-    expect(clientsResponse.meta.page).toBe(1);
-    expect(clientsResponse.meta.limit).toBe(2);
+    expectClientListEnvelope(clientsResponse, {
+      page: 1,
+      limit: 2,
+      total: allClientIds.length,
+    });
     expect(clientsResponse.data.length).toBeLessThanOrEqual(2);
+  });
+
+  it("employee clients pagination meta assigned scope dışına çıkmaz", async () => {
+    const response = await request(app.getHttpServer())
+      .get("/api/v1/clients?page=1&limit=1")
+      .set("Authorization", `Bearer ${employeeToken}`)
+      .expect(200);
+
+    const clientsResponse = response.body as PaginatedResponse<ClientListItem>;
+    expectClientListEnvelope(clientsResponse, {
+      page: 1,
+      limit: 1,
+      total: employeeAssignedClientIds.length,
+    });
+    expect(clientsResponse.data).toHaveLength(1);
+    expect(employeeAssignedClientIds).toContain(clientsResponse.data[0].id);
   });
 
   it("admin clients sort çalışır", async () => {
@@ -599,6 +620,11 @@ describe("Authorization Matrix (e2e)", () => {
       .expect(200);
 
     const clientsResponse = response.body as PaginatedResponse<ClientListItem>;
+    expectClientListEnvelope(clientsResponse, {
+      page: 1,
+      limit: 100,
+      total: allClientIds.length,
+    });
     const slugs = clientsResponse.data.map((client) => client.slug);
     expect(slugs).toEqual([...slugs].sort((first, second) => first.localeCompare(second)));
   });
@@ -610,6 +636,33 @@ describe("Authorization Matrix (e2e)", () => {
       .expect(400);
 
     expectApiError(response.body, /page/i);
+  });
+
+  it("admin clients decimal page için 400 alır", async () => {
+    const response = await request(app.getHttpServer())
+      .get("/api/v1/clients?page=1.5")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(400);
+
+    expectApiError(response.body, /page/i);
+  });
+
+  it("admin clients max page üstü için 400 alır", async () => {
+    const response = await request(app.getHttpServer())
+      .get("/api/v1/clients?page=10001")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(400);
+
+    expectApiError(response.body, /page/i);
+  });
+
+  it("admin clients zero limit için 400 alır", async () => {
+    const response = await request(app.getHttpServer())
+      .get("/api/v1/clients?limit=0")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(400);
+
+    expectApiError(response.body, /limit/i);
   });
 
   it("admin clients invalid limit için 400 alır", async () => {
@@ -655,6 +708,10 @@ describe("Authorization Matrix (e2e)", () => {
       .expect(200);
 
     const clientsResponse = response.body as PaginatedResponse<ClientListItem>;
+    const expectedTotal = await prisma.clientProfile.count({
+      where: { status: ClientStatus.INACTIVE },
+    });
+    expectClientListEnvelope(clientsResponse, { page: 1, limit: 20, total: expectedTotal });
     expect(clientsResponse.data.length).toBeGreaterThan(0);
     expect(clientsResponse.data.every((client) => client.status === ClientStatus.INACTIVE)).toBe(
       true,
@@ -668,12 +725,23 @@ describe("Authorization Matrix (e2e)", () => {
       .expect(200);
 
     const clientsResponse = response.body as PaginatedResponse<ClientListItem>;
+    const expectedTotal = await prisma.clientProfile.count({
+      where: {
+        OR: [
+          { companyName: { contains: "nova", mode: "insensitive" } },
+          { slug: { contains: "nova", mode: "insensitive" } },
+          { contactEmail: { contains: "nova", mode: "insensitive" } },
+        ],
+      },
+    });
+    expectClientListEnvelope(clientsResponse, { page: 1, limit: 20, total: expectedTotal });
     expect(clientsResponse.data.length).toBeGreaterThan(0);
     expect(
       clientsResponse.data.every(
         (client) =>
           client.companyName.toLowerCase().includes("nova") ||
-          client.slug.toLowerCase().includes("nova"),
+          client.slug.toLowerCase().includes("nova") ||
+          (client.contactEmail?.toLowerCase().includes("nova") ?? false),
       ),
     ).toBe(true);
   });
@@ -1107,6 +1175,25 @@ describe("Authorization Matrix (e2e)", () => {
     }
 
     throw new Error(`Unexpected status while ensuring assignment creation: ${response.status}`);
+  }
+
+  function expectClientListEnvelope(
+    response: PaginatedResponse<ClientListItem>,
+    expected: { page: number; limit: number; total: number },
+  ): void {
+    const totalPages = expected.total === 0 ? 0 : Math.ceil(expected.total / expected.limit);
+
+    expect(Array.isArray(response.data)).toBe(true);
+    expect(response.data.length).toBeLessThanOrEqual(expected.limit);
+    expect(response.meta).toEqual({
+      page: expected.page,
+      limit: expected.limit,
+      total: expected.total,
+      totalPages,
+      hasNextPage: totalPages > 0 && expected.page < totalPages,
+      hasPreviousPage: expected.page > 1 && totalPages > 0,
+    });
+    expect(JSON.stringify(response)).not.toMatch(/password|token|secret|hash/i);
   }
 
   function expectClientSummaryShape(
