@@ -6,7 +6,10 @@ import {
   EmployeeClientAssignmentScope,
   Priority,
   ProjectStatus,
+  PurchasedServiceKey,
+  PurchasedServiceStatus,
   TaskStatus,
+  TaskTodoVisibility,
   UserRole,
   UserStatus,
 } from "@prisma/client";
@@ -38,11 +41,19 @@ type EmployeeClientAssignmentSeed = {
   isActive?: boolean;
 };
 
+type ClientPurchasedServiceSeed = {
+  clientSlug: string;
+  serviceKey: PurchasedServiceKey;
+  status: PurchasedServiceStatus;
+  startedAt?: Date;
+};
+
 type ProjectSeed = {
   clientSlug: string;
   slug: string;
   name: string;
   description?: string;
+  serviceKey?: PurchasedServiceKey;
   status: ProjectStatus;
   priority: Priority;
   startDate?: Date;
@@ -58,6 +69,18 @@ type TaskSeed = {
   priority: Priority;
   assigneeEmail?: string;
   dueDate?: Date;
+};
+
+type TaskTodoSeed = {
+  projectClientSlug: string;
+  projectSlug: string;
+  taskTitle: string;
+  title: string;
+  description?: string;
+  visibility: TaskTodoVisibility;
+  isCompleted?: boolean;
+  completedAt?: Date;
+  completedByEmail?: string;
 };
 
 const prisma = new PrismaClient();
@@ -123,12 +146,70 @@ const EMPLOYEE_CLIENT_ASSIGNMENTS: EmployeeClientAssignmentSeed[] = [
   },
 ];
 
+const CLIENT_PURCHASED_SERVICE_SEEDS: ClientPurchasedServiceSeed[] = [
+  {
+    clientSlug: "acme-e-ticaret",
+    serviceKey: PurchasedServiceKey.GROWTH_HUB,
+    status: PurchasedServiceStatus.ACTIVE,
+    startedAt: new Date("2026-04-15T00:00:00.000Z"),
+  },
+  {
+    clientSlug: "acme-e-ticaret",
+    serviceKey: PurchasedServiceKey.META_ADS,
+    status: PurchasedServiceStatus.ACTIVE,
+    startedAt: new Date("2026-04-20T00:00:00.000Z"),
+  },
+  {
+    clientSlug: "acme-e-ticaret",
+    serviceKey: PurchasedServiceKey.WEB_APP,
+    status: PurchasedServiceStatus.ACTIVE,
+    startedAt: new Date("2026-05-01T00:00:00.000Z"),
+  },
+  {
+    clientSlug: "nova-performance",
+    serviceKey: PurchasedServiceKey.META_ADS,
+    status: PurchasedServiceStatus.ACTIVE,
+    startedAt: new Date("2026-04-01T00:00:00.000Z"),
+  },
+  {
+    clientSlug: "nova-performance",
+    serviceKey: PurchasedServiceKey.GOOGLE_ADS,
+    status: PurchasedServiceStatus.ACTIVE,
+    startedAt: new Date("2026-04-01T00:00:00.000Z"),
+  },
+  {
+    clientSlug: "nova-performance",
+    serviceKey: PurchasedServiceKey.TIKTOK_ADS,
+    status: PurchasedServiceStatus.PAUSED,
+    startedAt: new Date("2026-04-10T00:00:00.000Z"),
+  },
+  {
+    clientSlug: "mavi-sosyal",
+    serviceKey: PurchasedServiceKey.SOCIAL_MEDIA,
+    status: PurchasedServiceStatus.ACTIVE,
+    startedAt: new Date("2026-05-01T00:00:00.000Z"),
+  },
+  {
+    clientSlug: "mavi-sosyal",
+    serviceKey: PurchasedServiceKey.MEDIA_HUB,
+    status: PurchasedServiceStatus.ACTIVE,
+    startedAt: new Date("2026-05-01T00:00:00.000Z"),
+  },
+  {
+    clientSlug: "mavi-sosyal",
+    serviceKey: PurchasedServiceKey.WEB_MOBILE_DESIGN,
+    status: PurchasedServiceStatus.PAUSED,
+    startedAt: new Date("2026-05-10T00:00:00.000Z"),
+  },
+];
+
 const PROJECT_SEEDS: ProjectSeed[] = [
   {
     clientSlug: "acme-e-ticaret",
     slug: "growth-hub-launch",
     name: "Growth Hub Launch",
     description: "Launch foundation for Acme E-ticaret growth operations.",
+    serviceKey: PurchasedServiceKey.GROWTH_HUB,
     status: ProjectStatus.IN_PROGRESS,
     priority: Priority.HIGH,
     startDate: new Date("2026-04-15T00:00:00.000Z"),
@@ -139,6 +220,7 @@ const PROJECT_SEEDS: ProjectSeed[] = [
     slug: "paid-acquisition-optimization",
     name: "Paid Acquisition Optimization",
     description: "Performance sprint covering paid media audit, tracking, and optimization.",
+    serviceKey: PurchasedServiceKey.META_ADS,
     status: ProjectStatus.REVIEW,
     priority: Priority.URGENT,
     startDate: new Date("2026-04-01T00:00:00.000Z"),
@@ -149,6 +231,7 @@ const PROJECT_SEEDS: ProjectSeed[] = [
     slug: "social-calendar-refresh",
     name: "Social Calendar Refresh",
     description: "Monthly social content workflow and approval foundation.",
+    serviceKey: PurchasedServiceKey.SOCIAL_MEDIA,
     status: ProjectStatus.PLANNED,
     priority: Priority.MEDIUM,
     startDate: new Date("2026-05-01T00:00:00.000Z"),
@@ -226,6 +309,63 @@ const TASK_SEEDS: TaskSeed[] = [
     priority: Priority.MEDIUM,
     assigneeEmail: "project@socialtech.com",
     dueDate: new Date("2026-05-09T00:00:00.000Z"),
+  },
+];
+
+const TASK_TODO_SEEDS: TaskTodoSeed[] = [
+  {
+    projectClientSlug: "acme-e-ticaret",
+    projectSlug: "growth-hub-launch",
+    taskTitle: "Confirm kickoff scope and milestones",
+    title: "Share kickoff agenda with client",
+    description: "Send the client-facing agenda and milestone summary before kickoff.",
+    visibility: TaskTodoVisibility.CLIENT_VISIBLE,
+  },
+  {
+    projectClientSlug: "acme-e-ticaret",
+    projectSlug: "growth-hub-launch",
+    taskTitle: "Confirm kickoff scope and milestones",
+    title: "Review internal handoff notes",
+    description: "Validate delivery ownership and internal blockers before the client call.",
+    visibility: TaskTodoVisibility.INTERNAL,
+    isCompleted: true,
+    completedAt: new Date("2026-04-30T09:00:00.000Z"),
+    completedByEmail: "project@socialtech.com",
+  },
+  {
+    projectClientSlug: "acme-e-ticaret",
+    projectSlug: "growth-hub-launch",
+    taskTitle: "Prepare performance tracking plan",
+    title: "Confirm primary conversion events",
+    description: "Align visible conversion events with the client before implementation.",
+    visibility: TaskTodoVisibility.CLIENT_VISIBLE,
+  },
+  {
+    projectClientSlug: "acme-e-ticaret",
+    projectSlug: "growth-hub-launch",
+    taskTitle: "Prepare performance tracking plan",
+    title: "Map analytics implementation notes",
+    visibility: TaskTodoVisibility.INTERNAL,
+    isCompleted: true,
+    completedAt: new Date("2026-05-01T08:00:00.000Z"),
+    completedByEmail: "performance@socialtech.com",
+  },
+  {
+    projectClientSlug: "nova-performance",
+    projectSlug: "paid-acquisition-optimization",
+    taskTitle: "Review paid media audit findings",
+    title: "Publish audit summary for client review",
+    visibility: TaskTodoVisibility.CLIENT_VISIBLE,
+    isCompleted: true,
+    completedAt: new Date("2026-05-01T10:00:00.000Z"),
+    completedByEmail: "performance@socialtech.com",
+  },
+  {
+    projectClientSlug: "mavi-sosyal",
+    projectSlug: "social-calendar-refresh",
+    taskTitle: "Build May social calendar",
+    title: "Upload client-visible draft calendar",
+    visibility: TaskTodoVisibility.CLIENT_VISIBLE,
   },
 ];
 
@@ -542,6 +682,36 @@ async function seedClientProfiles(): Promise<Map<string, string>> {
   return clientProfileIdBySlug;
 }
 
+async function seedClientPurchasedServices(
+  clientProfileIdBySlug: Map<string, string>,
+): Promise<void> {
+  for (const service of CLIENT_PURCHASED_SERVICE_SEEDS) {
+    const clientProfileId = clientProfileIdBySlug.get(service.clientSlug);
+    if (!clientProfileId) {
+      throw new Error(`Missing client profile for purchased service: ${service.clientSlug}`);
+    }
+
+    await prisma.clientPurchasedService.upsert({
+      where: {
+        clientProfileId_serviceKey: {
+          clientProfileId,
+          serviceKey: service.serviceKey,
+        },
+      },
+      update: {
+        status: service.status,
+        startedAt: service.startedAt ?? null,
+      },
+      create: {
+        clientProfileId,
+        serviceKey: service.serviceKey,
+        status: service.status,
+        startedAt: service.startedAt ?? null,
+      },
+    });
+  }
+}
+
 async function seedUsers(clientProfileIdBySlug: Map<string, string>): Promise<void> {
   for (const user of DEMO_USERS) {
     const resolvedClientProfileId = user.clientProfileSlug
@@ -672,6 +842,7 @@ async function seedProjects(clientProfileIdBySlug: Map<string, string>): Promise
         description: project.description ?? null,
         status: project.status,
         priority: project.priority,
+        serviceKey: project.serviceKey ?? null,
         startDate: project.startDate ?? null,
         dueDate: project.dueDate ?? null,
       },
@@ -682,6 +853,7 @@ async function seedProjects(clientProfileIdBySlug: Map<string, string>): Promise
         description: project.description ?? null,
         status: project.status,
         priority: project.priority,
+        serviceKey: project.serviceKey ?? null,
         startDate: project.startDate ?? null,
         dueDate: project.dueDate ?? null,
       },
@@ -768,14 +940,101 @@ async function seedTasks(projectIdByKey: Map<string, string>): Promise<void> {
   }
 }
 
+async function seedTaskTodos(projectIdByKey: Map<string, string>): Promise<void> {
+  const completedByEmails = Array.from(
+    new Set(
+      TASK_TODO_SEEDS.flatMap((todo) => (todo.completedByEmail ? [todo.completedByEmail] : [])),
+    ),
+  );
+  const completedByRows = await prisma.user.findMany({
+    where: {
+      email: { in: completedByEmails },
+    },
+    select: {
+      id: true,
+      email: true,
+    },
+  });
+  const completedByUserByEmail = new Map(completedByRows.map((user) => [user.email, user]));
+
+  for (const todo of TASK_TODO_SEEDS) {
+    const projectId = projectIdByKey.get(projectSeedKey(todo.projectClientSlug, todo.projectSlug));
+    if (!projectId) {
+      throw new Error(
+        `Missing project for task todo seed: ${todo.projectClientSlug}/${todo.projectSlug}`,
+      );
+    }
+
+    const task = await prisma.task.findFirst({
+      where: {
+        projectId,
+        title: todo.taskTitle,
+      },
+      select: { id: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    if (!task) {
+      throw new Error(`Missing task for todo seed: ${todo.taskTitle}`);
+    }
+
+    const completedByUser = todo.completedByEmail
+      ? completedByUserByEmail.get(todo.completedByEmail)
+      : null;
+    if (todo.completedByEmail && !completedByUser) {
+      throw new Error(`Missing completedBy user for task todo: ${todo.completedByEmail}`);
+    }
+
+    const isCompleted = todo.isCompleted ?? false;
+    const completedAt = isCompleted ? todo.completedAt ?? new Date() : null;
+    const completedByUserId = isCompleted ? completedByUser?.id ?? null : null;
+
+    const existingTodo = await prisma.taskTodo.findFirst({
+      where: {
+        taskId: task.id,
+        title: todo.title,
+      },
+      select: { id: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+
+    if (existingTodo) {
+      await prisma.taskTodo.update({
+        where: { id: existingTodo.id },
+        data: {
+          description: todo.description ?? null,
+          visibility: todo.visibility,
+          isCompleted,
+          completedAt,
+          completedByUserId,
+        },
+      });
+      continue;
+    }
+
+    await prisma.taskTodo.create({
+      data: {
+        taskId: task.id,
+        title: todo.title,
+        description: todo.description ?? null,
+        visibility: todo.visibility,
+        isCompleted,
+        completedAt,
+        completedByUserId,
+      },
+    });
+  }
+}
+
 async function main(): Promise<void> {
   const permissionIdBySlug = await seedPermissions();
   await seedRolePermissions(permissionIdBySlug);
   const clientProfileIdBySlug = await seedClientProfiles();
+  await seedClientPurchasedServices(clientProfileIdBySlug);
   await seedUsers(clientProfileIdBySlug);
   await seedEmployeeClientAssignments(clientProfileIdBySlug);
   const projectIdByKey = await seedProjects(clientProfileIdBySlug);
   await seedTasks(projectIdByKey);
+  await seedTaskTodos(projectIdByKey);
 }
 
 main()

@@ -199,7 +199,21 @@ export class AuthService {
   private async buildUserProfile(userId: string): Promise<AuthUserProfile> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { clientProfile: true },
+      include: {
+        clientProfile: {
+          include: {
+            purchasedServices: {
+              select: {
+                serviceKey: true,
+                status: true,
+                startedAt: true,
+                endedAt: true,
+              },
+              orderBy: [{ serviceKey: "asc" }, { id: "asc" }],
+            },
+          },
+        },
+      },
     });
 
     if (!user) {
@@ -207,6 +221,15 @@ export class AuthService {
     }
 
     const permissions = await this.authorizationService.getPermissionsForRole(user.role);
+
+    const purchasedServices = user.clientProfile
+      ? user.clientProfile.purchasedServices.map((service) => ({
+          serviceKey: service.serviceKey,
+          status: service.status,
+          startedAt: service.startedAt,
+          endedAt: service.endedAt,
+        }))
+      : [];
 
     return {
       id: user.id,
@@ -222,8 +245,10 @@ export class AuthService {
             slug: user.clientProfile.slug,
             companyName: user.clientProfile.companyName,
             contactEmail: user.clientProfile.contactEmail,
+            purchasedServices,
           }
         : null,
+      purchasedServices,
     };
   }
 

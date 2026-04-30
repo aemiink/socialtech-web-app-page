@@ -5,6 +5,11 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type {
+  AdminUser,
+  AdminUsersListQuery,
+  AdminUsersListResponse,
+} from "../../features/adminUsers/adminUsersTypes";
 import type { AuthUserProfile } from "../../features/auth/authTypes";
 import type {
   Project,
@@ -38,6 +43,15 @@ type ProjectsQueryResult = {
   isLoading: boolean;
 };
 
+type AdminUsersQueryResult = {
+  data?: AdminUsersListResponse;
+  error?: unknown;
+  isError: boolean;
+  isLoading: boolean;
+  isFetching: boolean;
+  refetch: () => void;
+};
+
 type CreateTaskTrigger = (payload: CreateTaskRequest) => MutationResponse<Task>;
 
 type UpdateTaskTrigger = (payload: {
@@ -50,6 +64,9 @@ const mockUseCreateTaskMutation = vi.fn<() => [CreateTaskTrigger, { isLoading: b
 const mockUseUpdateTaskMutation = vi.fn<() => [UpdateTaskTrigger, { isLoading: boolean }]>();
 const mockUseGetProjectsQuery = vi.fn<
   (query?: ProjectsListQuery) => ProjectsQueryResult
+>();
+const mockUseGetAdminUsersQuery = vi.fn<
+  (query: AdminUsersListQuery) => AdminUsersQueryResult
 >();
 
 let currentUser: AuthUserProfile | null = null;
@@ -68,10 +85,26 @@ vi.mock("../../features/projects/projectsApi", () => ({
   useGetProjectsQuery: (query?: ProjectsListQuery) => mockUseGetProjectsQuery(query),
 }));
 
+vi.mock("../../features/adminUsers/adminUsersApi", () => ({
+  useGetAdminUsersQuery: (query: AdminUsersListQuery) => mockUseGetAdminUsersQuery(query),
+}));
+
 const clientProfileId = "11111111-1111-4111-8111-111111111111";
 const projectId = "22222222-2222-4222-8222-222222222222";
 const taskId = "33333333-3333-4333-8333-333333333333";
 const assigneeUserId = "44444444-4444-4444-8444-444444444444";
+
+const employeeUser: AdminUser = {
+  id: assigneeUserId,
+  email: "employee@socialtech.com",
+  displayName: "Deniz Developer",
+  accountType: "EMPLOYEE",
+  role: "DEVELOPER",
+  status: "ACTIVE",
+  lastLoginAt: null,
+  createdAt: "2026-04-20T10:00:00.000Z",
+  updatedAt: "2026-04-29T10:00:00.000Z",
+};
 
 const adminUser: AuthUserProfile = {
   id: "admin-user-id",
@@ -172,6 +205,18 @@ const projectsResponse: ProjectsListResponse = {
   },
 };
 
+const adminUsersResponse: AdminUsersListResponse = {
+  data: [employeeUser],
+  meta: {
+    page: 1,
+    limit: 8,
+    total: 1,
+    totalPages: 1,
+    hasNextPage: false,
+    hasPreviousPage: false,
+  },
+};
+
 function setupPointerMocks() {
   Object.defineProperty(window.HTMLElement.prototype, "hasPointerCapture", {
     configurable: true,
@@ -203,6 +248,18 @@ function setupProjectsState(response: ProjectsListResponse = projectsResponse) {
   mockUseGetProjectsQuery.mockReturnValue({
     data: response,
     isLoading: false,
+  });
+}
+
+function setupEmployeesState(overrides: Partial<AdminUsersQueryResult> = {}) {
+  mockUseGetAdminUsersQuery.mockReturnValue({
+    data: adminUsersResponse,
+    error: undefined,
+    isError: false,
+    isLoading: false,
+    isFetching: false,
+    refetch: vi.fn(),
+    ...overrides,
   });
 }
 
@@ -268,6 +325,15 @@ function getLastTasksQuery() {
   return calls[calls.length - 1][0];
 }
 
+function getLastAdminUsersQuery() {
+  const calls = mockUseGetAdminUsersQuery.mock.calls;
+  return calls[calls.length - 1][0];
+}
+
+function selectEmployee(container: HTMLElement, name = "Deniz Developer") {
+  fireEvent.click(within(container).getByRole("button", { name: new RegExp(name) }));
+}
+
 describe("Tasks", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -275,6 +341,7 @@ describe("Tasks", () => {
     currentUser = adminUser;
     setupTasksState();
     setupProjectsState();
+    setupEmployeesState();
     setupMutationState();
   });
 
@@ -321,7 +388,7 @@ describe("Tasks", () => {
     expect(screen.getByText("Landing page QA")).toBeInTheDocument();
     expect(screen.getByText("Acme E-ticaret")).toBeInTheDocument();
     expect(screen.getAllByText("Growth Hub Launch").length).toBeGreaterThan(0);
-    expect(screen.getByText("Deniz Developer")).toBeInTheDocument();
+    expect(screen.getAllByText("Deniz Developer").length).toBeGreaterThan(0);
   });
 
   it("disables create and edit actions for an admin without task manage permission", () => {
@@ -359,15 +426,24 @@ describe("Tasks", () => {
     });
   });
 
-  it("changes the tasks query when assigneeUserId filter is submitted", async () => {
+  it("changes the tasks query when selected employee filter is submitted", async () => {
     renderTasks();
-    fireEvent.change(screen.getByLabelText("Atanan Kullanıcı ID"), {
-      target: { value: ` ${assigneeUserId} ` },
-    });
+    selectEmployee(document.body);
     fireEvent.click(screen.getByRole("button", { name: "Filtrele" }));
 
     await waitFor(() => {
       expect(getLastTasksQuery()).toMatchObject({ assigneeUserId });
+    });
+  });
+
+  it("queries active employee picker candidates", () => {
+    renderTasks();
+
+    expect(getLastAdminUsersQuery()).toMatchObject({
+      accountType: "EMPLOYEE",
+      isActive: true,
+      limit: 8,
+      search: undefined,
     });
   });
 
@@ -400,7 +476,7 @@ describe("Tasks", () => {
     expect(openCreateDialog()).toBeInTheDocument();
   });
 
-  it("shows create validation for project, title length, and UUID rules", async () => {
+  it("shows create validation for project, title length, and project UUID rules", async () => {
     const user = userEvent.setup();
     const { createTask } = setupMutationState();
     const invalidProject = {
@@ -468,9 +544,7 @@ describe("Tasks", () => {
     fireEvent.change(within(dialog).getByLabelText("Açıklama"), {
       target: { value: "  Görev kapsamı  " },
     });
-    fireEvent.change(within(dialog).getByLabelText("Atanan Kullanıcı ID"), {
-      target: { value: ` ${assigneeUserId} ` },
-    });
+    selectEmployee(dialog);
     fireEvent.change(within(dialog).getByLabelText("Deadline"), {
       target: { value: "2026-05-10" },
     });

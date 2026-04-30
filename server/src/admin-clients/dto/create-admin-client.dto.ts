@@ -1,5 +1,7 @@
 import { Transform, Type } from "class-transformer";
 import {
+  ArrayMinSize,
+  IsArray,
   IsEmail,
   IsEnum,
   IsOptional,
@@ -11,6 +13,7 @@ import {
 } from "class-validator";
 import { ClientStatus } from "@prisma/client";
 import { AdminClientOwnerDto } from "./admin-client-owner.dto";
+import { AdminClientPurchasedServiceDto } from "./admin-client-purchased-service.dto";
 
 const CLIENT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -75,4 +78,11 @@ export class CreateAdminClientDto {
   @ValidateNested()
   @Type(() => AdminClientOwnerDto)
   owner?: AdminClientOwnerDto;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => AdminClientPurchasedServiceDto)
+  purchasedServices?: AdminClientPurchasedServiceDto[];
 }

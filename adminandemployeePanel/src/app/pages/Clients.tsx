@@ -19,6 +19,7 @@ import {
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import { Checkbox } from "../components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -55,15 +56,21 @@ import type {
   ClientsSortOrder,
   CreateAdminClientRequest,
   CreateOrLinkClientOwnerRequest,
+  ServiceKey,
   UpdateAdminClientRequest,
 } from "../features/clients/clientsTypes";
 import {
   CLIENT_STATUS_OPTIONS,
+  SERVICE_CATALOG,
   extractApiErrorMessage,
   formatClientDate,
   formatClientDateTime,
+  getActivePurchasedServiceKeys,
+  getActivePurchasedServices,
   getClientStatusBadgeClass,
   getClientStatusLabel,
+  getPurchasedServicesSummary,
+  getServiceLabel,
   shortId,
   validateClientName,
   validateClientOwnerDisplayName,
@@ -98,6 +105,7 @@ type ClientFormState = {
   ownerDisplayName: string;
   ownerPassword: string;
   existingOwnerUserId: string;
+  purchasedServices: ServiceKey[];
 };
 
 type ClientFormField = keyof ClientFormState;
@@ -112,6 +120,7 @@ const initialClientForm: ClientFormState = {
   ownerDisplayName: "",
   ownerPassword: "",
   existingOwnerUserId: "",
+  purchasedServices: [],
 };
 
 export function Clients() {
@@ -613,6 +622,7 @@ export function Clients() {
                 <tr>
                   <th className="p-4 text-left text-sm font-medium text-[#A0A0A0]">Firma</th>
                   <th className="p-4 text-left text-sm font-medium text-[#A0A0A0]">Portal Slug</th>
+                  <th className="p-4 text-left text-sm font-medium text-[#A0A0A0]">Hizmetler</th>
                   <th className="p-4 text-left text-sm font-medium text-[#A0A0A0]">Durum</th>
                   <th className="p-4 text-left text-sm font-medium text-[#A0A0A0]">Oluşturulma</th>
                   <th className="p-4 text-left text-sm font-medium text-[#A0A0A0]">Güncellenme</th>
@@ -637,6 +647,9 @@ export function Clients() {
                         <Badge variant="outline" className="font-mono text-xs">
                           {client.slug}
                         </Badge>
+                      </td>
+                      <td className="p-4">
+                        <ServiceBadgeSummary client={client} />
                       </td>
                       <td className="p-4 text-sm text-[#D8D8D8]">
                         <Badge className={getClientStatusBadgeClass(client.status)}>
@@ -748,6 +761,11 @@ export function Clients() {
                 <Card className="border-white/[0.06] bg-[#202020] p-4">
                   <p className="mb-2 text-xs text-[#A0A0A0]">Müşteri Kayıt ID</p>
                   <p className="break-all font-mono text-sm text-white">{selectedClient.id}</p>
+                </Card>
+
+                <Card className="border-white/[0.06] bg-[#202020] p-4">
+                  <p className="mb-3 text-xs text-[#A0A0A0]">Satın Alınan Hizmetler</p>
+                  <ServiceBadgeSummary client={selectedClient} expanded />
                 </Card>
 
                 <div className="border-t border-white/[0.06] pt-4">
@@ -994,6 +1012,15 @@ function ClientFormFields({
         </SelectControl>
       </div>
 
+      <ServiceCheckboxGroup
+        idPrefix={idPrefix}
+        selectedServices={form.purchasedServices}
+        disabled={disabled}
+        onToggle={(serviceKey) => {
+          onChange("purchasedServices", toggleServiceSelection(form.purchasedServices, serviceKey));
+        }}
+      />
+
       {includeOwnerFields && (
         <>
           <div className="space-y-2 border-t border-white/[0.06] pt-4">
@@ -1071,6 +1098,79 @@ function ClientFormFields({
         </>
       )}
     </>
+  );
+}
+
+function ServiceCheckboxGroup({
+  idPrefix,
+  selectedServices,
+  disabled,
+  onToggle,
+}: {
+  idPrefix: string;
+  selectedServices: ServiceKey[];
+  disabled: boolean;
+  onToggle: (serviceKey: ServiceKey) => void;
+}) {
+  return (
+    <fieldset className="space-y-3 rounded-lg border border-white/[0.06] bg-[#202020]/60 p-3">
+      <legend className="px-1 text-sm font-medium text-white">Satın Alınan Hizmetler</legend>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {SERVICE_CATALOG.map((service) => {
+          const checkboxId = `${idPrefix}-service-${service.key}`;
+          const checked = selectedServices.includes(service.key);
+
+          return (
+            <label
+              key={service.key}
+              htmlFor={checkboxId}
+              className="flex min-h-10 items-center gap-3 rounded-md border border-white/[0.06] bg-[#1A1A1A] px-3 py-2 text-sm text-white"
+            >
+              <Checkbox
+                id={checkboxId}
+                checked={checked}
+                onCheckedChange={() => onToggle(service.key)}
+                disabled={disabled}
+                className="border-white/[0.18] data-[state=checked]:border-[#AAFF01] data-[state=checked]:bg-[#AAFF01] data-[state=checked]:text-[#131313]"
+              />
+              <span>{service.label}</span>
+            </label>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
+
+function ServiceBadgeSummary({
+  client,
+  expanded = false,
+}: {
+  client: ClientProfile;
+  expanded?: boolean;
+}) {
+  const activeServices = getActivePurchasedServices(client);
+
+  if (activeServices.length === 0) {
+    return <span className="text-sm text-[#A0A0A0]">Hizmet yok</span>;
+  }
+
+  const visibleServices = expanded ? activeServices : activeServices.slice(0, 2);
+  const remainingCount = activeServices.length - visibleServices.length;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2" title={getPurchasedServicesSummary(client)}>
+      {visibleServices.map((service) => (
+        <Badge key={service.serviceKey} variant="outline" className="border-[#AAFF01]/30 text-[#d2ff8a]">
+          {getServiceLabel(service.serviceKey)}
+        </Badge>
+      ))}
+      {remainingCount > 0 && (
+        <Badge variant="outline" className="border-white/[0.12] text-[#A0A0A0]">
+          +{remainingCount}
+        </Badge>
+      )}
+    </div>
   );
 }
 
@@ -1362,6 +1462,10 @@ function validateClientForm(
     return "Geçerli bir müşteri durumu seçin.";
   }
 
+  if (form.purchasedServices.length === 0) {
+    return "En az bir satın alınan hizmet seçin.";
+  }
+
   if (!includeOwnerFields || form.ownerMode === "NONE") {
     return null;
   }
@@ -1389,6 +1493,7 @@ function buildCreateClientPayload(form: ClientFormState): CreateAdminClientReque
   const payload: CreateAdminClientRequest = {
     name: form.name.trim(),
     status: form.status,
+    purchasedServices: form.purchasedServices,
   };
   const slug = normalizeOptionalText(form.slug);
 
@@ -1403,6 +1508,7 @@ function buildUpdateClientPayload(form: ClientFormState): UpdateAdminClientReque
   const payload: UpdateAdminClientRequest = {
     name: form.name.trim(),
     status: form.status,
+    purchasedServices: form.purchasedServices,
   };
   const slug = normalizeOptionalText(form.slug);
 
@@ -1439,7 +1545,16 @@ function clientToForm(client: ClientProfile): ClientFormState {
     name: client.companyName,
     slug: client.slug,
     status: client.status,
+    purchasedServices: getActivePurchasedServiceKeys(client),
   };
+}
+
+function toggleServiceSelection(selectedServices: ServiceKey[], serviceKey: ServiceKey): ServiceKey[] {
+  if (selectedServices.includes(serviceKey)) {
+    return selectedServices.filter((selectedService) => selectedService !== serviceKey);
+  }
+
+  return [...selectedServices, serviceKey];
 }
 
 function normalizeOptionalText(value: string): string | undefined {

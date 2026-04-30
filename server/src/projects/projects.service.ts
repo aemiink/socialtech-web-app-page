@@ -5,7 +5,13 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { AccountType, Prisma, UserRole } from "@prisma/client";
+import {
+  AccountType,
+  Prisma,
+  PurchasedServiceKey,
+  PurchasedServiceStatus,
+  UserRole,
+} from "@prisma/client";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { PrismaService } from "../database/prisma.service";
 import { CreateProjectDto } from "./dto/create-project.dto";
@@ -22,6 +28,7 @@ const clientSummarySelect = {
 const projectReadSelect = {
   id: true,
   clientProfileId: true,
+  serviceKey: true,
   name: true,
   slug: true,
   description: true,
@@ -41,6 +48,7 @@ type ProjectReadModel = Prisma.ProjectGetPayload<{ select: typeof projectReadSel
 type ProjectUpdateState = {
   id: string;
   clientProfileId: string;
+  serviceKey: PurchasedServiceKey | null;
   name: string;
   startDate: Date | null;
   dueDate: Date | null;
@@ -106,6 +114,7 @@ export class ProjectsService {
     this.assertBodyObject(dto);
     this.assertCanManageProjects(currentUser);
     await this.assertClientProfileExists(dto.clientProfileId);
+    await this.assertClientAllowsServiceKey(dto.clientProfileId, dto.serviceKey ?? null);
 
     const startDate = this.parseNullableDate(dto.startDate) ?? null;
     const dueDate = this.parseNullableDate(dto.dueDate) ?? null;
@@ -119,6 +128,7 @@ export class ProjectsService {
           name: dto.name,
           slug,
           description: dto.description ?? null,
+          serviceKey: dto.serviceKey ?? null,
           status: dto.status,
           priority: dto.priority,
           startDate,
@@ -149,12 +159,15 @@ export class ProjectsService {
 
     const existingProject = await this.getProjectUpdateStateOrFail(projectId);
     const nextClientProfileId = dto.clientProfileId ?? existingProject.clientProfileId;
+    const nextServiceKey =
+      dto.serviceKey === undefined ? existingProject.serviceKey : (dto.serviceKey ?? null);
     if (dto.clientProfileId) {
       await this.assertClientProfileExists(dto.clientProfileId);
       if (dto.clientProfileId !== existingProject.clientProfileId) {
         await this.assertExistingTaskAssigneesMatchClient(projectId, dto.clientProfileId);
       }
     }
+    await this.assertClientAllowsServiceKey(nextClientProfileId, nextServiceKey);
 
     const startDateUpdate = this.parseNullableDate(dto.startDate);
     const dueDateUpdate = this.parseNullableDate(dto.dueDate);
@@ -169,6 +182,7 @@ export class ProjectsService {
 
     const data: Prisma.ProjectUpdateInput = {
       ...(dto.clientProfileId ? { clientProfile: { connect: { id: dto.clientProfileId } } } : {}),
+      ...(dto.serviceKey !== undefined ? { serviceKey: dto.serviceKey ?? null } : {}),
       ...(dto.name !== undefined ? { name: dto.name } : {}),
       ...(slug !== undefined ? { slug } : {}),
       ...(dto.description !== undefined ? { description: dto.description } : {}),
@@ -264,6 +278,7 @@ export class ProjectsService {
       select: {
         id: true,
         clientProfileId: true,
+        serviceKey: true,
         name: true,
         startDate: true,
         dueDate: true,
@@ -285,6 +300,28 @@ export class ProjectsService {
 
     if (!clientProfile) {
       throw new BadRequestException("Client profile not found.");
+    }
+  }
+
+  private async assertClientAllowsServiceKey(
+    clientProfileId: string,
+    serviceKey: PurchasedServiceKey | null,
+  ): Promise<void> {
+    if (!serviceKey) {
+      return;
+    }
+
+    const purchasedService = await this.prisma.clientPurchasedService.findFirst({
+      where: {
+        clientProfileId,
+        serviceKey,
+        status: PurchasedServiceStatus.ACTIVE,
+      },
+      select: { id: true },
+    });
+
+    if (!purchasedService) {
+      throw new BadRequestException("Selected service is not active for this client.");
     }
   }
 

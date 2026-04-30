@@ -1,5 +1,5 @@
 import type { FormEvent, ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { AlertCircle, CheckSquare, Clock, Plus } from "lucide-react";
 import { Badge } from "../components/ui/badge";
@@ -35,6 +35,12 @@ import {
   hasAdminPermission,
   selectCurrentUser,
 } from "../features/auth/authSelectors";
+import { useGetAdminUsersQuery } from "../features/adminUsers/adminUsersApi";
+import type {
+  AdminUser,
+  AdminUsersListQuery,
+} from "../features/adminUsers/adminUsersTypes";
+import { getRoleLabel } from "../features/adminUsers/adminUsersUtils";
 import { useGetProjectsQuery } from "../features/projects/projectsApi";
 import type { Priority, Project } from "../features/projects/projectsTypes";
 import { PRIORITY_OPTIONS } from "../features/projects/projectsUtils";
@@ -62,7 +68,6 @@ import {
   getTaskStatusBadgeClass,
   getTaskStatusLabel,
   isTaskOverdue,
-  isUuid,
   shortId,
   toNullableText,
 } from "../features/tasks/tasksUtils";
@@ -94,6 +99,15 @@ const initialTaskForm: TaskFormState = {
   dueDate: "",
 };
 
+const EMPLOYEE_PICKER_LIMIT = 8;
+const SEARCH_DEBOUNCE_MS = 275;
+
+type AssigneeSelection = {
+  id: string;
+  displayName: string | null;
+  roleLabel: string | null;
+};
+
 export function Tasks() {
   const currentUser = useAppSelector(selectCurrentUser);
   const canManageTasks = hasAdminPermission(currentUser, [
@@ -102,7 +116,8 @@ export function Tasks() {
   ]);
 
   const [projectIdFilter, setProjectIdFilter] = useState("ALL");
-  const [assigneeUserIdInput, setAssigneeUserIdInput] = useState("");
+  const [assigneeFilterSelection, setAssigneeFilterSelection] =
+    useState<AssigneeSelection | null>(null);
   const [assigneeUserIdFilter, setAssigneeUserIdFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<TaskStatusFilter>("ALL");
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("ALL");
@@ -112,10 +127,14 @@ export function Tasks() {
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState<TaskFormState>(initialTaskForm);
+  const [createSelectedAssignee, setCreateSelectedAssignee] =
+    useState<AssigneeSelection | null>(null);
   const [createSubmitError, setCreateSubmitError] = useState<string | null>(null);
 
   const [editTarget, setEditTarget] = useState<Task | null>(null);
   const [editForm, setEditForm] = useState<TaskFormState | null>(null);
+  const [editSelectedAssignee, setEditSelectedAssignee] =
+    useState<AssigneeSelection | null>(null);
   const [editSubmitError, setEditSubmitError] = useState<string | null>(null);
 
   const query = useMemo<TasksListQuery>(
@@ -161,20 +180,13 @@ export function Tasks() {
   const handleFilterSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setPageSuccess(null);
-
-    const normalizedAssigneeUserId = assigneeUserIdInput.trim();
-    if (normalizedAssigneeUserId && !isUuid(normalizedAssigneeUserId)) {
-      setPageError("Atanan kullanıcı ID geçerli bir UUID olmalıdır.");
-      return;
-    }
-
     setPageError(null);
-    setAssigneeUserIdFilter(normalizedAssigneeUserId);
+    setAssigneeUserIdFilter(assigneeFilterSelection?.id ?? "");
   };
 
   const resetFilters = () => {
     setProjectIdFilter("ALL");
-    setAssigneeUserIdInput("");
+    setAssigneeFilterSelection(null);
     setAssigneeUserIdFilter("");
     setStatusFilter("ALL");
     setPriorityFilter("ALL");
@@ -186,6 +198,7 @@ export function Tasks() {
     setPageError(null);
     setPageSuccess(null);
     setCreateSubmitError(null);
+    setCreateSelectedAssignee(null);
     setCreateForm({
       ...initialTaskForm,
       projectId: projectIdFilter === "ALL" ? "" : projectIdFilter,
@@ -197,6 +210,7 @@ export function Tasks() {
     setIsCreateOpen(false);
     setCreateSubmitError(null);
     setCreateForm(initialTaskForm);
+    setCreateSelectedAssignee(null);
   };
 
   const updateCreateForm = (field: TaskFormField, value: TaskFormValue) => {
@@ -207,6 +221,30 @@ export function Tasks() {
   const updateEditForm = (field: TaskFormField, value: TaskFormValue) => {
     setEditSubmitError(null);
     setEditForm((prev) => (prev ? { ...prev, [field]: value } : prev));
+  };
+
+  const selectCreateAssignee = (employee: AdminUser) => {
+    setCreateSubmitError(null);
+    setCreateSelectedAssignee(employeeToAssigneeSelection(employee));
+    setCreateForm((prev) => ({ ...prev, assigneeUserId: employee.id }));
+  };
+
+  const clearCreateAssignee = () => {
+    setCreateSubmitError(null);
+    setCreateSelectedAssignee(null);
+    setCreateForm((prev) => ({ ...prev, assigneeUserId: "" }));
+  };
+
+  const selectEditAssignee = (employee: AdminUser) => {
+    setEditSubmitError(null);
+    setEditSelectedAssignee(employeeToAssigneeSelection(employee));
+    setEditForm((prev) => (prev ? { ...prev, assigneeUserId: employee.id } : prev));
+  };
+
+  const clearEditAssignee = () => {
+    setEditSubmitError(null);
+    setEditSelectedAssignee(null);
+    setEditForm((prev) => (prev ? { ...prev, assigneeUserId: "" } : prev));
   };
 
   const handleCreateSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -237,11 +275,13 @@ export function Tasks() {
     setEditSubmitError(null);
     setEditTarget(task);
     setEditForm(taskToForm(task));
+    setEditSelectedAssignee(task.assignee ? taskAssigneeToSelection(task.assignee) : null);
   };
 
   const closeEditDialog = () => {
     setEditTarget(null);
     setEditForm(null);
+    setEditSelectedAssignee(null);
     setEditSubmitError(null);
   };
 
@@ -329,15 +369,14 @@ export function Tasks() {
             </Select>
           </div>
           <div className="2xl:col-span-2">
-            <Label htmlFor="task-assignee-filter" className="mb-2 block text-xs text-[#A0A0A0]">
-              Atanan Kullanıcı ID
-            </Label>
-            <Input
-              id="task-assignee-filter"
-              value={assigneeUserIdInput}
-              onChange={(event) => setAssigneeUserIdInput(event.target.value)}
-              className="border-white/[0.08] bg-[#202020] text-white"
-              placeholder="UUID ile filtrele"
+            <EmployeePicker
+              idPrefix="task-assignee-filter"
+              label="Atanan Çalışan"
+              selectedAssignee={assigneeFilterSelection}
+              selectedAssigneeId={assigneeFilterSelection?.id ?? ""}
+              onSelect={(employee) => setAssigneeFilterSelection(employeeToAssigneeSelection(employee))}
+              onClear={() => setAssigneeFilterSelection(null)}
+              disabled={false}
             />
           </div>
           <div>
@@ -504,7 +543,10 @@ export function Tasks() {
               idPrefix="create-task"
               form={createForm}
               projects={projects}
+              selectedAssignee={createSelectedAssignee}
               onChange={updateCreateForm}
+              onAssigneeSelect={selectCreateAssignee}
+              onAssigneeClear={clearCreateAssignee}
               disabled={isCreating}
             />
             <DialogFooter>
@@ -549,7 +591,10 @@ export function Tasks() {
                 idPrefix="edit-task"
                 form={editForm}
                 projects={projects}
+                selectedAssignee={editSelectedAssignee}
                 onChange={updateEditForm}
+                onAssigneeSelect={selectEditAssignee}
+                onAssigneeClear={clearEditAssignee}
                 disabled={isUpdating}
               />
               <DialogFooter>
@@ -596,13 +641,19 @@ function TaskFormFields({
   idPrefix,
   form,
   projects,
+  selectedAssignee,
   onChange,
+  onAssigneeSelect,
+  onAssigneeClear,
   disabled,
 }: {
   idPrefix: string;
   form: TaskFormState;
   projects: Project[];
+  selectedAssignee: AssigneeSelection | null;
   onChange: (field: TaskFormField, value: TaskFormValue) => void;
+  onAssigneeSelect: (employee: AdminUser) => void;
+  onAssigneeClear: () => void;
   disabled: boolean;
 }) {
   const projectOptions = getProjectOptions(projects, form.projectId);
@@ -696,13 +747,13 @@ function TaskFormFields({
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor={`${idPrefix}-assignee`}>Atanan Kullanıcı ID</Label>
-          <Input
-            id={`${idPrefix}-assignee`}
-            value={form.assigneeUserId}
-            onChange={(event) => onChange("assigneeUserId", event.target.value)}
-            className="border-white/[0.08] bg-[#202020]"
-            placeholder="Boş bırakılabilir"
+          <EmployeePicker
+            idPrefix={`${idPrefix}-assignee`}
+            label="Atanan Çalışan"
+            selectedAssignee={selectedAssignee}
+            selectedAssigneeId={form.assigneeUserId}
+            onSelect={onAssigneeSelect}
+            onClear={onAssigneeClear}
             disabled={disabled}
           />
         </div>
@@ -720,6 +771,171 @@ function TaskFormFields({
       </div>
     </>
   );
+}
+
+function EmployeePicker({
+  idPrefix,
+  label,
+  selectedAssignee,
+  selectedAssigneeId,
+  onSelect,
+  onClear,
+  disabled,
+}: {
+  idPrefix: string;
+  label: string;
+  selectedAssignee: AssigneeSelection | null;
+  selectedAssigneeId: string;
+  onSelect: (employee: AdminUser) => void;
+  onClear: () => void;
+  disabled: boolean;
+}) {
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setSearch(searchInput.trim());
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [searchInput]);
+
+  const employeeQuery = useMemo<AdminUsersListQuery>(
+    () => ({
+      accountType: "EMPLOYEE",
+      isActive: true,
+      limit: EMPLOYEE_PICKER_LIMIT,
+      search: search.length > 0 ? search : undefined,
+    }),
+    [search],
+  );
+
+  const {
+    data: employeesResponse,
+    error,
+    isError,
+    isFetching,
+    isLoading,
+    refetch,
+  } = useGetAdminUsersQuery(employeeQuery);
+
+  const employees = (employeesResponse?.data ?? []).filter(
+    (employee) => employee.accountType === "EMPLOYEE" && employee.status === "ACTIVE",
+  );
+  const selectedLabel = selectedAssignee
+    ? formatAssigneeSelection(selectedAssignee)
+    : selectedAssigneeId
+      ? shortId(selectedAssigneeId)
+      : null;
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={`${idPrefix}-search`}>{label}</Label>
+      <Input
+        id={`${idPrefix}-search`}
+        value={searchInput}
+        onChange={(event) => setSearchInput(event.target.value)}
+        className="border-white/[0.08] bg-[#202020]"
+        placeholder="Çalışan ara..."
+        disabled={disabled}
+      />
+
+      {selectedLabel && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[#AAFF01]/30 bg-[#AAFF01]/10 px-3 py-2">
+          <div className="min-w-0">
+            <Badge className="mb-1 bg-[#AAFF01] text-[#131313]">Seçili</Badge>
+            <p className="truncate text-sm font-medium text-white">{selectedLabel}</p>
+          </div>
+          <Button type="button" size="sm" variant="ghost" onClick={onClear} disabled={disabled}>
+            Temizle
+          </Button>
+        </div>
+      )}
+
+      <div className="rounded-md border border-white/[0.06] bg-[#202020]">
+        <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-2 text-xs text-[#A0A0A0]">
+          <span>Aktif çalışanlar</span>
+          {isFetching && !isLoading && <span>Güncelleniyor...</span>}
+        </div>
+        {isLoading && <div className="px-3 py-3 text-sm text-[#A0A0A0]">Çalışanlar yükleniyor...</div>}
+        {!isLoading && isError && (
+          <div className="space-y-2 px-3 py-3 text-sm text-red-200">
+            <p>{extractApiErrorMessage(error, "Çalışan adayları alınamadı.")}</p>
+            <Button type="button" size="sm" variant="outline" onClick={() => refetch()}>
+              Tekrar Dene
+            </Button>
+          </div>
+        )}
+        {!isLoading && !isError && employees.length === 0 && (
+          <div className="px-3 py-3 text-sm text-[#A0A0A0]">
+            {search ? "Aramaya uygun aktif çalışan bulunamadı." : "Aktif çalışan bulunamadı."}
+          </div>
+        )}
+        {!isLoading && !isError && employees.length > 0 && (
+          <div className="divide-y divide-white/[0.06]">
+            {employees.map((employee) => {
+              const isSelected = selectedAssigneeId === employee.id;
+
+              return (
+                <button
+                  key={employee.id}
+                  type="button"
+                  className={`flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50 ${
+                    isSelected ? "bg-[#AAFF01]/10" : ""
+                  }`}
+                  onClick={() => onSelect(employee)}
+                  disabled={disabled}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium text-white">
+                      {employee.displayName?.trim() || shortId(employee.id)}
+                    </span>
+                    <span className="block truncate text-xs text-[#A0A0A0]">
+                      {getRoleLabel(employee.role)}
+                    </span>
+                  </span>
+                  <Badge
+                    variant={isSelected ? "default" : "outline"}
+                    className={isSelected ? "bg-[#AAFF01] text-[#131313]" : undefined}
+                  >
+                    {isSelected ? "Seçili" : "Seç"}
+                  </Badge>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function employeeToAssigneeSelection(employee: AdminUser): AssigneeSelection {
+  return {
+    id: employee.id,
+    displayName: employee.displayName,
+    roleLabel: getRoleLabel(employee.role),
+  };
+}
+
+function taskAssigneeToSelection(assignee: Task["assignee"]): AssigneeSelection | null {
+  if (!assignee) {
+    return null;
+  }
+
+  return {
+    id: assignee.id,
+    displayName: assignee.displayName,
+    roleLabel: getRoleLabel(assignee.role),
+  };
+}
+
+function formatAssigneeSelection(assignee: AssigneeSelection): string {
+  const displayName = assignee.displayName?.trim() || shortId(assignee.id);
+  return assignee.roleLabel ? `${displayName} (${assignee.roleLabel})` : displayName;
 }
 
 function getProjectOptions(projects: Project[], selectedProjectId: string): Project[] {
@@ -746,21 +962,24 @@ function getProjectOptions(projects: Project[], selectedProjectId: string): Proj
   ];
 }
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isValidUuid(value: string): boolean {
+  return UUID_PATTERN.test(value.trim());
+}
+
 function validateTaskForm(form: TaskFormState): string | null {
   if (!form.projectId.trim()) {
     return "Proje seçimi gereklidir.";
   }
 
-  if (!isUuid(form.projectId)) {
+  if (!isValidUuid(form.projectId)) {
     return "Proje ID geçerli bir UUID olmalıdır.";
   }
 
   if (form.title.trim().length < 2) {
     return "Görev başlığı en az 2 karakter olmalıdır.";
-  }
-
-  if (form.assigneeUserId.trim() && !isUuid(form.assigneeUserId)) {
-    return "Atanan kullanıcı ID geçerli bir UUID olmalıdır.";
   }
 
   return null;

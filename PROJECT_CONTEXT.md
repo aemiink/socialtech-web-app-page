@@ -76,7 +76,7 @@ Portal areas:
 - `clientPanel` route behavior:
   - only `CLIENT` accounts can enter
   - state-based navigation in `App.tsx` is preserved
-  - service selection restore remains localStorage-backed
+  - service selection restore purchased-service authorization kontrolüyle localStorage-backed
 - `RoleContext` is no longer the auth source of truth in `adminandemployeePanel`; Redux auth state is canonical.
 - Backend auth is now implemented under `server/`:
   - `POST /api/v1/auth/login`
@@ -108,6 +108,11 @@ Portal areas:
 - Projects and tasks API foundation is now active:
   - Projects: `GET /api/v1/projects`, `GET /api/v1/projects/:id`, `POST /api/v1/projects`, `PATCH /api/v1/projects/:id`
   - Tasks: `GET /api/v1/tasks`, `GET /api/v1/tasks/:id`, `POST /api/v1/tasks`, `PATCH /api/v1/tasks/:id`
+- Task todo/checklist endpoints are now active:
+  - `POST /api/v1/tasks/:id/todos`
+  - `PATCH /api/v1/tasks/:taskId/todos/:todoId`
+  - `PATCH /api/v1/tasks/:taskId/todos/:todoId/toggle`
+  - `DELETE /api/v1/tasks/:taskId/todos/:todoId`
 - `GET /users` enforces `users.read`; service-level object authorization protects `/users/:id` and `/clients/:id`.
 - Admin can read full users/client profile scopes; client users are limited to their own `ClientProfile` scope.
 - Employee assignment scope is now modeled via `EmployeeClientAssignment` + active assignment checks.
@@ -115,7 +120,7 @@ Portal areas:
 - Employee users can read only active-assignment-scope projects/tasks and can update only `status` on tasks assigned to them within active assignment scope.
 - Client users can read only own `clientProfileId`-scope projects/tasks; out-of-scope detail access resolves as safe `404`.
 - Assignment admin endpoints are admin-only via `JwtAuthGuard` + `PermissionsGuard` + `RequirePermissions`, plus service-level `ADMIN` account/role and permission checks (`assignments.read`, `assignments.manage`).
-- Authz e2e matrix is now automated in backend tests and validated with real guard chain behavior (`7/7 suites`, `168/168` tests).
+- Authz e2e matrix is now automated in backend tests and validated with real guard chain behavior (`7/7 suites`, `176/176` tests).
 - Admin dashboard summary endpoint is active: `GET /api/v1/admin/summary` (permission: `admin.summary.read`).
 - Admin summary contract is now fixed and consumed by frontend as dedicated KPI source:
   - `users`: `total`, `active`, `inactive`, `employees`, `clients`, `admins`
@@ -160,6 +165,10 @@ Portal areas:
   - `Clients` uses server-side paginated/filterable/sortable list response (`data + meta`) and syncs pagination from `currentData.meta.page` to avoid stale-page snapback
   - `ClientDetail` uses `GET /clients/:id/summary` for client basics + related projects/tasks overview
   - `Dashboard` consumes normalized summary contract via `transformResponse + normalizeAdminSummaryResponse` guard layer
+  - `Clients` create/edit flow supports purchased-services selection and owner mode (`NONE` / `CREATE` / `LINK_EXISTING`)
+  - `Projects` create/edit flow uses searchable client picker + `serviceKey` selection
+  - `Tasks` create/edit flow uses searchable assignee picker
+  - `TaskDetail` includes todo/checklist management (`INTERNAL` / `CLIENT_VISIBLE`)
 - Layouts:
   - `RootLayout` — Admin Panel shell (sidebar + topbar + `<Outlet />`)
   - `EmployeeLayout` — Employee Panel shell (role-aware sidebar + topbar + `<Outlet />`)
@@ -205,7 +214,10 @@ Portal areas:
 - Portal data:
   - `clientPanel/src/app/data/service-pages.ts` — mock service profiles, KPIs, tabs, tables, timelines, agency comments, and client actions
   - `clientPanel/src/app/lib/client-actions.ts` — localStorage-backed action history and action event dispatch
-  - Service selection restore remains localStorage-backed during current state-based navigation
+- Service selection restore remains localStorage-backed during current state-based navigation
+- Service selection now renders only client’ın `ACTIVE` purchased services kümesi
+- `selectedService` restore unauthorized ise otomatik temizlenip service selection’a fallback edilir
+- Client-visible task progress bileşeni: `clientPanel/src/app/components/client-visible-tasks-section.tsx`
 - Portal styles: `clientPanel/src/styles/`
 
 ## Backend Architecture
@@ -223,7 +235,8 @@ Current backend baseline includes:
   - Core: `User`, `RefreshToken`, `ClientProfile`, `AuditLog`
   - Authorization: `Permission`, `RolePermission`
   - Assignment scope: `EmployeeClientAssignment` + `EmployeeClientAssignmentScope`
-  - Project tracking: `Project`, `Task` + enums (`ProjectStatus`, `TaskStatus`, `Priority`)
+  - Project tracking: `Project`, `Task`, `TaskTodo` + enums (`ProjectStatus`, `TaskStatus`, `Priority`, `TaskTodoVisibility`)
+  - Client purchased services: `ClientPurchasedService` + enums (`PurchasedServiceKey`, `PurchasedServiceStatus`)
 - Hybrid RBAC strategy selected: fixed `User.role` enum is kept, permission expansion is modeled via `Permission` + `RolePermission`
 - Demo seed foundation exists at `server/prisma/seed.ts`:
   - Seeds demo admin/employee/client accounts
@@ -244,6 +257,13 @@ Current backend baseline includes:
   - Admin Assignments: `GET /api/v1/admin/assignments`, `POST /api/v1/admin/assignments`, `PATCH /api/v1/admin/assignments/:id`, `PATCH /api/v1/admin/assignments/:id/deactivate`, `PATCH /api/v1/admin/assignments/:id/activate`
   - Projects: `GET /api/v1/projects`, `GET /api/v1/projects/:id`, `POST /api/v1/projects`, `PATCH /api/v1/projects/:id`
   - Tasks: `GET /api/v1/tasks`, `GET /api/v1/tasks/:id`, `POST /api/v1/tasks`, `PATCH /api/v1/tasks/:id`
+  - Task todos: `POST /api/v1/tasks/:id/todos`, `PATCH /api/v1/tasks/:taskId/todos/:todoId`, `PATCH /api/v1/tasks/:taskId/todos/:todoId/toggle`, `DELETE /api/v1/tasks/:taskId/todos/:todoId`
+  - Admin Client Management:
+    - `POST /api/v1/admin/clients`
+    - `PATCH /api/v1/admin/clients/:id`
+    - `PATCH /api/v1/admin/clients/:id/deactivate`
+    - `PATCH /api/v1/admin/clients/:id/activate`
+    - `POST /api/v1/admin/clients/:id/owner`
   - Admin Users Management:
     - Existing: `POST /api/v1/admin/users`
     - Added: `GET /api/v1/admin/users`, `GET /api/v1/admin/users/:id`, `PATCH /api/v1/admin/users/:id`, `PATCH /api/v1/admin/users/:id/deactivate`, `PATCH /api/v1/admin/users/:id/activate`, `PATCH /api/v1/admin/users/:id/reset-password`
@@ -283,7 +303,7 @@ Current backend baseline includes:
   - DB safety guard in runner: strict test DB-name check (`_test`, `test_`, `testing`) with delimiter-aware matching
   - `ALLOW_E2E_DB_RESET=true` no longer bypasses DB-name safety check
   - Matrix suite currently covers users/clients/admin-summary/admin-assignments/projects/tasks/admin-user/admin-audit-logs/token-invalidation flows
-  - Latest authz pattern run: `7/7` suites, `168/168` tests passed
+  - Latest authz pattern run: `7/7` suites, `176/176` tests passed
 - Token strategy:
   - access token in response body (Bearer usage)
   - refresh token in HttpOnly cookie
@@ -297,8 +317,9 @@ Current backend baseline includes:
   - `npm run build` passed
   - `npm run check` passed
   - `npm run typecheck:spec` passed
-  - `DATABASE_URL=postgresql://ahmeteminkaya@localhost:5432/socialtech_test?schema=public ALLOW_E2E_DB_RESET=true npm run test:e2e:authz` passed (`7/7 suites`, `168/168 tests`, test DB name: `socialtech_test`)
-  - `adminandemployeePanel npm run build` / `npm run check` / `npm run test:run` passed (`15` test files, `115/115` tests)
+  - `DATABASE_URL=postgresql://ahmeteminkaya@localhost:5432/socialtech_test?schema=public ALLOW_E2E_DB_RESET=true npm run test:e2e:authz` passed (`7/7 suites`, `176/176 tests`, test DB name: `socialtech_test`)
+  - `adminandemployeePanel npm run build` / `npm run check` / `npm run test:run` passed (`15` test files, `120/120` tests)
+  - `clientPanel npm run build` / `npm run check` / `npm test` passed (`1` test file, `6/6` tests)
   - manual auth flow tests passed (`login`, `me`, `refresh`, `logout`, `logout` sonrası `refresh=401`)
   - `server/tsconfig.build.json` uses `incremental: false` to avoid missing-module runtime issues from stale/incomplete dist output
 
@@ -340,6 +361,9 @@ Backend Prisma data model (foundation scope):
 - `EmployeeClientAssignmentScope`: assignment scope enum (`PROJECT`, `PERFORMANCE`, `SOCIAL_MEDIA`, `DESIGN`, `DEVELOPMENT`, `SUPPORT`, `SEO`)
 - `Project`: client-linked project entity with lifecycle/status/priority/date fields and client-scoped slug uniqueness
 - `Task`: project-linked task entity with status/priority/assignee fields
+- `TaskTodo`: task checklist item with visibility (`INTERNAL`, `CLIENT_VISIBLE`), completion metadata, and sort order
+- `Project.serviceKey`: project-to-service relationship for purchased-service-aware workflows
+- `ClientPurchasedService`: client service entitlements with status and lifecycle dates
 - `ProjectStatus`: `PLANNED | IN_PROGRESS | REVIEW | COMPLETED | ON_HOLD`
 - `TaskStatus`: `TODO | IN_PROGRESS | REVIEW | DONE | BLOCKED`
 - `Priority`: `LOW | MEDIUM | HIGH | URGENT`
@@ -355,7 +379,7 @@ Current protected read behavior:
 - Project/task responses are authorization-scoped by role:
   - admin: full project/task scope
   - employee: active-assignment-scope read, own-assigned status-only task update
-  - client: own-client-scope read
+  - client: own-client-scope read; todo payload is filtered to `CLIENT_VISIBLE` only
 
 Demo seed baseline (fresh reset):
 - `users=9` (local environments may exceed this after admin user creation tests)
@@ -611,3 +635,65 @@ Latest reported checks: `adminandemployeePanel npm run check`, `clientPanel npm 
 - `Musterilerim` sayfasında `limit=100` geçici değer; büyük tenant’larda sayfalama ihtiyacı oluşabilir.
 - `Gorevlerim` tarafında status update UX bu milestone’da eklenmedi; sonraki adımda kontrollü şekilde `PATCH /tasks/:id` ile entegre edilebilir.
 - Frontend bundle/chunk warning devam ediyor (`>500kB` ana chunk), fonksiyonel bloklayıcı değil.
+
+## Update - 2026-05-01 (Purchased Services + Picker UX + Task Todo Milestone)
+
+### Backend Architecture
+- Prisma tarafında client entitlements + task checklist genişlemesi tamamlandı:
+  - `ClientPurchasedService` (unique: `clientProfileId + serviceKey`, `startedAt/endedAt`)
+  - `Project.serviceKey`
+  - `TaskTodo` (`visibility`, `sortOrder`, completion metadata)
+- Admin client management API, purchased services payload’ıyla çalışıyor:
+  - `POST /api/v1/admin/clients`
+  - `PATCH /api/v1/admin/clients/:id`
+  - `PATCH /api/v1/admin/clients/:id/deactivate`
+  - `PATCH /api/v1/admin/clients/:id/activate`
+  - `POST /api/v1/admin/clients/:id/owner`
+- Task todo endpoints aktif:
+  - `POST /api/v1/tasks/:id/todos`
+  - `PATCH /api/v1/tasks/:taskId/todos/:todoId`
+  - `PATCH /api/v1/tasks/:taskId/todos/:todoId/toggle`
+  - `DELETE /api/v1/tasks/:taskId/todos/:todoId`
+- Client kullanıcı task okumalarında yalnızca `CLIENT_VISIBLE` todo’lar döndürülür; employee kendi assigned task’ında todo toggle yapabilir, client todo mutation yapamaz.
+
+### Admin Panel Frontend
+- Clients create/edit akışında satın alınan hizmetler alanı backend payload’ına bağlandı.
+- Projects create/edit akışında manuel `clientProfileId` input kaldırıldı; searchable client picker + `serviceKey` seçimi eklendi.
+- Tasks create/edit akışında manuel `assigneeUserId` input kaldırıldı; searchable employee picker eklendi.
+- TaskDetail içinde todo ekleme/güncelleme/silme/toggle ve progress görünümü backend checklist endpointleriyle entegre.
+
+### Employee Panel Frontend
+- `Gorevlerim` sayfasında API-driven task listesi üzerinde todo/progress görünümü ve toggle akışı çalışır durumda.
+- Employee görev akışı assignment + own-task scope kurallarıyla backend’e bırakılmıştır.
+
+### Client Portal Architecture
+- Service selection yalnızca authenticated client’ın `ACTIVE` purchased services kümesini gösterir.
+- `selectedService` restore purchased-services setine karşı doğrulanır; yetkisiz service localStorage’dan temizlenir.
+- Client-visible task progress bölümü (`ClientVisibleTasksSection`) seçili service bağlamında task/todo ilerlemesini render eder.
+
+### RTK Query / API Integration
+- Admin panelde clients/projects/tasks feature katmanları yeni purchased-service + picker + todo contract’ına göre güncellendi.
+- Client portalda auth normalizer purchased services için backend enum alias’larını normalize eder (`MEDIA_HUB`, `LANDING_PAGE` vb.).
+- Client portal tasks feature eklendi ve client-visible todo/progress render akışı API verisiyle bağlandı.
+
+### Testing
+- Backend doğrulama:
+  - `npm run prisma:generate` ✅
+  - `npm run prisma:seed` ✅
+  - `npm run build` ✅
+  - `npm run check` ✅
+  - `DATABASE_URL=postgresql://ahmeteminkaya@localhost:5432/socialtech_test?schema=public ALLOW_E2E_DB_RESET=true npm run test:e2e:authz` ✅ (`7/7`, `176/176`)
+- Admin/Employee frontend doğrulama:
+  - `npm run build` ✅
+  - `npm run check` ✅
+  - `npm run test:run` ✅ (`15` file, `120/120`)
+- Client portal doğrulama:
+  - `npm run build` ✅
+  - `npm run check` ✅
+  - `npm test` ✅ (`1` file, `6/6`)
+
+### Known Risks / Notes
+- Task assignee picker şu an global active employee adaylarını kullanıyor; project/client assignment-scope aday endpoint’i henüz yok.
+- Owner picker hâlâ admin users endpointine bağlı; dedicated owner-candidates endpoint planned.
+- Todo audit logging henüz genişletilmedi (mutation authz + data visibility uygulanmış durumda).
+- Bundle/chunk warningleri fonksiyonel bloklayıcı değil ama performans iyileştirme backlog’unda kalmalı.

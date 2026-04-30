@@ -1,4 +1,5 @@
 import { baseApi } from "../../services/baseApi";
+import { toBackendServiceKey } from "../clients/clientsUtils";
 import type {
   CreateProjectRequest,
   Project,
@@ -43,16 +44,18 @@ export const projectsApi = baseApi.injectEndpoints({
       query: (body) => ({
         url: "/projects",
         method: "POST",
-        body,
+        body: serializeProjectMutationBody(body),
       }),
+      transformResponse: (response: unknown) => normalizeProjectResponse(response),
       invalidatesTags: [{ type: "Projects", id: PROJECTS_LIST_ID }],
     }),
     updateProject: builder.mutation<Project, { id: string; body: UpdateProjectRequest }>({
       query: ({ id, body }) => ({
         url: `/projects/${id}`,
         method: "PATCH",
-        body,
+        body: serializeProjectMutationBody(body),
       }),
+      transformResponse: (response: unknown) => normalizeProjectResponse(response),
       invalidatesTags: (_result, _error, { id }) => [
         { type: "Projects", id: PROJECTS_LIST_ID },
         { type: "Projects", id },
@@ -104,4 +107,15 @@ function serializeProjectsListQuery(
   }
 
   return params;
+}
+
+function serializeProjectMutationBody(
+  body: CreateProjectRequest | UpdateProjectRequest,
+): Record<string, unknown> {
+  const serializedBody: Record<string, unknown> = { ...body };
+  if (body.serviceKey !== undefined) {
+    serializedBody.serviceKey = body.serviceKey === null ? null : toBackendServiceKey(body.serviceKey);
+  }
+
+  return serializedBody;
 }

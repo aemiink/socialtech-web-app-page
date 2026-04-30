@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { AlertTriangle, CheckCircle, Clock, FolderKanban, Plus } from "lucide-react";
 import { Badge } from "../components/ui/badge";
@@ -27,6 +27,12 @@ import {
   hasAdminPermission,
   selectCurrentUser,
 } from "../features/auth/authSelectors";
+import { useGetClientsQuery } from "../features/clients/clientsApi";
+import type { ClientProfile, ClientsListQuery, ServiceKey } from "../features/clients/clientsTypes";
+import {
+  getActivePurchasedServiceKeys,
+  getServiceLabel,
+} from "../features/clients/clientsUtils";
 import {
   useCreateProjectMutation,
   useGetProjectsQuery,
@@ -49,9 +55,9 @@ import {
   getPriorityLabel,
   getProjectClientName,
   getProjectProgress,
+  getProjectServiceLabel,
   getProjectStatusBadgeClass,
   getProjectStatusLabel,
-  isUuid,
   toNullableText,
 } from "../features/projects/projectsUtils";
 import { useAppSelector } from "../store/hooks";
@@ -61,6 +67,7 @@ type PriorityFilter = Priority | "ALL";
 
 type ProjectFormState = {
   clientProfileId: string;
+  serviceKey: ServiceKey | "";
   name: string;
   description: string;
   status: ProjectStatus;
@@ -74,6 +81,7 @@ type ProjectFormValue = ProjectFormState[ProjectFormField];
 
 const initialProjectForm: ProjectFormState = {
   clientProfileId: "",
+  serviceKey: "",
   name: "",
   description: "",
   status: "PLANNED",
@@ -82,6 +90,9 @@ const initialProjectForm: ProjectFormState = {
   dueDate: "",
 };
 
+const CLIENT_PICKER_LIMIT = 8;
+const SEARCH_DEBOUNCE_MS = 275;
+
 export function Projects() {
   const currentUser = useAppSelector(selectCurrentUser);
   const canManageProjects = hasAdminPermission(currentUser, [
@@ -89,7 +100,7 @@ export function Projects() {
     "projects.manage",
   ]);
 
-  const [clientProfileIdInput, setClientProfileIdInput] = useState("");
+  const [clientFilterSelection, setClientFilterSelection] = useState<ClientProfile | null>(null);
   const [clientProfileIdFilter, setClientProfileIdFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<ProjectStatusFilter>("ALL");
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("ALL");
@@ -99,10 +110,12 @@ export function Projects() {
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState<ProjectFormState>(initialProjectForm);
+  const [createSelectedClient, setCreateSelectedClient] = useState<ClientProfile | null>(null);
   const [createSubmitError, setCreateSubmitError] = useState<string | null>(null);
 
   const [editTarget, setEditTarget] = useState<Project | null>(null);
   const [editForm, setEditForm] = useState<ProjectFormState | null>(null);
+  const [editSelectedClient, setEditSelectedClient] = useState<ClientProfile | null>(null);
   const [editSubmitError, setEditSubmitError] = useState<string | null>(null);
 
   const query = useMemo<ProjectsListQuery>(
@@ -145,19 +158,12 @@ export function Projects() {
   const handleFilterSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setPageSuccess(null);
-
-    const normalizedClientProfileId = clientProfileIdInput.trim();
-    if (normalizedClientProfileId && !isUuid(normalizedClientProfileId)) {
-      setPageError("Müşteri profil ID geçerli bir UUID olmalıdır.");
-      return;
-    }
-
     setPageError(null);
-    setClientProfileIdFilter(normalizedClientProfileId);
+    setClientProfileIdFilter(clientFilterSelection?.id ?? "");
   };
 
   const resetFilters = () => {
-    setClientProfileIdInput("");
+    setClientFilterSelection(null);
     setClientProfileIdFilter("");
     setStatusFilter("ALL");
     setPriorityFilter("ALL");
@@ -170,6 +176,7 @@ export function Projects() {
     setPageSuccess(null);
     setCreateSubmitError(null);
     setCreateForm(initialProjectForm);
+    setCreateSelectedClient(null);
     setIsCreateOpen(true);
   };
 
@@ -177,6 +184,7 @@ export function Projects() {
     setIsCreateOpen(false);
     setCreateSubmitError(null);
     setCreateForm(initialProjectForm);
+    setCreateSelectedClient(null);
   };
 
   const updateCreateForm = (field: ProjectFormField, value: ProjectFormValue) => {
@@ -187,6 +195,42 @@ export function Projects() {
   const updateEditForm = (field: ProjectFormField, value: ProjectFormValue) => {
     setEditSubmitError(null);
     setEditForm((prev) => (prev ? { ...prev, [field]: value } : prev));
+  };
+
+  const selectCreateClient = (client: ClientProfile) => {
+    setCreateSubmitError(null);
+    setCreateSelectedClient(client);
+    setCreateForm((prev) => ({
+      ...prev,
+      clientProfileId: client.id,
+      serviceKey: keepValidServiceSelection(client, prev.serviceKey),
+    }));
+  };
+
+  const clearCreateClient = () => {
+    setCreateSubmitError(null);
+    setCreateSelectedClient(null);
+    setCreateForm((prev) => ({ ...prev, clientProfileId: "", serviceKey: "" }));
+  };
+
+  const selectEditClient = (client: ClientProfile) => {
+    setEditSubmitError(null);
+    setEditSelectedClient(client);
+    setEditForm((prev) =>
+      prev
+        ? {
+            ...prev,
+            clientProfileId: client.id,
+            serviceKey: keepValidServiceSelection(client, prev.serviceKey),
+          }
+        : prev,
+    );
+  };
+
+  const clearEditClient = () => {
+    setEditSubmitError(null);
+    setEditSelectedClient(null);
+    setEditForm((prev) => (prev ? { ...prev, clientProfileId: "", serviceKey: "" } : prev));
   };
 
   const handleCreateSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -217,11 +261,13 @@ export function Projects() {
     setEditSubmitError(null);
     setEditTarget(project);
     setEditForm(projectToForm(project));
+    setEditSelectedClient(project.clientProfile ? projectClientToClientProfile(project.clientProfile) : null);
   };
 
   const closeEditDialog = () => {
     setEditTarget(null);
     setEditForm(null);
+    setEditSelectedClient(null);
     setEditSubmitError(null);
   };
 
@@ -293,15 +339,14 @@ export function Projects() {
       <Card className="border-white/[0.06] bg-[#1A1A1A] p-4">
         <form onSubmit={handleFilterSubmit} className="grid grid-cols-1 gap-3 xl:grid-cols-5">
           <div className="xl:col-span-2">
-            <Label htmlFor="project-client-filter" className="mb-2 block text-xs text-[#A0A0A0]">
-              Müşteri Profil ID
-            </Label>
-            <Input
-              id="project-client-filter"
-              value={clientProfileIdInput}
-              onChange={(event) => setClientProfileIdInput(event.target.value)}
-              className="border-white/[0.08] bg-[#202020] text-white"
-              placeholder="UUID ile filtrele"
+            <ClientPicker
+              idPrefix="project-client-filter"
+              label="Müşteri"
+              selectedClient={clientFilterSelection}
+              selectedClientId={clientFilterSelection?.id ?? ""}
+              onSelect={setClientFilterSelection}
+              onClear={() => setClientFilterSelection(null)}
+              disabled={false}
             />
           </div>
           <div>
@@ -388,6 +433,11 @@ export function Projects() {
                       <Badge className={getPriorityBadgeClass(project.priority)}>
                         {getPriorityLabel(project.priority)}
                       </Badge>
+                      {project.serviceKey && (
+                        <Badge variant="outline" className="border-[#AAFF01]/30 text-[#d2ff8a]">
+                          {getProjectServiceLabel(project)}
+                        </Badge>
+                      )}
                     </div>
                     <div className="flex flex-wrap items-center gap-2 text-sm text-[#A0A0A0]">
                       <span>{getProjectClientName(project)}</span>
@@ -457,7 +507,10 @@ export function Projects() {
             <ProjectFormFields
               idPrefix="create-project"
               form={createForm}
+              selectedClient={createSelectedClient}
               onChange={updateCreateForm}
+              onClientSelect={selectCreateClient}
+              onClientClear={clearCreateClient}
               disabled={isCreating}
             />
             <DialogFooter>
@@ -501,7 +554,10 @@ export function Projects() {
               <ProjectFormFields
                 idPrefix="edit-project"
                 form={editForm}
+                selectedClient={editSelectedClient}
                 onChange={updateEditForm}
+                onClientSelect={selectEditClient}
+                onClientClear={clearEditClient}
                 disabled={isUpdating}
               />
               <DialogFooter>
@@ -556,27 +612,57 @@ function ProjectInfo({ label, value }: { label: string; value: string }) {
 function ProjectFormFields({
   idPrefix,
   form,
+  selectedClient,
   onChange,
+  onClientSelect,
+  onClientClear,
   disabled,
 }: {
   idPrefix: string;
   form: ProjectFormState;
+  selectedClient: ClientProfile | null;
   onChange: (field: ProjectFormField, value: ProjectFormValue) => void;
+  onClientSelect: (client: ClientProfile) => void;
+  onClientClear: () => void;
   disabled: boolean;
 }) {
+  const serviceOptions = getServiceOptions(selectedClient, form.serviceKey);
+
   return (
     <>
       <div className="space-y-2">
-        <Label htmlFor={`${idPrefix}-client-profile-id`}>Müşteri Profil ID</Label>
-        <Input
-          id={`${idPrefix}-client-profile-id`}
-          value={form.clientProfileId}
-          onChange={(event) => onChange("clientProfileId", event.target.value)}
-          className="border-white/[0.08] bg-[#202020]"
-          placeholder="ClientProfile UUID"
-          required
+        <ClientPicker
+          idPrefix={`${idPrefix}-client`}
+          label="Müşteri"
+          selectedClient={selectedClient}
+          selectedClientId={form.clientProfileId}
+          onSelect={onClientSelect}
+          onClear={onClientClear}
           disabled={disabled}
         />
+      </div>
+      <div className="space-y-2">
+        <Label>Hizmet</Label>
+        <Select
+          value={form.serviceKey || "NONE"}
+          onValueChange={(value) => onChange("serviceKey", value === "NONE" ? "" : value as ServiceKey)}
+          disabled={disabled || serviceOptions.length === 0}
+        >
+          <SelectTrigger className="border-white/[0.08] bg-[#202020]">
+            <SelectValue placeholder="Hizmet seçin" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="NONE">Hizmet seçilmedi</SelectItem>
+            {serviceOptions.map((serviceKey) => (
+              <SelectItem key={serviceKey} value={serviceKey}>
+                {getServiceLabel(serviceKey)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {selectedClient && serviceOptions.length === 0 && (
+          <p className="text-xs text-[#A0A0A0]">Seçili müşterinin aktif hizmeti bulunmuyor.</p>
+        )}
       </div>
       <div className="space-y-2">
         <Label htmlFor={`${idPrefix}-name`}>Proje Adı</Label>
@@ -672,13 +758,146 @@ function ProjectFormFields({
   );
 }
 
+function ClientPicker({
+  idPrefix,
+  label,
+  selectedClient,
+  selectedClientId,
+  onSelect,
+  onClear,
+  disabled,
+}: {
+  idPrefix: string;
+  label: string;
+  selectedClient: ClientProfile | null;
+  selectedClientId: string;
+  onSelect: (client: ClientProfile) => void;
+  onClear: () => void;
+  disabled: boolean;
+}) {
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setSearch(searchInput.trim());
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [searchInput]);
+
+  const clientQuery = useMemo<ClientsListQuery>(
+    () => ({
+      status: "ACTIVE",
+      limit: CLIENT_PICKER_LIMIT,
+      search: search.length > 0 ? search : undefined,
+    }),
+    [search],
+  );
+
+  const {
+    data: clientsResponse,
+    error,
+    isError,
+    isFetching,
+    isLoading,
+    refetch,
+  } = useGetClientsQuery(clientQuery);
+
+  const clients = clientsResponse?.data ?? [];
+  const selectedLabel = selectedClient?.companyName ?? (selectedClientId ? shortClientId(selectedClientId) : null);
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={`${idPrefix}-search`}>{label}</Label>
+      <Input
+        id={`${idPrefix}-search`}
+        value={searchInput}
+        onChange={(event) => setSearchInput(event.target.value)}
+        className="border-white/[0.08] bg-[#202020]"
+        placeholder="Müşteri ara..."
+        disabled={disabled}
+      />
+
+      {selectedLabel && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[#AAFF01]/30 bg-[#AAFF01]/10 px-3 py-2">
+          <div className="min-w-0">
+            <Badge className="mb-1 bg-[#AAFF01] text-[#131313]">Seçili</Badge>
+            <p className="truncate text-sm font-medium text-white">{selectedLabel}</p>
+          </div>
+          <Button type="button" size="sm" variant="ghost" onClick={onClear} disabled={disabled}>
+            Temizle
+          </Button>
+        </div>
+      )}
+
+      <div className="rounded-md border border-white/[0.06] bg-[#202020]">
+        <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-2 text-xs text-[#A0A0A0]">
+          <span>Aktif müşteriler</span>
+          {isFetching && !isLoading && <span>Güncelleniyor...</span>}
+        </div>
+        {isLoading && <div className="px-3 py-3 text-sm text-[#A0A0A0]">Müşteriler yükleniyor...</div>}
+        {!isLoading && isError && (
+          <div className="space-y-2 px-3 py-3 text-sm text-red-200">
+            <p>{extractApiErrorMessage(error, "Müşteri adayları alınamadı.")}</p>
+            <Button type="button" size="sm" variant="outline" onClick={() => refetch()}>
+              Tekrar Dene
+            </Button>
+          </div>
+        )}
+        {!isLoading && !isError && clients.length === 0 && (
+          <div className="px-3 py-3 text-sm text-[#A0A0A0]">
+            {search ? "Aramaya uygun aktif müşteri bulunamadı." : "Aktif müşteri bulunamadı."}
+          </div>
+        )}
+        {!isLoading && !isError && clients.length > 0 && (
+          <div className="divide-y divide-white/[0.06]">
+            {clients.map((client) => {
+              const isSelected = selectedClientId === client.id;
+
+              return (
+                <button
+                  key={client.id}
+                  type="button"
+                  className={`flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50 ${
+                    isSelected ? "bg-[#AAFF01]/10" : ""
+                  }`}
+                  onClick={() => onSelect(client)}
+                  disabled={disabled}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium text-white">
+                      {client.companyName}
+                    </span>
+                    <span className="block truncate text-xs text-[#A0A0A0]">
+                      {client.slug}
+                    </span>
+                  </span>
+                  <Badge
+                    variant={isSelected ? "default" : "outline"}
+                    className={isSelected ? "bg-[#AAFF01] text-[#131313]" : undefined}
+                  >
+                    {isSelected ? "Seçili" : "Seç"}
+                  </Badge>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function shortClientId(id: string): string {
+  return id.length > 8 ? `${id.slice(0, 8)}...` : id;
+}
+
 function validateProjectForm(form: ProjectFormState): string | null {
   if (!form.clientProfileId.trim()) {
-    return "Müşteri profil ID gereklidir.";
-  }
-
-  if (!isUuid(form.clientProfileId)) {
-    return "Müşteri profil ID geçerli bir UUID olmalıdır.";
+    return "Müşteri seçimi gereklidir.";
   }
 
   if (form.name.trim().length < 2) {
@@ -695,6 +914,7 @@ function validateProjectForm(form: ProjectFormState): string | null {
 function buildProjectPayload(form: ProjectFormState): CreateProjectRequest {
   return {
     clientProfileId: form.clientProfileId.trim(),
+    ...(form.serviceKey ? { serviceKey: form.serviceKey } : {}),
     name: form.name.trim(),
     description: toNullableText(form.description),
     status: form.status,
@@ -707,6 +927,7 @@ function buildProjectPayload(form: ProjectFormState): CreateProjectRequest {
 function projectToForm(project: Project): ProjectFormState {
   return {
     clientProfileId: project.clientProfileId,
+    serviceKey: project.serviceKey ?? "",
     name: project.name,
     description: project.description ?? "",
     status: project.status,
@@ -714,4 +935,44 @@ function projectToForm(project: Project): ProjectFormState {
     startDate: formatDateInput(project.startDate),
     dueDate: formatDateInput(project.dueDate),
   };
+}
+
+function projectClientToClientProfile(client: Project["clientProfile"]): ClientProfile | null {
+  if (!client) {
+    return null;
+  }
+
+  return {
+    id: client.id,
+    slug: client.slug,
+    companyName: client.companyName,
+    contactEmail: client.contactEmail,
+    status: "ACTIVE",
+    createdAt: "",
+    updatedAt: "",
+    purchasedServices: client.purchasedServices,
+  };
+}
+
+function keepValidServiceSelection(client: ClientProfile, selectedServiceKey: ServiceKey | ""): ServiceKey | "" {
+  if (!selectedServiceKey) {
+    return "";
+  }
+
+  return getServiceOptions(client, selectedServiceKey).includes(selectedServiceKey)
+    ? selectedServiceKey
+    : "";
+}
+
+function getServiceOptions(
+  client: ClientProfile | null,
+  selectedServiceKey: ServiceKey | "",
+): ServiceKey[] {
+  const activeServiceKeys = client ? getActivePurchasedServiceKeys(client) : [];
+
+  if (selectedServiceKey && !activeServiceKeys.includes(selectedServiceKey)) {
+    return [...activeServiceKeys, selectedServiceKey];
+  }
+
+  return activeServiceKeys;
 }

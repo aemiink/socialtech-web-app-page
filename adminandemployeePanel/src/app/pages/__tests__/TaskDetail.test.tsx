@@ -1,7 +1,7 @@
 /// <reference types="vitest" />
 /// <reference types="@testing-library/jest-dom" />
 
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthUserProfile } from "../../features/auth/authTypes";
@@ -21,6 +21,21 @@ type TaskQueryResult = {
   refetch: () => void;
 };
 
+type MutationResponse<T> = {
+  unwrap: () => Promise<T>;
+};
+
+type TodoMutationTrigger = (payload: {
+  taskId: string;
+  todoId?: string;
+  body?: unknown;
+}) => MutationResponse<unknown>;
+
+type DeleteTodoTrigger = (payload: {
+  taskId: string;
+  todoId: string;
+}) => MutationResponse<unknown>;
+
 type TaskWithSensitiveFields = Task & {
   passwordHash: string;
   resetToken: string;
@@ -31,6 +46,10 @@ type TaskWithSensitiveFields = Task & {
 const mockUseGetTaskQuery = vi.fn<
   (id: string, options: QueryOptions) => TaskQueryResult
 >();
+const mockUseCreateTaskTodoMutation = vi.fn<() => [TodoMutationTrigger, { isLoading: boolean }]>();
+const mockUseUpdateTaskTodoMutation = vi.fn<() => [TodoMutationTrigger, { isLoading: boolean }]>();
+const mockUseToggleTaskTodoMutation = vi.fn<() => [TodoMutationTrigger, { isLoading: boolean }]>();
+const mockUseDeleteTaskTodoMutation = vi.fn<() => [DeleteTodoTrigger, { isLoading: boolean }]>();
 
 let currentUser: AuthUserProfile | null = null;
 
@@ -41,6 +60,10 @@ vi.mock("../../store/hooks", () => ({
 vi.mock("../../features/tasks/tasksApi", () => ({
   useGetTaskQuery: (id: string, options: QueryOptions) =>
     mockUseGetTaskQuery(id, options),
+  useCreateTaskTodoMutation: () => mockUseCreateTaskTodoMutation(),
+  useUpdateTaskTodoMutation: () => mockUseUpdateTaskTodoMutation(),
+  useToggleTaskTodoMutation: () => mockUseToggleTaskTodoMutation(),
+  useDeleteTaskTodoMutation: () => mockUseDeleteTaskTodoMutation(),
 }));
 
 const taskId = "11111111-1111-4111-8111-111111111111";
@@ -62,6 +85,11 @@ const adminUser: AuthUserProfile = {
 const adminWithoutTaskReadPermission: AuthUserProfile = {
   ...adminUser,
   permissions: [],
+};
+
+const taskManagerUser: AuthUserProfile = {
+  ...adminUser,
+  permissions: ["tasks.read.any", "tasks.manage.any"],
 };
 
 const taskDetail: TaskWithSensitiveFields = {
@@ -94,6 +122,25 @@ const taskDetail: TaskWithSensitiveFields = {
     displayName: "Deniz Developer",
     role: "DEVELOPER",
   },
+  todos: [
+    {
+      id: "55555555-5555-4555-8555-555555555555",
+      taskId,
+      title: "Desktop QA",
+      isCompleted: true,
+    },
+    {
+      id: "66666666-6666-4666-8666-666666666666",
+      taskId,
+      title: "Mobile QA",
+      isCompleted: false,
+    },
+  ],
+  completion: {
+    totalTodos: 2,
+    completedTodos: 1,
+    percent: 50,
+  },
   passwordHash: "hashed-password-value",
   resetToken: "reset-token-value",
   apiSecret: "api-secret-value",
@@ -112,6 +159,20 @@ function setupQueryState(overrides: Partial<TaskQueryResult> = {}) {
   });
 }
 
+function setupTodoMutations() {
+  const createTodo = vi.fn<TodoMutationTrigger>(() => ({ unwrap: async () => ({}) }));
+  const updateTodo = vi.fn<TodoMutationTrigger>(() => ({ unwrap: async () => ({}) }));
+  const toggleTodo = vi.fn<TodoMutationTrigger>(() => ({ unwrap: async () => ({}) }));
+  const deleteTodo = vi.fn<DeleteTodoTrigger>(() => ({ unwrap: async () => ({}) }));
+
+  mockUseCreateTaskTodoMutation.mockReturnValue([createTodo, { isLoading: false }]);
+  mockUseUpdateTaskTodoMutation.mockReturnValue([updateTodo, { isLoading: false }]);
+  mockUseToggleTaskTodoMutation.mockReturnValue([toggleTodo, { isLoading: false }]);
+  mockUseDeleteTaskTodoMutation.mockReturnValue([deleteTodo, { isLoading: false }]);
+
+  return { createTodo, updateTodo, toggleTodo, deleteTodo };
+}
+
 function renderTaskDetail(id: string = taskId) {
   render(
     <MemoryRouter initialEntries={[`/gorevler/${id}`]}>
@@ -127,6 +188,7 @@ describe("TaskDetail", () => {
     vi.clearAllMocks();
     currentUser = adminUser;
     setupQueryState();
+    setupTodoMutations();
   });
 
   it("shows invalid UUID state and skips the detail query", () => {
@@ -187,8 +249,68 @@ describe("TaskDetail", () => {
     expect(screen.getByText(/Acme E-ticaret/)).toBeInTheDocument();
     expect(screen.getByText("Deniz Developer")).toBeInTheDocument();
     expect(screen.getAllByText("Acil").length).toBeGreaterThan(0);
+    expect(screen.getByText("Todo Listesi")).toBeInTheDocument();
+    expect(screen.getByText("1/2 tamamlandı · %50")).toBeInTheDocument();
+    expect(screen.getByText("Desktop QA")).toBeInTheDocument();
+    expect(screen.getByText("Mobile QA")).toBeInTheDocument();
     expect(screen.getByText(projectId)).toBeInTheDocument();
     expect(screen.getByText(assigneeUserId)).toBeInTheDocument();
+  });
+
+  it("allows admins with manage permission to create, toggle, update, and delete todos", async () => {
+    currentUser = taskManagerUser;
+    const { createTodo, toggleTodo, updateTodo, deleteTodo } = setupTodoMutations();
+    setupQueryState({ data: taskDetail });
+
+    renderTaskDetail();
+
+    fireEvent.change(screen.getByLabelText("Yeni todo"), {
+      target: { value: "  Tablet QA  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Todo Ekle" }));
+
+    await waitFor(() => {
+      expect(createTodo).toHaveBeenCalledWith({
+        taskId,
+        body: { title: "Tablet QA", visibility: "INTERNAL" },
+      });
+    });
+
+    fireEvent.click(screen.getByLabelText("Mobile QA durumunu değiştir"));
+    await waitFor(() => {
+      expect(toggleTodo).toHaveBeenCalledWith({
+        taskId,
+        todoId: "66666666-6666-4666-8666-666666666666",
+        body: { isCompleted: true },
+      });
+    });
+
+    const todoList = screen.getByText("Todo Listesi").closest("div");
+    if (!(todoList instanceof HTMLElement)) {
+      throw new Error("Todo list container not found.");
+    }
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Düzenle" })[0]);
+    fireEvent.change(screen.getByLabelText("Todo başlığı"), {
+      target: { value: "Desktop QA updated" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Kaydet" }));
+
+    await waitFor(() => {
+      expect(updateTodo).toHaveBeenCalledWith({
+        taskId,
+        todoId: "55555555-5555-4555-8555-555555555555",
+        body: { title: "Desktop QA updated" },
+      });
+    });
+
+    fireEvent.click(within(document.body).getAllByRole("button", { name: /Sil/ })[0]);
+    await waitFor(() => {
+      expect(deleteTodo).toHaveBeenCalledWith({
+        taskId,
+        todoId: "55555555-5555-4555-8555-555555555555",
+      });
+    });
   });
 
   it("does not render sensitive fields returned by the API", () => {

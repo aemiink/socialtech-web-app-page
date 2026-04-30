@@ -117,7 +117,13 @@ Purpose: customer-facing visibility panel for purchased Social Tech services, re
   - `clientPanel/src/app/features/auth/authSlice.ts`
   - `clientPanel/src/app/features/auth/authSelectors.ts`
   - `clientPanel/src/app/features/auth/authTypes.ts`
+  - `clientPanel/src/app/features/auth/authNormalizers.ts`
   - `clientPanel/src/app/features/auth/roleMapping.ts`
+  - purchased-services aware auth parsing + service restore guards
+- Client task visibility feature:
+  - `clientPanel/src/app/features/tasks/tasksApi.ts`
+  - `clientPanel/src/app/features/tasks/tasksTypes.ts`
+  - `clientPanel/src/app/features/tasks/tasksUtils.ts`
 
 ### Navigation
 
@@ -134,6 +140,7 @@ Purpose: customer-facing visibility panel for purchased Social Tech services, re
 - `clientPanel/src/app/components/topbar.tsx` - selected service title, authenticated client identity, and backend logout.
 - `clientPanel/src/app/components/client-login.tsx` - backend client login screen (`/auth/login`).
 - `clientPanel/src/app/components/client-action-center.tsx` - floating action button, toast, action history drawer.
+- `clientPanel/src/app/components/client-visible-tasks-section.tsx` - client-visible todo/progress kartları
 - `clientPanel/src/app/components/button.tsx` - local portal button abstraction.
 - `clientPanel/src/app/components/metric-card.tsx` - reusable metric display.
 - `clientPanel/src/app/components/dashboard-widgets.tsx` - dashboard widgets.
@@ -170,7 +177,7 @@ Additional portal pages exist under `clientPanel/src/app/pages/` and `clientPane
 - `clientPanel/src/app/data/service-pages.ts` - service labels, service profiles, KPIs, tab content, tables, timelines, agency comments, and client action prompts.
 - `clientPanel/src/app/lib/client-actions.ts` - browser `localStorage` action history, action type inference, action event dispatch, and local text-file download behavior.
 - `clientPanel/src/app/App.tsx` keeps service-selection/page state behavior; auth state is Redux-managed.
-- `selectedService` restore remains localStorage-backed.
+- `selectedService` restore purchased-service yetkisine göre doğrulanır; yetkisiz seçim otomatik temizlenir.
 - Client Portal auth flow is backend-integrated; service/domain data is still partially mock/static.
 
 ## Backend API
@@ -200,10 +207,12 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 
 - `server/prisma/schema.prisma` - Prisma schema foundation:
   - Core models: `User`, `RefreshToken`, `ClientProfile`, `AuditLog`, `EmployeeClientAssignment`
-  - Delivery models: `Project`, `Task`
+  - Delivery models: `Project`, `Task`, `TaskTodo`
+  - Client service model: `ClientPurchasedService`
   - Hybrid RBAC models: `Permission`, `RolePermission`
   - Assignment scope enum: `EmployeeClientAssignmentScope`
   - Delivery enums: `ProjectStatus`, `TaskStatus`, `Priority`
+  - Additional enums: `PurchasedServiceKey`, `PurchasedServiceStatus`, `TaskTodoVisibility`
   - `User.role` enum remains the primary fixed role field
   - `User.sessionInvalidatedAt` is used for access-token invalidation lifecycle
   - `ClientProfile.slug` is unique
@@ -217,10 +226,12 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - Project/task indexes:
     - `Project`: `clientProfileId`, `status`, `priority`
     - `Task`: `projectId`, `assigneeUserId`, `status`, `priority`
+    - `TaskTodo`: `(taskId, sortOrder)`
 - `server/src/database/prisma.service.ts` - Prisma client lifecycle management
 - `server/src/database/database.module.ts` - global database module
 - `server/prisma/migrations/20260428211614_add_session_invalidated_at/migration.sql` - adds `User.sessionInvalidatedAt` column
 - `server/prisma/migrations/20260430000000_add_client_profile_status/migration.sql` - adds `ClientProfile.status` and `ClientProfile_status_idx`
+- `server/prisma/migrations/20260501000000_add_purchased_services_and_task_todos/migration.sql` - adds purchased-services, project serviceKey, and task-todo checklist schema
 - `server/prisma/seed.ts` - demo seed foundation:
   - seeds admin + 7 employee roles + 1 client owner
   - seeds permission catalog and role-permission mappings
@@ -284,13 +295,14 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - `admin-users.module.ts` - module wiring
 - `server/src/projects/` - projects API foundation:
   - `projects.controller.ts` - `GET /api/v1/projects`, `GET /api/v1/projects/:id`, `POST /api/v1/projects`, `PATCH /api/v1/projects/:id`
-  - `projects.service.ts` - admin full write scope, employee assignment-scope read, client own-scope read, object-level visibility checks
+  - `projects.service.ts` - admin full write scope, employee assignment-scope read, client own-scope read, object-level visibility checks, client purchased-service validation for `serviceKey`
   - `dto/create-project.dto.ts`, `dto/update-project.dto.ts`, `dto/project-query.dto.ts` - payload/query validation
   - `projects.module.ts` - module wiring
 - `server/src/tasks/` - tasks API foundation:
-  - `tasks.controller.ts` - `GET /api/v1/tasks`, `GET /api/v1/tasks/:id`, `POST /api/v1/tasks`, `PATCH /api/v1/tasks/:id`
-  - `tasks.service.ts` - admin full write scope, employee assignment-scope read + own-assigned status-only update, client own-scope read
-  - `dto/create-task.dto.ts`, `dto/update-task.dto.ts`, `dto/task-query.dto.ts` - payload/query validation
+  - `tasks.controller.ts` - `GET /api/v1/tasks`, `GET /api/v1/tasks/:id`, `POST /api/v1/tasks`, `PATCH /api/v1/tasks/:id`, todo CRUD/toggle endpoints
+  - `tasks.service.ts` - admin full write scope, employee assignment-scope read + own-assigned status-only update, client own-scope read, todo visibility filtering (`CLIENT_VISIBLE`)
+  - `dto/create-task.dto.ts`, `dto/update-task.dto.ts`, `dto/task-query.dto.ts`
+  - `dto/create-task-todo.dto.ts`, `dto/update-task-todo.dto.ts`, `dto/toggle-task-todo.dto.ts`
   - `tasks.module.ts` - module wiring
 - `users/clients/admin-assignments/admin-users/admin-audit-logs/projects/tasks` are now protected foundations; broader domain CRUD remains planned.
 
@@ -323,7 +335,7 @@ From `server/package.json`:
   - `npm run test:e2e:prepare`
   - `npm run test:e2e`
   - `npm run test:e2e:authz`
-- latest DB-connected authz pattern run: `7/7 suites`, `168/168` tests passed
+- latest DB-connected authz pattern run: `7/7 suites`, `176/176` tests passed
 
 ### Styles
 
@@ -460,3 +472,61 @@ The `client/` directory is the public/marketing Social Tech website, not the Cli
   - `tasks.read.assigned` permission gate + query `skip` davranışı
 - `adminandemployeePanel/src/app/employee/pages/__tests__/Gorevlerim.test.tsx`
   - loading/error/empty/success/unauthorized/query param coverage
+
+## 2026-05-01 Update Map (Purchased Services + Picker UX + Task Todos)
+
+### Backend
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260501000000_add_purchased_services_and_task_todos/migration.sql`
+- `server/prisma/seed.ts`
+- `server/src/admin-clients/admin-clients.service.ts`
+- `server/src/admin-clients/dto/create-admin-client.dto.ts`
+- `server/src/admin-clients/dto/update-admin-client.dto.ts`
+- `server/src/admin-clients/dto/admin-client-purchased-service.dto.ts`
+- `server/src/clients/clients.service.ts`
+- `server/src/auth/auth.service.ts`
+- `server/src/auth/types/auth-response.type.ts`
+- `server/src/projects/dto/create-project.dto.ts`
+- `server/src/projects/dto/update-project.dto.ts`
+- `server/src/projects/projects.service.ts`
+- `server/src/tasks/tasks.controller.ts`
+- `server/src/tasks/tasks.service.ts`
+- `server/src/tasks/dto/create-task-todo.dto.ts`
+- `server/src/tasks/dto/update-task-todo.dto.ts`
+- `server/src/tasks/dto/toggle-task-todo.dto.ts`
+- `server/test/admin-clients-authz.e2e-spec.ts`
+- `server/test/projects-tasks-authz.e2e-spec.ts`
+
+### Admin + Employee Panel Frontend
+- `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
+- `adminandemployeePanel/src/app/features/projects/projectsApi.ts`
+- `adminandemployeePanel/src/app/features/projects/projectsTypes.ts`
+- `adminandemployeePanel/src/app/features/projects/projectsUtils.ts`
+- `adminandemployeePanel/src/app/features/tasks/tasksApi.ts`
+- `adminandemployeePanel/src/app/features/tasks/tasksTypes.ts`
+- `adminandemployeePanel/src/app/features/tasks/tasksUtils.ts`
+- `adminandemployeePanel/src/app/pages/Clients.tsx`
+- `adminandemployeePanel/src/app/pages/Projects.tsx`
+- `adminandemployeePanel/src/app/pages/Tasks.tsx`
+- `adminandemployeePanel/src/app/pages/TaskDetail.tsx`
+- `adminandemployeePanel/src/app/employee/pages/Gorevlerim.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/Clients.test.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/Projects.test.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/Tasks.test.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/TaskDetail.test.tsx`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/Gorevlerim.test.tsx`
+
+### Client Portal Frontend
+- `clientPanel/src/app/App.tsx`
+- `clientPanel/src/app/pages/service-selection.tsx`
+- `clientPanel/src/app/components/client-visible-tasks-section.tsx`
+- `clientPanel/src/app/features/auth/authApi.ts`
+- `clientPanel/src/app/features/auth/authTypes.ts`
+- `clientPanel/src/app/features/auth/authNormalizers.ts`
+- `clientPanel/src/app/features/tasks/tasksApi.ts`
+- `clientPanel/src/app/features/tasks/tasksTypes.ts`
+- `clientPanel/src/app/features/tasks/tasksUtils.ts`
+- `clientPanel/src/app/__tests__/client-portal.test.tsx`
+- `clientPanel/src/test/setup.ts`

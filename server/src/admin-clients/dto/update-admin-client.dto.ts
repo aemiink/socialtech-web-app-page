@@ -1,5 +1,7 @@
-import { Transform } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
+  ArrayMinSize,
+  IsArray,
   IsEmail,
   IsEnum,
   IsOptional,
@@ -8,8 +10,10 @@ import {
   MaxLength,
   MinLength,
   ValidateIf,
+  ValidateNested,
 } from "class-validator";
 import { ClientStatus } from "@prisma/client";
+import { AdminClientPurchasedServiceDto } from "./admin-client-purchased-service.dto";
 
 const CLIENT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -75,4 +79,11 @@ export class UpdateAdminClientDto {
   @IsOptional()
   @IsEnum(ClientStatus)
   status?: ClientStatus;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => AdminClientPurchasedServiceDto)
+  purchasedServices?: AdminClientPurchasedServiceDto[];
 }

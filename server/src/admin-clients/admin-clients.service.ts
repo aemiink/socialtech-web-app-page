@@ -5,7 +5,15 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { AccountType, ClientStatus, Prisma, UserRole, UserStatus } from "@prisma/client";
+import {
+  AccountType,
+  ClientStatus,
+  Prisma,
+  PurchasedServiceKey,
+  PurchasedServiceStatus,
+  UserRole,
+  UserStatus,
+} from "@prisma/client";
 import {
   ADMIN_CLIENT_AUDIT_ACTIONS,
   AuditLogService,
@@ -16,6 +24,7 @@ import { AuthService } from "../auth/auth.service";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { PrismaService } from "../database/prisma.service";
 import { AdminClientOwnerDto, AdminClientOwnerMode } from "./dto/admin-client-owner.dto";
+import { AdminClientPurchasedServiceDto } from "./dto/admin-client-purchased-service.dto";
 import { CreateAdminClientDto } from "./dto/create-admin-client.dto";
 import { UpdateAdminClientDto } from "./dto/update-admin-client.dto";
 
@@ -34,6 +43,16 @@ const clientOwnerSummarySelect = {
   updatedAt: true,
 } satisfies Prisma.UserSelect;
 
+const purchasedServiceReadSelect = {
+  id: true,
+  serviceKey: true,
+  status: true,
+  startedAt: true,
+  endedAt: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.ClientPurchasedServiceSelect;
+
 const adminClientReadSelect = {
   id: true,
   slug: true,
@@ -50,6 +69,10 @@ const adminClientReadSelect = {
     select: clientOwnerSummarySelect,
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   },
+  purchasedServices: {
+    select: purchasedServiceReadSelect,
+    orderBy: [{ serviceKey: "asc" }, { id: "asc" }],
+  },
 } satisfies Prisma.ClientProfileSelect;
 
 type ClientOwnerReadModel = Prisma.UserGetPayload<{
@@ -60,6 +83,10 @@ type AdminClientReadModel = Prisma.ClientProfileGetPayload<{
   select: typeof adminClientReadSelect;
 }>;
 
+type PurchasedServiceReadModel = Prisma.ClientPurchasedServiceGetPayload<{
+  select: typeof purchasedServiceReadSelect;
+}>;
+
 type AdminClientOwnerResponse = {
   id: string;
   email: string;
@@ -68,6 +95,16 @@ type AdminClientOwnerResponse = {
   role: UserRole;
   status: UserStatus;
   clientProfileId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type AdminClientPurchasedServiceResponse = {
+  id: string;
+  serviceKey: PurchasedServiceKey;
+  status: PurchasedServiceStatus;
+  startedAt: Date | null;
+  endedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -83,6 +120,7 @@ type AdminClientResponse = {
   createdAt: Date;
   updatedAt: Date;
   owner: AdminClientOwnerResponse | null;
+  purchasedServices: AdminClientPurchasedServiceResponse[];
 };
 
 type ClientAuditMetadataOptions = {
@@ -109,7 +147,9 @@ export class AdminClientsService {
   ): Promise<AdminClientResponse> {
     this.assertCanManageClients(currentUser);
     this.assertValidCreateOwnerPayload(dto.owner);
+    this.assertValidPurchasedServicesPayload(dto.purchasedServices);
     const clientName = this.resolveCreateClientName(dto);
+    const purchasedServiceInputs = this.toPurchasedServiceCreateInputs(dto.purchasedServices);
 
     const ownerMode = dto.owner?.mode ?? AdminClientOwnerMode.NONE;
     const passwordHash =
@@ -125,6 +165,9 @@ export class AdminClientsService {
             companyName: clientName,
             contactEmail: dto.contactEmail ?? null,
             status: dto.status ?? ClientStatus.ACTIVE,
+            ...(purchasedServiceInputs.length > 0
+              ? { purchasedServices: { create: purchasedServiceInputs } }
+              : {}),
           },
           select: adminClientReadSelect,
         });
@@ -181,6 +224,7 @@ export class AdminClientsService {
     auditRequestContext?: AuditLogRequestContext,
   ): Promise<AdminClientResponse> {
     this.assertCanManageClients(currentUser);
+    this.assertValidPurchasedServicesPayload(dto.purchasedServices);
     this.assertHasUpdatePayload(dto);
     const clientName = this.resolveUpdateClientName(dto);
 
@@ -188,16 +232,24 @@ export class AdminClientsService {
 
     try {
       const updatedClient = await this.prisma.$transaction(async (tx) => {
-        const clientProfile = await tx.clientProfile.update({
-          where: { id: clientProfileId },
-          data: {
-            ...(clientName !== undefined ? { companyName: clientName } : {}),
-            ...(dto.slug !== undefined ? { slug: dto.slug } : {}),
-            ...(dto.contactEmail !== undefined ? { contactEmail: dto.contactEmail } : {}),
-            ...(dto.status !== undefined ? { status: dto.status } : {}),
-          },
-          select: adminClientReadSelect,
-        });
+        if (this.hasClientProfileFieldUpdate(dto)) {
+          await tx.clientProfile.update({
+            where: { id: clientProfileId },
+            data: {
+              ...(clientName !== undefined ? { companyName: clientName } : {}),
+              ...(dto.slug !== undefined ? { slug: dto.slug } : {}),
+              ...(dto.contactEmail !== undefined ? { contactEmail: dto.contactEmail } : {}),
+              ...(dto.status !== undefined ? { status: dto.status } : {}),
+            },
+            select: { id: true },
+          });
+        }
+
+        if (dto.purchasedServices !== undefined) {
+          await this.replacePurchasedServices(tx, clientProfileId, dto.purchasedServices);
+        }
+
+        const clientProfile = await this.getClientProfileOrFail(clientProfileId, tx);
 
         await this.recordAdminClientAudit(
           tx,
@@ -495,6 +547,44 @@ export class AdminClientsService {
     }
   }
 
+  private async replacePurchasedServices(
+    tx: Prisma.TransactionClient,
+    clientProfileId: string,
+    purchasedServices: AdminClientPurchasedServiceDto[],
+  ): Promise<void> {
+    const serviceKeys = purchasedServices.map((service) => service.serviceKey);
+
+    await tx.clientPurchasedService.deleteMany({
+      where: {
+        clientProfileId,
+        serviceKey: { notIn: serviceKeys },
+      },
+    });
+
+    for (const service of purchasedServices) {
+      await tx.clientPurchasedService.upsert({
+        where: {
+          clientProfileId_serviceKey: {
+            clientProfileId,
+            serviceKey: service.serviceKey,
+          },
+        },
+        update: {
+          status: service.status ?? PurchasedServiceStatus.ACTIVE,
+          startedAt: this.parseNullableDate(service.startedAt),
+          endedAt: this.parseNullableDate(service.endedAt),
+        },
+        create: {
+          clientProfileId,
+          serviceKey: service.serviceKey,
+          status: service.status ?? PurchasedServiceStatus.ACTIVE,
+          startedAt: this.parseNullableDate(service.startedAt),
+          endedAt: this.parseNullableDate(service.endedAt),
+        },
+      });
+    }
+  }
+
   private async recordOwnerAudit(
     tx: Prisma.TransactionClient,
     currentUser: AuthenticatedUser,
@@ -560,7 +650,19 @@ export class AdminClientsService {
       companyName: client.companyName,
       contactEmail: client.contactEmail,
       status: client.status,
+      purchasedServices: this.toPurchasedServicesAuditState(client.purchasedServices),
     } satisfies Prisma.InputJsonObject;
+  }
+
+  private toPurchasedServicesAuditState(
+    purchasedServices: AdminClientReadModel["purchasedServices"],
+  ): Prisma.InputJsonArray {
+    return purchasedServices.map((service) => ({
+      serviceKey: service.serviceKey,
+      status: service.status,
+      startedAt: service.startedAt?.toISOString() ?? null,
+      endedAt: service.endedAt?.toISOString() ?? null,
+    }));
   }
 
   private getCreatedClientChangedFields(client: AdminClientReadModel): string[] {
@@ -570,6 +672,7 @@ export class AdminClientsService {
       "companyName",
       ...(client.contactEmail === null ? [] : ["contactEmail"]),
       "status",
+      ...(client.purchasedServices.length === 0 ? [] : ["purchasedServices"]),
     ];
   }
 
@@ -596,7 +699,21 @@ export class AdminClientsService {
       changedFields.push("status");
     }
 
+    if (!this.arePurchasedServicesEqual(previousClient, updatedClient)) {
+      changedFields.push("purchasedServices");
+    }
+
     return changedFields;
+  }
+
+  private arePurchasedServicesEqual(
+    previousClient: AdminClientReadModel,
+    updatedClient: AdminClientReadModel,
+  ): boolean {
+    return (
+      JSON.stringify(this.toPurchasedServicesAuditState(previousClient.purchasedServices)) ===
+      JSON.stringify(this.toPurchasedServicesAuditState(updatedClient.purchasedServices))
+    );
   }
 
   private assertCanManageClients(currentUser: AuthenticatedUser): void {
@@ -615,12 +732,65 @@ export class AdminClientsService {
       dto.companyName === undefined &&
       dto.slug === undefined &&
       dto.contactEmail === undefined &&
-      dto.status === undefined
+      dto.status === undefined &&
+      dto.purchasedServices === undefined
     ) {
       throw new BadRequestException(
-        "Provide name, slug, contactEmail, and/or status to update a client.",
+        "Provide name, slug, contactEmail, status, and/or purchasedServices to update a client.",
       );
     }
+  }
+
+  private hasClientProfileFieldUpdate(dto: UpdateAdminClientDto): boolean {
+    return (
+      dto.name !== undefined ||
+      dto.companyName !== undefined ||
+      dto.slug !== undefined ||
+      dto.contactEmail !== undefined ||
+      dto.status !== undefined
+    );
+  }
+
+  private assertValidPurchasedServicesPayload(
+    purchasedServices?: AdminClientPurchasedServiceDto[],
+  ): void {
+    if (purchasedServices === undefined) {
+      return;
+    }
+
+    if (purchasedServices.length === 0) {
+      throw new BadRequestException("purchasedServices must include at least one service.");
+    }
+
+    const seenServiceKeys = new Set<PurchasedServiceKey>();
+    for (const service of purchasedServices) {
+      if (seenServiceKeys.has(service.serviceKey)) {
+        throw new BadRequestException("purchasedServices cannot include duplicate serviceKey values.");
+      }
+
+      const startedAt = this.parseNullableDate(service.startedAt);
+      const endedAt = this.parseNullableDate(service.endedAt);
+      if (startedAt && endedAt && startedAt.getTime() > endedAt.getTime()) {
+        throw new BadRequestException("purchasedServices endedAt cannot be earlier than startedAt.");
+      }
+
+      seenServiceKeys.add(service.serviceKey);
+    }
+  }
+
+  private toPurchasedServiceCreateInputs(
+    purchasedServices?: AdminClientPurchasedServiceDto[],
+  ): Prisma.ClientPurchasedServiceCreateWithoutClientProfileInput[] {
+    if (!purchasedServices) {
+      return [];
+    }
+
+    return purchasedServices.map((service) => ({
+      serviceKey: service.serviceKey,
+      status: service.status ?? PurchasedServiceStatus.ACTIVE,
+      startedAt: this.parseNullableDate(service.startedAt),
+      endedAt: this.parseNullableDate(service.endedAt),
+    }));
   }
 
   private assertValidCreateOwnerPayload(owner?: AdminClientOwnerDto): void {
@@ -711,6 +881,10 @@ export class AdminClientsService {
       if (target.includes("email")) {
         throw new ConflictException("Owner email is already in use.");
       }
+
+      if (target.includes("serviceKey")) {
+        throw new ConflictException("Client purchased service is already configured.");
+      }
     }
 
     throw new ConflictException("Client or owner unique value is already in use.");
@@ -738,6 +912,9 @@ export class AdminClientsService {
       createdAt: client.createdAt,
       updatedAt: client.updatedAt,
       owner: owner ? this.toOwnerResponse(owner) : null,
+      purchasedServices: client.purchasedServices.map((service) =>
+        this.toPurchasedServiceResponse(service),
+      ),
     };
   }
 
@@ -769,6 +946,14 @@ export class AdminClientsService {
     return normalized;
   }
 
+  private parseNullableDate(value: string | null | undefined): Date | null {
+    if (!value) {
+      return null;
+    }
+
+    return new Date(value);
+  }
+
   private toOwnerResponse(owner: ClientOwnerReadModel): AdminClientOwnerResponse {
     return {
       id: owner.id,
@@ -780,6 +965,20 @@ export class AdminClientsService {
       clientProfileId: owner.clientProfileId,
       createdAt: owner.createdAt,
       updatedAt: owner.updatedAt,
+    };
+  }
+
+  private toPurchasedServiceResponse(
+    purchasedService: PurchasedServiceReadModel,
+  ): AdminClientPurchasedServiceResponse {
+    return {
+      id: purchasedService.id,
+      serviceKey: purchasedService.serviceKey,
+      status: purchasedService.status,
+      startedAt: purchasedService.startedAt,
+      endedAt: purchasedService.endedAt,
+      createdAt: purchasedService.createdAt,
+      updatedAt: purchasedService.updatedAt,
     };
   }
 }

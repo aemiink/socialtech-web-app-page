@@ -37,6 +37,28 @@ enum ClientStatus {
   SUSPENDED
 }
 
+enum PurchasedServiceKey {
+  GROWTH_HUB
+  SOCIAL_MEDIA
+  MEDIA_HUB
+  META_ADS
+  TIKTOK_ADS
+  GOOGLE_ADS
+  AMAZON_ADS
+  WEB_APP
+  MOBILE_APP
+  LANDING_PAGE
+  WEB_MOBILE_DESIGN
+  TECHNICAL_SUPPORT
+  SEO_AUDIT
+}
+
+enum PurchasedServiceStatus {
+  ACTIVE
+  PAUSED
+  INACTIVE
+}
+
 enum EmployeeClientAssignmentScope {
   PROJECT
   PERFORMANCE
@@ -68,6 +90,11 @@ enum Priority {
   MEDIUM
   HIGH
   URGENT
+}
+
+enum TaskTodoVisibility {
+  INTERNAL
+  CLIENT_VISIBLE
 }
 
 model Permission {
@@ -110,6 +137,7 @@ model User {
   clientProfile             ClientProfile?             @relation(fields: [clientProfileId], references: [id], onDelete: SetNull)
   employeeClientAssignments EmployeeClientAssignment[] @relation("EmployeeClientAssignments")
   assignedTasks             Task[]                     @relation("TaskAssignee")
+  completedTaskTodos        TaskTodo[]                 @relation("TaskTodoCompletedBy")
   auditLogs                 AuditLog[]                 @relation("AuditActor")
 
   @@index([accountType, role])
@@ -144,14 +172,33 @@ model ClientProfile {
 
   users               User[]
   employeeAssignments EmployeeClientAssignment[]
+  purchasedServices   ClientPurchasedService[]
   projects            Project[]
 
   @@index([status])
 }
 
+model ClientPurchasedService {
+  id              String                 @id @default(uuid()) @db.Uuid
+  clientProfileId String                 @db.Uuid
+  serviceKey      PurchasedServiceKey
+  status          PurchasedServiceStatus @default(ACTIVE)
+  startedAt       DateTime?
+  endedAt         DateTime?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([clientProfileId, serviceKey])
+  @@index([clientProfileId, status])
+  @@index([serviceKey, status])
+}
+
 model Project {
   id              String        @id @default(uuid()) @db.Uuid
   clientProfileId String        @db.Uuid
+  serviceKey      PurchasedServiceKey?
   name            String
   slug            String
   description     String?
@@ -167,6 +214,7 @@ model Project {
 
   @@unique([clientProfileId, slug])
   @@index([clientProfileId])
+  @@index([serviceKey])
   @@index([status])
   @@index([priority])
 }
@@ -183,13 +231,36 @@ model Task {
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
-  project  Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  assignee User?   @relation("TaskAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
+  project  Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignee User?      @relation("TaskAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
+  todos    TaskTodo[]
 
   @@index([projectId])
   @@index([assigneeUserId])
   @@index([status])
   @@index([priority])
+}
+
+model TaskTodo {
+  id                String             @id @default(uuid()) @db.Uuid
+  taskId            String             @db.Uuid
+  title             String
+  description       String?
+  visibility        TaskTodoVisibility @default(INTERNAL)
+  sortOrder         Int                @default(0)
+  isCompleted       Boolean            @default(false)
+  completedAt       DateTime?
+  completedByUserId String?            @db.Uuid
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  task        Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  completedBy User? @relation("TaskTodoCompletedBy", fields: [completedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([taskId, visibility])
+  @@index([taskId, isCompleted])
+  @@index([taskId, sortOrder])
+  @@index([completedByUserId])
 }
 
 model AuditLog {

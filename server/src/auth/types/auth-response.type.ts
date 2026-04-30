@@ -1,10 +1,24 @@
-import { AccountType, UserRole, UserStatus } from "@prisma/client";
+import {
+  AccountType,
+  PurchasedServiceKey,
+  PurchasedServiceStatus,
+  UserRole,
+  UserStatus,
+} from "@prisma/client";
+
+export type PurchasedServiceSummary = {
+  serviceKey: PurchasedServiceKey;
+  status: PurchasedServiceStatus;
+  startedAt: Date | null;
+  endedAt: Date | null;
+};
 
 export type ClientProfileSummary = {
   id: string;
   slug: string;
   companyName: string;
   contactEmail: string | null;
+  purchasedServices: PurchasedServiceSummary[];
 };
 
 export type AuthUserProfile = {
@@ -16,6 +30,7 @@ export type AuthUserProfile = {
   status: UserStatus;
   permissions: string[];
   clientProfile: ClientProfileSummary | null;
+  purchasedServices: PurchasedServiceSummary[];
 };
 
 export type PublicAuthResponse = {

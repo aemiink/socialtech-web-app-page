@@ -6,6 +6,7 @@ import {
   fetchBaseQuery,
 } from "@reduxjs/toolkit/query/react";
 import { clearAuth, setCredentials, setCurrentUser } from "../features/auth/authSlice";
+import { normalizePublicAuthResponse } from "../features/auth/authNormalizers";
 import type { PublicAuthResponse } from "../features/auth/authTypes";
 import type { RootState } from "../store/store";
 
@@ -92,20 +93,6 @@ function isAuthLogoutRequest(url: string): boolean {
   return url.includes("/auth/logout");
 }
 
-function isPublicAuthResponse(value: unknown): value is PublicAuthResponse {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-
-  const candidate = value as Partial<PublicAuthResponse>;
-  return (
-    typeof candidate.accessToken === "string" &&
-    typeof candidate.accessTokenExpiresAt === "string" &&
-    typeof candidate.user === "object" &&
-    candidate.user !== null
-  );
-}
-
 async function getOrCreateRefreshRequest(
   api: Parameters<typeof rawBaseQuery>[1],
   extraOptions: Parameters<typeof rawBaseQuery>[2],
@@ -118,11 +105,7 @@ async function getOrCreateRefreshRequest(
         extraOptions,
       );
 
-      if (isPublicAuthResponse(refreshResult.data)) {
-        return refreshResult.data;
-      }
-
-      return null;
+      return normalizePublicAuthResponse(refreshResult.data);
     })().finally(() => {
       refreshRequestPromise = null;
     });

@@ -1,15 +1,20 @@
 import { baseApi } from "../../services/baseApi";
 import type {
   CreateTaskRequest,
+  CreateTaskTodoRequest,
   Task,
+  TaskTodoMutationResponse,
   TasksListQuery,
   TasksListResponse,
+  ToggleTaskTodoRequest,
   UpdateTaskRequest,
+  UpdateTaskTodoRequest,
 } from "./tasksTypes";
 import { normalizeTaskResponse, normalizeTasksListResponse } from "./tasksUtils";
 
 const TASKS_LIST_ID = "LIST";
 const PROJECTS_LIST_ID = "LIST";
+const TASK_TODOS_ID_PREFIX = "TASK";
 
 export const tasksApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -37,7 +42,10 @@ export const tasksApi = baseApi.injectEndpoints({
         method: "GET",
       }),
       transformResponse: (response: unknown) => normalizeTaskResponse(response),
-      providesTags: (_result, _error, id) => [{ type: "Tasks", id }],
+      providesTags: (_result, _error, id) => [
+        { type: "Tasks", id },
+        { type: "TaskTodos", id: getTaskTodosTagId(id) },
+      ],
     }),
     createTask: builder.mutation<Task, CreateTaskRequest>({
       query: (body) => ({
@@ -65,6 +73,49 @@ export const tasksApi = baseApi.injectEndpoints({
         ...(body.projectId ? [{ type: "Projects" as const, id: body.projectId }] : []),
       ],
     }),
+    createTaskTodo: builder.mutation<
+      TaskTodoMutationResponse,
+      { taskId: string; body: CreateTaskTodoRequest }
+    >({
+      query: ({ taskId, body }) => ({
+        url: `/tasks/${taskId}/todos`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: (_result, _error, { taskId }) => getTaskTodoInvalidations(taskId),
+    }),
+    updateTaskTodo: builder.mutation<
+      TaskTodoMutationResponse,
+      { taskId: string; todoId: string; body: UpdateTaskTodoRequest }
+    >({
+      query: ({ taskId, todoId, body }) => ({
+        url: `/tasks/${taskId}/todos/${todoId}`,
+        method: "PATCH",
+        body,
+      }),
+      invalidatesTags: (_result, _error, { taskId }) => getTaskTodoInvalidations(taskId),
+    }),
+    toggleTaskTodo: builder.mutation<
+      TaskTodoMutationResponse,
+      { taskId: string; todoId: string; body: ToggleTaskTodoRequest }
+    >({
+      query: ({ taskId, todoId, body }) => ({
+        url: `/tasks/${taskId}/todos/${todoId}/toggle`,
+        method: "PATCH",
+        body,
+      }),
+      invalidatesTags: (_result, _error, { taskId }) => getTaskTodoInvalidations(taskId),
+    }),
+    deleteTaskTodo: builder.mutation<
+      TaskTodoMutationResponse,
+      { taskId: string; todoId: string }
+    >({
+      query: ({ taskId, todoId }) => ({
+        url: `/tasks/${taskId}/todos/${todoId}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: (_result, _error, { taskId }) => getTaskTodoInvalidations(taskId),
+    }),
   }),
 });
 
@@ -74,7 +125,23 @@ export const {
   useLazyGetTaskQuery,
   useCreateTaskMutation,
   useUpdateTaskMutation,
+  useCreateTaskTodoMutation,
+  useUpdateTaskTodoMutation,
+  useToggleTaskTodoMutation,
+  useDeleteTaskTodoMutation,
 } = tasksApi;
+
+function getTaskTodosTagId(taskId: string): string {
+  return `${TASK_TODOS_ID_PREFIX}:${taskId}`;
+}
+
+function getTaskTodoInvalidations(taskId: string) {
+  return [
+    { type: "Tasks" as const, id: TASKS_LIST_ID },
+    { type: "Tasks" as const, id: taskId },
+    { type: "TaskTodos" as const, id: getTaskTodosTagId(taskId) },
+  ];
+}
 
 function serializeTasksListQuery(
   query: TasksListQuery | void,

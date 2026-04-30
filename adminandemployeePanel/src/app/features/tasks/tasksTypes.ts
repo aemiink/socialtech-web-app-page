@@ -2,6 +2,7 @@ import type { UserRole } from "../auth/authTypes";
 import type { Priority, ProjectClientProfile, ProjectStatus } from "../projects/projectsTypes";
 
 export type TaskStatus = "TODO" | "IN_PROGRESS" | "REVIEW" | "DONE" | "BLOCKED";
+export type TaskTodoVisibility = "INTERNAL" | "CLIENT_VISIBLE";
 
 export type TaskProjectSummary = {
   id: string;
@@ -19,6 +20,25 @@ export type TaskAssigneeSummary = {
   role: UserRole;
 };
 
+export type TaskTodo = {
+  id: string;
+  taskId?: string;
+  title: string;
+  description?: string | null;
+  visibility?: TaskTodoVisibility;
+  sortOrder?: number;
+  isCompleted: boolean;
+  completedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type TaskCompletion = {
+  totalTodos: number;
+  completedTodos: number;
+  percent: number;
+};
+
 export type Task = {
   id: string;
   projectId: string;
@@ -32,6 +52,8 @@ export type Task = {
   updatedAt: string;
   project: TaskProjectSummary | null;
   assignee: TaskAssigneeSummary | null;
+  todos?: TaskTodo[];
+  completion?: TaskCompletion;
 };
 
 export type TasksListMeta = {
@@ -70,3 +92,23 @@ export type CreateTaskRequest = {
 };
 
 export type UpdateTaskRequest = Partial<CreateTaskRequest>;
+
+export type CreateTaskTodoRequest = {
+  title: string;
+  description?: string | null;
+  visibility?: TaskTodoVisibility;
+  sortOrder?: number;
+};
+
+export type UpdateTaskTodoRequest = {
+  title?: string;
+  description?: string | null;
+  visibility?: TaskTodoVisibility;
+  sortOrder?: number;
+};
+
+export type ToggleTaskTodoRequest = {
+  isCompleted: boolean;
+};
+
+export type TaskTodoMutationResponse = TaskTodo | Task | { success?: boolean };

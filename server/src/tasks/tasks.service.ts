@@ -4,12 +4,15 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { AccountType, Prisma, UserRole, UserStatus } from "@prisma/client";
+import { AccountType, Prisma, TaskTodoVisibility, UserRole, UserStatus } from "@prisma/client";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { PrismaService } from "../database/prisma.service";
 import { CreateTaskDto } from "./dto/create-task.dto";
+import { CreateTaskTodoDto } from "./dto/create-task-todo.dto";
 import { TaskQueryDto } from "./dto/task-query.dto";
+import { ToggleTaskTodoDto } from "./dto/toggle-task-todo.dto";
 import { UpdateTaskDto } from "./dto/update-task.dto";
+import { UpdateTaskTodoDto } from "./dto/update-task-todo.dto";
 
 const clientSummarySelect = {
   id: true,
@@ -21,6 +24,7 @@ const clientSummarySelect = {
 const projectSummarySelect = {
   id: true,
   clientProfileId: true,
+  serviceKey: true,
   name: true,
   slug: true,
   status: true,
@@ -35,6 +39,20 @@ const assigneeSummarySelect = {
   displayName: true,
   role: true,
 } satisfies Prisma.UserSelect;
+
+const taskTodoReadSelect = {
+  id: true,
+  taskId: true,
+  title: true,
+  description: true,
+  visibility: true,
+  sortOrder: true,
+  isCompleted: true,
+  completedAt: true,
+  completedByUserId: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.TaskTodoSelect;
 
 const taskReadSelect = {
   id: true,
@@ -53,9 +71,27 @@ const taskReadSelect = {
   assignee: {
     select: assigneeSummarySelect,
   },
+  todos: {
+    select: taskTodoReadSelect,
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+  },
 } satisfies Prisma.TaskSelect;
 
 type TaskReadModel = Prisma.TaskGetPayload<{ select: typeof taskReadSelect }>;
+type TaskTodoReadModel = Prisma.TaskTodoGetPayload<{ select: typeof taskTodoReadSelect }>;
+
+type TaskCompletion = {
+  totalTodos: number;
+  completedTodos: number;
+  remainingTodos: number;
+  completionPercentage: number;
+  isComplete: boolean;
+};
+
+type TaskResponse = Omit<TaskReadModel, "todos"> & {
+  todos: TaskTodoReadModel[];
+  completion: TaskCompletion;
+};
 
 type ProjectAssignmentContext = {
   id: string;
@@ -85,7 +121,7 @@ export class TasksService {
   async getTasks(
     currentUser: AuthenticatedUser,
     query: TaskQueryDto,
-  ): Promise<TaskReadModel[]> {
+  ): Promise<TaskResponse[]> {
     this.assertValidDateRange(query.dueFrom, query.dueTo);
 
     if (this.isClient(currentUser) && this.isClientProfileFilterOutsideOwnScope(currentUser, query)) {
@@ -97,17 +133,19 @@ export class TasksService {
       AND: [this.buildTaskVisibilityWhere(currentUser), this.buildTaskQueryWhere(query)],
     };
 
-    return this.prisma.task.findMany({
+    const tasks = await this.prisma.task.findMany({
       where,
       select: taskReadSelect,
       orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
     });
+
+    return tasks.map((task) => this.toTaskResponse(task, currentUser));
   }
 
   async getTaskById(
     currentUser: AuthenticatedUser,
     taskId: string,
-  ): Promise<TaskReadModel> {
+  ): Promise<TaskResponse> {
     const task = await this.prisma.task.findFirst({
       where: {
         AND: [{ id: taskId }, this.buildTaskVisibilityWhere(currentUser)],
@@ -119,20 +157,20 @@ export class TasksService {
       throw new NotFoundException("Task not found.");
     }
 
-    return task;
+    return this.toTaskResponse(task, currentUser);
   }
 
   async createTask(
     currentUser: AuthenticatedUser,
     dto: CreateTaskDto,
-  ): Promise<TaskReadModel> {
+  ): Promise<TaskResponse> {
     this.assertBodyObject(dto);
     this.assertCanManageTasks(currentUser);
 
     const project = await this.getProjectAssignmentContextOrBadRequest(dto.projectId);
     await this.assertAssigneeIsValidForProject(dto.assigneeUserId, project.clientProfileId);
 
-    return this.prisma.task.create({
+    const task = await this.prisma.task.create({
       data: {
         title: dto.title,
         description: dto.description ?? null,
@@ -148,13 +186,15 @@ export class TasksService {
       },
       select: taskReadSelect,
     });
+
+    return this.toTaskResponse(task, currentUser);
   }
 
   async updateTask(
     currentUser: AuthenticatedUser,
     taskId: string,
     dto: UpdateTaskDto,
-  ): Promise<TaskReadModel> {
+  ): Promise<TaskResponse> {
     this.assertBodyObject(dto);
     this.assertHasUpdatePayload(dto);
 
@@ -169,11 +209,114 @@ export class TasksService {
     throw new ForbiddenException("Client accounts cannot update tasks.");
   }
 
+  async createTaskTodo(
+    currentUser: AuthenticatedUser,
+    taskId: string,
+    dto: CreateTaskTodoDto,
+  ): Promise<TaskResponse> {
+    this.assertBodyObject(dto);
+    this.assertCanManageTasks(currentUser);
+    await this.assertTaskExistsForTodoMutation(taskId);
+
+    await this.prisma.taskTodo.create({
+      data: {
+        taskId,
+        title: dto.title,
+        description: dto.description ?? null,
+        visibility: dto.visibility ?? TaskTodoVisibility.INTERNAL,
+        sortOrder: dto.sortOrder ?? 0,
+      },
+    });
+
+    return this.getTaskById(currentUser, taskId);
+  }
+
+  async updateTaskTodo(
+    currentUser: AuthenticatedUser,
+    taskId: string,
+    todoId: string,
+    dto: UpdateTaskTodoDto,
+  ): Promise<TaskResponse> {
+    this.assertBodyObject(dto);
+    this.assertCanManageTasks(currentUser);
+    this.assertHasTodoUpdatePayload(dto);
+    await this.assertTaskTodoExists(taskId, todoId);
+
+    await this.prisma.taskTodo.update({
+      where: { id: todoId },
+      data: {
+        ...(dto.title !== undefined ? { title: dto.title } : {}),
+        ...(dto.description !== undefined ? { description: dto.description } : {}),
+        ...(dto.visibility !== undefined ? { visibility: dto.visibility } : {}),
+        ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
+      },
+    });
+
+    return this.getTaskById(currentUser, taskId);
+  }
+
+  async toggleTaskTodo(
+    currentUser: AuthenticatedUser,
+    taskId: string,
+    todoId: string,
+    dto: ToggleTaskTodoDto | undefined,
+  ): Promise<TaskResponse> {
+    const payload = dto ?? {};
+    this.assertBodyObject(payload);
+    await this.assertCanToggleTaskTodo(currentUser, taskId);
+
+    const todo = await this.prisma.taskTodo.findFirst({
+      where: {
+        id: todoId,
+        taskId,
+      },
+      select: {
+        id: true,
+        isCompleted: true,
+      },
+    });
+    if (!todo) {
+      throw new NotFoundException("Task todo not found.");
+    }
+
+    const isCompleted = payload.isCompleted ?? !todo.isCompleted;
+    await this.prisma.taskTodo.update({
+      where: { id: todo.id },
+      data: {
+        isCompleted,
+        completedAt: isCompleted ? new Date() : null,
+        completedByUserId: isCompleted ? currentUser.id : null,
+      },
+    });
+
+    return this.getTaskById(currentUser, taskId);
+  }
+
+  async deleteTaskTodo(
+    currentUser: AuthenticatedUser,
+    taskId: string,
+    todoId: string,
+  ): Promise<TaskResponse> {
+    this.assertCanManageTasks(currentUser);
+
+    const result = await this.prisma.taskTodo.deleteMany({
+      where: {
+        id: todoId,
+        taskId,
+      },
+    });
+    if (result.count !== 1) {
+      throw new NotFoundException("Task todo not found.");
+    }
+
+    return this.getTaskById(currentUser, taskId);
+  }
+
   private async updateTaskAsAdmin(
     currentUser: AuthenticatedUser,
     taskId: string,
     dto: UpdateTaskDto,
-  ): Promise<TaskReadModel> {
+  ): Promise<TaskResponse> {
     this.assertCanManageTasks(currentUser);
 
     const existingTask = await this.getTaskUpdateStateOrFail(taskId);
@@ -205,18 +348,20 @@ export class TasksService {
         : {}),
     };
 
-    return this.prisma.task.update({
+    const task = await this.prisma.task.update({
       where: { id: taskId },
       data,
       select: taskReadSelect,
     });
+
+    return this.toTaskResponse(task, currentUser);
   }
 
   private async updateOwnTaskStatus(
     currentUser: AuthenticatedUser,
     taskId: string,
     dto: UpdateTaskDto,
-  ): Promise<TaskReadModel> {
+  ): Promise<TaskResponse> {
     this.assertCanUpdateOwnTask(currentUser);
     this.assertEmployeeStatusOnlyUpdate(dto);
 
@@ -242,11 +387,77 @@ export class TasksService {
       throw new NotFoundException("Task not found.");
     }
 
-    return this.prisma.task.update({
+    const updatedTask = await this.prisma.task.update({
       where: { id: taskId },
       data: { status: dto.status },
       select: taskReadSelect,
     });
+
+    return this.toTaskResponse(updatedTask, currentUser);
+  }
+
+  private async assertTaskExistsForTodoMutation(taskId: string): Promise<void> {
+    const task = await this.prisma.task.findUnique({
+      where: { id: taskId },
+      select: { id: true },
+    });
+
+    if (!task) {
+      throw new NotFoundException("Task not found.");
+    }
+  }
+
+  private async assertTaskTodoExists(taskId: string, todoId: string): Promise<void> {
+    const todo = await this.prisma.taskTodo.findFirst({
+      where: {
+        id: todoId,
+        taskId,
+      },
+      select: { id: true },
+    });
+
+    if (!todo) {
+      throw new NotFoundException("Task todo not found.");
+    }
+  }
+
+  private async assertCanToggleTaskTodo(
+    currentUser: AuthenticatedUser,
+    taskId: string,
+  ): Promise<void> {
+    if (this.isAdmin(currentUser)) {
+      this.assertCanManageTasks(currentUser);
+      await this.assertTaskExistsForTodoMutation(taskId);
+      return;
+    }
+
+    if (!this.isEmployee(currentUser)) {
+      throw new ForbiddenException("Client accounts cannot update task todos.");
+    }
+
+    this.assertCanUpdateOwnTask(currentUser);
+
+    const task = await this.prisma.task.findFirst({
+      where: {
+        id: taskId,
+        assigneeUserId: currentUser.id,
+        project: {
+          clientProfile: {
+            employeeAssignments: {
+              some: {
+                employeeUserId: currentUser.id,
+                isActive: true,
+              },
+            },
+          },
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!task) {
+      throw new NotFoundException("Task not found.");
+    }
   }
 
   private buildTaskVisibilityWhere(currentUser: AuthenticatedUser): Prisma.TaskWhereInput {
@@ -408,6 +619,16 @@ export class TasksService {
     }
   }
 
+  private assertHasTodoUpdatePayload(dto: UpdateTaskTodoDto): void {
+    if (
+      dto.title === undefined &&
+      dto.description === undefined &&
+      dto.visibility === undefined
+    ) {
+      throw new BadRequestException("Provide at least one task todo field to update.");
+    }
+  }
+
   private assertBodyObject(value: unknown): void {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
       throw new BadRequestException("Request body must be a JSON object.");
@@ -461,6 +682,35 @@ export class TasksService {
     }
 
     return new Date(value);
+  }
+
+  private toTaskResponse(task: TaskReadModel, currentUser: AuthenticatedUser): TaskResponse {
+    const { todos, ...taskWithoutTodos } = task;
+    const visibleTodos = this.isClient(currentUser)
+      ? todos.filter((todo) => todo.visibility === TaskTodoVisibility.CLIENT_VISIBLE)
+      : todos;
+
+    return {
+      ...taskWithoutTodos,
+      todos: visibleTodos,
+      completion: this.buildTaskCompletion(visibleTodos),
+    };
+  }
+
+  private buildTaskCompletion(todos: TaskTodoReadModel[]): TaskCompletion {
+    const totalTodos = todos.length;
+    const completedTodos = todos.filter((todo) => todo.isCompleted).length;
+    const remainingTodos = totalTodos - completedTodos;
+    const completionPercentage =
+      totalTodos === 0 ? 0 : Math.round((completedTodos / totalTodos) * 100);
+
+    return {
+      totalTodos,
+      completedTodos,
+      remainingTodos,
+      completionPercentage,
+      isComplete: totalTodos > 0 && completedTodos === totalTodos,
+    };
   }
 
   private assertCanManageTasks(currentUser: AuthenticatedUser): void {

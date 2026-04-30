@@ -1,13 +1,17 @@
 import type { ClientProfileSummary } from "../auth/authTypes";
+import type { ClientPurchasedService, ServiceKey } from "../clients/clientsTypes";
 
 export type ProjectStatus = "PLANNED" | "IN_PROGRESS" | "REVIEW" | "COMPLETED" | "ON_HOLD";
 export type Priority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
 
-export type ProjectClientProfile = ClientProfileSummary;
+export type ProjectClientProfile = ClientProfileSummary & {
+  purchasedServices?: ClientPurchasedService[];
+};
 
 export type Project = {
   id: string;
   clientProfileId: string;
+  serviceKey?: ServiceKey | null;
   name: string;
   slug: string;
   description: string | null;
@@ -45,6 +49,7 @@ export type ProjectsListQuery = {
 
 export type CreateProjectRequest = {
   clientProfileId: string;
+  serviceKey?: ServiceKey | null;
   name: string;
   description?: string | null;
   status?: ProjectStatus;

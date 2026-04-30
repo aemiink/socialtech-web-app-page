@@ -1,5 +1,10 @@
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { extractApiErrorMessage } from "../adminUsers/adminUsersUtils";
+import {
+  getServiceLabel,
+  normalizeToUiServiceKey,
+} from "../clients/clientsUtils";
+import type { ServiceKey } from "../clients/clientsTypes";
 import type {
   Priority,
   Project,
@@ -49,7 +54,7 @@ const UUID_PATTERN =
 
 export function normalizeProjectsListResponse(response: unknown): ProjectsListResponse {
   const responseData = isRecord(response) ? response.data : response;
-  const data = Array.isArray(responseData) ? responseData.filter(isProject) : [];
+  const data = Array.isArray(responseData) ? responseData.map(normalizeProject).filter(isDefined) : [];
   const meta = normalizeListMeta(isRecord(response) ? response.meta : null, data.length);
 
   return { data, meta };
@@ -57,9 +62,9 @@ export function normalizeProjectsListResponse(response: unknown): ProjectsListRe
 
 export function normalizeProjectResponse(response: unknown): Project {
   const candidate = isRecord(response) && "data" in response ? response.data : response;
-
-  if (isProject(candidate)) {
-    return candidate;
+  const project = normalizeProject(candidate);
+  if (project) {
+    return project;
   }
 
   throw new Error("Project detail response could not be parsed.");
@@ -115,6 +120,10 @@ export function getPriorityBadgeClass(priority: Priority): string {
 
 export function getProjectClientName(project: Project): string {
   return project.clientProfile?.companyName ?? shortId(project.clientProfileId);
+}
+
+export function getProjectServiceLabel(project: Project): string {
+  return getServiceLabel(project.serviceKey);
 }
 
 export function formatDate(value: string | null): string {
@@ -217,25 +226,45 @@ function createFallbackMeta(dataLength: number): ProjectsListMeta {
   };
 }
 
-function isProject(value: unknown): value is Project {
+function normalizeProject(value: unknown): Project | null {
   if (!isRecord(value)) {
-    return false;
+    return null;
   }
 
-  return (
-    typeof value.id === "string" &&
-    typeof value.clientProfileId === "string" &&
-    typeof value.name === "string" &&
-    typeof value.slug === "string" &&
-    isStringOrNull(value.description) &&
-    isProjectStatus(value.status) &&
-    isPriority(value.priority) &&
-    isStringOrNull(value.startDate) &&
-    isStringOrNull(value.dueDate) &&
-    typeof value.createdAt === "string" &&
-    typeof value.updatedAt === "string" &&
-    (value.clientProfile === null || isProjectClientProfile(value.clientProfile))
-  );
+  const serviceKey = normalizeOptionalServiceKey(value.serviceKey);
+  if (
+    typeof value.id !== "string" ||
+    typeof value.clientProfileId !== "string" ||
+    serviceKey === undefined ||
+    typeof value.name !== "string" ||
+    typeof value.slug !== "string" ||
+    !isStringOrNull(value.description) ||
+    !isProjectStatus(value.status) ||
+    !isPriority(value.priority) ||
+    !isStringOrNull(value.startDate) ||
+    !isStringOrNull(value.dueDate) ||
+    typeof value.createdAt !== "string" ||
+    typeof value.updatedAt !== "string" ||
+    (value.clientProfile !== null && !isProjectClientProfile(value.clientProfile))
+  ) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    clientProfileId: value.clientProfileId,
+    serviceKey,
+    name: value.name,
+    slug: value.slug,
+    description: value.description,
+    status: value.status,
+    priority: value.priority,
+    startDate: value.startDate,
+    dueDate: value.dueDate,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+    clientProfile: value.clientProfile as ProjectClientProfile | null,
+  };
 }
 
 function isProjectClientProfile(value: unknown): value is ProjectClientProfile {
@@ -247,7 +276,8 @@ function isProjectClientProfile(value: unknown): value is ProjectClientProfile {
     typeof value.id === "string" &&
     typeof value.slug === "string" &&
     typeof value.companyName === "string" &&
-    isStringOrNull(value.contactEmail)
+    isStringOrNull(value.contactEmail) &&
+    (typeof value.purchasedServices === "undefined" || Array.isArray(value.purchasedServices))
   );
 }
 
@@ -257,6 +287,18 @@ function isProjectStatus(value: unknown): value is ProjectStatus {
 
 function isPriority(value: unknown): value is Priority {
   return typeof value === "string" && PRIORITY_OPTIONS.includes(value as Priority);
+}
+
+function normalizeOptionalServiceKey(value: unknown): ServiceKey | null | undefined {
+  if (typeof value === "undefined") {
+    return undefined;
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  return normalizeToUiServiceKey(value) ?? undefined;
 }
 
 function isStringOrNull(value: unknown): value is string | null {
@@ -273,6 +315,10 @@ function readNumber(value: unknown, fallback: number): number {
 
 function readBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
+}
+
+function isDefined<T>(value: T | null): value is T {
+  return value !== null;
 }
 
 export type ApiMutationError = FetchBaseQueryError | Error | unknown;

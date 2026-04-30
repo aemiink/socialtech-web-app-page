@@ -1257,3 +1257,98 @@ Employee görev görünümünü gerçek assignment-aware backend verisine taşı
 Affected files:
 - `adminandemployeePanel/src/app/employee/pages/Gorevlerim.tsx`
 - `adminandemployeePanel/src/app/employee/pages/__tests__/Gorevlerim.test.tsx`
+
+---
+
+## 2026-04-30 - Client Purchased Services and Portal Service Visibility
+
+Context:
+Client lifecycle’ında “satın alınan hizmet” bilgisi hem admin tarafında yönetilebilir hem de client portal tarafında zorlayıcı görünürlük kuralı olacak şekilde eksikti.
+
+Decision:
+- Backend’e `ClientPurchasedService` modeli ve ilgili enum sözleşmeleri eklendi; `clientProfileId + serviceKey` unique olacak şekilde kuruldu.
+- Admin client create/update akışları `purchasedServices` payload’ını kabul edecek şekilde genişletildi; boş veya duplicate service setleri fail-closed doğrulanıyor.
+- Client read/detail/summary ve auth profile (`/auth/me`) yanıtlarına purchased services bilgisi eklendi.
+- Client Portal service selection artık yalnızca kullanıcının `ACTIVE` purchased services setini gösteriyor.
+- localStorage restore edilen `selectedService` artık authorization-aware doğrulanıyor; yetkisiz service otomatik temizlenip service selection’a dönülüyor.
+
+Reason:
+Ürün akışında “müşterinin satın almadığı hizmete erişim” riskini hem backend veri modeli hem frontend UX seviyesinde kapatmak ve service bazlı operasyon akışlarını güvenli hale getirmek.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260501000000_add_purchased_services_and_task_todos/migration.sql`
+- `server/prisma/seed.ts`
+- `server/src/admin-clients/*`
+- `server/src/clients/clients.service.ts`
+- `server/src/auth/auth.service.ts`
+- `server/src/auth/types/auth-response.type.ts`
+- `clientPanel/src/app/App.tsx`
+- `clientPanel/src/app/pages/service-selection.tsx`
+- `clientPanel/src/app/features/auth/authTypes.ts`
+- `clientPanel/src/app/features/auth/authApi.ts`
+- `clientPanel/src/app/features/auth/authNormalizers.ts`
+- `clientPanel/src/app/__tests__/client-portal.test.tsx`
+
+---
+
+## 2026-04-30 - Project and Task Picker UX
+
+Context:
+Project ve task create/edit akışlarında manuel ID girişi (clientProfileId / assigneeUserId) hem hata üretmeye açıktı hem de operasyonel UX’i zayıflatıyordu.
+
+Decision:
+- Projects create/edit akışında manuel client ID input’u yerine backend aramalı müşteri picker kullanıldı.
+- Project tarafında `serviceKey` seçimi eklendi ve seçili müşteriyle uyumlu purchased services kümesine bağlandı.
+- Tasks create/edit akışında manuel assignee ID input’u yerine backend aramalı employee picker kullanıldı.
+- Picker aramaları debounced query paramlarıyla (`275ms`) mevcut RTK Query pattern’i üzerinden taşındı.
+
+Reason:
+Admin operasyonunda ID-copy/paste kaynaklı hataları azaltmak, form doğruluğunu artırmak ve product akışını müşteri/hizmet/çalışan ilişkisiyle tutarlı hale getirmek.
+
+Affected files:
+- `adminandemployeePanel/src/app/pages/Projects.tsx`
+- `adminandemployeePanel/src/app/pages/Tasks.tsx`
+- `adminandemployeePanel/src/app/features/projects/*`
+- `adminandemployeePanel/src/app/features/tasks/*`
+- `adminandemployeePanel/src/app/pages/__tests__/Projects.test.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/Tasks.test.tsx`
+- `server/src/projects/dto/create-project.dto.ts`
+- `server/src/projects/dto/update-project.dto.ts`
+- `server/src/projects/projects.service.ts`
+
+---
+
+## 2026-04-30 - Task Todo Checklist and Client Progress Visibility
+
+Context:
+Task operasyonunda checklist/todo eksikti; employee ilerleme güncellemesi ve client tarafında görünür progress ihtiyacı karşılanmıyordu.
+
+Decision:
+- Backend’e `TaskTodo` modeli (visibility + completion + sortOrder) eklendi.
+- Task API’ye todo yönetimi endpointleri eklendi:
+  - `POST /api/v1/tasks/:id/todos`
+  - `PATCH /api/v1/tasks/:taskId/todos/:todoId`
+  - `PATCH /api/v1/tasks/:taskId/todos/:todoId/toggle`
+  - `DELETE /api/v1/tasks/:taskId/todos/:todoId`
+- Completion hesapları task yanıtına entegre edildi; client kullanıcılar için yalnızca `CLIENT_VISIBLE` todo’lar döndürülüyor.
+- Employee, own-assigned task için todo toggle yapabiliyor; client kullanıcılar todo mutation yapamıyor.
+- Admin/Employee/Client panellerinde todo/progress görünümü ve mutation akışları mevcut role sınırlarıyla entegre edildi.
+
+Reason:
+Teslimatın operasyonel takibini ölçülebilir hale getirmek, employee execution akışını hızlandırmak ve client’e kontrollü ilerleme şeffaflığı sağlamak.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260501000000_add_purchased_services_and_task_todos/migration.sql`
+- `server/prisma/seed.ts`
+- `server/src/tasks/tasks.controller.ts`
+- `server/src/tasks/tasks.service.ts`
+- `server/src/tasks/dto/create-task-todo.dto.ts`
+- `server/src/tasks/dto/update-task-todo.dto.ts`
+- `server/src/tasks/dto/toggle-task-todo.dto.ts`
+- `server/test/projects-tasks-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/pages/TaskDetail.tsx`
+- `adminandemployeePanel/src/app/employee/pages/Gorevlerim.tsx`
+- `clientPanel/src/app/components/client-visible-tasks-section.tsx`
+- `clientPanel/src/app/features/tasks/*`

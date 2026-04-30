@@ -14,9 +14,10 @@ import {
   LogOut,
   LucideIcon,
 } from 'lucide-react';
+import type { ServiceId } from '../data/service-pages';
 
 interface Service {
-  id: string;
+  id: ServiceId;
   title: string;
   description: string;
   icon: LucideIcon;
@@ -132,10 +133,11 @@ const services: Service[] = [
 ];
 
 interface ServiceSelectionPageProps {
-  onServiceSelect: (serviceId: string) => void;
+  onServiceSelect: (serviceId: ServiceId) => void;
   onLogout: () => void;
   clientName: string;
   companyName: string;
+  availableServiceIds: ServiceId[];
 }
 
 export function ServiceSelectionPage({
@@ -143,8 +145,13 @@ export function ServiceSelectionPage({
   onLogout,
   clientName,
   companyName,
+  availableServiceIds,
 }: ServiceSelectionPageProps) {
-  const activeServices = services.filter(s => s.status === 'active').length;
+  const availableServiceIdSet = new Set<ServiceId>(availableServiceIds);
+  const purchasedActiveServices = services.filter(
+    (service) => service.status === 'active' && availableServiceIdSet.has(service.id),
+  );
+  const activeServices = purchasedActiveServices.length;
 
   return (
     <div className="min-h-screen bg-[#131313] p-8">
@@ -176,21 +183,32 @@ export function ServiceSelectionPage({
             <div className="text-sm text-[#A0A0A0]">Aktif Hizmet</div>
           </div>
           <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
-            <div className="text-3xl text-[#FFA726] mb-1">5</div>
+            <div className="text-3xl text-[#FFA726] mb-1">{activeServices > 0 ? '5' : '0'}</div>
             <div className="text-sm text-[#A0A0A0]">Bekleyen Onay</div>
           </div>
           <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
-            <div className="text-3xl text-white mb-1">15 Nis</div>
+            <div className="text-3xl text-white mb-1">{activeServices > 0 ? '15 Nis' : '-'}</div>
             <div className="text-sm text-[#A0A0A0]">Son Rapor</div>
           </div>
           <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
-            <div className="text-3xl text-white mb-1">2 May</div>
+            <div className="text-3xl text-white mb-1">{activeServices > 0 ? '2 May' : '-'}</div>
             <div className="text-sm text-[#A0A0A0]">Sonraki Toplantı</div>
           </div>
         </div>
 
+        {activeServices === 0 ? (
+          <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-10 text-center">
+            <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-xl bg-white/[0.04]">
+              <BarChart3 className="h-7 w-7 text-[#A0A0A0]" />
+            </div>
+            <h2 className="mb-2 text-2xl text-white">Aktif hizmet bulunmuyor</h2>
+            <p className="mx-auto max-w-xl text-sm leading-relaxed text-[#A0A0A0]">
+              Bu hesap için aktif satın alınmış hizmet görünmüyor. Yeni bir hizmet aktif olduğunda panel burada listelenecek.
+            </p>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {services.map((service) => {
+          {purchasedActiveServices.map((service) => {
             const Icon = service.icon;
 
             return (
@@ -227,6 +245,7 @@ export function ServiceSelectionPage({
             );
           })}
         </div>
+        )}
       </div>
     </div>
   );

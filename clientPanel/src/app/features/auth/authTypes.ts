@@ -1,3 +1,5 @@
+import type { ServiceId } from "../../data/service-pages";
+
 export type AccountType = "ADMIN" | "EMPLOYEE" | "CLIENT";
 
 export type UserRole =
@@ -14,11 +16,25 @@ export type UserRole =
 
 export type UserStatus = "ACTIVE" | "INACTIVE";
 
+export type PurchasedServiceStatus =
+  | "ACTIVE"
+  | "INACTIVE"
+  | "SUSPENDED"
+  | "CANCELED"
+  | "CANCELLED"
+  | "PAUSED";
+
+export type ClientPurchasedService = {
+  serviceId: ServiceId;
+  status: PurchasedServiceStatus;
+};
+
 export type ClientProfileSummary = {
   id: string;
   slug: string;
   companyName: string;
   contactEmail: string | null;
+  purchasedServices: ClientPurchasedService[];
 };
 
 export type AuthUserProfile = {
@@ -30,6 +46,7 @@ export type AuthUserProfile = {
   status: UserStatus;
   permissions: string[];
   clientProfile: ClientProfileSummary | null;
+  purchasedServices: ClientPurchasedService[];
 };
 
 export type PublicAuthResponse = {

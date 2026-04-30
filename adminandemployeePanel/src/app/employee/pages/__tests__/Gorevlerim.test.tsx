@@ -1,7 +1,7 @@
 /// <reference types="vitest" />
 /// <reference types="@testing-library/jest-dom" />
 
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthUserProfile } from "../../../features/auth/authTypes";
 import type {
@@ -24,9 +24,20 @@ type TasksQueryResult = {
   refetch: () => void;
 };
 
+type MutationResponse<T> = {
+  unwrap: () => Promise<T>;
+};
+
+type ToggleTodoTrigger = (payload: {
+  taskId: string;
+  todoId: string;
+  body: { isCompleted: boolean };
+}) => MutationResponse<unknown>;
+
 const mockUseGetTasksQuery = vi.fn<
   (query: TasksListQuery, options?: QueryOptions) => TasksQueryResult
 >();
+const mockUseToggleTaskTodoMutation = vi.fn<() => [ToggleTodoTrigger, { isLoading: boolean }]>();
 
 let currentUser: AuthUserProfile | null = null;
 
@@ -37,6 +48,7 @@ vi.mock("../../../store/hooks", () => ({
 vi.mock("../../../features/tasks/tasksApi", () => ({
   useGetTasksQuery: (query: TasksListQuery, options?: QueryOptions) =>
     mockUseGetTasksQuery(query, options),
+  useToggleTaskTodoMutation: () => mockUseToggleTaskTodoMutation(),
 }));
 
 const employeeUser: AuthUserProfile = {
@@ -80,6 +92,25 @@ const assignedTask: Task = {
     displayName: "Employee User",
     role: "DEVELOPER",
   },
+  todos: [
+    {
+      id: "55555555-5555-4555-8555-555555555555",
+      taskId: "33333333-3333-4333-8333-333333333333",
+      title: "Desktop QA",
+      isCompleted: true,
+    },
+    {
+      id: "66666666-6666-4666-8666-666666666666",
+      taskId: "33333333-3333-4333-8333-333333333333",
+      title: "Mobile QA",
+      isCompleted: false,
+    },
+  ],
+  completion: {
+    totalTodos: 2,
+    completedTodos: 1,
+    percent: 50,
+  },
 };
 
 const assignedTasksResponse: TasksListResponse = {
@@ -118,6 +149,12 @@ function setupTasksState(overrides: Partial<TasksQueryResult> = {}) {
   });
 }
 
+function setupTodoMutation() {
+  const toggleTodo = vi.fn<ToggleTodoTrigger>(() => ({ unwrap: async () => ({}) }));
+  mockUseToggleTaskTodoMutation.mockReturnValue([toggleTodo, { isLoading: false }]);
+  return { toggleTodo };
+}
+
 describe("Gorevlerim", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -125,6 +162,7 @@ describe("Gorevlerim", () => {
     vi.clearAllMocks();
     currentUser = employeeUser;
     setupTasksState();
+    setupTodoMutation();
   });
 
   afterEach(() => {
@@ -168,7 +206,25 @@ describe("Gorevlerim", () => {
     expect(screen.getByText("Growth Hub Launch")).toBeInTheDocument();
     expect(screen.getByText("Yüksek")).toBeInTheDocument();
     expect(screen.getByText("Devam Ediyor")).toBeInTheDocument();
+    expect(screen.getByText("Desktop QA")).toBeInTheDocument();
+    expect(screen.getByText("Mobile QA")).toBeInTheDocument();
+    expect(screen.getByText("1/2 tamamlandı")).toBeInTheDocument();
+    expect(screen.getByText("%50")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Detay" })).toBeInTheDocument();
+  });
+
+  it("toggles an own task todo", async () => {
+    const { toggleTodo } = setupTodoMutation();
+
+    render(<Gorevlerim />);
+
+    fireEvent.click(screen.getByLabelText("Mobile QA durumunu değiştir"));
+
+    expect(toggleTodo).toHaveBeenCalledWith({
+      taskId: assignedTask.id,
+      todoId: "66666666-6666-4666-8666-666666666666",
+      body: { isCompleted: true },
+    });
   });
 
   it("queries tasks with assigneeUserId and does not skip for authorized employees", () => {

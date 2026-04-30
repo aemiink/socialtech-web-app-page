@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Sidebar } from "./components/sidebar";
 import { Topbar } from "./components/topbar";
 import { ClientActionCenter } from "./components/client-action-center";
+import { ClientVisibleTasksSection } from "./components/client-visible-tasks-section";
 import { ClientLogin, DemoClient } from "./components/client-login";
 import { ServiceSelectionPage } from "./pages/service-selection";
 import { ReportsPage } from "./pages/reports";
@@ -22,7 +23,7 @@ import { MobileAppDashboard } from "./pages/services/mobile-app-dashboard";
 import { LandingPagesDashboard } from "./pages/services/landing-pages-dashboard";
 import { WebMobileDesignDashboard } from "./pages/services/web-mobile-design-dashboard";
 import { ServiceTabPage } from "./pages/service-tab-page";
-import { serviceLabels, type ServiceId } from "./data/service-pages";
+import type { ServiceId } from "./data/service-pages";
 import { useAppDispatch, useAppSelector } from "./store/hooks";
 import { AuthBootstrap } from "./features/auth/AuthBootstrap";
 import { useLoginMutation, useLogoutMutation } from "./features/auth/authApi";
@@ -33,11 +34,13 @@ import {
   getUserDisplayName,
   getUserInitials,
 } from "./features/auth/roleMapping";
+import { getActivePurchasedServiceIds, normalizeServiceId } from "./features/auth/authNormalizers";
 import type { AuthUserProfile } from "./features/auth/authTypes";
 
 const SELECTED_SERVICE_STORAGE_KEY = "socialtech-client-selected-service";
 const CURRENT_PAGE_STORAGE_KEY = "socialtech-client-current-page";
 const DEFAULT_PAGE = "overview";
+const SHARED_PAGE_IDS = new Set(["reports", "meetings", "billing", "settings"]);
 
 const DEMO_CLIENT: DemoClient = {
   email: "client@socialtech.com",
@@ -47,8 +50,6 @@ const DEMO_CLIENT: DemoClient = {
   initials: "AY",
 };
 
-const VALID_SERVICE_IDS = new Set(Object.keys(serviceLabels) as ServiceId[]);
-
 export default function App() {
   return (
     <AuthBootstrap>
@@ -57,25 +58,23 @@ export default function App() {
   );
 }
 
-function ClientPortalApp() {
+export function ClientPortalApp() {
   const dispatch = useAppDispatch();
   const currentUser = useAppSelector(selectCurrentUser);
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
   const [login] = useLoginMutation();
   const [logout] = useLogoutMutation();
-  const [selectedService, setSelectedService] = useState<string | null>(() => readStoredService());
+  const [selectedService, setSelectedService] = useState<ServiceId | null>(() => readStoredService());
   const [currentPage, setCurrentPage] = useState(() => readStoredPage());
   const [authNotice, setAuthNotice] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!selectedService || VALID_SERVICE_IDS.has(selectedService as ServiceId)) {
-      return;
-    }
-
-    setSelectedService(null);
-    setCurrentPage(DEFAULT_PAGE);
-    clearPortalSelectionStorage();
-  }, [selectedService]);
+  const activePurchasedServiceIds = useMemo(
+    () => (currentUser ? getActivePurchasedServiceIds(currentUser) : []),
+    [currentUser],
+  );
+  const activePurchasedServiceSet = useMemo(
+    () => new Set<ServiceId>(activePurchasedServiceIds),
+    [activePurchasedServiceIds],
+  );
 
   useEffect(() => {
     if (!isAuthenticated || !currentUser || isSupportedClientPortalUser(currentUser)) {
@@ -96,6 +95,20 @@ function ClientPortalApp() {
         clearPortalSelectionStorage();
       });
   }, [currentUser, dispatch, isAuthenticated, logout]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !currentUser || !selectedService) {
+      return;
+    }
+
+    if (activePurchasedServiceSet.has(selectedService)) {
+      return;
+    }
+
+    setSelectedService(null);
+    setCurrentPage(DEFAULT_PAGE);
+    clearPortalSelectionStorage();
+  }, [activePurchasedServiceSet, currentUser, isAuthenticated, selectedService]);
 
   const handleLogin = async (email: string, password: string) => {
     try {
@@ -144,7 +157,14 @@ function ClientPortalApp() {
     }
   };
 
-  const handleServiceSelect = (serviceId: string) => {
+  const handleServiceSelect = (serviceId: ServiceId) => {
+    if (!activePurchasedServiceSet.has(serviceId)) {
+      setSelectedService(null);
+      setCurrentPage(DEFAULT_PAGE);
+      clearPortalSelectionStorage();
+      return;
+    }
+
     setSelectedService(serviceId);
     setCurrentPage("service-dashboard");
     writeStoredService(serviceId);
@@ -220,13 +240,18 @@ function ClientPortalApp() {
   const companyName = currentUser.clientProfile?.companyName ?? DEMO_CLIENT.company;
   const initials = getUserInitials(currentUser);
 
-  if (!selectedService) {
+  const selectedServiceIsAuthorized =
+    selectedService !== null && activePurchasedServiceSet.has(selectedService);
+  const shouldShowClientTasksSection = !SHARED_PAGE_IDS.has(currentPage);
+
+  if (!selectedServiceIsAuthorized) {
     return (
       <ServiceSelectionPage
         onServiceSelect={handleServiceSelect}
         onLogout={handleLogout}
         clientName={clientName}
         companyName={companyName}
+        availableServiceIds={activePurchasedServiceIds}
       />
     );
   }
@@ -250,6 +275,7 @@ function ClientPortalApp() {
         />
         <main className="flex-1 overflow-y-auto">
           {renderContent()}
+          {shouldShowClientTasksSection ? <ClientVisibleTasksSection selectedService={selectedService} /> : null}
         </main>
         <ClientActionCenter />
       </div>
@@ -269,16 +295,12 @@ function isSupportedClientPortalUser(user: AuthUserProfile): boolean {
   return user.role === "CLIENT_OWNER" || user.role === "CLIENT_MEMBER";
 }
 
-function readStoredService(): string | null {
+function readStoredService(): ServiceId | null {
   if (typeof window === "undefined") return null;
 
   try {
     const serviceId = window.localStorage.getItem(SELECTED_SERVICE_STORAGE_KEY);
-    if (!serviceId) {
-      return null;
-    }
-
-    return VALID_SERVICE_IDS.has(serviceId as ServiceId) ? serviceId : null;
+    return normalizeServiceId(serviceId);
   } catch {
     return null;
   }
@@ -294,7 +316,7 @@ function readStoredPage(): string {
   }
 }
 
-function writeStoredService(serviceId: string): void {
+function writeStoredService(serviceId: ServiceId): void {
   if (typeof window === "undefined") return;
 
   try {

@@ -1,6 +1,6 @@
 import { Transform } from "class-transformer";
 import { IsDateString, IsEnum, IsString, IsUUID, MaxLength, MinLength, ValidateIf } from "class-validator";
-import { Priority, ProjectStatus } from "@prisma/client";
+import { Priority, ProjectStatus, PurchasedServiceKey } from "@prisma/client";
 
 function trimString(value: unknown): unknown {
   return typeof value === "string" ? value.trim() : value;
@@ -10,6 +10,10 @@ export class UpdateProjectDto {
   @ValidateIf((_, value: unknown) => value !== undefined)
   @IsUUID()
   clientProfileId?: string;
+
+  @ValidateIf((_, value: unknown) => value !== undefined)
+  @IsEnum(PurchasedServiceKey)
+  serviceKey?: PurchasedServiceKey | null;
 
   @ValidateIf((_, value: unknown) => value !== undefined)
   @Transform(({ value }) => trimString(value))

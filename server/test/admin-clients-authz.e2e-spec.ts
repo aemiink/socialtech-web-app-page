@@ -6,6 +6,8 @@ import {
   ClientStatus,
   Prisma,
   PrismaClient,
+  PurchasedServiceKey,
+  PurchasedServiceStatus,
   UserRole,
   UserStatus,
 } from "@prisma/client";
@@ -18,6 +20,7 @@ import { createCorsOptions } from "../src/config/cors.config";
 
 const ADMIN_CLIENTS_PATH = "/api/v1/admin/clients";
 const AUTH_LOGIN_PATH = "/api/v1/auth/login";
+const CLIENTS_PATH = "/api/v1/clients";
 const CLIENTS_MANAGE_PERMISSION = "clients.manage";
 const TEST_EMAIL_PREFIX = "authz-admin-clients-";
 const TEST_SLUG_PREFIX = "authz-admin-clients-";
@@ -90,6 +93,15 @@ type AdminClientOwnerBody = {
   accessToken?: unknown;
 };
 
+type AdminClientPurchasedServiceBody = {
+  id: string;
+  serviceKey: PurchasedServiceKey;
+  status: PurchasedServiceStatus;
+  startedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type AdminClientBody = {
   id: string;
   slug: string;
@@ -101,6 +113,23 @@ type AdminClientBody = {
   createdAt: string;
   updatedAt: string;
   owner: AdminClientOwnerBody | null;
+  purchasedServices: AdminClientPurchasedServiceBody[];
+  users?: unknown;
+  passwordHash?: unknown;
+  refreshTokens?: unknown;
+  tokenHash?: unknown;
+  accessToken?: unknown;
+};
+
+type ClientReadBody = {
+  id: string;
+  slug: string;
+  companyName: string;
+  contactEmail: string | null;
+  status: ClientStatus;
+  createdAt: string;
+  updatedAt: string;
+  purchasedServices: AdminClientPurchasedServiceBody[];
   users?: unknown;
   passwordHash?: unknown;
   refreshTokens?: unknown;
@@ -120,6 +149,11 @@ type CreateClientPayload = {
     password?: string;
     userId?: string;
   };
+  purchasedServices?: Array<{
+    serviceKey: PurchasedServiceKey;
+    status?: PurchasedServiceStatus;
+    startedAt?: string | null;
+  }>;
 };
 
 describe("Admin Client Management Authorization (e2e)", () => {
@@ -255,6 +289,98 @@ describe("Admin Client Management Authorization (e2e)", () => {
     );
   });
 
+  it("admin creates a client with purchased services and writes sanitized service audit metadata", async () => {
+    const payload = buildClientPayload("create-services", {
+      purchasedServices: [
+        {
+          serviceKey: PurchasedServiceKey.GROWTH_HUB,
+          status: PurchasedServiceStatus.ACTIVE,
+          startedAt: "2026-05-01T00:00:00.000Z",
+        },
+        {
+          serviceKey: PurchasedServiceKey.META_ADS,
+          status: PurchasedServiceStatus.PAUSED,
+        },
+      ],
+    });
+
+    const response = await request(app.getHttpServer())
+      .post(ADMIN_CLIENTS_PATH)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .set("User-Agent", TEST_USER_AGENT)
+      .send(payload)
+      .expect(201);
+
+    const client = expectAdminClientResponse(response.body);
+    expect(client.purchasedServices).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          serviceKey: PurchasedServiceKey.GROWTH_HUB,
+          status: PurchasedServiceStatus.ACTIVE,
+          startedAt: "2026-05-01T00:00:00.000Z",
+        }),
+        expect.objectContaining({
+          serviceKey: PurchasedServiceKey.META_ADS,
+          status: PurchasedServiceStatus.PAUSED,
+          startedAt: null,
+        }),
+      ]),
+    );
+
+    const auditLog = await expectAuditLog(ADMIN_CLIENT_AUDIT_ACTIONS.CREATED, client.id);
+    const metadata = expectAuditMetadata(auditLog, client.id);
+    expectChangedFields(metadata, ["purchasedServices"]);
+    const nextState = expectRecord(metadata.nextState);
+    expect(nextState.purchasedServices).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          serviceKey: PurchasedServiceKey.GROWTH_HUB,
+          status: PurchasedServiceStatus.ACTIVE,
+          startedAt: "2026-05-01T00:00:00.000Z",
+        }),
+        expect.objectContaining({
+          serviceKey: PurchasedServiceKey.META_ADS,
+          status: PurchasedServiceStatus.PAUSED,
+          startedAt: null,
+        }),
+      ]),
+    );
+    expect(JSON.stringify(nextState.purchasedServices)).not.toMatch(/clientProfileId|passwordHash|tokenHash/i);
+  });
+
+  it("client read endpoints include purchased services in a safe shape", async () => {
+    const myClientResponse = await request(app.getHttpServer())
+      .get(`${CLIENTS_PATH}/me`)
+      .set("Authorization", `Bearer ${clientToken}`)
+      .expect(200);
+    const myClient = expectClientReadResponse(myClientResponse.body);
+    expect(myClient.purchasedServices.length).toBeGreaterThan(0);
+
+    const listResponse = await request(app.getHttpServer())
+      .get(CLIENTS_PATH)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+    expect(Array.isArray(listResponse.body.data)).toBe(true);
+    const listedClient = (listResponse.body.data as unknown[]).find((item) => {
+      return isRecord(item) && item.id === myClient.id;
+    });
+    expectClientReadResponse(listedClient);
+
+    const detailResponse = await request(app.getHttpServer())
+      .get(`${CLIENTS_PATH}/${myClient.id}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+    expectClientReadResponse(detailResponse.body);
+
+    const summaryResponse = await request(app.getHttpServer())
+      .get(`${CLIENTS_PATH}/${myClient.id}/summary`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+    const summaryClient = expectRecord(summaryResponse.body.client);
+    expectPurchasedServices(summaryClient.purchasedServices);
+    expectNoSensitiveTokens(summaryResponse.body);
+  });
+
   it("rejects invalid client create payload with 400", async () => {
     const response = await request(app.getHttpServer())
       .post(ADMIN_CLIENTS_PATH)
@@ -266,6 +392,32 @@ describe("Admin Client Management Authorization (e2e)", () => {
       .expect(400);
 
     expectApiError(response.body);
+  });
+
+  it("rejects empty or duplicate purchased services on client create", async () => {
+    const emptyResponse = await request(app.getHttpServer())
+      .post(ADMIN_CLIENTS_PATH)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send(buildClientPayload("empty-services", { purchasedServices: [] }))
+      .expect(400);
+    expectApiError(emptyResponse.body);
+
+    const duplicateResponse = await request(app.getHttpServer())
+      .post(ADMIN_CLIENTS_PATH)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send(
+        buildClientPayload("duplicate-services", {
+          purchasedServices: [
+            { serviceKey: PurchasedServiceKey.SEO_AUDIT },
+            {
+              serviceKey: PurchasedServiceKey.SEO_AUDIT,
+              status: PurchasedServiceStatus.PAUSED,
+            },
+          ],
+        }),
+      )
+      .expect(400);
+    expectApiError(duplicateResponse.body, /duplicate serviceKey/i);
   });
 
   it("rejects duplicate slug on client create", async () => {
@@ -344,6 +496,78 @@ describe("Admin Client Management Authorization (e2e)", () => {
       .expect(409);
 
     expectApiError(response.body);
+  });
+
+  it("admin replaces purchased services on update and audits the service change", async () => {
+    const client = await createClientViaApi("service-update", {
+      purchasedServices: [
+        {
+          serviceKey: PurchasedServiceKey.WEB_APP,
+          status: PurchasedServiceStatus.ACTIVE,
+        },
+      ],
+    });
+
+    const updatePayload = {
+      purchasedServices: [
+        {
+          serviceKey: PurchasedServiceKey.SEO_AUDIT,
+          status: PurchasedServiceStatus.ACTIVE,
+          startedAt: "2026-06-01T00:00:00.000Z",
+        },
+        {
+          serviceKey: PurchasedServiceKey.TECHNICAL_SUPPORT,
+          status: PurchasedServiceStatus.PAUSED,
+        },
+      ],
+    };
+
+    const response = await request(app.getHttpServer())
+      .patch(`${ADMIN_CLIENTS_PATH}/${client.id}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .set("User-Agent", TEST_USER_AGENT)
+      .send(updatePayload)
+      .expect(200);
+
+    const updatedClient = expectAdminClientResponse(response.body);
+    expect(updatedClient.purchasedServices).toHaveLength(2);
+    expect(updatedClient.purchasedServices).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          serviceKey: PurchasedServiceKey.SEO_AUDIT,
+          status: PurchasedServiceStatus.ACTIVE,
+          startedAt: "2026-06-01T00:00:00.000Z",
+        }),
+        expect.objectContaining({
+          serviceKey: PurchasedServiceKey.TECHNICAL_SUPPORT,
+          status: PurchasedServiceStatus.PAUSED,
+          startedAt: null,
+        }),
+      ]),
+    );
+    expect(
+      updatedClient.purchasedServices.some(
+        (service) => service.serviceKey === PurchasedServiceKey.WEB_APP,
+      ),
+    ).toBe(false);
+
+    const auditLog = await expectAuditLog(ADMIN_CLIENT_AUDIT_ACTIONS.UPDATED, client.id);
+    const metadata = expectAuditMetadata(auditLog, client.id);
+    expectChangedFields(metadata, ["purchasedServices"]);
+    const previousState = expectRecord(metadata.previousState);
+    const nextState = expectRecord(metadata.nextState);
+    expect(previousState.purchasedServices).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ serviceKey: PurchasedServiceKey.WEB_APP }),
+      ]),
+    );
+    expect(nextState.purchasedServices).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ serviceKey: PurchasedServiceKey.SEO_AUDIT }),
+        expect.objectContaining({ serviceKey: PurchasedServiceKey.TECHNICAL_SUPPORT }),
+      ]),
+    );
+    expectNoSensitiveTokens(metadata);
   });
 
   it("admin creates a client and owner account in one request without returning sensitive fields", async () => {
@@ -540,12 +764,15 @@ describe("Admin Client Management Authorization (e2e)", () => {
     return body;
   }
 
-  async function createClientViaApi(suffixLabel: string): Promise<AdminClientBody> {
+  async function createClientViaApi(
+    suffixLabel: string,
+    overrides: Partial<CreateClientPayload> = {},
+  ): Promise<AdminClientBody> {
     const response = await request(app.getHttpServer())
       .post(ADMIN_CLIENTS_PATH)
       .set("Authorization", `Bearer ${adminToken}`)
       .set("User-Agent", TEST_USER_AGENT)
-      .send(buildClientPayload(suffixLabel))
+      .send(buildClientPayload(suffixLabel, overrides))
       .expect(201);
 
     return expectAdminClientResponse(response.body);
@@ -720,16 +947,27 @@ describe("Admin Client Management Authorization (e2e)", () => {
   }
 
   function expectAdminClientResponse(body: unknown): AdminClientBody {
-  const client = body as AdminClientBody;
-  expect(client.id).toEqual(expect.any(String));
-  expect(client.slug).toEqual(expect.any(String));
-  expect(client.name).toEqual(expect.any(String));
-  expect(client.companyName).toEqual(expect.any(String));
-  expect(client.name).toBe(client.companyName);
+    const client = body as AdminClientBody;
+    expect(client.id).toEqual(expect.any(String));
+    expect(client.slug).toEqual(expect.any(String));
+    expect(client.name).toEqual(expect.any(String));
+    expect(client.companyName).toEqual(expect.any(String));
+    expect(client.name).toBe(client.companyName);
     expect(Object.values(ClientStatus)).toContain(client.status);
     expect(typeof client.isActive).toBe("boolean");
     expectValidIsoDate(client.createdAt);
     expectValidIsoDate(client.updatedAt);
+    expect(Array.isArray(client.purchasedServices)).toBe(true);
+    for (const service of client.purchasedServices) {
+      expect(service.id).toEqual(expect.any(String));
+      expect(Object.values(PurchasedServiceKey)).toContain(service.serviceKey);
+      expect(Object.values(PurchasedServiceStatus)).toContain(service.status);
+      if (service.startedAt !== null) {
+        expectValidIsoDate(service.startedAt);
+      }
+      expectValidIsoDate(service.createdAt);
+      expectValidIsoDate(service.updatedAt);
+    }
     expect(client).not.toHaveProperty("users");
     expect(client).not.toHaveProperty("passwordHash");
     expect(client).not.toHaveProperty("tokenHash");
@@ -751,6 +989,67 @@ describe("Admin Client Management Authorization (e2e)", () => {
     }
 
     return client;
+  }
+
+  function expectClientReadResponse(body: unknown): ClientReadBody {
+    expect(isRecord(body)).toBe(true);
+    if (!isRecord(body)) {
+      throw new Error("Expected client read response.");
+    }
+
+    const client = body as ClientReadBody;
+    expect(client.id).toEqual(expect.any(String));
+    expect(client.slug).toEqual(expect.any(String));
+    expect(client.companyName).toEqual(expect.any(String));
+    expect(Object.values(ClientStatus)).toContain(client.status);
+    expectValidIsoDate(client.createdAt);
+    expectValidIsoDate(client.updatedAt);
+    expectPurchasedServices(client.purchasedServices);
+    expect(client).not.toHaveProperty("users");
+    expect(client).not.toHaveProperty("passwordHash");
+    expect(client).not.toHaveProperty("tokenHash");
+    expect(client).not.toHaveProperty("refreshTokens");
+    expect(client).not.toHaveProperty("accessToken");
+
+    return client;
+  }
+
+  function expectPurchasedServices(value: unknown): void {
+    expect(Array.isArray(value)).toBe(true);
+    if (!Array.isArray(value)) {
+      throw new Error("Expected purchasedServices array.");
+    }
+
+    for (const service of value) {
+      expect(isRecord(service)).toBe(true);
+      if (!isRecord(service)) {
+        throw new Error("Expected purchased service record.");
+      }
+
+      expect(service.id).toEqual(expect.any(String));
+      expect(Object.values(PurchasedServiceKey)).toContain(service.serviceKey);
+      expect(Object.values(PurchasedServiceStatus)).toContain(service.status);
+      if (service.startedAt !== null) {
+        expect(typeof service.startedAt).toBe("string");
+        if (typeof service.startedAt !== "string") {
+          throw new Error("Expected purchased service startedAt to be an ISO string or null.");
+        }
+        expectValidIsoDate(service.startedAt);
+      }
+      expect(typeof service.createdAt).toBe("string");
+      if (typeof service.createdAt !== "string") {
+        throw new Error("Expected purchased service createdAt to be an ISO string.");
+      }
+      expectValidIsoDate(service.createdAt);
+      expect(typeof service.updatedAt).toBe("string");
+      if (typeof service.updatedAt !== "string") {
+        throw new Error("Expected purchased service updatedAt to be an ISO string.");
+      }
+      expectValidIsoDate(service.updatedAt);
+      expect(service).not.toHaveProperty("clientProfileId");
+      expect(service).not.toHaveProperty("users");
+      expect(service).not.toHaveProperty("passwordHash");
+    }
   }
 
   function expectAuditMetadata(
@@ -778,6 +1077,15 @@ describe("Admin Client Management Authorization (e2e)", () => {
     for (const field of expectedFields) {
       expect(changedFields).toContain(field);
     }
+  }
+
+  function expectRecord(value: unknown): Record<string, unknown> {
+    expect(isRecord(value)).toBe(true);
+    if (!isRecord(value)) {
+      throw new Error("Expected record value.");
+    }
+
+    return value;
   }
 
   function expectJsonObject(value: Prisma.JsonValue | null): Record<string, unknown> {

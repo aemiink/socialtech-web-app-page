@@ -16,6 +16,18 @@ const clientReadSelect = {
   status: true,
   createdAt: true,
   updatedAt: true,
+  purchasedServices: {
+    select: {
+      id: true,
+      serviceKey: true,
+      status: true,
+      startedAt: true,
+      endedAt: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+    orderBy: [{ serviceKey: "asc" }, { id: "asc" }],
+  },
 } satisfies Prisma.ClientProfileSelect;
 
 type ClientReadModel = Prisma.ClientProfileGetPayload<{ select: typeof clientReadSelect }>;
@@ -40,6 +52,7 @@ type ClientSummaryResponse = {
     status: ClientReadModel["status"];
     createdAt: Date;
     updatedAt: Date;
+    purchasedServices: ClientReadModel["purchasedServices"];
   };
   projects: {
     total: number;
@@ -290,6 +303,7 @@ export class ClientsService {
         status: clientProfile.status,
         createdAt: clientProfile.createdAt,
         updatedAt: clientProfile.updatedAt,
+        purchasedServices: clientProfile.purchasedServices,
       },
       projects: {
         total: projectTotal,

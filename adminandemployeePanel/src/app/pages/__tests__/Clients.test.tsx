@@ -107,6 +107,10 @@ const client: ClientProfile = {
   status: "INACTIVE",
   createdAt: "2026-04-01T09:00:00.000Z",
   updatedAt: "2026-04-29T10:00:00.000Z",
+  purchasedServices: [
+    { serviceKey: "growth-hub", status: "ACTIVE" },
+    { serviceKey: "meta-ads", status: "ACTIVE" },
+  ],
 };
 
 const activeClient: ClientProfile = {
@@ -204,6 +208,10 @@ function setupMutationState() {
       status: payload.status ?? "ACTIVE",
       createdAt: "2026-04-30T10:00:00.000Z",
       updatedAt: "2026-04-30T10:00:00.000Z",
+      purchasedServices: payload.purchasedServices.map((serviceKey) => ({
+        serviceKey,
+        status: "ACTIVE",
+      })),
     };
 
     return { unwrap: async () => createdClient };
@@ -217,6 +225,10 @@ function setupMutationState() {
       slug: body.slug ?? client.slug,
       status: body.status ?? client.status,
       updatedAt: "2026-04-30T10:00:00.000Z",
+      purchasedServices: body.purchasedServices?.map((serviceKey) => ({
+        serviceKey,
+        status: "ACTIVE",
+      })) ?? client.purchasedServices,
     };
 
     return { unwrap: async () => updatedClient };
@@ -397,6 +409,14 @@ describe("Clients", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useRealTimers();
+    vi.stubGlobal(
+      "ResizeObserver",
+      vi.fn(() => ({
+        observe: vi.fn(),
+        unobserve: vi.fn(),
+        disconnect: vi.fn(),
+      })),
+    );
     currentUser = adminUser;
     setupListState();
     setupOwnerPickerState();
@@ -405,6 +425,7 @@ describe("Clients", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   it("requests the initial server-side query params", () => {
@@ -563,6 +584,18 @@ describe("Clients", () => {
     expect(screen.getByRole("button", { name: "Aktifleştir" })).toBeEnabled();
   });
 
+  it("shows purchased service badges in list and preview", () => {
+    renderClients();
+
+    expect(screen.getByText("Growth & Hub")).toBeInTheDocument();
+    expect(screen.getByText("Meta ADS")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Önizle" }));
+
+    expect(screen.getByText("Satın Alınan Hizmetler")).toBeInTheDocument();
+    expect(screen.getAllByText("Growth & Hub").length).toBeGreaterThan(0);
+  });
+
   it("validates create modal fields before submitting", async () => {
     const { createAdminClient } = setupMutationState();
 
@@ -586,6 +619,7 @@ describe("Clients", () => {
     fireEvent.change(within(dialog).getByLabelText("Portal Slug"), {
       target: { value: "acme-e-ticaret" },
     });
+    fireEvent.click(within(dialog).getByLabelText("Growth & Hub"));
     fireEvent.change(within(dialog).getByLabelText("Sahip İşlemi"), {
       target: { value: "CREATE" },
     });
@@ -653,6 +687,7 @@ describe("Clients", () => {
     fireEvent.change(within(dialog).getByLabelText("Müşteri Adı"), {
       target: { value: "Yeni Müşteri" },
     });
+    fireEvent.click(within(dialog).getByLabelText("Growth & Hub"));
     fireEvent.change(within(dialog).getByLabelText("Sahip İşlemi"), {
       target: { value: "LINK_EXISTING" },
     });
@@ -673,6 +708,7 @@ describe("Clients", () => {
     fireEvent.change(within(dialog).getByLabelText("Müşteri Adı"), {
       target: { value: "Yeni Müşteri" },
     });
+    fireEvent.click(within(dialog).getByLabelText("Growth & Hub"));
     fireEvent.change(within(dialog).getByLabelText("Sahip İşlemi"), {
       target: { value: "LINK_EXISTING" },
     });
@@ -704,6 +740,7 @@ describe("Clients", () => {
     fireEvent.change(within(dialog).getByLabelText("Müşteri Adı"), {
       target: { value: "Yeni Müşteri" },
     });
+    fireEvent.click(within(dialog).getByLabelText("Growth & Hub"));
     fireEvent.click(within(dialog).getByRole("button", { name: "Müşteri Oluştur" }));
 
     await waitFor(() => {
@@ -728,6 +765,8 @@ describe("Clients", () => {
     fireEvent.change(within(dialog).getByLabelText("Durum"), {
       target: { value: "INACTIVE" },
     });
+    fireEvent.click(within(dialog).getByLabelText("Growth & Hub"));
+    fireEvent.click(within(dialog).getByLabelText("Meta ADS"));
     fireEvent.change(within(dialog).getByLabelText("Sahip İşlemi"), {
       target: { value: "CREATE" },
     });
@@ -749,6 +788,7 @@ describe("Clients", () => {
       name: "Yeni Müşteri",
       slug: "yeni-musteri",
       status: "INACTIVE",
+      purchasedServices: ["growth-hub", "meta-ads"],
     });
     expect(createOrLinkClientOwner).toHaveBeenCalledWith({
       clientId: "33333333-3333-4333-8333-333333333333",
@@ -779,6 +819,7 @@ describe("Clients", () => {
     fireEvent.change(within(dialog).getByLabelText("Müşteri Adı"), {
       target: { value: "Yeni Müşteri" },
     });
+    fireEvent.click(within(dialog).getByLabelText("Growth & Hub"));
     fireEvent.click(within(dialog).getByRole("button", { name: "Müşteri Oluştur" }));
 
     await waitFor(() => {
@@ -815,6 +856,7 @@ describe("Clients", () => {
         name: "Updated Client",
         slug: "updated-client",
         status: "ACTIVE",
+        purchasedServices: ["growth-hub", "meta-ads"],
       },
     });
     expect(await screen.findByText("Müşteri bilgileri güncellendi.")).toBeInTheDocument();

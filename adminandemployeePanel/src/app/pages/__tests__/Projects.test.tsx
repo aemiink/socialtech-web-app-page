@@ -1,11 +1,16 @@
 /// <reference types="vitest" />
 /// <reference types="@testing-library/jest-dom" />
 
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthUserProfile } from "../../features/auth/authTypes";
+import type {
+  ClientProfile,
+  ClientsListQuery,
+  ClientsListResponse,
+} from "../../features/clients/clientsTypes";
 import type {
   CreateProjectRequest,
   Project,
@@ -28,6 +33,15 @@ type ProjectsQueryResult = {
   refetch: () => void;
 };
 
+type ClientsQueryResult = {
+  data?: ClientsListResponse;
+  error?: unknown;
+  isError: boolean;
+  isLoading: boolean;
+  isFetching: boolean;
+  refetch: () => void;
+};
+
 type CreateProjectTrigger = (
   payload: CreateProjectRequest,
 ) => MutationResponse<Project>;
@@ -38,6 +52,7 @@ type UpdateProjectTrigger = (payload: {
 }) => MutationResponse<Project>;
 
 const mockUseGetProjectsQuery = vi.fn<(query: ProjectsListQuery) => ProjectsQueryResult>();
+const mockUseGetClientsQuery = vi.fn<(query: ClientsListQuery) => ClientsQueryResult>();
 const mockUseCreateProjectMutation = vi.fn<
   () => [CreateProjectTrigger, { isLoading: boolean }]
 >();
@@ -57,8 +72,26 @@ vi.mock("../../features/projects/projectsApi", () => ({
   useUpdateProjectMutation: () => mockUseUpdateProjectMutation(),
 }));
 
+vi.mock("../../features/clients/clientsApi", () => ({
+  useGetClientsQuery: (query: ClientsListQuery) => mockUseGetClientsQuery(query),
+}));
+
 const clientProfileId = "11111111-1111-4111-8111-111111111111";
 const projectId = "22222222-2222-4222-8222-222222222222";
+
+const clientProfile: ClientProfile = {
+  id: clientProfileId,
+  slug: "acme-e-ticaret",
+  companyName: "Acme E-ticaret",
+  contactEmail: "client@example.com",
+  status: "ACTIVE",
+  createdAt: "2026-04-01T09:00:00.000Z",
+  updatedAt: "2026-04-29T10:00:00.000Z",
+  purchasedServices: [
+    { serviceKey: "growth-hub", status: "ACTIVE" },
+    { serviceKey: "meta-ads", status: "ACTIVE" },
+  ],
+};
 
 const adminUser: AuthUserProfile = {
   id: "admin-user-id",
@@ -89,10 +122,19 @@ const project: Project = {
   createdAt: "2026-04-28T10:00:00.000Z",
   updatedAt: "2026-04-29T10:00:00.000Z",
   clientProfile: {
-    id: clientProfileId,
-    slug: "acme-e-ticaret",
-    companyName: "Acme E-ticaret",
-    contactEmail: "client@example.com",
+    ...clientProfile,
+  },
+};
+
+const clientsResponse: ClientsListResponse = {
+  data: [clientProfile],
+  meta: {
+    page: 1,
+    limit: 8,
+    total: 1,
+    totalPages: 1,
+    hasNextPage: false,
+    hasPreviousPage: false,
   },
 };
 
@@ -138,6 +180,18 @@ function setupPointerMocks() {
 function setupListState(overrides: Partial<ProjectsQueryResult> = {}) {
   mockUseGetProjectsQuery.mockReturnValue({
     data: emptyProjectsResponse,
+    error: undefined,
+    isError: false,
+    isLoading: false,
+    isFetching: false,
+    refetch: vi.fn(),
+    ...overrides,
+  });
+}
+
+function setupClientsState(overrides: Partial<ClientsQueryResult> = {}) {
+  mockUseGetClientsQuery.mockReturnValue({
+    data: clientsResponse,
     error: undefined,
     isError: false,
     isLoading: false,
@@ -210,13 +264,27 @@ function getLastProjectsQuery() {
   return calls[calls.length - 1][0];
 }
 
+function getLastClientsQuery() {
+  const calls = mockUseGetClientsQuery.mock.calls;
+  return calls[calls.length - 1][0];
+}
+
+function selectClient(container: HTMLElement, name = "Acme E-ticaret") {
+  fireEvent.click(within(container).getByRole("button", { name: new RegExp(name) }));
+}
+
 describe("Projects", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setupPointerMocks();
     currentUser = adminUser;
     setupListState();
+    setupClientsState();
     setupMutationState();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("shows loading, error, empty, and list states", () => {
@@ -260,7 +328,7 @@ describe("Projects", () => {
     );
 
     expect(screen.getByText("Growth Hub Launch")).toBeInTheDocument();
-    expect(screen.getByText("Acme E-ticaret")).toBeInTheDocument();
+    expect(screen.getAllByText("Acme E-ticaret").length).toBeGreaterThan(0);
     expect(screen.getByText("growth-hub-launch")).toBeInTheDocument();
   });
 
@@ -314,30 +382,43 @@ describe("Projects", () => {
     });
   });
 
-  it("validates and applies the clientProfileId filter", async () => {
+  it("applies the selected client filter", async () => {
     renderProjects();
 
-    fireEvent.change(screen.getByLabelText("Müşteri Profil ID"), {
-      target: { value: "not-a-uuid" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Filtrele" }));
-
-    expect(
-      await screen.findByText("Müşteri profil ID geçerli bir UUID olmalıdır."),
-    ).toBeInTheDocument();
-    expect(getLastProjectsQuery().clientProfileId).toBeUndefined();
-
-    fireEvent.change(screen.getByLabelText("Müşteri Profil ID"), {
-      target: { value: clientProfileId },
-    });
+    selectClient(document.body);
     fireEvent.click(screen.getByRole("button", { name: "Filtrele" }));
 
     await waitFor(() => {
       expect(getLastProjectsQuery()).toMatchObject({ clientProfileId });
     });
-    expect(
-      screen.queryByText("Müşteri profil ID geçerli bir UUID olmalıdır."),
-    ).not.toBeInTheDocument();
+  });
+
+  it("queries active client picker candidates with debounced search", async () => {
+    vi.useFakeTimers();
+
+    renderProjects();
+    expect(getLastClientsQuery()).toMatchObject({
+      status: "ACTIVE",
+      limit: 8,
+      search: undefined,
+    });
+
+    fireEvent.change(screen.getByLabelText("Müşteri"), {
+      target: { value: "  Acme  " },
+    });
+    expect(getLastClientsQuery().search).toBeUndefined();
+
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+
+    expect(getLastClientsQuery()).toMatchObject({
+      status: "ACTIVE",
+      limit: 8,
+      search: "Acme",
+    });
+
+    vi.useRealTimers();
   });
 
   it("opens the create modal", () => {
@@ -346,26 +427,16 @@ describe("Projects", () => {
     expect(openCreateDialog()).toBeInTheDocument();
   });
 
-  it("shows create validation for required, UUID, and date rules", async () => {
+  it("shows create validation for required client and date rules", async () => {
     const { createProject } = setupMutationState();
 
     renderProjects();
     const dialog = openCreateDialog();
 
     fireEvent.click(within(dialog).getByRole("button", { name: "Proje Oluştur" }));
-    expect(await screen.findByText("Müşteri profil ID gereklidir.")).toBeInTheDocument();
+    expect(await screen.findByText("Müşteri seçimi gereklidir.")).toBeInTheDocument();
 
-    fireEvent.change(within(dialog).getByLabelText("Müşteri Profil ID"), {
-      target: { value: "not-a-uuid" },
-    });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Proje Oluştur" }));
-    expect(
-      await screen.findByText("Müşteri profil ID geçerli bir UUID olmalıdır."),
-    ).toBeInTheDocument();
-
-    fireEvent.change(within(dialog).getByLabelText("Müşteri Profil ID"), {
-      target: { value: clientProfileId },
-    });
+    selectClient(dialog);
     fireEvent.change(within(dialog).getByLabelText("Proje Adı"), {
       target: { value: "Launch Plan" },
     });
@@ -384,14 +455,18 @@ describe("Projects", () => {
   });
 
   it("submits a valid create payload and shows success", async () => {
+    const user = userEvent.setup();
     const { createProject } = setupMutationState();
 
     renderProjects();
     const dialog = openCreateDialog();
 
-    fireEvent.change(within(dialog).getByLabelText("Müşteri Profil ID"), {
-      target: { value: ` ${clientProfileId} ` },
-    });
+    selectClient(dialog);
+    await selectComboboxOption(
+      user,
+      getComboboxByFieldLabel(dialog, "Hizmet"),
+      "Growth & Hub",
+    );
     fireEvent.change(within(dialog).getByLabelText("Proje Adı"), {
       target: { value: "  Yeni Proje  " },
     });
@@ -411,6 +486,7 @@ describe("Projects", () => {
     });
     expect(createProject.mock.calls[0][0]).toEqual({
       clientProfileId,
+      serviceKey: "growth-hub",
       name: "Yeni Proje",
       description: "Kapsam notu",
       status: "PLANNED",
@@ -435,9 +511,7 @@ describe("Projects", () => {
     renderProjects();
     const dialog = openCreateDialog();
 
-    fireEvent.change(within(dialog).getByLabelText("Müşteri Profil ID"), {
-      target: { value: clientProfileId },
-    });
+    selectClient(dialog);
     fireEvent.change(within(dialog).getByLabelText("Proje Adı"), {
       target: { value: "Yeni Proje" },
     });

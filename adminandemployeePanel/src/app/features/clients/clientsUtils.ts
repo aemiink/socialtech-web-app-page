@@ -1,18 +1,39 @@
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { extractApiErrorMessage } from "../adminUsers/adminUsersUtils";
 import type {
+  BackendPurchasedServiceKey,
+  BackendPurchasedServiceStatus,
   ClientProfile,
+  ClientPurchasedService,
   ClientStatus,
   ClientsListMeta,
   ClientsListResponse,
   ClientSummaryRecentProject,
   ClientSummaryRecentTask,
   ClientSummaryResponse,
+  PurchasedServiceStatus,
+  ServiceKey,
 } from "./clientsTypes";
 
 export { extractApiErrorMessage };
 
 export const CLIENT_STATUS_OPTIONS: ClientStatus[] = ["ACTIVE", "INACTIVE", "SUSPENDED"];
+export const SERVICE_CATALOG: Array<{ key: ServiceKey; label: string }> = [
+  { key: "growth-hub", label: "Growth & Hub" },
+  { key: "social-media", label: "Social Media" },
+  { key: "media-hub", label: "Media Hub" },
+  { key: "meta-ads", label: "Meta ADS" },
+  { key: "tiktok-ads", label: "TikTok ADS" },
+  { key: "google-ads", label: "Google ADS" },
+  { key: "amazon-ads", label: "Amazon ADS" },
+  { key: "web-app", label: "Web APP" },
+  { key: "mobile-app", label: "Mobile APP" },
+  { key: "landing-pages", label: "Landing Pages" },
+  { key: "web-mobile-design", label: "Web & Mobile Design" },
+  { key: "technical-support", label: "Technical Support" },
+  { key: "seo-audit", label: "SEO Audit" },
+];
+export const SERVICE_KEY_OPTIONS: ServiceKey[] = SERVICE_CATALOG.map((service) => service.key);
 export const CLIENT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export const CLIENT_OWNER_PASSWORD_LETTER_PATTERN = /[A-Za-z]/;
 export const CLIENT_OWNER_PASSWORD_NUMBER_PATTERN = /[0-9]/;
@@ -20,9 +41,47 @@ export const CLIENT_OWNER_PASSWORD_NUMBER_PATTERN = /[0-9]/;
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+const UI_TO_BACKEND_SERVICE_KEY_MAP: Record<ServiceKey, BackendPurchasedServiceKey> = {
+  "growth-hub": "GROWTH_HUB",
+  "social-media": "SOCIAL_MEDIA",
+  "media-hub": "MEDIA_HUB",
+  "medya-hub": "MEDIA_HUB",
+  "meta-ads": "META_ADS",
+  "tiktok-ads": "TIKTOK_ADS",
+  "google-ads": "GOOGLE_ADS",
+  "amazon-ads": "AMAZON_ADS",
+  "web-app": "WEB_APP",
+  "mobile-app": "MOBILE_APP",
+  "landing-page": "LANDING_PAGE",
+  "landing-pages": "LANDING_PAGE",
+  "web-mobile-design": "WEB_MOBILE_DESIGN",
+  "technical-support": "TECHNICAL_SUPPORT",
+  "seo-audit": "SEO_AUDIT",
+};
+
+const BACKEND_TO_UI_SERVICE_KEY_MAP: Record<BackendPurchasedServiceKey, ServiceKey> = {
+  GROWTH_HUB: "growth-hub",
+  SOCIAL_MEDIA: "social-media",
+  MEDIA_HUB: "media-hub",
+  MEDYA_HUB: "media-hub",
+  META_ADS: "meta-ads",
+  TIKTOK_ADS: "tiktok-ads",
+  GOOGLE_ADS: "google-ads",
+  AMAZON_ADS: "amazon-ads",
+  WEB_APP: "web-app",
+  MOBILE_APP: "mobile-app",
+  LANDING_PAGE: "landing-pages",
+  LANDING_PAGES: "landing-pages",
+  WEB_MOBILE_DESIGN: "web-mobile-design",
+  TECHNICAL_SUPPORT: "technical-support",
+  SEO_AUDIT: "seo-audit",
+};
+
 export function normalizeClientsListResponse(response: unknown): ClientsListResponse {
   const responseData = isRecord(response) && "data" in response ? response.data : response;
-  const data = Array.isArray(responseData) ? responseData.filter(isClientProfile) : [];
+  const data = Array.isArray(responseData)
+    ? responseData.map(normalizeClientProfile).filter(isDefined)
+    : [];
   const meta = normalizeListMeta(isRecord(response) ? response.meta : null, data.length);
 
   return { data, meta };
@@ -31,8 +90,9 @@ export function normalizeClientsListResponse(response: unknown): ClientsListResp
 export function normalizeClientResponse(response: unknown): ClientProfile {
   const candidate = getClientCandidate(response);
 
-  if (isClientProfile(candidate)) {
-    return candidate;
+  const client = normalizeClientProfile(candidate);
+  if (client) {
+    return client;
   }
 
   throw new Error("Client detail response could not be parsed.");
@@ -242,6 +302,75 @@ export function getClientStatusBadgeClass(status: string | null | undefined): st
   }
 
   return "border-white/[0.12] bg-white/[0.08] text-[#E5E5E5]";
+}
+
+export function getServiceLabel(serviceKey: string | null | undefined): string {
+  const normalizedServiceKey = normalizeToUiServiceKey(serviceKey);
+  const service = SERVICE_CATALOG.find((item) => item.key === normalizedServiceKey);
+  return service?.label ?? serviceKey ?? "Belirtilmedi";
+}
+
+export function toBackendServiceKey(serviceKey: ServiceKey): BackendPurchasedServiceKey {
+  return UI_TO_BACKEND_SERVICE_KEY_MAP[serviceKey];
+}
+
+export function normalizeToUiServiceKey(value: unknown): ServiceKey | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim();
+  if (normalized.length === 0) {
+    return null;
+  }
+
+  if (isServiceKey(normalized)) {
+    return normalized;
+  }
+
+  if (normalized.toLowerCase() === "medya-hub") {
+    return "media-hub";
+  }
+
+  if (normalized.toLowerCase() === "landing-page") {
+    return "landing-pages";
+  }
+
+  const upperValue = normalized.toUpperCase();
+  if (isBackendPurchasedServiceKey(upperValue)) {
+    return BACKEND_TO_UI_SERVICE_KEY_MAP[upperValue];
+  }
+
+  return null;
+}
+
+export function getClientPurchasedServices(client: ClientProfile): ClientPurchasedService[] {
+  return client.purchasedServices ?? [];
+}
+
+export function getActivePurchasedServices(client: ClientProfile): ClientPurchasedService[] {
+  return getClientPurchasedServices(client).filter((service) => service.status === "ACTIVE");
+}
+
+export function getActivePurchasedServiceKeys(client: ClientProfile): ServiceKey[] {
+  return getActivePurchasedServices(client).map((service) => service.serviceKey);
+}
+
+export function getPurchasedServicesSummary(client: ClientProfile): string {
+  const activeServices = getActivePurchasedServices(client);
+
+  if (activeServices.length === 0) {
+    return "Hizmet yok";
+  }
+
+  const [firstService, secondService, ...remainingServices] = activeServices;
+  const labels = [firstService, secondService]
+    .filter(isDefined)
+    .map((service) => getServiceLabel(service.serviceKey));
+
+  return remainingServices.length > 0
+    ? `${labels.join(", ")} +${remainingServices.length}`
+    : labels.join(", ");
 }
 
 export function getClientProjectStatusLabel(status: string | null | undefined): string {
@@ -578,6 +707,21 @@ function createFallbackMeta(dataLength: number): ClientsListMeta {
   };
 }
 
+function normalizeClientProfile(value: unknown): ClientProfile | null {
+  if (!isClientProfile(value)) {
+    return null;
+  }
+
+  if (!isRecord(value) || !("purchasedServices" in value)) {
+    return value;
+  }
+
+  return {
+    ...value,
+    purchasedServices: normalizePurchasedServices(value.purchasedServices),
+  };
+}
+
 function isClientProfile(value: unknown): value is ClientProfile {
   if (!isRecord(value)) {
     return false;
@@ -592,6 +736,75 @@ function isClientProfile(value: unknown): value is ClientProfile {
     typeof value.createdAt === "string" &&
     typeof value.updatedAt === "string"
   );
+}
+
+function normalizePurchasedServices(value: unknown): ClientPurchasedService[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.map(normalizePurchasedService).filter(isDefined);
+}
+
+function normalizePurchasedService(value: unknown): ClientPurchasedService | null {
+  if (typeof value === "string") {
+    const normalizedServiceKey = normalizeToUiServiceKey(value);
+    return normalizedServiceKey
+      ? {
+          serviceKey: normalizedServiceKey,
+          status: "ACTIVE",
+        }
+      : null;
+  }
+
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const serviceKey = normalizeToUiServiceKey(value.serviceKey);
+  if (!serviceKey) {
+    return null;
+  }
+
+  return {
+    serviceKey,
+    status: normalizePurchasedServiceStatus(value.status),
+    startedAt: isStringOrNull(value.startedAt) ? value.startedAt : undefined,
+    endedAt: isStringOrNull(value.endedAt) ? value.endedAt : undefined,
+    createdAt: isStringOrNull(value.createdAt) ? value.createdAt : undefined,
+    updatedAt: isStringOrNull(value.updatedAt) ? value.updatedAt : undefined,
+  };
+}
+
+function isServiceKey(value: unknown): value is ServiceKey {
+  return typeof value === "string" && SERVICE_KEY_OPTIONS.includes(value as ServiceKey);
+}
+
+function isBackendPurchasedServiceKey(value: string): value is BackendPurchasedServiceKey {
+  return value in BACKEND_TO_UI_SERVICE_KEY_MAP;
+}
+
+function isPurchasedServiceStatus(value: unknown): value is PurchasedServiceStatus {
+  return value === "ACTIVE" || value === "INACTIVE" || value === "PAUSED" || value === "SUSPENDED";
+}
+
+function normalizePurchasedServiceStatus(value: unknown): PurchasedServiceStatus {
+  if (isPurchasedServiceStatus(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toUpperCase() as BackendPurchasedServiceStatus | string;
+    if (normalized === "CANCELED") {
+      return "INACTIVE";
+    }
+
+    if (normalized === "PAUSED") {
+      return "PAUSED";
+    }
+  }
+
+  return "ACTIVE";
 }
 
 function isStringOrNull(value: unknown): value is string | null {

@@ -12,6 +12,7 @@ import {
   normalizeClientResponse,
   normalizeClientSummaryResponse,
   normalizeClientsListResponse,
+  toBackendServiceKey,
 } from "./clientsUtils";
 
 const CLIENTS_LIST_ID = "LIST";
@@ -62,7 +63,7 @@ export const clientsApi = baseApi.injectEndpoints({
       query: (body) => ({
         url: "/admin/clients",
         method: "POST",
-        body,
+        body: serializeAdminClientMutationBody(body),
       }),
       transformResponse: (response: unknown) => normalizeClientResponse(response),
       invalidatesTags: (result) => getAdminClientCreateInvalidations(result),
@@ -74,7 +75,7 @@ export const clientsApi = baseApi.injectEndpoints({
       query: ({ id, body }) => ({
         url: `/admin/clients/${id}`,
         method: "PATCH",
-        body,
+        body: serializeAdminClientMutationBody(body),
       }),
       transformResponse: (response: unknown) => normalizeClientResponse(response),
       invalidatesTags: (_result, _error, { id }) => getAdminClientMutationInvalidations(id),
@@ -187,4 +188,19 @@ function serializeClientsListQuery(
   }
 
   return params;
+}
+
+function serializeAdminClientMutationBody(
+  body: CreateAdminClientRequest | UpdateAdminClientRequest,
+): Record<string, unknown> {
+  const serializedBody: Record<string, unknown> = { ...body };
+
+  if (body.purchasedServices !== undefined) {
+    serializedBody.purchasedServices = body.purchasedServices.map((serviceKey) => ({
+      serviceKey: toBackendServiceKey(serviceKey),
+      status: "ACTIVE",
+    }));
+  }
+
+  return serializedBody;
 }
