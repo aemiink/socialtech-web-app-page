@@ -42,3 +42,16 @@ None identified.
 - Brand: dark (`#131313`) + neon green (`#AAFF01`) design system
 - All mock data uses realistic Turkish company names (Koçtaş, Türk Telekom, Migros, Getir, etc.)
 - Client portal directory not yet confirmed — inspect git diff of latest commit or look for a new root-level directory
+## Update - 2026-04-29
+
+### Completed
+- Client summary endpoint (`GET /api/v1/clients/:id/summary`)
+- ClientDetail related Projects/Tasks overview UI (summary-driven)
+- ClientDetail summary frontend tests
+
+### Planned
+- Client summary cache / TTL
+- Backend admin summary endpoint
+- Dashboard dedicated summary endpoint integration
+- Clients server-side pagination/filter/sorting (only if still pending in branch-level rollout)
+- Summary query optimization (count/query strategy tuning at larger scale)

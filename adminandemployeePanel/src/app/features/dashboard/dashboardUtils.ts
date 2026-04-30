@@ -24,7 +24,6 @@ export const EMPTY_ADMIN_SUMMARY: AdminSummaryResponse = {
   },
   tasks: {
     total: 0,
-    unassigned: 0,
     todo: 0,
     inProgress: 0,
     review: 0,
@@ -33,12 +32,10 @@ export const EMPTY_ADMIN_SUMMARY: AdminSummaryResponse = {
   },
   auditLogs: {
     total: 0,
-    last24Hours: 0,
     lastActionAt: null,
   },
   meta: {
     generatedAt: "",
-    resourceCount: 0,
   },
 };
 
@@ -56,12 +53,12 @@ export function formatDashboardMetric(value: number, isLoading: boolean, isError
 
 export function formatDashboardDateTime(value: string | null): string {
   if (!value) {
-    return "Henüz kayıt yok";
+    return "Henüz işlem yok";
   }
 
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    return "Henüz kayıt yok";
+    return "Henüz işlem yok";
   }
 
   return new Intl.DateTimeFormat("tr-TR", {

@@ -65,7 +65,6 @@ type AdminSummaryResponse = {
     total: number;
     active: number;
     inactive: number;
-    suspended: number;
   };
   projects: {
     total: number;
@@ -77,7 +76,6 @@ type AdminSummaryResponse = {
   };
   tasks: {
     total: number;
-    unassigned: number;
     todo: number;
     inProgress: number;
     review: number;
@@ -86,12 +84,10 @@ type AdminSummaryResponse = {
   };
   auditLogs: {
     total: number;
-    last24Hours: number;
     lastActionAt: string | null;
   };
   meta: {
     generatedAt: string;
-    resourceCount: number;
   };
 };
 
@@ -338,7 +334,6 @@ describe("Authorization Matrix (e2e)", () => {
           total: expect.any(Number),
           active: expect.any(Number),
           inactive: expect.any(Number),
-          suspended: expect.any(Number),
         }),
         projects: expect.objectContaining({
           total: expect.any(Number),
@@ -350,7 +345,6 @@ describe("Authorization Matrix (e2e)", () => {
         }),
         tasks: expect.objectContaining({
           total: expect.any(Number),
-          unassigned: expect.any(Number),
           todo: expect.any(Number),
           inProgress: expect.any(Number),
           review: expect.any(Number),
@@ -359,11 +353,9 @@ describe("Authorization Matrix (e2e)", () => {
         }),
         auditLogs: expect.objectContaining({
           total: expect.any(Number),
-          last24Hours: expect.any(Number),
         }),
         meta: expect.objectContaining({
           generatedAt: expect.any(String),
-          resourceCount: expect.any(Number),
         }),
       }),
     );
@@ -371,7 +363,35 @@ describe("Authorization Matrix (e2e)", () => {
       summary.auditLogs.lastActionAt === null ||
         typeof summary.auditLogs.lastActionAt === "string",
     ).toBe(true);
+    expect(summary.clients).not.toHaveProperty("suspended");
+    expect(summary.tasks).not.toHaveProperty("unassigned");
+    expect(summary.auditLogs).not.toHaveProperty("last24Hours");
+    expect(summary.meta).not.toHaveProperty("resourceCount");
     expect(JSON.stringify(summary)).not.toMatch(/password|token|secret|hash/i);
+  });
+
+  it("admin.summary.read izni admin role'de bulunur, non-admin rollerde bulunmaz", async () => {
+    const permission = await prisma.permission.findUnique({
+      where: { slug: ADMIN_SUMMARY_READ_PERMISSION },
+      select: { id: true },
+    });
+    expect(permission).not.toBeNull();
+    if (!permission) {
+      return;
+    }
+
+    const rolePermissions = await prisma.rolePermission.findMany({
+      where: { permissionId: permission.id },
+      select: { role: true },
+    });
+    const roles = rolePermissions.map((item) => item.role);
+
+    expect(roles).toContain(UserRole.ADMIN);
+
+    const nonAdminRoles = new Set<UserRole>(
+      Object.values(UserRole).filter((role) => role !== UserRole.ADMIN),
+    );
+    expect(roles.some((role) => nonAdminRoles.has(role))).toBe(false);
   });
 
   it("admin summary permission kaldırılırsa route-level guard 403 döner", async () => {

@@ -35,19 +35,25 @@ export function Dashboard() {
 
   const kpis = [
     {
-      label: "Toplam Çalışan",
-      value: formatDashboardMetric(summary.users.employees, isLoading, isError),
+      label: "Toplam Kullanıcı",
+      value: formatDashboardMetric(summary.users.total, isLoading, isError),
       icon: Users,
       color: "text-white",
     },
     {
-      label: "Aktif Çalışan",
-      value: formatDashboardMetric(summary.users.active, isLoading, isError),
-      icon: CheckCircle,
+      label: "Toplam Çalışan",
+      value: formatDashboardMetric(summary.users.employees, isLoading, isError),
+      icon: Users,
       color: "text-[#AAFF01]",
     },
     {
-      label: "Pasif Çalışan",
+      label: "Aktif Kullanıcı",
+      value: formatDashboardMetric(summary.users.active, isLoading, isError),
+      icon: CheckCircle,
+      color: "text-white",
+    },
+    {
+      label: "Pasif Kullanıcı",
       value: formatDashboardMetric(summary.users.inactive, isLoading, isError),
       icon: Clock,
       color: "text-orange-400",
@@ -118,14 +124,14 @@ export function Dashboard() {
             <p className="mt-1 text-sm text-[#A0A0A0]">
               Son audit kaydı: {formatDashboardDateTime(summary.auditLogs.lastActionAt)}
             </p>
+            <p className="mt-1 text-xs text-[#7D7D7D]">
+              Son güncelleme: {formatDashboardDateTime(summary.meta.generatedAt)}
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge className="bg-[#AAFF01] text-[#131313]">
               Toplam Audit Log:{" "}
               {formatDashboardMetric(summary.auditLogs.total, isLoading, isError)}
-            </Badge>
-            <Badge variant="outline" className="text-[#d2ff8a]">
-              Son 24 Saat: {formatDashboardMetric(summary.auditLogs.last24Hours, isLoading, isError)}
             </Badge>
             {isUpdating && (
               <Badge variant="outline" className="text-[#d2ff8a]">
@@ -169,6 +175,10 @@ export function Dashboard() {
               label="Tamamlanan"
               value={formatDashboardMetric(summary.projects.completed, isLoading, isError)}
             />
+            <SummaryRow
+              label="Beklemede"
+              value={formatDashboardMetric(summary.projects.onHold, isLoading, isError)}
+            />
           </div>
         </Card>
 
@@ -184,12 +194,16 @@ export function Dashboard() {
               value={formatDashboardMetric(summary.tasks.review, isLoading, isError)}
             />
             <SummaryRow
-              label="Bloklanan"
-              value={formatDashboardMetric(summary.tasks.blocked, isLoading, isError)}
+              label="Devam Eden"
+              value={formatDashboardMetric(summary.tasks.inProgress, isLoading, isError)}
             />
             <SummaryRow
-              label="Atanmamış"
-              value={formatDashboardMetric(summary.tasks.unassigned, isLoading, isError)}
+              label="Tamamlanan"
+              value={formatDashboardMetric(summary.tasks.done, isLoading, isError)}
+            />
+            <SummaryRow
+              label="Bloklanan"
+              value={formatDashboardMetric(summary.tasks.blocked, isLoading, isError)}
             />
           </div>
         </Card>

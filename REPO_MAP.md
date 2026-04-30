@@ -352,3 +352,24 @@ The `client/` directory is the public/marketing Social Tech website, not the Cli
 - `adminandemployeePanel/src/app/contexts/RoleContext.tsx` - role compatibility layer; Redux auth state is authoritative.
 - `clientPanel/src/app/App.tsx` - Client Portal navigation state lives here until a router is introduced.
 - `clientPanel/src/app/data/service-pages.ts` - dense mock service content used across portal tabs.
+## Update - 2026-04-29 (Client Summary + ClientDetail)
+
+### Backend
+- `server/src/clients/clients.controller.ts`
+  - includes `GET /api/v1/clients/:id/summary` route.
+- `server/src/clients/clients.service.ts`
+  - implements client-level aggregated summary with scoped recent projects/tasks and permission-aware access checks.
+- `server/test/authz.e2e-spec.ts`
+  - expanded with client summary authz/object-scope/fail-closed coverage.
+
+### Admin Panel Frontend (`adminandemployeePanel`)
+- `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
+  - adds summary query hook for `/clients/:id/summary`.
+- `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`
+  - summary response and recent item typings.
+- `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
+  - summary normalization + status/priority/date mapping helpers.
+- `adminandemployeePanel/src/app/pages/ClientDetail.tsx`
+  - switched to summary-driven overview UI.
+- `adminandemployeePanel/src/app/pages/__tests__/ClientDetail.test.tsx`
+  - summary-based UI-state and security rendering tests.

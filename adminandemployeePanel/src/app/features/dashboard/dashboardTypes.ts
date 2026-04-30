@@ -24,7 +24,6 @@ export type AdminSummaryProjects = {
 
 export type AdminSummaryTasks = {
   total: number;
-  unassigned: number;
   todo: number;
   inProgress: number;
   review: number;
@@ -34,7 +33,6 @@ export type AdminSummaryTasks = {
 
 export type AdminSummaryAuditLogs = {
   total: number;
-  last24Hours: number;
   lastActionAt: string | null;
 };
 
@@ -46,6 +44,5 @@ export type AdminSummaryResponse = {
   auditLogs: AdminSummaryAuditLogs;
   meta: {
     generatedAt: string;
-    resourceCount: number;
   };
 };

@@ -1039,3 +1039,19 @@ Affected files:
 - `adminandemployeePanel/src/app/pages/EmployeeDetail.test.tsx`
 - `adminandemployeePanel/src/app/pages/AuditLogs.test.tsx`
 - `adminandemployeePanel/src/app/pages/__tests__/*`
+## 2026-04-29 - Client Summary Endpoint and ClientDetail Overview
+
+- Added backend `GET /api/v1/clients/:id/summary` as a single-source client overview endpoint.
+- Endpoint response standardizes:
+  - `client` basic profile
+  - `projects` count breakdown + `recent` (max 5)
+  - `tasks` count breakdown + `recent` (max 5)
+  - `meta.generatedAt`
+- Kept existing route guard chain (`JwtAuthGuard`, `PermissionsGuard`) and reused object-level access from `getClientById`.
+- Added explicit summary permission checks per actor:
+  - Admin: `projects.read.any`, `tasks.read.any`
+  - Employee: `projects.read.assigned`, `tasks.read.assigned`
+  - Client: `projects.read.own`, `tasks.read.own`
+- Preserved secure cross-tenant deny behavior (`403/404`) consistent with existing client detail rules.
+- Frontend `ClientDetail` now uses summary endpoint as primary data source (removed multi-query derived overview path).
+- Count/recent overview UI is rendered directly from summary payload; loading/error/invalid/not-found/empty states were retained.

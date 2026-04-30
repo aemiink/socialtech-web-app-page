@@ -391,3 +391,37 @@ DATABASE_URL=postgresql://user:pass@localhost:5432/socialtech_test?schema=public
 ```
 `run-e2e.cjs` now requires test DB naming (`_test`, `test_`, or `testing` in DB name); `ALLOW_E2E_DB_RESET=true` does not bypass this requirement.
 Latest reported checks: `adminandemployeePanel npm run check`, `clientPanel npm run check`, and `server npm run build/check` passed. End-to-end runtime UI QA remains a manual validation step.
+## Update - 2026-04-29 (Client Summary + ClientDetail Integration)
+
+### Backend Architecture
+- `server/src/clients/clients.controller.ts` now exposes `GET /api/v1/clients/:id/summary`.
+- `server/src/clients/clients.service.ts` now provides aggregated client overview output:
+  - client core profile
+  - project status counts + recent projects (max 5)
+  - task status counts + recent tasks (max 5, scoped to the client’s projects)
+  - response metadata with generation timestamp
+- Summary authorization follows existing object-level visibility and adds explicit project/task read permission gates.
+
+### Admin Panel Frontend
+- `adminandemployeePanel` `ClientDetail` page now consumes summary response directly.
+- Client overview is no longer computed from separate projects/tasks list queries.
+- UI supports loading, error, invalid UUID, not-found, and empty recent sections with existing design language preserved.
+
+### RTK Query / API Integration
+- `clientsApi` includes `useGetClientSummaryQuery` for `/clients/:id/summary`.
+- `clientsTypes` and `clientsUtils` were extended for summary payload typing and normalization/mapping.
+- Status/priority label mapping and safe parsing remain centralized in client feature utils.
+
+### Testing
+- Backend authz suite includes client summary access/security and response-shape validations:
+  - admin/client/assigned employee allow
+  - unassigned employee deny
+  - unauthenticated 401
+  - count fields numeric
+  - recent arrays max 5
+  - cross-tenant leak checks
+  - fail-closed validation when admin lacks `tasks.read.any`
+- Backend result: `6/6 suites`, `147/147 tests` passed.
+- Frontend ClientDetail tests were updated to summary-based flow:
+  - loading/error/invalid UUID/not found/success/empty/sensitive-field coverage
+- Frontend result: `9 test files`, `71/71 tests` passed.
