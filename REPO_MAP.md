@@ -60,6 +60,7 @@ Location: `adminandemployeePanel/`
 - Frontend tests (Vitest/RTL):
   - `adminandemployeePanel/src/app/pages/EmployeeDetail.test.tsx`
   - `adminandemployeePanel/src/app/pages/AuditLogs.test.tsx`
+  - `adminandemployeePanel/src/app/pages/__tests__/Clients.test.tsx`
   - `adminandemployeePanel/src/app/pages/__tests__/Dashboard.test.tsx`
   - `adminandemployeePanel/src/app/pages/__tests__/ClientDetail.test.tsx`
   - `adminandemployeePanel/src/app/pages/__tests__/Projects.test.tsx`
@@ -313,7 +314,7 @@ From `server/package.json`:
   - `npm run test:e2e:prepare`
   - `npm run test:e2e`
   - `npm run test:e2e:authz`
-  - latest DB-connected authz pattern run: `6/6 suites`, `139/139` tests passed
+- latest DB-connected authz pattern run: `6/6 suites`, `152/152` tests passed
 
 ### Styles
 
@@ -373,3 +374,25 @@ The `client/` directory is the public/marketing Social Tech website, not the Cli
   - switched to summary-driven overview UI.
 - `adminandemployeePanel/src/app/pages/__tests__/ClientDetail.test.tsx`
   - summary-based UI-state and security rendering tests.
+
+## Update - 2026-04-30 (Admin Summary + Clients Query Hardening)
+
+### Backend
+- `server/src/admin-summary/admin-summary.module.ts`
+- `server/src/admin-summary/admin-summary.controller.ts`
+- `server/src/admin-summary/admin-summary.service.ts`
+- `server/src/clients/clients.controller.ts`
+- `server/src/clients/clients.service.ts`
+- `server/test/authz.e2e-spec.ts`
+
+### Admin Panel Frontend (`adminandemployeePanel`)
+- `adminandemployeePanel/src/app/features/dashboard/dashboardApi.ts`
+- `adminandemployeePanel/src/app/features/dashboard/dashboardTypes.ts`
+- `adminandemployeePanel/src/app/features/dashboard/dashboardUtils.ts`
+- `adminandemployeePanel/src/app/pages/Dashboard.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/Dashboard.test.tsx`
+- `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
+- `adminandemployeePanel/src/app/pages/Clients.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/Clients.test.tsx`

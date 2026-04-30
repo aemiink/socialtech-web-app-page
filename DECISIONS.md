@@ -1055,3 +1055,92 @@ Affected files:
 - Preserved secure cross-tenant deny behavior (`403/404`) consistent with existing client detail rules.
 - Frontend `ClientDetail` now uses summary endpoint as primary data source (removed multi-query derived overview path).
 - Count/recent overview UI is rendered directly from summary payload; loading/error/invalid/not-found/empty states were retained.
+
+---
+
+## 2026-04-29 - Admin Summary Endpoint and Dashboard Integration
+
+Context:
+Admin dashboard KPI cards were derived from multiple list endpoints, creating extra request cost and UI/backend contract drift risk.
+
+Decision:
+- Added dedicated backend admin KPI endpoint: `GET /api/v1/admin/summary`.
+- Fixed contract to:
+  - `users`: `total`, `active`, `inactive`, `employees`, `clients`, `admins`
+  - `clients`: `total`, `active`, `inactive`
+  - `projects`: `total`, `planned`, `inProgress`, `review`, `completed`, `onHold`
+  - `tasks`: `total`, `todo`, `inProgress`, `review`, `done`, `blocked`
+  - `auditLogs`: `total`, `lastActionAt`
+  - `meta`: `generatedAt`
+- Removed legacy/extra fields from summary output:
+  - `clients.suspended`
+  - `tasks.unassigned`
+  - `auditLogs.last24Hours`
+  - `meta.resourceCount`
+- Enforced authorization:
+  - route-level: `JwtAuthGuard` + `PermissionsGuard` + `RequirePermissions("admin.summary.read")`
+  - service-level: `ADMIN` accountType + `ADMIN` role + permission check
+- Integrated `adminandemployeePanel` Dashboard to use only `/admin/summary` (no list-derived KPI path).
+
+Validation:
+- Backend authz suites passed (`6/6`, `148/148` at summary rollout checkpoint).
+- Frontend dashboard checkpoint passed (`77/77` tests).
+
+Reason:
+Centralizes KPI source-of-truth, reduces frontend query fan-out, and stabilizes dashboard contract evolution.
+
+Affected files:
+- `server/src/admin-summary/admin-summary.module.ts`
+- `server/src/admin-summary/admin-summary.controller.ts`
+- `server/src/admin-summary/admin-summary.service.ts`
+- `server/src/app.module.ts`
+- `server/test/authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/dashboard/dashboardApi.ts`
+- `adminandemployeePanel/src/app/features/dashboard/dashboardTypes.ts`
+- `adminandemployeePanel/src/app/features/dashboard/dashboardUtils.ts`
+- `adminandemployeePanel/src/app/pages/Dashboard.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/Dashboard.test.tsx`
+
+---
+
+## 2026-04-29 - Clients Server-side Pagination and Dashboard Contract Hardening
+
+Context:
+Clients list needed consistent server-side pagination/filter/sorting across role scopes. Dashboard frontend also needed a single guard/normalize point against backend summary field drift.
+
+Decision:
+- Hardened `GET /api/v1/clients` server-side contract (validated paging/sorting/filter envelope already in place, authz coverage expanded):
+  - `data + meta` response
+  - `page` (`1..10000`), `limit` (`1..100`), `sortBy/sortOrder` whitelist
+  - `search` and `status` filters
+  - role-scoped visibility preserved for admin/employee/client
+- Updated Clients frontend page to fully query backend params (`page`, `limit`, `sortBy`, `sortOrder`, `search`, `status`) and rely on backend `meta`.
+- Fixed stale pagination regression by syncing current page from RTK Query `currentData.meta.page`.
+- Added/expanded frontend clients tests for query args, meta-driven pagination, and stale-data transition.
+- Added dashboard contract hardening layer:
+  - `normalizeAdminSummaryResponse(response: unknown)` in dashboard utils
+  - `transformResponse` usage in dashboard API
+  - safe defaults for malformed/missing fields and invalid dates
+  - removal of any UI dependency on legacy removed summary fields.
+
+Validation:
+- Backend authz suite passed (`6/6`, `152/152` latest run).
+- Frontend checks passed (`build`, `check`, `test:run` with `10` files, `82/82` tests).
+
+Reason:
+Keeps list UX scalable and backend-driven while reducing dashboard breakage risk from contract changes to a single normalization boundary.
+
+Affected files:
+- `server/src/clients/dto/client-query.dto.ts`
+- `server/src/clients/clients.controller.ts`
+- `server/src/clients/clients.service.ts`
+- `server/test/authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
+- `adminandemployeePanel/src/app/pages/Clients.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/Clients.test.tsx`
+- `adminandemployeePanel/src/app/features/dashboard/dashboardApi.ts`
+- `adminandemployeePanel/src/app/features/dashboard/dashboardUtils.ts`
+- `adminandemployeePanel/src/app/pages/Dashboard.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/Dashboard.test.tsx`

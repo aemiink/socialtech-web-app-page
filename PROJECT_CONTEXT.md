@@ -114,8 +114,20 @@ Portal areas:
 - Employee users can read only active-assignment-scope projects/tasks and can update only `status` on tasks assigned to them within active assignment scope.
 - Client users can read only own `clientProfileId`-scope projects/tasks; out-of-scope detail access resolves as safe `404`.
 - Assignment admin endpoints are admin-only via `JwtAuthGuard` + `PermissionsGuard` + `RequirePermissions`, plus service-level `ADMIN` account/role and permission checks (`assignments.read`, `assignments.manage`).
-- Authz e2e matrix is now automated in backend tests and validated with real guard chain behavior (`6/6 suites`, `139/139` tests).
+- Authz e2e matrix is now automated in backend tests and validated with real guard chain behavior (`6/6 suites`, `152/152` tests).
 - Admin dashboard summary endpoint is active: `GET /api/v1/admin/summary` (permission: `admin.summary.read`).
+- Admin summary contract is now fixed and consumed by frontend as dedicated KPI source:
+  - `users`: `total`, `active`, `inactive`, `employees`, `clients`, `admins`
+  - `clients`: `total`, `active`, `inactive`
+  - `projects`: `total`, `planned`, `inProgress`, `review`, `completed`, `onHold`
+  - `tasks`: `total`, `todo`, `inProgress`, `review`, `done`, `blocked`
+  - `auditLogs`: `total`, `lastActionAt`
+  - `meta`: `generatedAt`
+  - removed legacy/extra fields: `clients.suspended`, `tasks.unassigned`, `auditLogs.last24Hours`, `meta.resourceCount`
+- `GET /api/v1/admin/summary` authorization is enforced both route-level and service-level:
+  - `JwtAuthGuard` + `PermissionsGuard` + `RequirePermissions("admin.summary.read")`
+  - service-level `ADMIN` accountType + `ADMIN` role + permission check
+  - non-admin access returns `403` even with temporary permission mutation attempts
 - `GET /api/v1/clients` now supports validated server-side pagination/filter/sorting and returns a standard `data + meta` envelope.
 - Full domain endpoint authorization rollout beyond users/clients/admin-assignments/projects/tasks remains pending.
 
@@ -143,8 +155,9 @@ Portal areas:
   - `adminandemployeePanel/src/app/features/tasks/*` (`GET/POST/PATCH /tasks*`)
 - Admin pages now backend-driven for core operations:
   - `Dashboard` uses dedicated summary endpoint (`/admin/summary`)
-  - `Clients` uses server-side paginated/filterable list response (`data + meta`)
-  - `ClientDetail` includes related projects/tasks overview using existing `projects`/`tasks` APIs
+  - `Clients` uses server-side paginated/filterable/sortable list response (`data + meta`) and syncs pagination from `currentData.meta.page` to avoid stale-page snapback
+  - `ClientDetail` uses `GET /clients/:id/summary` for client basics + related projects/tasks overview
+  - `Dashboard` consumes normalized summary contract via `transformResponse + normalizeAdminSummaryResponse` guard layer
 - Layouts:
   - `RootLayout` — Admin Panel shell (sidebar + topbar + `<Outlet />`)
   - `EmployeeLayout` — Employee Panel shell (role-aware sidebar + topbar + `<Outlet />`)
@@ -225,6 +238,7 @@ Current backend baseline includes:
 - Protected users/clients/admin-assignments/projects/tasks foundation:
   - Users: `GET /api/v1/users/me`, `GET /api/v1/users`, `GET /api/v1/users/:id`
   - Clients: `GET /api/v1/clients`, `GET /api/v1/clients/:id`, `GET /api/v1/clients/me`
+  - Client Summary: `GET /api/v1/clients/:id/summary`
   - Admin Assignments: `GET /api/v1/admin/assignments`, `POST /api/v1/admin/assignments`, `PATCH /api/v1/admin/assignments/:id`, `PATCH /api/v1/admin/assignments/:id/deactivate`, `PATCH /api/v1/admin/assignments/:id/activate`
   - Projects: `GET /api/v1/projects`, `GET /api/v1/projects/:id`, `POST /api/v1/projects`, `PATCH /api/v1/projects/:id`
   - Tasks: `GET /api/v1/tasks`, `GET /api/v1/tasks/:id`, `POST /api/v1/tasks`, `PATCH /api/v1/tasks/:id`
@@ -266,8 +280,8 @@ Current backend baseline includes:
   - E2E runner: `server/test/run-e2e.cjs` (Prisma prepare + Jest execution)
   - DB safety guard in runner: strict test DB-name check (`_test`, `test_`, `testing`) with delimiter-aware matching
   - `ALLOW_E2E_DB_RESET=true` no longer bypasses DB-name safety check
-  - Matrix suite currently covers users/clients/admin-assignments/projects/tasks/admin-user flows
-  - Latest authz pattern run: `6/6` suites, `139/139` tests passed
+  - Matrix suite currently covers users/clients/admin-summary/admin-assignments/projects/tasks/admin-user/admin-audit-logs/token-invalidation flows
+  - Latest authz pattern run: `6/6` suites, `152/152` tests passed
 - Token strategy:
   - access token in response body (Bearer usage)
   - refresh token in HttpOnly cookie
@@ -281,8 +295,8 @@ Current backend baseline includes:
   - `npm run build` passed
   - `npm run check` passed
   - `npm run typecheck:spec` passed
-  - `DATABASE_URL=postgresql://ahmeteminkaya@localhost:5432/socialtech_test?schema=public ALLOW_E2E_DB_RESET=true npm run test:e2e:authz` passed (`6/6 suites`, `139/139 tests`, test DB name: `socialtech_test`)
-  - `adminandemployeePanel npm run build` / `npm run check` / `npm run test:run` passed (`9` suites, `66/66` tests)
+  - `DATABASE_URL=postgresql://ahmeteminkaya@localhost:5432/socialtech_test?schema=public ALLOW_E2E_DB_RESET=true npm run test:e2e:authz` passed (`6/6 suites`, `152/152 tests`, test DB name: `socialtech_test`)
+  - `adminandemployeePanel npm run build` / `npm run check` / `npm run test:run` passed (`10` test files, `82/82` tests)
   - manual auth flow tests passed (`login`, `me`, `refresh`, `logout`, `logout` sonrası `refresh=401`)
   - `server/tsconfig.build.json` uses `incremental: false` to avoid missing-module runtime issues from stale/incomplete dist output
 
@@ -334,6 +348,7 @@ Current protected read behavior:
 - Object-level authorization is enforced in services for `users/:id`, `clients/:id`, and `clients/me`.
 - Employee access to `/clients` and `/clients/:id` is assignment-based (`isActive=true`) for accounts with `clients.read.assigned`.
 - `/clients` list is envelope-shaped (`data + meta`) and validates `page`, `limit`, `sortBy`, `sortOrder`, `status`, `search`.
+- `/clients/:id/summary` returns client + projects/tasks aggregate overview with recent scoped items (`max 5`) and `meta.generatedAt`.
 - Admin assignment responses are sanitized to minimal employee/client summaries; auth-sensitive fields are excluded.
 - Project/task responses are authorization-scoped by role:
   - admin: full project/task scope
@@ -425,3 +440,31 @@ Latest reported checks: `adminandemployeePanel npm run check`, `clientPanel npm 
 - Frontend ClientDetail tests were updated to summary-based flow:
   - loading/error/invalid UUID/not found/success/empty/sensitive-field coverage
 - Frontend result: `9 test files`, `71/71 tests` passed.
+
+## Update - 2026-04-30 (Admin Summary + Clients Query Contract Hardening)
+
+### Backend Architecture
+- `GET /api/v1/admin/summary` is productionized for admin KPI cards and no longer exposes legacy/extra fields.
+- `GET /api/v1/clients` server-side pagination/filter/sorting contract is validated and authz-tested with role-scope-safe envelope behavior.
+- Backend authz result after latest hardening: `6/6 suites`, `152/152 tests` passed.
+
+### Admin Panel Frontend
+- Dashboard no longer derives KPI data from list endpoints; it only consumes `/admin/summary`.
+- Clients page uses backend query params (`page`, `limit`, `sortBy`, `sortOrder`, `search`, `status`) and backend `meta` for paging.
+- Stale-data pagination regression was fixed by syncing page with `currentData.meta.page`.
+
+### RTK Query / API Integration
+- `dashboardApi` now applies `transformResponse` with `normalizeAdminSummaryResponse`.
+- `dashboardUtils` normalize layer guards malformed payloads (missing nested nodes, non-numeric counts, invalid date fields).
+- `clientsApi` remains envelope-first and UI query-driven (no local full-list filtering fallback path in page logic).
+
+### Testing
+- Dashboard tests cover loading/error/403/success/fallback/retry/sensitive field scenarios and legacy-field independence.
+- Clients tests cover initial query contract, filter/sort/search params, backend-meta pagination, and stale-data transition regression.
+- Frontend checkpoint: `10` test files, `82/82` tests passed.
+
+### Known Risks / Notes
+- Clients and Dashboard frontend tests are currently hook-mocked rather than store+baseApi integration-level.
+- Dashboard normalize layer prefers fail-safe zero/default behavior; fail-fast policy decision remains planned.
+- Clients search is currently non-debounced.
+- Radix Dialog ref warning logs continue in Vitest output (non-blocking).
