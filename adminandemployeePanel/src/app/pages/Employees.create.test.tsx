@@ -124,7 +124,6 @@ describe("Employees create employee modal", () => {
   });
 
   it("shows invalid email, weak password and confirm password mismatch errors", async () => {
-    const user = userEvent.setup();
     const createMutationTrigger = vi.fn<
       (payload: CreateAdminEmployeeUserRequest) => MutationResponse<object>
     >();
@@ -137,10 +136,10 @@ describe("Employees create employee modal", () => {
     render(<Employees />);
     openCreateModal();
 
-    await user.type(screen.getByLabelText("Ad Soyad"), "Ali");
-    await user.type(screen.getByLabelText("E-posta"), "invalid-email");
-    await user.type(screen.getByLabelText("Geçici Şifre"), "abc");
-    await user.type(screen.getByLabelText("Şifre Tekrarı"), "abcd");
+    fireEvent.change(screen.getByLabelText("Ad Soyad"), { target: { value: "Ali" } });
+    fireEvent.change(screen.getByLabelText("E-posta"), { target: { value: "invalid-email" } });
+    fireEvent.change(screen.getByLabelText("Geçici Şifre"), { target: { value: "abc" } });
+    fireEvent.change(screen.getByLabelText("Şifre Tekrarı"), { target: { value: "abcd" } });
 
     fireEvent.click(screen.getByRole("button", { name: "Çalışan Oluştur" }));
 
@@ -151,7 +150,6 @@ describe("Employees create employee modal", () => {
   });
 
   it("submits sanitized create payload and does not send confirmPassword", async () => {
-    const user = userEvent.setup();
     const createMutationTrigger = vi.fn<
       (payload: CreateAdminEmployeeUserRequest) => MutationResponse<object>
     >((payload) => ({
@@ -170,10 +168,14 @@ describe("Employees create employee modal", () => {
     render(<Employees />);
     openCreateModal();
 
-    await user.type(screen.getByLabelText("Ad Soyad"), "  Yeni Developer  ");
-    await user.type(screen.getByLabelText("E-posta"), "DEVELOPER2@SOCIALTECH.COM ");
-    await user.type(screen.getByLabelText("Geçici Şifre"), "TempPass123");
-    await user.type(screen.getByLabelText("Şifre Tekrarı"), "TempPass123");
+    fireEvent.change(screen.getByLabelText("Ad Soyad"), {
+      target: { value: "  Yeni Developer  " },
+    });
+    fireEvent.change(screen.getByLabelText("E-posta"), {
+      target: { value: "DEVELOPER2@SOCIALTECH.COM " },
+    });
+    fireEvent.change(screen.getByLabelText("Geçici Şifre"), { target: { value: "TempPass123" } });
+    fireEvent.change(screen.getByLabelText("Şifre Tekrarı"), { target: { value: "TempPass123" } });
 
     fireEvent.click(screen.getByRole("button", { name: "Çalışan Oluştur" }));
 
