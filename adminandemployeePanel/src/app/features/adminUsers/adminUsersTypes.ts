@@ -20,6 +20,11 @@ export type AdminUser = {
   lastLoginAt: string | null;
   createdAt: string;
   updatedAt: string;
+  clientProfile?: {
+    id: string;
+    name?: string | null;
+    slug?: string | null;
+  } | null;
 };
 
 export type AdminUsersListMeta = {

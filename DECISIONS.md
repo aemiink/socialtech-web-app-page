@@ -1144,3 +1144,51 @@ Affected files:
 - `adminandemployeePanel/src/app/features/dashboard/dashboardUtils.ts`
 - `adminandemployeePanel/src/app/pages/Dashboard.tsx`
 - `adminandemployeePanel/src/app/pages/__tests__/Dashboard.test.tsx`
+## 2026-04-29 - Admin Client Management API and UI CRUD Integration
+
+- Backend tarafında admin odaklı client management akışı `server/src/admin-clients/*` altında tamamlandı.
+- Endpoint seti netleşti:
+  - `POST /api/v1/admin/clients`
+  - `PATCH /api/v1/admin/clients/:id`
+  - `PATCH /api/v1/admin/clients/:id/deactivate`
+  - `PATCH /api/v1/admin/clients/:id/activate`
+  - `POST /api/v1/admin/clients/:id/owner`
+- Owner mode stratejisi:
+  - `NONE`
+  - `CREATE` (CLIENT account + CLIENT_OWNER role oluşturur)
+  - `LINK_EXISTING` (mevcut CLIENT user bağlar; bağlıysa 409)
+- `LINK_EXISTING` sonrası session güvenliği için `sessionInvalidatedAt` set + aktif refresh token revoke uygulanır.
+- `clients.manage` route-level permission + admin-only service-level auth birlikte korunur (defense-in-depth).
+- Client mutation aksiyonları audit log’a transaction içinde yazılır:
+  - `ADMIN_CLIENT_CREATED`
+  - `ADMIN_CLIENT_UPDATED`
+  - `ADMIN_CLIENT_DEACTIVATED`
+  - `ADMIN_CLIENT_ACTIVATED`
+  - `ADMIN_CLIENT_OWNER_CREATED`
+  - `ADMIN_CLIENT_OWNER_LINKED`
+- Frontend admin Clients ekranı CRUD + owner assign akışlarıyla backend’e bağlanmıştır; mutation sonrası Clients/Summary/AuditLogs/AdminSummary invalidation aktiftir.
+
+## 2026-04-29 - Admin Client Owner Picker UI
+
+- `LINK_EXISTING` owner flow’da manuel UUID input kaldırılmıştır.
+- Yerine searchable owner picker eklenmiştir (`useGetAdminUsersQuery`):
+  - `accountType=CLIENT`
+  - `limit=8`
+  - `search` debounce: `275ms`
+- UI davranışı:
+  - sonuç listesinde `displayName + email`
+  - seçilen kullanıcı için “Seçili” görünümü
+  - “Seçimi Temizle” butonu
+  - loading / error / empty state
+- Yetki sıkılaştırma:
+  - `users.manage` yoksa `LINK_EXISTING` seçeneği disabled
+  - bilgilendirme metni gösterilir
+- Payload garantisi:
+  - `LINK_EXISTING` için yalnızca `{ mode: "LINK_EXISTING", userId }`
+  - `email/displayName/password/confirmPassword` gönderilmez
+- Validation:
+  - user seçilmeden submit bloklanır
+  - `CREATE` ve `NONE` akışları korunur
+- Önleyici filtre:
+  - listeden dönen CLIENT kullanıcıları içinde `clientProfile.id` dolu olanlar (varsa) picker’da elenir
+  - backend yine de linked user için fail-safe reject (409) yapar

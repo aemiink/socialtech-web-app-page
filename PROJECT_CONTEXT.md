@@ -468,3 +468,81 @@ Latest reported checks: `adminandemployeePanel npm run check`, `clientPanel npm 
 - Dashboard normalize layer prefers fail-safe zero/default behavior; fail-fast policy decision remains planned.
 - Clients search is currently non-debounced.
 - Radix Dialog ref warning logs continue in Vitest output (non-blocking).
+## 2026-04-29 Update Snapshot
+
+### Backend Architecture
+- Admin Client Management modülü eklendi: `server/src/admin-clients/*`.
+- Admin client CRUD + owner assign endpointleri canlı:
+  - `POST /api/v1/admin/clients`
+  - `PATCH /api/v1/admin/clients/:id`
+  - `PATCH /api/v1/admin/clients/:id/deactivate`
+  - `PATCH /api/v1/admin/clients/:id/activate`
+  - `POST /api/v1/admin/clients/:id/owner`
+- Owner mode yaklaşımı:
+  - `NONE`
+  - `CREATE`
+  - `LINK_EXISTING`
+- `LINK_EXISTING` akışında güvenlik:
+  - başka profile bağlı user -> 409
+  - `sessionInvalidatedAt` güncellenir
+  - aktif refresh tokenlar revoke edilir
+
+### Admin Panel Frontend
+- `adminandemployeePanel` Clients ekranı backend CRUD + owner assign ile tam entegre.
+- `LINK_EXISTING` için manuel UUID yerine searchable owner picker kullanılıyor.
+- Owner picker davranışı:
+  - `displayName + email` listesi
+  - seçili kullanıcı özeti
+  - temizleme aksiyonu
+  - loading/error/empty state
+
+### RTK Query / API Integration
+- Clients mutasyonları sonrası cache invalidation:
+  - `Clients`
+  - `Clients summary`
+  - `AuditLogs`
+  - `AdminSummary`
+- Integration test katmanı mevcut:
+  - `baseApi.clients.integration.test.tsx`
+  - `baseApi.dashboard.integration.test.tsx`
+- Clients search debounce:
+  - `275ms`
+  - search değişince `page=1`
+  - boş search query paramı gönderilmez
+
+### Auth & RBAC Summary
+- Backend tarafında client management için route-level `clients.manage` + service-level admin check birlikte uygulanır.
+- Frontend owner picker’da `users.manage` yoksa `LINK_EXISTING` opsiyonu disable edilir.
+- Least-privilege açısından owner picker halen admin users endpointine bağlıdır (ayrı candidate endpoint planned).
+
+### Audit Logging
+- Client yönetimi aksiyonları transaction içi audit log yazar:
+  - `ADMIN_CLIENT_CREATED`
+  - `ADMIN_CLIENT_UPDATED`
+  - `ADMIN_CLIENT_DEACTIVATED`
+  - `ADMIN_CLIENT_ACTIVATED`
+  - `ADMIN_CLIENT_OWNER_CREATED`
+  - `ADMIN_CLIENT_OWNER_LINKED`
+- Metadata recursive sanitize:
+  - password/token/secret/authorization/cookie/credential/apikey türevleri dışarıda bırakılır.
+
+### Frontend Testing
+- Clients owner picker testleri eklendi/güncellendi:
+  - LINK_EXISTING picker render
+  - debounced search query paramı
+  - `accountType=CLIENT` query doğrulaması
+  - user seçimi sonrası `userId` payload
+  - seçim yoksa validation error
+  - NONE/CREATE akış regresyon koruması
+- Son checkpoint:
+  - `npm run build` ✅
+  - `npm run check` ✅
+  - `npm run test:run` ✅
+  - `12` test file, `100/100` test passed
+
+### Known Risks / Notes
+- `GET /api/v1/admin/users` response’unda `clientProfile` alanı her durumda gelmiyorsa frontend linked-user elemesi kısmi kalabilir.
+- Backend linked user durumunu 409 ile yine fail-safe engeller.
+- Owner picker şu an genel admin users endpointini kullanıyor; dedicated owner-candidates endpoint planned.
+- Client deactivate sırasında owner user otomatik pasifleştirme policy henüz yok.
+- Vite bundle/chunk uyarısı devam edebilir (optimizasyon planned).

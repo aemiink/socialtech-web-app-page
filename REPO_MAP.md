@@ -396,3 +396,28 @@ The `client/` directory is the public/marketing Social Tech website, not the Cli
 - `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
 - `adminandemployeePanel/src/app/pages/Clients.tsx`
 - `adminandemployeePanel/src/app/pages/__tests__/Clients.test.tsx`
+## 2026-04-29 Update Map
+
+### Backend - Admin Clients
+- `server/src/admin-clients/admin-clients.module.ts`
+- `server/src/admin-clients/admin-clients.controller.ts`
+- `server/src/admin-clients/admin-clients.service.ts`
+- `server/src/admin-clients/dto/create-admin-client.dto.ts`
+- `server/src/admin-clients/dto/update-admin-client.dto.ts`
+- `server/src/admin-clients/dto/admin-client-owner.dto.ts`
+- `server/test/admin-clients-authz.e2e-spec.ts`
+
+### Frontend - Clients Feature
+- `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
+- `adminandemployeePanel/src/app/features/adminUsers/adminUsersTypes.ts`
+- `adminandemployeePanel/src/app/pages/Clients.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/Clients.test.tsx`
+
+### Frontend - baseApi Integration Tests
+- `adminandemployeePanel/src/app/services/__tests__/baseApi.clients.integration.test.tsx`
+- `adminandemployeePanel/src/app/services/__tests__/baseApi.dashboard.integration.test.tsx`
+
+### Frontend - UI Primitive Update
+- `adminandemployeePanel/src/app/components/ui/dialog.tsx`

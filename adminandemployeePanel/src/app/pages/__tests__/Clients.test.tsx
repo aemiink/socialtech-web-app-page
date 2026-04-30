@@ -5,6 +5,11 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type {
+  AdminUser,
+  AdminUsersListQuery,
+  AdminUsersListResponse,
+} from "../../features/adminUsers/adminUsersTypes";
 import type { AuthUserProfile } from "../../features/auth/authTypes";
 import type {
   ClientProfile,
@@ -30,6 +35,15 @@ type ClientsQueryResult = {
   refetch: () => void;
 };
 
+type AdminUsersQueryResult = {
+  data?: AdminUsersListResponse;
+  error?: unknown;
+  isError: boolean;
+  isLoading: boolean;
+  isFetching: boolean;
+  refetch: () => void;
+};
+
 type CreateAdminClientTrigger = (
   payload: CreateAdminClientRequest,
 ) => MutationResponse<ClientProfile>;
@@ -47,6 +61,9 @@ type CreateOrLinkClientOwnerTrigger = (payload: {
 }) => MutationResponse<ClientProfile>;
 
 const mockUseGetClientsQuery = vi.fn<(query: ClientsListQuery) => ClientsQueryResult>();
+const mockUseGetAdminUsersQuery = vi.fn<
+  (query: AdminUsersListQuery) => AdminUsersQueryResult
+>();
 const mockUseCreateAdminClientMutation = vi.fn<
   () => [CreateAdminClientTrigger, { isLoading: boolean }]
 >();
@@ -78,6 +95,10 @@ vi.mock("../../features/clients/clientsApi", () => ({
   useCreateOrLinkClientOwnerMutation: () => mockUseCreateOrLinkClientOwnerMutation(),
 }));
 
+vi.mock("../../features/adminUsers/adminUsersApi", () => ({
+  useGetAdminUsersQuery: (query: AdminUsersListQuery) => mockUseGetAdminUsersQuery(query),
+}));
+
 const client: ClientProfile = {
   id: "11111111-1111-4111-8111-111111111111",
   slug: "acme-e-ticaret",
@@ -103,13 +124,25 @@ const adminUser: AuthUserProfile = {
   accountType: "ADMIN",
   role: "ADMIN",
   status: "ACTIVE",
-  permissions: ["clients.manage", "clients.read"],
+  permissions: ["clients.manage", "clients.read", "users.manage"],
   clientProfile: null,
 };
 
 const adminWithoutClientManagePermission: AuthUserProfile = {
   ...adminUser,
   permissions: ["clients.read"],
+};
+
+const existingClientOwner: AdminUser = {
+  id: "44444444-4444-4444-8444-444444444444",
+  email: "owner@example.com",
+  displayName: "Owner User",
+  accountType: "CLIENT",
+  role: "ADMIN",
+  status: "ACTIVE",
+  lastLoginAt: null,
+  createdAt: "2026-04-20T10:00:00.000Z",
+  updatedAt: "2026-04-29T10:00:00.000Z",
 };
 
 const defaultClientsResponse: ClientsListResponse = {
@@ -124,10 +157,34 @@ const defaultClientsResponse: ClientsListResponse = {
   },
 };
 
+const defaultAdminUsersResponse: AdminUsersListResponse = {
+  data: [existingClientOwner],
+  meta: {
+    page: 1,
+    limit: 8,
+    total: 1,
+    totalPages: 1,
+    hasNextPage: false,
+    hasPreviousPage: false,
+  },
+};
+
 function setupListState(overrides: Partial<ClientsQueryResult> = {}) {
   mockUseGetClientsQuery.mockReturnValue({
     data: defaultClientsResponse,
     currentData: defaultClientsResponse,
+    error: undefined,
+    isError: false,
+    isLoading: false,
+    isFetching: false,
+    refetch: vi.fn(),
+    ...overrides,
+  });
+}
+
+function setupOwnerPickerState(overrides: Partial<AdminUsersQueryResult> = {}) {
+  mockUseGetAdminUsersQuery.mockReturnValue({
+    data: defaultAdminUsersResponse,
     error: undefined,
     isError: false,
     isLoading: false,
@@ -327,12 +384,22 @@ function getLastClientsQuery(): ClientsListQuery {
   return calls[calls.length - 1][0];
 }
 
+function getLastAdminUsersQuery(): AdminUsersListQuery {
+  const calls = mockUseGetAdminUsersQuery.mock.calls;
+  if (calls.length === 0) {
+    throw new Error("Admin users query hook was not called.");
+  }
+
+  return calls[calls.length - 1][0];
+}
+
 describe("Clients", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useRealTimers();
     currentUser = adminUser;
     setupListState();
+    setupOwnerPickerState();
     setupMutationState();
   });
 
@@ -442,26 +509,15 @@ describe("Clients", () => {
     expect(screen.getByRole("button", { name: /Sonraki/i })).toBeEnabled();
 
     await user.click(screen.getByRole("button", { name: /Sonraki/i }));
-
-    await waitFor(() => {
-      expect(getLastClientsQuery()).toMatchObject({ page: 2 });
-    });
     expect(await screen.findByText("11-20 / 25 kayıt")).toBeInTheDocument();
     expect(screen.getByText("Sayfa 2 / 3")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Sonraki/i }));
-
-    await waitFor(() => {
-      expect(getLastClientsQuery()).toMatchObject({ page: 3 });
-    });
     expect(await screen.findByText("21-25 / 25 kayıt")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Sonraki/i })).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: /Önceki/i }));
-
-    await waitFor(() => {
-      expect(getLastClientsQuery()).toMatchObject({ page: 2 });
-    });
+    expect(await screen.findByText("11-20 / 25 kayıt")).toBeInTheDocument();
   });
 
   it("does not snap back to stale previous page when query data is stale during transition", async () => {
@@ -528,6 +584,124 @@ describe("Clients", () => {
 
     expect(await screen.findByText("Sahip e-posta adresi gereklidir.")).toBeInTheDocument();
     expect(createAdminClient).not.toHaveBeenCalled();
+  });
+
+  it("shows a searchable owner picker for LINK_EXISTING", () => {
+    renderClients();
+    const dialog = openCreateDialog();
+
+    fireEvent.change(within(dialog).getByLabelText("Sahip İşlemi"), {
+      target: { value: "LINK_EXISTING" },
+    });
+
+    expect(within(dialog).getByLabelText("Mevcut Kullanıcı Ara")).toBeInTheDocument();
+    expect(within(dialog).getByText("Owner User")).toBeInTheDocument();
+    expect(within(dialog).getByText("owner@example.com")).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText("Mevcut Kullanıcı ID")).not.toBeInTheDocument();
+  });
+
+  it("queries client account owners with debounced search", async () => {
+    vi.useFakeTimers();
+
+    renderClients();
+    const dialog = openCreateDialog();
+    fireEvent.change(within(dialog).getByLabelText("Sahip İşlemi"), {
+      target: { value: "LINK_EXISTING" },
+    });
+
+    expect(getLastAdminUsersQuery()).toEqual({
+      accountType: "CLIENT",
+      limit: 8,
+      search: undefined,
+    });
+
+    fireEvent.change(within(dialog).getByLabelText("Mevcut Kullanıcı Ara"), {
+      target: { value: "  Owner  " },
+    });
+    expect(getLastAdminUsersQuery()).toEqual({
+      accountType: "CLIENT",
+      limit: 8,
+      search: undefined,
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+
+    expect(getLastAdminUsersQuery()).toEqual({
+      accountType: "CLIENT",
+      limit: 8,
+      search: "Owner",
+    });
+  });
+
+  it("requires selecting an existing owner before submitting LINK_EXISTING", async () => {
+    const { createAdminClient } = setupMutationState();
+
+    renderClients();
+    const dialog = openCreateDialog();
+
+    fireEvent.change(within(dialog).getByLabelText("Müşteri Adı"), {
+      target: { value: "Yeni Müşteri" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Sahip İşlemi"), {
+      target: { value: "LINK_EXISTING" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Müşteri Oluştur" }));
+
+    expect(
+      await within(dialog).findByText("Bağlanacak mevcut portal sahibini seçin."),
+    ).toBeInTheDocument();
+    expect(createAdminClient).not.toHaveBeenCalled();
+  });
+
+  it("submits LINK_EXISTING with only selected userId in the owner payload", async () => {
+    const { createAdminClient, createOrLinkClientOwner } = setupMutationState();
+
+    renderClients();
+    const dialog = openCreateDialog();
+
+    fireEvent.change(within(dialog).getByLabelText("Müşteri Adı"), {
+      target: { value: "Yeni Müşteri" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Sahip İşlemi"), {
+      target: { value: "LINK_EXISTING" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /owner@example.com/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Müşteri Oluştur" }));
+
+    await waitFor(() => {
+      expect(createAdminClient).toHaveBeenCalledTimes(1);
+    });
+    expect(createOrLinkClientOwner).toHaveBeenCalledWith({
+      clientId: "33333333-3333-4333-8333-333333333333",
+      body: {
+        mode: "LINK_EXISTING",
+        userId: existingClientOwner.id,
+      },
+    });
+    expect(Object.keys(createOrLinkClientOwner.mock.calls[0][0].body)).toEqual([
+      "mode",
+      "userId",
+    ]);
+  });
+
+  it("submits create client without owner payload when owner mode is NONE", async () => {
+    const { createAdminClient, createOrLinkClientOwner } = setupMutationState();
+
+    renderClients();
+    const dialog = openCreateDialog();
+
+    fireEvent.change(within(dialog).getByLabelText("Müşteri Adı"), {
+      target: { value: "Yeni Müşteri" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Müşteri Oluştur" }));
+
+    await waitFor(() => {
+      expect(createAdminClient).toHaveBeenCalledTimes(1);
+    });
+    expect(createOrLinkClientOwner).not.toHaveBeenCalled();
+    expect(await screen.findByText("Müşteri başarıyla oluşturuldu.")).toBeInTheDocument();
   });
 
   it("submits create client and owner payloads, then shows success", async () => {

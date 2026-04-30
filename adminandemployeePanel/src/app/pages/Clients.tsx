@@ -34,6 +34,11 @@ import {
   hasAdminPermission,
   selectCurrentUser,
 } from "../features/auth/authSelectors";
+import { useGetAdminUsersQuery } from "../features/adminUsers/adminUsersApi";
+import type {
+  AdminUser,
+  AdminUsersListQuery,
+} from "../features/adminUsers/adminUsersTypes";
 import {
   useActivateAdminClientMutation,
   useCreateAdminClientMutation,
@@ -59,7 +64,6 @@ import {
   formatClientDateTime,
   getClientStatusBadgeClass,
   getClientStatusLabel,
-  isUuid,
   shortId,
   validateClientName,
   validateClientOwnerDisplayName,
@@ -78,6 +82,8 @@ const CLIENT_SORT_OPTIONS: Array<{ value: ClientsSortBy; label: string }> = [
 ];
 
 const SEARCH_DEBOUNCE_MS = 275;
+const OWNER_PICKER_LIMIT = 8;
+const EXISTING_OWNER_REQUIRED_MESSAGE = "Bağlanacak mevcut portal sahibini seçin.";
 
 type ClientStatusFilter = ClientStatus | "ALL";
 type ClientOwnerMode = "NONE" | "CREATE" | "LINK_EXISTING";
@@ -111,6 +117,7 @@ const initialClientForm: ClientFormState = {
 export function Clients() {
   const currentUser = useAppSelector(selectCurrentUser);
   const canManageClients = hasAdminPermission(currentUser, ["clients.manage"]);
+  const canReadAdminUsers = hasAdminPermission(currentUser, ["users.manage"]);
 
   const [selectedClient, setSelectedClient] = useState<ClientProfile | null>(null);
   const [searchInput, setSearchInput] = useState("");
@@ -126,6 +133,8 @@ export function Clients() {
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState<ClientFormState>(initialClientForm);
+  const [createSelectedExistingOwner, setCreateSelectedExistingOwner] =
+    useState<AdminUser | null>(null);
   const [createSubmitError, setCreateSubmitError] = useState<string | null>(null);
 
   const [editTarget, setEditTarget] = useState<ClientProfile | null>(null);
@@ -240,6 +249,7 @@ export function Clients() {
     setPageSuccess(null);
     setCreateSubmitError(null);
     setCreateForm(initialClientForm);
+    setCreateSelectedExistingOwner(null);
     setIsCreateOpen(true);
   }
 
@@ -247,11 +257,24 @@ export function Clients() {
     setIsCreateOpen(false);
     setCreateSubmitError(null);
     setCreateForm(initialClientForm);
+    setCreateSelectedExistingOwner(null);
   }
 
   function updateCreateForm(field: ClientFormField, value: ClientFormValue) {
     setCreateSubmitError(null);
     setCreateForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function selectCreateExistingOwner(owner: AdminUser) {
+    setCreateSubmitError(null);
+    setCreateSelectedExistingOwner(owner);
+    setCreateForm((prev) => ({ ...prev, existingOwnerUserId: owner.id }));
+  }
+
+  function clearCreateExistingOwner() {
+    setCreateSubmitError(null);
+    setCreateSelectedExistingOwner(null);
+    setCreateForm((prev) => ({ ...prev, existingOwnerUserId: "" }));
   }
 
   function openEditDialog(client: ClientProfile) {
@@ -283,7 +306,7 @@ export function Clients() {
     setPageError(null);
     setPageSuccess(null);
 
-    const validationMessage = validateClientForm(createForm, true);
+    const validationMessage = validateClientForm(createForm, true, canReadAdminUsers);
     if (validationMessage) {
       setCreateSubmitError(validationMessage);
       return;
@@ -334,7 +357,7 @@ export function Clients() {
     setPageError(null);
     setPageSuccess(null);
 
-    const validationMessage = validateClientForm(editForm, false);
+    const validationMessage = validateClientForm(editForm, false, canReadAdminUsers);
     if (validationMessage) {
       setEditSubmitError(validationMessage);
       return;
@@ -749,7 +772,7 @@ export function Clients() {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreateSubmit} className="space-y-4" noValidate>
-            {createSubmitError && (
+            {createSubmitError && createSubmitError !== EXISTING_OWNER_REQUIRED_MESSAGE && (
               <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
                 {createSubmitError}
               </div>
@@ -760,6 +783,13 @@ export function Clients() {
               onChange={updateCreateForm}
               disabled={isCreating || isLinkingOwner}
               includeOwnerFields
+              canLinkExistingOwner={canReadAdminUsers}
+              selectedExistingOwner={createSelectedExistingOwner}
+              existingOwnerError={
+                createSubmitError === EXISTING_OWNER_REQUIRED_MESSAGE ? createSubmitError : null
+              }
+              onExistingOwnerSelect={selectCreateExistingOwner}
+              onExistingOwnerClear={clearCreateExistingOwner}
             />
             <DialogFooter>
               <Button
@@ -890,13 +920,28 @@ function ClientFormFields({
   onChange,
   disabled,
   includeOwnerFields = false,
+  canLinkExistingOwner = true,
+  selectedExistingOwner = null,
+  existingOwnerError = null,
+  onExistingOwnerSelect,
+  onExistingOwnerClear,
 }: {
   idPrefix: string;
   form: ClientFormState;
   onChange: (field: ClientFormField, value: ClientFormValue) => void;
   disabled: boolean;
   includeOwnerFields?: boolean;
+  canLinkExistingOwner?: boolean;
+  selectedExistingOwner?: AdminUser | null;
+  existingOwnerError?: string | null;
+  onExistingOwnerSelect?: (owner: AdminUser) => void;
+  onExistingOwnerClear?: () => void;
 }) {
+  const handleExistingOwnerSelect =
+    onExistingOwnerSelect ?? ((owner: AdminUser) => onChange("existingOwnerUserId", owner.id));
+  const handleExistingOwnerClear =
+    onExistingOwnerClear ?? (() => onChange("existingOwnerUserId", ""));
+
   return (
     <>
       <div className="space-y-2">
@@ -955,8 +1000,15 @@ function ClientFormFields({
             >
               <option value="NONE">Sahip Ekleme Yok</option>
               <option value="CREATE">Yeni Portal Sahibi Oluştur</option>
-              <option value="LINK_EXISTING">Mevcut Kullanıcı Bağla</option>
+              <option value="LINK_EXISTING" disabled={!canLinkExistingOwner}>
+                Mevcut Kullanıcı Bağla
+              </option>
             </SelectControl>
+            {!canLinkExistingOwner && (
+              <p className="text-xs text-[#A0A0A0]">
+                Mevcut kullanıcı bağlama için `users.manage` yetkisi gerekir.
+              </p>
+            )}
           </div>
 
           {form.ownerMode === "CREATE" && (
@@ -999,22 +1051,201 @@ function ClientFormFields({
           )}
 
           {form.ownerMode === "LINK_EXISTING" && (
-            <div className="space-y-2">
-              <Label htmlFor={`${idPrefix}-existing-owner-user-id`}>Mevcut Kullanıcı ID</Label>
-              <Input
-                id={`${idPrefix}-existing-owner-user-id`}
-                value={form.existingOwnerUserId}
-                onChange={(event) => onChange("existingOwnerUserId", event.target.value)}
-                className="border-white/[0.08] bg-[#202020]"
-                placeholder="User UUID"
-                disabled={disabled}
-              />
-            </div>
+            <ClientOwnerPicker
+              idPrefix={idPrefix}
+              selectedOwner={selectedExistingOwner}
+              selectedUserId={form.existingOwnerUserId}
+              error={existingOwnerError}
+              disabled={disabled}
+              onSelect={handleExistingOwnerSelect}
+              onClear={handleExistingOwnerClear}
+            />
           )}
         </>
       )}
     </>
   );
+}
+
+function ClientOwnerPicker({
+  idPrefix,
+  selectedOwner,
+  selectedUserId,
+  error,
+  disabled,
+  onSelect,
+  onClear,
+}: {
+  idPrefix: string;
+  selectedOwner: AdminUser | null;
+  selectedUserId: string;
+  error: string | null;
+  disabled: boolean;
+  onSelect: (owner: AdminUser) => void;
+  onClear: () => void;
+}) {
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setSearch(searchInput.trim());
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [searchInput]);
+
+  const ownerQuery = useMemo<AdminUsersListQuery>(
+    () => ({
+      accountType: "CLIENT",
+      limit: OWNER_PICKER_LIMIT,
+      search: search.length > 0 ? search : undefined,
+    }),
+    [search],
+  );
+
+  const {
+    data: ownersResponse,
+    error: ownersError,
+    isError: isOwnersError,
+    isFetching: isOwnersFetching,
+    isLoading: isOwnersLoading,
+    refetch,
+  } = useGetAdminUsersQuery(ownerQuery);
+
+  const owners = (ownersResponse?.data ?? []).filter(
+    (owner) => owner.accountType === "CLIENT" && !owner.clientProfile?.id,
+  );
+  const fieldErrorId = `${idPrefix}-existing-owner-error`;
+  const hasSelectedOwner = Boolean(selectedUserId);
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <Label htmlFor={`${idPrefix}-existing-owner-search`}>Mevcut Kullanıcı Ara</Label>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#A0A0A0]" />
+          <Input
+            id={`${idPrefix}-existing-owner-search`}
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
+            className="border-white/[0.08] bg-[#202020] pl-10"
+            placeholder="E-posta veya ad ile client kullanıcısı ara..."
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? fieldErrorId : undefined}
+            disabled={disabled}
+          />
+        </div>
+        {error && (
+          <p id={fieldErrorId} className="text-sm text-red-200">
+            {error}
+          </p>
+        )}
+      </div>
+
+      {hasSelectedOwner && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#AAFF01]/30 bg-[#AAFF01]/10 px-3 py-2">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className="bg-[#AAFF01] text-[#131313]">Seçili</Badge>
+              <span className="truncate text-sm font-medium text-white">
+                {selectedOwner ? formatOwnerDisplayName(selectedOwner) : shortId(selectedUserId)}
+              </span>
+            </div>
+            <p className="mt-1 truncate text-xs text-[#d2ff8a]">
+              {selectedOwner ? selectedOwner.email : selectedUserId}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="gap-1 text-[#d2ff8a]"
+            onClick={onClear}
+            disabled={disabled}
+          >
+            <X className="h-3 w-3" />
+            Seçimi Temizle
+          </Button>
+        </div>
+      )}
+
+      <div className="rounded-lg border border-white/[0.06] bg-[#202020]">
+        <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-2 text-xs text-[#A0A0A0]">
+          <span>Client kullanıcıları</span>
+          {isOwnersFetching && !isOwnersLoading && <span>Güncelleniyor...</span>}
+        </div>
+
+        {isOwnersLoading && (
+          <div className="px-3 py-4 text-sm text-[#A0A0A0]">Kullanıcılar yükleniyor...</div>
+        )}
+
+        {!isOwnersLoading && isOwnersError && (
+          <div className="space-y-3 px-3 py-4 text-sm text-red-200">
+            <p>{extractApiErrorMessage(ownersError, "Client kullanıcıları alınamadı.")}</p>
+            <Button type="button" variant="outline" size="sm" onClick={() => refetch()}>
+              Tekrar Dene
+            </Button>
+          </div>
+        )}
+
+        {!isOwnersLoading && !isOwnersError && owners.length === 0 && (
+          <div className="px-3 py-4 text-sm text-[#A0A0A0]">
+            {search.length > 0
+              ? "Aramaya uygun client kullanıcısı bulunamadı."
+              : "Bağlanabilecek client kullanıcısı bulunamadı."}
+          </div>
+        )}
+
+        {!isOwnersLoading && !isOwnersError && owners.length > 0 && (
+          <div className="divide-y divide-white/[0.06]">
+            {owners.map((owner) => {
+              const isSelected = selectedUserId === owner.id;
+
+              return (
+                <button
+                  key={owner.id}
+                  type="button"
+                  className={`flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50 ${
+                    isSelected ? "bg-[#AAFF01]/10" : ""
+                  }`}
+                  onClick={() => onSelect(owner)}
+                  disabled={disabled}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium text-white">
+                      {formatOwnerDisplayName(owner)}
+                    </span>
+                    <span className="block truncate text-xs text-[#A0A0A0]">
+                      {owner.email}
+                    </span>
+                  </span>
+                  <Badge
+                    variant={isSelected ? "default" : "outline"}
+                    className={isSelected ? "bg-[#AAFF01] text-[#131313]" : undefined}
+                  >
+                    {isSelected ? "Seçili" : "Seç"}
+                  </Badge>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function formatOwnerDisplayName(owner: AdminUser): string {
+  const displayName = owner.displayName?.trim();
+
+  if (displayName) {
+    return displayName;
+  }
+
+  return "İsim belirtilmedi";
 }
 
 function SelectControl({
@@ -1105,7 +1336,11 @@ function PaginationFooter({
   );
 }
 
-function validateClientForm(form: ClientFormState, includeOwnerFields: boolean): string | null {
+function validateClientForm(
+  form: ClientFormState,
+  includeOwnerFields: boolean,
+  canLinkExistingOwner: boolean,
+): string | null {
   const nameError = validateClientName(form.name);
   if (nameError) {
     return nameError;
@@ -1132,8 +1367,12 @@ function validateClientForm(form: ClientFormState, includeOwnerFields: boolean):
     );
   }
 
-  if (form.ownerMode === "LINK_EXISTING" && !isUuid(form.existingOwnerUserId)) {
-    return "Mevcut kullanıcı ID geçerli bir UUID olmalıdır.";
+  if (form.ownerMode === "LINK_EXISTING" && !canLinkExistingOwner) {
+    return "Bu hesapta mevcut kullanıcı bağlama yetkisi bulunmuyor.";
+  }
+
+  if (form.ownerMode === "LINK_EXISTING" && !form.existingOwnerUserId.trim()) {
+    return EXISTING_OWNER_REQUIRED_MESSAGE;
   }
 
   return null;

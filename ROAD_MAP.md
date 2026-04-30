@@ -45,3 +45,23 @@ None identified.
 - Latest backend validation checkpoint: `6/6` authz suites, `152/152` tests.
 - Latest frontend validation checkpoint: `10` test files, `82/82` tests.
 - Summary query optimization and summary-side cache/TTL remain relevant follow-ups as data volume grows.
+## 2026-04-29 Checkpoint
+
+### Completed
+- [x] Admin Client Management CRUD API
+- [x] Client owner user create/link
+- [x] Client audit logging
+- [x] Admin Clients UI CRUD integration
+- [x] Clients owner assign UI
+- [x] Store+baseApi integration tests for Clients/Dashboard
+- [x] Clients search debounce
+- [x] Radix Dialog ref warning cleanup
+- [x] Admin Client Owner Picker UI
+
+### Planned
+- [ ] Dedicated owner candidates endpoint (`GET /api/v1/admin/clients/owner-candidates`)
+- [ ] Owner picker migration from admin users endpoint to owner-candidates endpoint
+- [ ] Optional owner user deactivation policy on client deactivate
+- [ ] Employee Assignment UI
+- [ ] Bundle/code splitting optimization
+- [ ] Platform integrations: Meta/TikTok/Amazon Ads
