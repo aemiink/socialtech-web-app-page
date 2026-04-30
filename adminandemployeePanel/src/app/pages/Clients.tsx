@@ -1,12 +1,15 @@
-import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import type { FormEvent, ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import {
   Building2,
   Calendar,
   ChevronLeft,
   ChevronRight,
+  Edit,
   Eye,
+  PauseCircle,
+  PlayCircle,
   RefreshCw,
   Search,
   UserPlus,
@@ -16,15 +19,38 @@ import {
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../components/ui/sheet";
-import { useGetClientsQuery } from "../features/clients/clientsApi";
+import {
+  hasAdminPermission,
+  selectCurrentUser,
+} from "../features/auth/authSelectors";
+import {
+  useActivateAdminClientMutation,
+  useCreateAdminClientMutation,
+  useCreateOrLinkClientOwnerMutation,
+  useDeactivateAdminClientMutation,
+  useGetClientsQuery,
+  useUpdateAdminClientMutation,
+} from "../features/clients/clientsApi";
 import type {
   ClientProfile,
   ClientStatus,
-  ClientsSortOrder,
   ClientsListQuery,
   ClientsSortBy,
+  ClientsSortOrder,
+  CreateAdminClientRequest,
+  CreateOrLinkClientOwnerRequest,
+  UpdateAdminClientRequest,
 } from "../features/clients/clientsTypes";
 import {
   CLIENT_STATUS_OPTIONS,
@@ -33,8 +59,15 @@ import {
   formatClientDateTime,
   getClientStatusBadgeClass,
   getClientStatusLabel,
+  isUuid,
   shortId,
+  validateClientName,
+  validateClientOwnerDisplayName,
+  validateClientOwnerEmail,
+  validateClientOwnerPassword,
+  validateClientSlug,
 } from "../features/clients/clientsUtils";
+import { useAppSelector } from "../store/hooks";
 
 const CLIENT_SORT_OPTIONS: Array<{ value: ClientsSortBy; label: string }> = [
   { value: "name", label: "Firma" },
@@ -44,16 +77,77 @@ const CLIENT_SORT_OPTIONS: Array<{ value: ClientsSortBy; label: string }> = [
   { value: "updatedAt", label: "Güncellenme" },
 ];
 
+const SEARCH_DEBOUNCE_MS = 275;
+
 type ClientStatusFilter = ClientStatus | "ALL";
+type ClientOwnerMode = "NONE" | "CREATE" | "LINK_EXISTING";
+type PendingClientStatusAction = "activate" | "deactivate";
+
+type ClientFormState = {
+  name: string;
+  slug: string;
+  status: ClientStatus;
+  ownerMode: ClientOwnerMode;
+  ownerEmail: string;
+  ownerDisplayName: string;
+  ownerPassword: string;
+  existingOwnerUserId: string;
+};
+
+type ClientFormField = keyof ClientFormState;
+type ClientFormValue = ClientFormState[ClientFormField];
+
+const initialClientForm: ClientFormState = {
+  name: "",
+  slug: "",
+  status: "ACTIVE",
+  ownerMode: "NONE",
+  ownerEmail: "",
+  ownerDisplayName: "",
+  ownerPassword: "",
+  existingOwnerUserId: "",
+};
 
 export function Clients() {
+  const currentUser = useAppSelector(selectCurrentUser);
+  const canManageClients = hasAdminPermission(currentUser, ["clients.manage"]);
+
   const [selectedClient, setSelectedClient] = useState<ClientProfile | null>(null);
   const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<ClientStatusFilter>("ALL");
   const [sortBy, setSortBy] = useState<ClientsSortBy>("createdAt");
   const [sortOrder, setSortOrder] = useState<ClientsSortOrder>("desc");
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
+
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [pageSuccess, setPageSuccess] = useState<string | null>(null);
+
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [createForm, setCreateForm] = useState<ClientFormState>(initialClientForm);
+  const [createSubmitError, setCreateSubmitError] = useState<string | null>(null);
+
+  const [editTarget, setEditTarget] = useState<ClientProfile | null>(null);
+  const [editForm, setEditForm] = useState<ClientFormState | null>(null);
+  const [editSubmitError, setEditSubmitError] = useState<string | null>(null);
+
+  const [statusActionTarget, setStatusActionTarget] = useState<{
+    client: ClientProfile;
+    action: PendingClientStatusAction;
+  } | null>(null);
+  const [statusSubmitError, setStatusSubmitError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setSearch(searchInput.trim());
+      setPage(1);
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [searchInput]);
 
   const clientsQuery = useMemo<ClientsListQuery>(
     () => ({
@@ -61,14 +155,15 @@ export function Clients() {
       limit,
       sortBy,
       sortOrder,
-      search: searchInput.trim() || undefined,
+      search: search.trim() || undefined,
       status: statusFilter === "ALL" ? undefined : statusFilter,
     }),
-    [limit, page, searchInput, sortBy, sortOrder, statusFilter],
+    [limit, page, search, sortBy, sortOrder, statusFilter],
   );
 
   const {
     data: clientsResponse,
+    currentData: currentClientsResponse,
     error: listError,
     isError: isListError,
     isFetching,
@@ -76,7 +171,16 @@ export function Clients() {
     refetch,
   } = useGetClientsQuery(clientsQuery);
 
+  const [createAdminClient, { isLoading: isCreating }] = useCreateAdminClientMutation();
+  const [updateAdminClient, { isLoading: isUpdating }] = useUpdateAdminClientMutation();
+  const [deactivateAdminClient, { isLoading: isDeactivating }] =
+    useDeactivateAdminClientMutation();
+  const [activateAdminClient, { isLoading: isActivating }] = useActivateAdminClientMutation();
+  const [createOrLinkClientOwner, { isLoading: isLinkingOwner }] =
+    useCreateOrLinkClientOwnerMutation();
+
   const clients = clientsResponse?.data ?? [];
+  const responsePage = currentClientsResponse?.meta.page;
   const meta = clientsResponse?.meta ?? {
     page,
     limit,
@@ -86,11 +190,19 @@ export function Clients() {
     hasPreviousPage: page > 1,
   };
 
+  useEffect(() => {
+    if (responsePage !== undefined && responsePage !== page) {
+      setPage(responsePage);
+    }
+  }, [page, responsePage]);
+
   const hasActiveFilters = searchInput.trim().length > 0 || statusFilter !== "ALL";
   const activeOnPageCount = clients.filter((client) => client.status === "ACTIVE").length;
   const recentActivityCount = clients.filter(
     (client) => isDateInCurrentMonth(client.createdAt) || isWithinLastDays(client.updatedAt, 30),
   ).length;
+  const isMutating =
+    isCreating || isUpdating || isDeactivating || isActivating || isLinkingOwner;
 
   const kpiCards = [
     {
@@ -123,6 +235,176 @@ export function Clients() {
     setPage(1);
   }
 
+  function openCreateDialog() {
+    setPageError(null);
+    setPageSuccess(null);
+    setCreateSubmitError(null);
+    setCreateForm(initialClientForm);
+    setIsCreateOpen(true);
+  }
+
+  function closeCreateDialog() {
+    setIsCreateOpen(false);
+    setCreateSubmitError(null);
+    setCreateForm(initialClientForm);
+  }
+
+  function updateCreateForm(field: ClientFormField, value: ClientFormValue) {
+    setCreateSubmitError(null);
+    setCreateForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function openEditDialog(client: ClientProfile) {
+    setPageError(null);
+    setPageSuccess(null);
+    setEditSubmitError(null);
+    setEditTarget(client);
+    setEditForm(clientToForm(client));
+  }
+
+  function closeEditDialog() {
+    setEditTarget(null);
+    setEditForm(null);
+    setEditSubmitError(null);
+  }
+
+  function updateEditForm(field: ClientFormField, value: ClientFormValue) {
+    setEditSubmitError(null);
+    setEditForm((prev) => (prev ? { ...prev, [field]: value } : prev));
+  }
+
+  async function handleCreateSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (isCreating || isLinkingOwner) {
+      return;
+    }
+
+    setCreateSubmitError(null);
+    setPageError(null);
+    setPageSuccess(null);
+
+    const validationMessage = validateClientForm(createForm, true);
+    if (validationMessage) {
+      setCreateSubmitError(validationMessage);
+      return;
+    }
+
+    try {
+      const createdClient = await createAdminClient(buildCreateClientPayload(createForm)).unwrap();
+      const ownerPayload = buildOwnerPayload(createForm);
+
+      if (ownerPayload) {
+        try {
+          await createOrLinkClientOwner({
+            clientId: createdClient.id,
+            body: ownerPayload,
+          }).unwrap();
+        } catch (error) {
+          closeCreateDialog();
+          setPageError(
+            `Müşteri oluşturuldu ancak portal sahibi bağlanamadı: ${extractApiErrorMessage(
+              error,
+              "Sahip bağlantısı tamamlanamadı.",
+            )}`,
+          );
+          return;
+        }
+      }
+
+      closeCreateDialog();
+      setPageSuccess(
+        ownerPayload
+          ? "Müşteri ve portal sahibi başarıyla kaydedildi."
+          : "Müşteri başarıyla oluşturuldu.",
+      );
+    } catch (error) {
+      setCreateSubmitError(
+        extractApiErrorMessage(error, "Müşteri oluşturulamadı. Lütfen tekrar deneyin."),
+      );
+    }
+  }
+
+  async function handleUpdateSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editTarget || !editForm || isUpdating) {
+      return;
+    }
+
+    setEditSubmitError(null);
+    setPageError(null);
+    setPageSuccess(null);
+
+    const validationMessage = validateClientForm(editForm, false);
+    if (validationMessage) {
+      setEditSubmitError(validationMessage);
+      return;
+    }
+
+    try {
+      const updatedClient = await updateAdminClient({
+        id: editTarget.id,
+        body: buildUpdateClientPayload(editForm),
+      }).unwrap();
+      setSelectedClient((prev) => (prev?.id === updatedClient.id ? updatedClient : prev));
+      closeEditDialog();
+      setPageSuccess("Müşteri bilgileri güncellendi.");
+    } catch (error) {
+      setEditSubmitError(
+        extractApiErrorMessage(error, "Müşteri güncellenemedi. Lütfen tekrar deneyin."),
+      );
+    }
+  }
+
+  function openStatusDialog(client: ClientProfile) {
+    setPageError(null);
+    setPageSuccess(null);
+    setStatusSubmitError(null);
+    setStatusActionTarget({
+      client,
+      action: client.status === "ACTIVE" ? "deactivate" : "activate",
+    });
+  }
+
+  function closeStatusDialog() {
+    setStatusActionTarget(null);
+    setStatusSubmitError(null);
+  }
+
+  async function handleStatusActionConfirm() {
+    if (!statusActionTarget || isDeactivating || isActivating) {
+      return;
+    }
+
+    setStatusSubmitError(null);
+    setPageError(null);
+    setPageSuccess(null);
+
+    const { client, action } = statusActionTarget;
+
+    try {
+      const updatedClient = action === "deactivate"
+        ? await deactivateAdminClient(client.id).unwrap()
+        : await activateAdminClient(client.id).unwrap();
+
+      setSelectedClient((prev) => (prev?.id === updatedClient.id ? updatedClient : prev));
+      closeStatusDialog();
+      setPageSuccess(
+        action === "deactivate"
+          ? "Müşteri pasif duruma alındı."
+          : "Müşteri tekrar aktif edildi.",
+      );
+    } catch (error) {
+      setStatusSubmitError(
+        extractApiErrorMessage(
+          error,
+          action === "deactivate"
+            ? "Pasife alma işlemi başarısız oldu."
+            : "Aktifleştirme işlemi başarısız oldu.",
+        ),
+      );
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -135,13 +417,26 @@ export function Clients() {
         <Button
           type="button"
           className="gap-2 bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
-          disabled
-          title="Müşteri oluşturma endpoint'i henüz bu ekrana bağlanmadı."
+          onClick={openCreateDialog}
+          disabled={!canManageClients || isMutating}
+          title={canManageClients ? undefined : "Bu işlem için müşteri yönetim yetkisi gerekir."}
         >
           <UserPlus className="h-4 w-4" />
           Yeni Müşteri Ekle
         </Button>
       </div>
+
+      {pageError && (
+        <Card className="border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
+          {pageError}
+        </Card>
+      )}
+
+      {pageSuccess && (
+        <Card className="border-[#AAFF01]/30 bg-[#AAFF01]/10 p-4 text-sm text-[#d2ff8a]">
+          {pageSuccess}
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         {kpiCards.map((kpi) => {
@@ -170,10 +465,7 @@ export function Clients() {
             <Input
               id="client-search"
               value={searchInput}
-              onChange={(event) => {
-                setSearchInput(event.target.value);
-                resetToFirstPage();
-              }}
+              onChange={(event) => setSearchInput(event.target.value)}
               placeholder="Firma veya slug ara..."
               className="border-white/[0.06] bg-[#202020] pl-10 text-white"
             />
@@ -243,6 +535,7 @@ export function Clients() {
                 size="sm"
                 onClick={() => {
                   setSearchInput("");
+                  setSearch("");
                   setStatusFilter("ALL");
                   resetToFirstPage();
                 }}
@@ -294,56 +587,89 @@ export function Clients() {
                   <th className="p-4 text-left text-sm font-medium text-[#A0A0A0]">Oluşturulma</th>
                   <th className="p-4 text-left text-sm font-medium text-[#A0A0A0]">Güncellenme</th>
                   <th className="p-4 text-left text-sm font-medium text-[#A0A0A0]">Kayıt ID</th>
-                  <th className="p-4 text-left text-sm font-medium text-[#A0A0A0]"></th>
+                  <th className="p-4 text-right text-sm font-medium text-[#A0A0A0]">Aksiyonlar</th>
                 </tr>
               </thead>
               <tbody>
-                {clients.map((client) => (
-                  <tr
-                    key={client.id}
-                    className="border-t border-white/[0.06] transition-colors hover:bg-white/5"
-                  >
-                    <td className="p-4">
-                      <div className="font-medium text-white">{client.companyName}</div>
-                    </td>
-                    <td className="p-4">
-                      <Badge variant="outline" className="font-mono text-xs">
-                        {client.slug}
-                      </Badge>
-                    </td>
-                    <td className="p-4 text-sm text-[#D8D8D8]">
-                      <Badge className={getClientStatusBadgeClass(client.status)}>
-                        {getClientStatusLabel(client.status)}
-                      </Badge>
-                    </td>
-                    <td className="p-4 text-sm text-[#A0A0A0]">{formatClientDate(client.createdAt)}</td>
-                    <td className="p-4 text-sm text-[#A0A0A0]">{formatClientDateTime(client.updatedAt)}</td>
-                    <td className="p-4 font-mono text-sm text-[#A0A0A0]">{shortId(client.id)}</td>
-                    <td className="p-4">
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="gap-2"
-                          onClick={() => setSelectedClient(client)}
-                        >
-                          <Eye className="h-4 w-4" />
-                          Önizle
-                        </Button>
-                        <Link to={`/musteriler/${client.id}`}>
+                {clients.map((client) => {
+                  const nextStatusAction =
+                    client.status === "ACTIVE" ? "deactivate" : "activate";
+
+                  return (
+                    <tr
+                      key={client.id}
+                      className="border-t border-white/[0.06] transition-colors hover:bg-white/5"
+                    >
+                      <td className="p-4">
+                        <div className="font-medium text-white">{client.companyName}</div>
+                      </td>
+                      <td className="p-4">
+                        <Badge variant="outline" className="font-mono text-xs">
+                          {client.slug}
+                        </Badge>
+                      </td>
+                      <td className="p-4 text-sm text-[#D8D8D8]">
+                        <Badge className={getClientStatusBadgeClass(client.status)}>
+                          {getClientStatusLabel(client.status)}
+                        </Badge>
+                      </td>
+                      <td className="p-4 text-sm text-[#A0A0A0]">{formatClientDate(client.createdAt)}</td>
+                      <td className="p-4 text-sm text-[#A0A0A0]">{formatClientDateTime(client.updatedAt)}</td>
+                      <td className="p-4 font-mono text-sm text-[#A0A0A0]">{shortId(client.id)}</td>
+                      <td className="p-4">
+                        <div className="flex flex-wrap items-center justify-end gap-2">
                           <Button
                             type="button"
                             size="sm"
-                            className="bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
+                            variant="outline"
+                            className="gap-2"
+                            onClick={() => setSelectedClient(client)}
                           >
-                            Detay
+                            <Eye className="h-4 w-4" />
+                            Önizle
                           </Button>
-                        </Link>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          <Link to={`/musteriler/${client.id}`}>
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
+                            >
+                              Detay
+                            </Button>
+                          </Link>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="gap-2"
+                            onClick={() => openEditDialog(client)}
+                            disabled={!canManageClients || isMutating}
+                            title={canManageClients ? undefined : "Bu işlem için müşteri yönetim yetkisi gerekir."}
+                          >
+                            <Edit className="h-4 w-4" />
+                            Düzenle
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={nextStatusAction === "deactivate" ? "destructive" : "outline"}
+                            className="gap-2"
+                            onClick={() => openStatusDialog(client)}
+                            disabled={!canManageClients || isMutating}
+                            title={canManageClients ? undefined : "Bu işlem için müşteri yönetim yetkisi gerekir."}
+                          >
+                            {nextStatusAction === "deactivate" ? (
+                              <PauseCircle className="h-4 w-4" />
+                            ) : (
+                              <PlayCircle className="h-4 w-4" />
+                            )}
+                            {nextStatusAction === "deactivate" ? "Pasife Al" : "Aktifleştir"}
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -351,8 +677,8 @@ export function Clients() {
           <PaginationFooter
             meta={meta}
             isFetching={isFetching}
-            onPrevious={() => setPage((currentPage) => Math.max(currentPage - 1, 1))}
-            onNext={() => setPage((currentPage) => currentPage + 1)}
+            onPrevious={() => setPage(Math.max(meta.page - 1, 1))}
+            onNext={() => setPage(Math.min(meta.page + 1, meta.totalPages))}
           />
         </Card>
       )}
@@ -406,27 +732,314 @@ export function Clients() {
           )}
         </SheetContent>
       </Sheet>
+
+      <Dialog
+        open={isCreateOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeCreateDialog();
+          }
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto border-white/[0.08] bg-[#1A1A1A] text-white">
+          <DialogHeader>
+            <DialogTitle>Yeni Müşteri Oluştur</DialogTitle>
+            <DialogDescription className="text-[#A0A0A0]">
+              Müşteri kaydı Admin Clients API üzerinden oluşturulacaktır.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateSubmit} className="space-y-4" noValidate>
+            {createSubmitError && (
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+                {createSubmitError}
+              </div>
+            )}
+            <ClientFormFields
+              idPrefix="create-client"
+              form={createForm}
+              onChange={updateCreateForm}
+              disabled={isCreating || isLinkingOwner}
+              includeOwnerFields
+            />
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={closeCreateDialog}
+                disabled={isCreating || isLinkingOwner}
+              >
+                Vazgeç
+              </Button>
+              <Button
+                type="submit"
+                className="bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
+                disabled={isCreating || isLinkingOwner}
+              >
+                {isCreating || isLinkingOwner ? "Kaydediliyor..." : "Müşteri Oluştur"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(editTarget && editForm)}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeEditDialog();
+          }
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto border-white/[0.08] bg-[#1A1A1A] text-white">
+          <DialogHeader>
+            <DialogTitle>Müşteri Güncelle</DialogTitle>
+            <DialogDescription className="text-[#A0A0A0]">
+              Müşteri profil bilgileri Admin Clients API üzerinden güncellenecektir.
+            </DialogDescription>
+          </DialogHeader>
+          {editForm && (
+            <form onSubmit={handleUpdateSubmit} className="space-y-4" noValidate>
+              {editSubmitError && (
+                <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+                  {editSubmitError}
+                </div>
+              )}
+              <ClientFormFields
+                idPrefix="edit-client"
+                form={editForm}
+                onChange={updateEditForm}
+                disabled={isUpdating}
+              />
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={closeEditDialog} disabled={isUpdating}>
+                  Vazgeç
+                </Button>
+                <Button
+                  type="submit"
+                  className="bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
+                  disabled={isUpdating}
+                >
+                  {isUpdating ? "Kaydediliyor..." : "Değişiklikleri Kaydet"}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(statusActionTarget)}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeStatusDialog();
+          }
+        }}
+      >
+        <DialogContent className="border-white/[0.08] bg-[#1A1A1A] text-white">
+          <DialogHeader>
+            <DialogTitle>
+              {statusActionTarget?.action === "deactivate"
+                ? "Müşteriyi Pasife Al"
+                : "Müşteriyi Aktifleştir"}
+            </DialogTitle>
+            <DialogDescription className="text-[#A0A0A0]">
+              {statusActionTarget?.client.companyName ?? "Seçili müşteri"} için durum değişikliği uygulanacaktır.
+            </DialogDescription>
+          </DialogHeader>
+          {statusSubmitError && (
+            <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+              {statusSubmitError}
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={closeStatusDialog}
+              disabled={isDeactivating || isActivating}
+            >
+              Vazgeç
+            </Button>
+            <Button
+              type="button"
+              variant={statusActionTarget?.action === "deactivate" ? "destructive" : "default"}
+              className={
+                statusActionTarget?.action === "activate"
+                  ? "bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
+                  : undefined
+              }
+              onClick={() => void handleStatusActionConfirm()}
+              disabled={isDeactivating || isActivating}
+            >
+              {isDeactivating || isActivating
+                ? "Uygulanıyor..."
+                : statusActionTarget?.action === "deactivate"
+                  ? "Pasife Al"
+                  : "Aktifleştir"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
+function ClientFormFields({
+  idPrefix,
+  form,
+  onChange,
+  disabled,
+  includeOwnerFields = false,
+}: {
+  idPrefix: string;
+  form: ClientFormState;
+  onChange: (field: ClientFormField, value: ClientFormValue) => void;
+  disabled: boolean;
+  includeOwnerFields?: boolean;
+}) {
+  return (
+    <>
+      <div className="space-y-2">
+        <Label htmlFor={`${idPrefix}-name`}>Müşteri Adı</Label>
+        <Input
+          id={`${idPrefix}-name`}
+          value={form.name}
+          onChange={(event) => onChange("name", event.target.value)}
+          className="border-white/[0.08] bg-[#202020]"
+          placeholder="Acme E-ticaret"
+          required
+          minLength={2}
+          maxLength={160}
+          disabled={disabled}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor={`${idPrefix}-slug`}>Portal Slug</Label>
+        <Input
+          id={`${idPrefix}-slug`}
+          value={form.slug}
+          onChange={(event) => onChange("slug", event.target.value)}
+          className="border-white/[0.08] bg-[#202020]"
+          placeholder="acme-e-ticaret"
+          maxLength={80}
+          disabled={disabled}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor={`${idPrefix}-status`}>Durum</Label>
+        <SelectControl
+          id={`${idPrefix}-status`}
+          ariaLabel="Durum"
+          value={form.status}
+          onChange={(value) => onChange("status", value as ClientStatus)}
+          disabled={disabled}
+        >
+          {CLIENT_STATUS_OPTIONS.map((status) => (
+            <option key={status} value={status}>
+              {getClientStatusLabel(status)}
+            </option>
+          ))}
+        </SelectControl>
+      </div>
+
+      {includeOwnerFields && (
+        <>
+          <div className="space-y-2 border-t border-white/[0.06] pt-4">
+            <Label htmlFor={`${idPrefix}-owner-mode`}>Sahip İşlemi</Label>
+            <SelectControl
+              id={`${idPrefix}-owner-mode`}
+              ariaLabel="Sahip İşlemi"
+              value={form.ownerMode}
+              onChange={(value) => onChange("ownerMode", value as ClientOwnerMode)}
+              disabled={disabled}
+            >
+              <option value="NONE">Sahip Ekleme Yok</option>
+              <option value="CREATE">Yeni Portal Sahibi Oluştur</option>
+              <option value="LINK_EXISTING">Mevcut Kullanıcı Bağla</option>
+            </SelectControl>
+          </div>
+
+          {form.ownerMode === "CREATE" && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor={`${idPrefix}-owner-email`}>Sahip E-posta</Label>
+                <Input
+                  id={`${idPrefix}-owner-email`}
+                  type="email"
+                  value={form.ownerEmail}
+                  onChange={(event) => onChange("ownerEmail", event.target.value)}
+                  className="border-white/[0.08] bg-[#202020]"
+                  autoComplete="email"
+                  disabled={disabled}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={`${idPrefix}-owner-display-name`}>Sahip Adı</Label>
+                <Input
+                  id={`${idPrefix}-owner-display-name`}
+                  value={form.ownerDisplayName}
+                  onChange={(event) => onChange("ownerDisplayName", event.target.value)}
+                  className="border-white/[0.08] bg-[#202020]"
+                  disabled={disabled}
+                />
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor={`${idPrefix}-owner-password`}>Geçici Şifre</Label>
+                <Input
+                  id={`${idPrefix}-owner-password`}
+                  type="password"
+                  value={form.ownerPassword}
+                  onChange={(event) => onChange("ownerPassword", event.target.value)}
+                  className="border-white/[0.08] bg-[#202020]"
+                  autoComplete="new-password"
+                  disabled={disabled}
+                />
+              </div>
+            </div>
+          )}
+
+          {form.ownerMode === "LINK_EXISTING" && (
+            <div className="space-y-2">
+              <Label htmlFor={`${idPrefix}-existing-owner-user-id`}>Mevcut Kullanıcı ID</Label>
+              <Input
+                id={`${idPrefix}-existing-owner-user-id`}
+                value={form.existingOwnerUserId}
+                onChange={(event) => onChange("existingOwnerUserId", event.target.value)}
+                className="border-white/[0.08] bg-[#202020]"
+                placeholder="User UUID"
+                disabled={disabled}
+              />
+            </div>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
 function SelectControl({
+  id,
   ariaLabel,
   value,
   onChange,
   children,
+  disabled = false,
 }: {
+  id?: string;
   ariaLabel: string;
   value: string;
   onChange: (value: string) => void;
   children: ReactNode;
+  disabled?: boolean;
 }) {
   return (
     <select
+      id={id}
       aria-label={ariaLabel}
       value={value}
       onChange={(event) => onChange(event.target.value)}
-      className="h-10 rounded-md border border-white/[0.06] bg-[#202020] px-3 text-sm text-white outline-none transition-colors hover:border-white/[0.12] focus:border-[#AAFF01]/50"
+      disabled={disabled}
+      className="h-10 w-full rounded-md border border-white/[0.06] bg-[#202020] px-3 text-sm text-white outline-none transition-colors hover:border-white/[0.12] focus:border-[#AAFF01]/50 disabled:cursor-not-allowed disabled:opacity-50"
     >
       {children}
     </select>
@@ -490,6 +1103,102 @@ function PaginationFooter({
       </div>
     </div>
   );
+}
+
+function validateClientForm(form: ClientFormState, includeOwnerFields: boolean): string | null {
+  const nameError = validateClientName(form.name);
+  if (nameError) {
+    return nameError;
+  }
+
+  const slugError = validateClientSlug(form.slug);
+  if (slugError) {
+    return slugError;
+  }
+
+  if (!CLIENT_STATUS_OPTIONS.includes(form.status)) {
+    return "Geçerli bir müşteri durumu seçin.";
+  }
+
+  if (!includeOwnerFields || form.ownerMode === "NONE") {
+    return null;
+  }
+
+  if (form.ownerMode === "CREATE") {
+    return (
+      validateClientOwnerEmail(form.ownerEmail) ??
+      validateClientOwnerDisplayName(form.ownerDisplayName) ??
+      validateClientOwnerPassword(form.ownerPassword)
+    );
+  }
+
+  if (form.ownerMode === "LINK_EXISTING" && !isUuid(form.existingOwnerUserId)) {
+    return "Mevcut kullanıcı ID geçerli bir UUID olmalıdır.";
+  }
+
+  return null;
+}
+
+function buildCreateClientPayload(form: ClientFormState): CreateAdminClientRequest {
+  const payload: CreateAdminClientRequest = {
+    name: form.name.trim(),
+    status: form.status,
+  };
+  const slug = normalizeOptionalText(form.slug);
+
+  if (slug) {
+    payload.slug = slug;
+  }
+
+  return payload;
+}
+
+function buildUpdateClientPayload(form: ClientFormState): UpdateAdminClientRequest {
+  const payload: UpdateAdminClientRequest = {
+    name: form.name.trim(),
+    status: form.status,
+  };
+  const slug = normalizeOptionalText(form.slug);
+
+  if (slug) {
+    payload.slug = slug;
+  }
+
+  return payload;
+}
+
+function buildOwnerPayload(form: ClientFormState): CreateOrLinkClientOwnerRequest | null {
+  if (form.ownerMode === "CREATE") {
+    return {
+      mode: "CREATE",
+      email: form.ownerEmail.trim().toLowerCase(),
+      displayName: form.ownerDisplayName.trim(),
+      password: form.ownerPassword,
+    };
+  }
+
+  if (form.ownerMode === "LINK_EXISTING") {
+    return {
+      mode: "LINK_EXISTING",
+      userId: form.existingOwnerUserId.trim(),
+    };
+  }
+
+  return null;
+}
+
+function clientToForm(client: ClientProfile): ClientFormState {
+  return {
+    ...initialClientForm,
+    name: client.companyName,
+    slug: client.slug,
+    status: client.status,
+  };
+}
+
+function normalizeOptionalText(value: string): string | undefined {
+  const normalizedValue = value.trim();
+  return normalizedValue.length > 0 ? normalizedValue : undefined;
 }
 
 function getMetricValue(value: number, isLoading: boolean, isError: boolean): string {

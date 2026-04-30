@@ -4,6 +4,9 @@ import type {
   ClientsListQuery,
   ClientsListResponse,
   ClientSummaryResponse,
+  CreateAdminClientRequest,
+  CreateOrLinkClientOwnerRequest,
+  UpdateAdminClientRequest,
 } from "./clientsTypes";
 import {
   normalizeClientResponse,
@@ -12,6 +15,10 @@ import {
 } from "./clientsUtils";
 
 const CLIENTS_LIST_ID = "LIST";
+const CLIENT_SUMMARY_ID_PREFIX = "SUMMARY";
+const ADMIN_SUMMARY_ID = "SUMMARY";
+const AUDIT_LOGS_LIST_ID = "LIST";
+const ADMIN_USERS_LIST_ID = "LIST";
 
 export const clientsApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -47,7 +54,61 @@ export const clientsApi = baseApi.injectEndpoints({
         method: "GET",
       }),
       transformResponse: (response: unknown) => normalizeClientSummaryResponse(response),
-      providesTags: (_result, _error, id) => [{ type: "Clients", id }],
+      providesTags: (_result, _error, id) => [
+        { type: "Clients", id: getClientSummaryTagId(id) },
+      ],
+    }),
+    createAdminClient: builder.mutation<ClientProfile, CreateAdminClientRequest>({
+      query: (body) => ({
+        url: "/admin/clients",
+        method: "POST",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeClientResponse(response),
+      invalidatesTags: (result) => getAdminClientCreateInvalidations(result),
+    }),
+    updateAdminClient: builder.mutation<
+      ClientProfile,
+      { id: string; body: UpdateAdminClientRequest }
+    >({
+      query: ({ id, body }) => ({
+        url: `/admin/clients/${id}`,
+        method: "PATCH",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeClientResponse(response),
+      invalidatesTags: (_result, _error, { id }) => getAdminClientMutationInvalidations(id),
+    }),
+    deactivateAdminClient: builder.mutation<ClientProfile, string>({
+      query: (id) => ({
+        url: `/admin/clients/${id}/deactivate`,
+        method: "PATCH",
+      }),
+      transformResponse: (response: unknown) => normalizeClientResponse(response),
+      invalidatesTags: (_result, _error, id) => getAdminClientMutationInvalidations(id),
+    }),
+    activateAdminClient: builder.mutation<ClientProfile, string>({
+      query: (id) => ({
+        url: `/admin/clients/${id}/activate`,
+        method: "PATCH",
+      }),
+      transformResponse: (response: unknown) => normalizeClientResponse(response),
+      invalidatesTags: (_result, _error, id) => getAdminClientMutationInvalidations(id),
+    }),
+    createOrLinkClientOwner: builder.mutation<
+      ClientProfile,
+      { clientId: string; body: CreateOrLinkClientOwnerRequest }
+    >({
+      query: ({ clientId, body }) => ({
+        url: `/admin/clients/${clientId}/owner`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeClientResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        ...getAdminClientMutationInvalidations(clientId),
+        { type: "AdminUsers", id: ADMIN_USERS_LIST_ID },
+      ],
     }),
   }),
 });
@@ -57,7 +118,40 @@ export const {
   useGetClientQuery,
   useLazyGetClientQuery,
   useGetClientSummaryQuery,
+  useCreateAdminClientMutation,
+  useUpdateAdminClientMutation,
+  useDeactivateAdminClientMutation,
+  useActivateAdminClientMutation,
+  useCreateOrLinkClientOwnerMutation,
 } = clientsApi;
+
+function getClientSummaryTagId(id: string): string {
+  return `${CLIENT_SUMMARY_ID_PREFIX}:${id}`;
+}
+
+function getAdminClientMutationInvalidations(id: string) {
+  return [
+    { type: "Clients" as const, id: CLIENTS_LIST_ID },
+    { type: "Clients" as const, id },
+    { type: "Clients" as const, id: getClientSummaryTagId(id) },
+    { type: "AdminSummary" as const, id: ADMIN_SUMMARY_ID },
+    { type: "AuditLogs" as const, id: AUDIT_LOGS_LIST_ID },
+  ];
+}
+
+function getAdminClientCreateInvalidations(result: ClientProfile | undefined) {
+  return [
+    { type: "Clients" as const, id: CLIENTS_LIST_ID },
+    ...(result
+      ? [
+          { type: "Clients" as const, id: result.id },
+          { type: "Clients" as const, id: getClientSummaryTagId(result.id) },
+        ]
+      : []),
+    { type: "AdminSummary" as const, id: ADMIN_SUMMARY_ID },
+    { type: "AuditLogs" as const, id: AUDIT_LOGS_LIST_ID },
+  ];
+}
 
 function serializeClientsListQuery(
   query: ClientsListQuery | void,

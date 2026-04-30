@@ -13,6 +13,9 @@ import type {
 export { extractApiErrorMessage };
 
 export const CLIENT_STATUS_OPTIONS: ClientStatus[] = ["ACTIVE", "INACTIVE", "SUSPENDED"];
+export const CLIENT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+export const CLIENT_OWNER_PASSWORD_LETTER_PATTERN = /[A-Za-z]/;
+export const CLIENT_OWNER_PASSWORD_NUMBER_PATTERN = /[0-9]/;
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -26,7 +29,7 @@ export function normalizeClientsListResponse(response: unknown): ClientsListResp
 }
 
 export function normalizeClientResponse(response: unknown): ClientProfile {
-  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  const candidate = getClientCandidate(response);
 
   if (isClientProfile(candidate)) {
     return candidate;
@@ -99,6 +102,98 @@ export function formatClientDateTime(value: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+export function validateClientName(name: string): string | null {
+  const normalizedName = name.trim();
+
+  if (!normalizedName) {
+    return "Müşteri adı gereklidir.";
+  }
+
+  if (normalizedName.length < 2) {
+    return "Müşteri adı en az 2 karakter olmalıdır.";
+  }
+
+  if (normalizedName.length > 160) {
+    return "Müşteri adı en fazla 160 karakter olabilir.";
+  }
+
+  return null;
+}
+
+export function validateClientSlug(slug: string): string | null {
+  const normalizedSlug = slug.trim();
+
+  if (!normalizedSlug) {
+    return null;
+  }
+
+  if (normalizedSlug.length < 2) {
+    return "Slug en az 2 karakter olmalıdır.";
+  }
+
+  if (normalizedSlug.length > 80) {
+    return "Slug en fazla 80 karakter olabilir.";
+  }
+
+  if (!CLIENT_SLUG_PATTERN.test(normalizedSlug)) {
+    return "Slug sadece küçük harf, rakam ve tek tire içerebilir.";
+  }
+
+  return null;
+}
+
+export function validateClientOwnerEmail(email: string): string | null {
+  const normalizedEmail = email.trim();
+
+  if (!normalizedEmail) {
+    return "Sahip e-posta adresi gereklidir.";
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    return "Geçerli bir sahip e-posta adresi girin.";
+  }
+
+  return null;
+}
+
+export function validateClientOwnerDisplayName(displayName: string): string | null {
+  const normalizedDisplayName = displayName.trim();
+
+  if (!normalizedDisplayName) {
+    return "Sahip adı gereklidir.";
+  }
+
+  if (normalizedDisplayName.length < 2) {
+    return "Sahip adı en az 2 karakter olmalıdır.";
+  }
+
+  return null;
+}
+
+export function validateClientOwnerPassword(password: string): string | null {
+  if (!password) {
+    return "Sahip geçici şifresi gereklidir.";
+  }
+
+  if (password.length < 8) {
+    return "Sahip geçici şifresi en az 8 karakter olmalıdır.";
+  }
+
+  if (password.length > 72) {
+    return "Sahip geçici şifresi en fazla 72 karakter olabilir.";
+  }
+
+  if (!CLIENT_OWNER_PASSWORD_LETTER_PATTERN.test(password)) {
+    return "Sahip geçici şifresi en az bir harf içermelidir.";
+  }
+
+  if (!CLIENT_OWNER_PASSWORD_NUMBER_PATTERN.test(password)) {
+    return "Sahip geçici şifresi en az bir rakam içermelidir.";
+  }
+
+  return null;
 }
 
 export function isUuid(value: string): boolean {
@@ -414,6 +509,26 @@ function normalizeClientSummaryClient(value: unknown): ClientSummaryResponse["cl
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
   };
+}
+
+function getClientCandidate(response: unknown): unknown {
+  if (!isRecord(response)) {
+    return response;
+  }
+
+  if ("data" in response) {
+    return getClientCandidate(response.data);
+  }
+
+  if ("client" in response) {
+    return response.client;
+  }
+
+  if ("clientProfile" in response) {
+    return response.clientProfile;
+  }
+
+  return response;
 }
 
 function normalizeClientSummaryMeta(value: unknown): ClientSummaryResponse["meta"] {

@@ -36,6 +36,34 @@ export type ClientsListResponse = {
   meta: ClientsListMeta;
 };
 
+export type CreateAdminClientRequest = {
+  name: string;
+  slug?: string;
+  status?: ClientStatus;
+};
+
+export type UpdateAdminClientRequest = {
+  name?: string;
+  slug?: string;
+  status?: ClientStatus;
+};
+
+export type CreateClientOwnerRequest = {
+  mode: "CREATE";
+  email: string;
+  displayName: string;
+  password: string;
+};
+
+export type LinkExistingClientOwnerRequest = {
+  mode: "LINK_EXISTING";
+  userId: string;
+};
+
+export type CreateOrLinkClientOwnerRequest =
+  | CreateClientOwnerRequest
+  | LinkExistingClientOwnerRequest;
+
 export type ClientSummaryProjectStatus =
   | "PLANNED"
   | "IN_PROGRESS"

@@ -114,6 +114,10 @@ export function Dashboard() {
           <p className="text-sm text-orange-100">
             {extractApiErrorMessage(error, "Admin summary verisi alınamadı.")}
           </p>
+          <Button type="button" variant="outline" className="mt-4 gap-2" onClick={() => refetch()}>
+            <RefreshCw className="h-4 w-4" />
+            Tekrar Dene
+          </Button>
         </Card>
       )}
 

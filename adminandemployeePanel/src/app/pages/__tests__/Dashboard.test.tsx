@@ -5,6 +5,10 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminSummaryResponse } from "../../features/dashboard/dashboardTypes";
+import {
+  EMPTY_ADMIN_SUMMARY,
+  normalizeAdminSummaryResponse,
+} from "../../features/dashboard/dashboardUtils";
 import { Dashboard } from "../Dashboard";
 
 type DashboardSummaryQueryResult = {
@@ -172,14 +176,101 @@ describe("Dashboard", () => {
     expect(screen.queryByText(/suspended/i)).not.toBeInTheDocument();
   });
 
-  it("renders retry button and calls refetch when clicked", async () => {
+  it("normalizes partial invalid payloads with fallback values and ignores legacy fields", () => {
+    const normalized = normalizeAdminSummaryResponse({
+      data: {
+        users: {
+          total: 99,
+          active: "invalid",
+          employees: 12,
+        },
+        clients: {
+          total: 45,
+          active: 40,
+          inactive: null,
+          suspended: 5,
+        },
+        projects: {
+          total: 18,
+          inProgress: 6,
+          completed: -1,
+        },
+        tasks: {
+          total: 250,
+          todo: 40,
+          blocked: Number.NaN,
+          unassigned: 9,
+        },
+        auditLogs: {
+          total: "invalid",
+          lastActionAt: 123,
+          last24Hours: 7,
+        },
+        meta: {
+          generatedAt: false,
+          resourceCount: 999,
+        },
+      },
+    });
+
+    expect(normalized).toEqual({
+      users: {
+        total: 99,
+        active: 0,
+        inactive: 0,
+        employees: 12,
+        clients: 0,
+        admins: 0,
+      },
+      clients: {
+        total: 45,
+        active: 40,
+        inactive: 0,
+      },
+      projects: {
+        total: 18,
+        planned: 0,
+        inProgress: 6,
+        review: 0,
+        completed: 0,
+        onHold: 0,
+      },
+      tasks: {
+        total: 250,
+        todo: 40,
+        inProgress: 0,
+        review: 0,
+        done: 0,
+        blocked: 0,
+      },
+      auditLogs: {
+        total: 0,
+        lastActionAt: null,
+      },
+      meta: {
+        generatedAt: "",
+      },
+    });
+    expect(normalized).not.toHaveProperty("clients.suspended");
+    expect(normalized).not.toHaveProperty("tasks.unassigned");
+    expect(normalized).not.toHaveProperty("auditLogs.last24Hours");
+    expect(normalized).not.toHaveProperty("meta.resourceCount");
+    expect(normalizeAdminSummaryResponse({ data: null })).toEqual(EMPTY_ADMIN_SUMMARY);
+  });
+
+  it("renders error retry button and calls refetch when clicked", async () => {
     const user = userEvent.setup();
     const refetch = vi.fn();
-    setupSummaryState({ refetch });
+    setupSummaryState({
+      data: undefined,
+      error: { status: 500, data: { message: "Özet servisi kullanılamıyor." } },
+      isError: true,
+      refetch,
+    });
 
     renderDashboard();
 
-    await user.click(screen.getByRole("button", { name: /Yenile/i }));
+    await user.click(screen.getByRole("button", { name: /Tekrar Dene/i }));
     expect(refetch).toHaveBeenCalledTimes(1);
   });
 
