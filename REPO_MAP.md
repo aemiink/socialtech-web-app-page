@@ -36,6 +36,9 @@ Location: `adminandemployeePanel/`
   - `adminandemployeePanel/src/app/features/dashboard/dashboardApi.ts`
   - `adminandemployeePanel/src/app/features/dashboard/dashboardTypes.ts`
   - `adminandemployeePanel/src/app/features/dashboard/dashboardUtils.ts`
+  - `adminandemployeePanel/src/app/features/adminAssignments/adminAssignmentsApi.ts`
+  - `adminandemployeePanel/src/app/features/adminAssignments/adminAssignmentsTypes.ts`
+  - `adminandemployeePanel/src/app/features/adminAssignments/adminAssignmentsUtils.ts`
   - `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
   - `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`
   - `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
@@ -51,6 +54,7 @@ Location: `adminandemployeePanel/`
 - Admin pages: `adminandemployeePanel/src/app/pages/`
 - Backend-integrated admin pages (core):
   - `adminandemployeePanel/src/app/pages/Dashboard.tsx`
+  - `adminandemployeePanel/src/app/pages/EmployeeAssignments.tsx`
   - `adminandemployeePanel/src/app/pages/Clients.tsx`
   - `adminandemployeePanel/src/app/pages/ClientDetail.tsx`
   - `adminandemployeePanel/src/app/pages/Projects.tsx`
@@ -60,6 +64,7 @@ Location: `adminandemployeePanel/`
 - Frontend tests (Vitest/RTL):
   - `adminandemployeePanel/src/app/pages/EmployeeDetail.test.tsx`
   - `adminandemployeePanel/src/app/pages/AuditLogs.test.tsx`
+  - `adminandemployeePanel/src/app/pages/__tests__/EmployeeAssignments.test.tsx`
   - `adminandemployeePanel/src/app/pages/__tests__/Clients.test.tsx`
   - `adminandemployeePanel/src/app/pages/__tests__/Dashboard.test.tsx`
   - `adminandemployeePanel/src/app/pages/__tests__/ClientDetail.test.tsx`
@@ -68,6 +73,10 @@ Location: `adminandemployeePanel/`
   - `adminandemployeePanel/src/app/pages/__tests__/Tasks.test.tsx`
   - `adminandemployeePanel/src/app/pages/__tests__/TaskDetail.test.tsx`
 - Employee pages: `adminandemployeePanel/src/app/employee/pages/`
+- Employee API-migrated page:
+  - `adminandemployeePanel/src/app/employee/pages/Musterilerim.tsx`
+- Employee page tests:
+  - `adminandemployeePanel/src/app/employee/pages/__tests__/Musterilerim.test.tsx`
 - Employee dashboards: `adminandemployeePanel/src/app/employee/dashboards/`
 - UI primitives: `adminandemployeePanel/src/app/components/ui/`
 - Mock data: `adminandemployeePanel/src/app/data/mockData.ts`
@@ -182,7 +191,7 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 ### App Bootstrap
 
 - `server/src/main.ts` - Nest bootstrap, `/api/v1` global prefix, global ValidationPipe, global exception filter, CORS setup
-- `server/src/app.module.ts` - root module imports for config/database/health/auth/users/clients/admin-summary/admin-assignments/admin-users/admin-audit-logs/projects/tasks/audit-log
+- `server/src/app.module.ts` - root module imports for config/database/health/auth/users/clients/admin-summary/admin-assignments/admin-clients/admin-users/admin-audit-logs/projects/tasks
 - `server/src/config/env.validation.ts` - Joi env validation schema
 - `server/src/config/cors.config.ts` - env-based CORS whitelist
 - `server/src/common/filters/global-exception.filter.ts` - centralized error response format
@@ -314,7 +323,7 @@ From `server/package.json`:
   - `npm run test:e2e:prepare`
   - `npm run test:e2e`
   - `npm run test:e2e:authz`
-- latest DB-connected authz pattern run: `6/6 suites`, `152/152` tests passed
+- latest DB-connected authz pattern run: `7/7 suites`, `168/168` tests passed
 
 ### Styles
 
@@ -421,3 +430,33 @@ The `client/` directory is the public/marketing Social Tech website, not the Cli
 
 ### Frontend - UI Primitive Update
 - `adminandemployeePanel/src/app/components/ui/dialog.tsx`
+
+## 2026-04-30 Update Map (Employee Assignment UI Milestone)
+
+### Backend
+- `server/src/admin-assignments/admin-assignments.service.ts`
+  - assignment create/activate için inactive employee ve inactive client engelleri
+- `server/test/authz.e2e-spec.ts`
+  - assignment negative-path authz/e2e senaryoları genişletildi
+
+### Admin + Employee Panel Frontend
+- `adminandemployeePanel/src/app/features/adminAssignments/adminAssignmentsApi.ts`
+- `adminandemployeePanel/src/app/features/adminAssignments/adminAssignmentsTypes.ts`
+- `adminandemployeePanel/src/app/features/adminAssignments/adminAssignmentsUtils.ts`
+- `adminandemployeePanel/src/app/pages/EmployeeAssignments.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/EmployeeAssignments.test.tsx`
+- `adminandemployeePanel/src/app/routes.tsx` (`/calisanlar/atamalar`)
+- `adminandemployeePanel/src/app/components/RootLayout.tsx` (Atamalar menü girdisi)
+- `adminandemployeePanel/src/app/pages/Employees.tsx` (Atamaları Yönet CTA)
+- `adminandemployeePanel/src/app/services/baseApi.ts` (`AdminAssignments` tag)
+- `adminandemployeePanel/src/app/employee/pages/Musterilerim.tsx` (API migration)
+- `adminandemployeePanel/src/app/employee/pages/__tests__/Musterilerim.test.tsx`
+
+## 2026-05-01 Update Map (Employee Gorevlerim API Integration)
+
+### Frontend - Employee Tasks
+- `adminandemployeePanel/src/app/employee/pages/Gorevlerim.tsx`
+  - mock task kaynağı kaldırıldı, `useGetTasksQuery` ile backend `GET /tasks` entegrasyonu
+  - `tasks.read.assigned` permission gate + query `skip` davranışı
+- `adminandemployeePanel/src/app/employee/pages/__tests__/Gorevlerim.test.tsx`
+  - loading/error/empty/success/unauthorized/query param coverage

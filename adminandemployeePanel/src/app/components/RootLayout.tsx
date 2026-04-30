@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, Briefcase, FolderKanban,
   CheckSquare, ThumbsUp, Megaphone, FileText,
   BarChart3, Calendar, UserCheck, DollarSign,
-  Zap, Settings, Search, Plus, Bell, LogOut, History
+  Zap, Settings, Search, Plus, Bell, LogOut, History, UserCog
 } from "lucide-react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
@@ -30,6 +30,7 @@ const menuItems = [
   { path: "/raporlar", label: "Raporlar", icon: BarChart3 },
   { path: "/toplantilar", label: "Toplantılar", icon: Calendar },
   { path: "/calisanlar", label: "Çalışanlar", icon: UserCheck },
+  { path: "/calisanlar/atamalar", label: "Atamalar", icon: UserCog },
   { path: "/audit-loglari", label: "İşlem Geçmişi", icon: History },
   { path: "/finans", label: "Finans", icon: DollarSign },
   { path: "/otomasyonlar", label: "Otomasyonlar", icon: Zap },
@@ -172,6 +173,10 @@ export function RootLayout() {
 function isMenuItemActive(itemPath: string, currentPath: string): boolean {
   if (itemPath === "/") {
     return currentPath === "/";
+  }
+
+  if (itemPath === "/calisanlar" && currentPath === "/calisanlar/atamalar") {
+    return false;
   }
 
   return currentPath === itemPath || currentPath.startsWith(`${itemPath}/`);

@@ -509,14 +509,23 @@ describe("Clients", () => {
     expect(screen.getByRole("button", { name: /Sonraki/i })).toBeEnabled();
 
     await user.click(screen.getByRole("button", { name: /Sonraki/i }));
+    await waitFor(() => {
+      expect(getLastClientsQuery()).toMatchObject({ page: 2 });
+    });
     expect(await screen.findByText("11-20 / 25 kayıt")).toBeInTheDocument();
-    expect(screen.getByText("Sayfa 2 / 3")).toBeInTheDocument();
+    expect(await screen.findByText("Sayfa 2 / 3")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Sonraki/i }));
+    await waitFor(() => {
+      expect(getLastClientsQuery()).toMatchObject({ page: 3 });
+    });
     expect(await screen.findByText("21-25 / 25 kayıt")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Sonraki/i })).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: /Önceki/i }));
+    await waitFor(() => {
+      expect(getLastClientsQuery()).toMatchObject({ page: 2 });
+    });
     expect(await screen.findByText("11-20 / 25 kayıt")).toBeInTheDocument();
   });
 

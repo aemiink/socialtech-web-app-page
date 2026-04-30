@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 import {
   AccountType,
+  ClientStatus,
   EmployeeClientAssignmentScope,
   Prisma,
   UserRole,
@@ -78,6 +79,10 @@ type AssignmentIdentity = {
   employeeUserId: string;
   clientProfileId: string;
   scope: EmployeeClientAssignmentScope;
+};
+
+type AssignmentState = AssignmentIdentity & {
+  isActive: boolean;
 };
 
 const ASSIGNMENTS_READ_PERMISSION = "assignments.read";
@@ -165,12 +170,16 @@ export class AdminAssignmentsService {
     this.assertHasUpdatePayload(dto);
 
     const assignment = await this.getAssignmentIdentityOrFail(assignmentId);
+    const nextIsActive = dto.isActive ?? assignment.isActive;
     if (dto.scope && dto.scope !== assignment.scope) {
       await this.assertScopeUpdateDoesNotDuplicate(assignmentId, {
         employeeUserId: assignment.employeeUserId,
         clientProfileId: assignment.clientProfileId,
         scope: dto.scope,
       });
+    }
+    if (nextIsActive) {
+      await this.assertAssignmentCanBeActive(assignment);
     }
 
     try {
@@ -225,6 +234,7 @@ export class AdminAssignmentsService {
     if (assignment.isActive) {
       return this.toAssignmentResponse(assignment);
     }
+    await this.assertAssignmentCanBeActive(assignment);
 
     const activatedAssignment = await this.prisma.employeeClientAssignment.update({
       where: { id: assignmentId },
@@ -251,14 +261,25 @@ export class AdminAssignmentsService {
   }
 
   private async assertClientProfileExists(clientProfileId: string): Promise<void> {
-    const clientProfile = await this.prisma.clientProfile.findUnique({
-      where: { id: clientProfileId },
+    const clientProfile = await this.prisma.clientProfile.findFirst({
+      where: {
+        id: clientProfileId,
+        status: ClientStatus.ACTIVE,
+      },
       select: { id: true },
     });
 
     if (!clientProfile) {
-      throw new BadRequestException("Client profile not found.");
+      throw new BadRequestException("Client profile not found or inactive.");
     }
+  }
+
+  private async assertAssignmentCanBeActive(identity: {
+    employeeUserId: string;
+    clientProfileId: string;
+  }): Promise<void> {
+    await this.assertEmployeeExists(identity.employeeUserId);
+    await this.assertClientProfileExists(identity.clientProfileId);
   }
 
   private async findAssignmentByIdentity(identity: AssignmentIdentity): Promise<{
@@ -280,13 +301,14 @@ export class AdminAssignmentsService {
     });
   }
 
-  private async getAssignmentIdentityOrFail(assignmentId: string): Promise<AssignmentIdentity> {
+  private async getAssignmentIdentityOrFail(assignmentId: string): Promise<AssignmentState> {
     const assignment = await this.prisma.employeeClientAssignment.findUnique({
       where: { id: assignmentId },
       select: {
         employeeUserId: true,
         clientProfileId: true,
         scope: true,
+        isActive: true,
       },
     });
 

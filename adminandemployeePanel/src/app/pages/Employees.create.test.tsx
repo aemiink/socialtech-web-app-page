@@ -3,6 +3,7 @@
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthUserProfile } from "../features/auth/authTypes";
 import type {
@@ -96,6 +97,14 @@ function openCreateModal() {
   fireEvent.click(screen.getByRole("button", { name: "Yeni Çalışan" }));
 }
 
+function renderEmployees() {
+  render(
+    <MemoryRouter>
+      <Employees />
+    </MemoryRouter>,
+  );
+}
+
 describe("Employees create employee modal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -112,7 +121,7 @@ describe("Employees create employee modal", () => {
       { isLoading: false },
     ]);
 
-    render(<Employees />);
+    renderEmployees();
     openCreateModal();
     fireEvent.click(screen.getByRole("button", { name: "Çalışan Oluştur" }));
 
@@ -133,7 +142,7 @@ describe("Employees create employee modal", () => {
       { isLoading: false },
     ]);
 
-    render(<Employees />);
+    renderEmployees();
     openCreateModal();
 
     fireEvent.change(screen.getByLabelText("Ad Soyad"), { target: { value: "Ali" } });
@@ -165,7 +174,7 @@ describe("Employees create employee modal", () => {
       { isLoading: false },
     ]);
 
-    render(<Employees />);
+    renderEmployees();
     openCreateModal();
 
     fireEvent.change(screen.getByLabelText("Ad Soyad"), {
@@ -222,7 +231,7 @@ describe("Employees create employee modal", () => {
       { isLoading: false },
     ]);
 
-    render(<Employees />);
+    renderEmployees();
     openCreateModal();
 
     await user.type(screen.getByLabelText("Ad Soyad"), "Yeni Uzman");

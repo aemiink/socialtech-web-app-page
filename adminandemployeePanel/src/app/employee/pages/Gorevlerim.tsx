@@ -1,13 +1,59 @@
+import type { ReactNode } from "react";
+import { useMemo } from "react";
 import { Card } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { CheckSquare, AlertCircle, Clock, FileText } from "lucide-react";
-import { tasks } from "../../data/mockData";
-
-const inProgressTasks = tasks.filter(t => t.status === "in-progress");
-const reviewTasks = tasks.filter(t => t.status === "review");
+import { selectCurrentUser } from "../../features/auth/authSelectors";
+import { useGetTasksQuery } from "../../features/tasks/tasksApi";
+import type { Task, TasksListQuery } from "../../features/tasks/tasksTypes";
+import {
+  extractApiErrorMessage,
+  formatDate,
+  formatDateTime,
+  getPriorityBadgeClass,
+  getPriorityLabel,
+  getTaskClientName,
+  getTaskStatusBadgeClass,
+  getTaskStatusLabel,
+  isTaskOverdue,
+} from "../../features/tasks/tasksUtils";
+import { useAppSelector } from "../../store/hooks";
 
 export function Gorevlerim() {
+  const currentUser = useAppSelector(selectCurrentUser);
+  const canReadAssignedTasks =
+    currentUser?.accountType === "EMPLOYEE" &&
+    currentUser.permissions.includes("tasks.read.assigned");
+
+  const tasksQuery = useMemo<TasksListQuery>(
+    () => ({
+      assigneeUserId: currentUser?.accountType === "EMPLOYEE" ? currentUser.id : undefined,
+    }),
+    [currentUser],
+  );
+
+  const {
+    data: tasksResponse,
+    error,
+    isError,
+    isFetching,
+    isLoading,
+    refetch,
+  } = useGetTasksQuery(tasksQuery, { skip: !canReadAssignedTasks });
+
+  if (!canReadAssignedTasks) {
+    return (
+      <Card className="border-red-500/30 bg-red-500/10 p-6 text-red-200">
+        Atanmış görevleri görüntüleme yetkiniz bulunmuyor.
+      </Card>
+    );
+  }
+
+  const assignedTasks = tasksResponse?.data ?? [];
+  const kpis = calculateTaskKpis(assignedTasks);
+  const metricValue = (value: number) => (isLoading || isError ? "—" : value);
+
   return (
     <div className="space-y-6">
       <div>
@@ -17,86 +63,196 @@ export function Gorevlerim() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <Card className="bg-[#1A1A1A] border-white/[0.06] p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <CheckSquare className="w-5 h-5 text-[#AAFF01]" />
-            <span className="text-sm text-[#A0A0A0]">Bugünkü Görev</span>
-          </div>
-          <div className="text-2xl font-semibold">{tasks.filter(t => new Date(t.deadline).toDateString() === new Date('2026-04-28').toDateString()).length}</div>
-        </Card>
-        <Card className="bg-[#1A1A1A] border-white/[0.06] p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <AlertCircle className="w-5 h-5 text-red-500" />
-            <span className="text-sm text-[#A0A0A0]">Geciken Görev</span>
-          </div>
-          <div className="text-2xl font-semibold text-red-500">0</div>
-        </Card>
-        <Card className="bg-[#1A1A1A] border-white/[0.06] p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <Clock className="w-5 h-5 text-[#AAFF01]" />
-            <span className="text-sm text-[#A0A0A0]">Bu Hafta Teslim</span>
-          </div>
-          <div className="text-2xl font-semibold">{tasks.length}</div>
-        </Card>
-        <Card className="bg-[#1A1A1A] border-white/[0.06] p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <FileText className="w-5 h-5 text-blue-500" />
-            <span className="text-sm text-[#A0A0A0]">İncelemede</span>
-          </div>
-          <div className="text-2xl font-semibold">{reviewTasks.length}</div>
-        </Card>
-        <Card className="bg-[#1A1A1A] border-white/[0.06] p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <CheckSquare className="w-5 h-5 text-[#AAFF01]" />
-            <span className="text-sm text-[#A0A0A0]">Tamamlanan</span>
-          </div>
-          <div className="text-2xl font-semibold">28</div>
-        </Card>
+        <MetricCard
+          icon={<CheckSquare className="w-5 h-5 text-[#AAFF01]" />}
+          label="Bugünkü Görev"
+          value={metricValue(kpis.today)}
+        />
+        <MetricCard
+          icon={<AlertCircle className="w-5 h-5 text-red-500" />}
+          label="Geciken Görev"
+          value={metricValue(kpis.overdue)}
+          valueClassName="text-red-500"
+        />
+        <MetricCard
+          icon={<Clock className="w-5 h-5 text-[#AAFF01]" />}
+          label="Bu Hafta Teslim"
+          value={metricValue(kpis.dueThisWeek)}
+        />
+        <MetricCard
+          icon={<FileText className="w-5 h-5 text-blue-500" />}
+          label="İncelemede"
+          value={metricValue(kpis.review)}
+        />
+        <MetricCard
+          icon={<CheckSquare className="w-5 h-5 text-[#AAFF01]" />}
+          label="Tamamlanan"
+          value={metricValue(kpis.done)}
+        />
       </div>
 
-      {/* Task Table */}
-      <Card className="bg-[#1A1A1A] border-white/[0.06] overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-[#202020]">
-              <tr>
-                <th className="text-left p-4 text-sm font-medium text-[#A0A0A0]">Görev</th>
-                <th className="text-left p-4 text-sm font-medium text-[#A0A0A0]">Müşteri</th>
-                <th className="text-left p-4 text-sm font-medium text-[#A0A0A0]">Hizmet</th>
-                <th className="text-left p-4 text-sm font-medium text-[#A0A0A0]">Öncelik</th>
-                <th className="text-left p-4 text-sm font-medium text-[#A0A0A0]">Deadline</th>
-                <th className="text-left p-4 text-sm font-medium text-[#A0A0A0]">Durum</th>
-                <th className="text-left p-4 text-sm font-medium text-[#A0A0A0]"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {tasks.map((task) => (
-                <tr key={task.id} className="border-t border-white/[0.06] hover:bg-white/5">
-                  <td className="p-4 font-medium">{task.title}</td>
-                  <td className="p-4 text-sm">{task.client}</td>
-                  <td className="p-4 text-sm">{task.project}</td>
-                  <td className="p-4">
-                    <Badge variant={task.priority === "critical" ? "destructive" : task.priority === "high" ? "default" : "secondary"}>
-                      {task.priority === "critical" ? "Kritik" : task.priority === "high" ? "Yüksek" : "Normal"}
-                    </Badge>
-                  </td>
-                  <td className="p-4 text-sm text-[#A0A0A0]">{new Date(task.deadline).toLocaleDateString('tr-TR')}</td>
-                  <td className="p-4">
-                    <Badge variant="outline">
-                      {task.status === "in-progress" ? "Devam Ediyor" :
-                       task.status === "review" ? "İncelemede" :
-                       task.status === "pending" ? "Bekliyor" : "Tamamlandı"}
-                    </Badge>
-                  </td>
-                  <td className="p-4">
-                    <Button size="sm" variant="outline">Detay</Button>
-                  </td>
+      {isLoading && (
+        <Card className="border-white/[0.06] bg-[#1A1A1A] p-8 text-center text-[#A0A0A0]">
+          Görevler yükleniyor...
+        </Card>
+      )}
+
+      {isError && !isLoading && (
+        <Card className="border-red-500/30 bg-red-500/10 p-6 text-center text-red-200">
+          <p>{extractApiErrorMessage(error, "Görevler alınamadı.")}</p>
+          <Button type="button" variant="outline" className="mt-4" onClick={() => refetch()}>
+            Tekrar Dene
+          </Button>
+        </Card>
+      )}
+
+      {!isLoading && !isError && assignedTasks.length === 0 && (
+        <Card className="border-white/[0.06] bg-[#1A1A1A] p-8 text-center text-[#A0A0A0]">
+          Henüz size atanmış görev bulunmuyor.
+        </Card>
+      )}
+
+      {!isLoading && !isError && assignedTasks.length > 0 && (
+        <Card className="bg-[#1A1A1A] border-white/[0.06] overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-[#202020]">
+                <tr>
+                  <th className="text-left p-4 text-sm font-medium text-[#A0A0A0]">Görev</th>
+                  <th className="text-left p-4 text-sm font-medium text-[#A0A0A0]">Müşteri</th>
+                  <th className="text-left p-4 text-sm font-medium text-[#A0A0A0]">Proje</th>
+                  <th className="text-left p-4 text-sm font-medium text-[#A0A0A0]">Öncelik</th>
+                  <th className="text-left p-4 text-sm font-medium text-[#A0A0A0]">Deadline</th>
+                  <th className="text-left p-4 text-sm font-medium text-[#A0A0A0]">Durum</th>
+                  <th className="text-left p-4 text-sm font-medium text-[#A0A0A0]"></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+              </thead>
+              <tbody>
+                {assignedTasks.map((task) => (
+                  <tr key={task.id} className="border-t border-white/[0.06] hover:bg-white/5">
+                    <td className="p-4 font-medium">{task.title}</td>
+                    <td className="p-4 text-sm">{getTaskClientName(task)}</td>
+                    <td className="p-4 text-sm">{task.project?.name ?? "—"}</td>
+                    <td className="p-4">
+                      <Badge className={getPriorityBadgeClass(task.priority)}>
+                        {getPriorityLabel(task.priority)}
+                      </Badge>
+                    </td>
+                    <td className="p-4 text-sm text-[#A0A0A0]">
+                      <span title={formatDateTime(task.dueDate)}>{formatDate(task.dueDate)}</span>
+                      {isTaskOverdue(task) && (
+                        <span className="ml-2 text-xs text-red-300">Gecikti</span>
+                      )}
+                    </td>
+                    <td className="p-4">
+                      <Badge className={getTaskStatusBadgeClass(task.status)}>
+                        {getTaskStatusLabel(task.status)}
+                      </Badge>
+                    </td>
+                    <td className="p-4">
+                      <Button type="button" size="sm" variant="outline">Detay</Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {!isLoading && !isError && isFetching && (
+        <p className="text-xs text-[#d2ff8a]">Görev listesi güncelleniyor...</p>
+      )}
     </div>
   );
+}
+
+type MetricCardProps = {
+  icon: ReactNode;
+  label: string;
+  value: ReactNode;
+  valueClassName?: string;
+};
+
+function MetricCard({ icon, label, value, valueClassName = "" }: MetricCardProps) {
+  return (
+    <Card className="bg-[#1A1A1A] border-white/[0.06] p-5">
+      <div className="flex items-center gap-3 mb-3">
+        {icon}
+        <span className="text-sm text-[#A0A0A0]">{label}</span>
+      </div>
+      <div className={`text-2xl font-semibold ${valueClassName}`}>{value}</div>
+    </Card>
+  );
+}
+
+type TaskKpis = {
+  today: number;
+  overdue: number;
+  dueThisWeek: number;
+  review: number;
+  done: number;
+};
+
+function calculateTaskKpis(tasks: Task[]): TaskKpis {
+  return {
+    today: tasks.filter((task) => isTaskDueToday(task)).length,
+    overdue: tasks.filter(isTaskOverdue).length,
+    dueThisWeek: tasks.filter((task) => isTaskDueThisWeek(task)).length,
+    review: tasks.filter((task) => task.status === "REVIEW").length,
+    done: tasks.filter((task) => task.status === "DONE").length,
+  };
+}
+
+function isTaskDueToday(task: Task): boolean {
+  const dueDate = parseTaskDueDate(task);
+
+  if (!dueDate) {
+    return false;
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  return dueDate.getTime() === today.getTime();
+}
+
+function isTaskDueThisWeek(task: Task): boolean {
+  const dueDate = parseTaskDueDate(task);
+
+  if (!dueDate) {
+    return false;
+  }
+
+  const { start, end } = getCurrentWeekRange();
+  return dueDate.getTime() >= start.getTime() && dueDate.getTime() <= end.getTime();
+}
+
+function parseTaskDueDate(task: Task): Date | null {
+  if (!task.dueDate) {
+    return null;
+  }
+
+  const dueDate = new Date(task.dueDate);
+  if (Number.isNaN(dueDate.getTime())) {
+    return null;
+  }
+
+  dueDate.setHours(0, 0, 0, 0);
+  return dueDate;
+}
+
+function getCurrentWeekRange(): { start: Date; end: Date } {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+
+  const day = start.getDay();
+  const daysSinceMonday = day === 0 ? 6 : day - 1;
+  start.setDate(start.getDate() - daysSinceMonday);
+
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
+
+  return { start, end };
 }

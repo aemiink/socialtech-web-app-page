@@ -17,6 +17,7 @@ import { Reports } from "./pages/Reports";
 import { ReportDetail } from "./pages/ReportDetail";
 import { Meetings } from "./pages/Meetings";
 import { Employees } from "./pages/Employees";
+import { EmployeeAssignments } from "./pages/EmployeeAssignments";
 import { EmployeeDetail } from "./pages/EmployeeDetail";
 import { AuditLogs } from "./pages/AuditLogs";
 import { Finance } from "./pages/Finance";
@@ -101,6 +102,7 @@ export const router = createBrowserRouter([
       { path: "raporlar/:id", Component: ReportDetail },
       { path: "toplantilar", Component: Meetings },
       { path: "calisanlar", Component: Employees },
+      { path: "calisanlar/atamalar", Component: EmployeeAssignments },
       { path: "calisanlar/:id", Component: EmployeeDetail },
       { path: "audit-loglari", Component: AuditLogs },
       { path: "finans", Component: Finance },

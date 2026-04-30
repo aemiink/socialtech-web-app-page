@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Plus, Search, ShieldAlert, UserCheck, UserCog, Users } from "lucide-react";
 import { Link } from "react-router";
-import { Plus, Search, ShieldAlert, UserCheck, Users } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -504,14 +504,22 @@ export function Employees() {
             Backend Admin Users API üzerinden ekip yönetimi
           </p>
         </div>
-        <Button
-          type="button"
-          className="gap-2 bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
-          onClick={openCreateModal}
-        >
-          <Plus className="h-4 w-4" />
-          Yeni Çalışan
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline" className="gap-2">
+            <Link to="/calisanlar/atamalar">
+              <UserCog className="h-4 w-4" />
+              Atamaları Yönet
+            </Link>
+          </Button>
+          <Button
+            type="button"
+            className="gap-2 bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
+            onClick={openCreateModal}
+          >
+            <Plus className="h-4 w-4" />
+            Yeni Çalışan
+          </Button>
+        </div>
       </div>
 
       {pageError && (

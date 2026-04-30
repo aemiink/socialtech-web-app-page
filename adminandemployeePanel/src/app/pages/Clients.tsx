@@ -149,8 +149,15 @@ export function Clients() {
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      setSearch(searchInput.trim());
-      setPage(1);
+      const nextSearch = searchInput.trim();
+      setSearch((previousSearch) => {
+        if (previousSearch === nextSearch) {
+          return previousSearch;
+        }
+
+        setPage(1);
+        return nextSearch;
+      });
     }, SEARCH_DEBOUNCE_MS);
 
     return () => {

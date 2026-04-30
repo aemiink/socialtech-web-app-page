@@ -104,6 +104,7 @@ Portal areas:
   - `PATCH /api/v1/admin/assignments/:id`
   - `PATCH /api/v1/admin/assignments/:id/deactivate`
   - `PATCH /api/v1/admin/assignments/:id/activate`
+  - assignment create/activate now fails closed for inactive employee or inactive client profile (`400`)
 - Projects and tasks API foundation is now active:
   - Projects: `GET /api/v1/projects`, `GET /api/v1/projects/:id`, `POST /api/v1/projects`, `PATCH /api/v1/projects/:id`
   - Tasks: `GET /api/v1/tasks`, `GET /api/v1/tasks/:id`, `POST /api/v1/tasks`, `PATCH /api/v1/tasks/:id`
@@ -114,7 +115,7 @@ Portal areas:
 - Employee users can read only active-assignment-scope projects/tasks and can update only `status` on tasks assigned to them within active assignment scope.
 - Client users can read only own `clientProfileId`-scope projects/tasks; out-of-scope detail access resolves as safe `404`.
 - Assignment admin endpoints are admin-only via `JwtAuthGuard` + `PermissionsGuard` + `RequirePermissions`, plus service-level `ADMIN` account/role and permission checks (`assignments.read`, `assignments.manage`).
-- Authz e2e matrix is now automated in backend tests and validated with real guard chain behavior (`6/6 suites`, `152/152` tests).
+- Authz e2e matrix is now automated in backend tests and validated with real guard chain behavior (`7/7 suites`, `168/168` tests).
 - Admin dashboard summary endpoint is active: `GET /api/v1/admin/summary` (permission: `admin.summary.read`).
 - Admin summary contract is now fixed and consumed by frontend as dedicated KPI source:
   - `users`: `total`, `active`, `inactive`, `employees`, `clients`, `admins`
@@ -150,6 +151,7 @@ Portal areas:
   - `adminandemployeePanel/src/app/features/auth/roleMapping.ts`
 - Domain API features (RTK Query via `baseApi.injectEndpoints`):
   - `adminandemployeePanel/src/app/features/dashboard/*` (`GET /admin/summary`)
+  - `adminandemployeePanel/src/app/features/adminAssignments/*` (`GET/POST/PATCH /admin/assignments*`)
   - `adminandemployeePanel/src/app/features/clients/*` (`GET /clients`, `GET /clients/:id`)
   - `adminandemployeePanel/src/app/features/projects/*` (`GET/POST/PATCH /projects*`)
   - `adminandemployeePanel/src/app/features/tasks/*` (`GET/POST/PATCH /tasks*`)
@@ -281,7 +283,7 @@ Current backend baseline includes:
   - DB safety guard in runner: strict test DB-name check (`_test`, `test_`, `testing`) with delimiter-aware matching
   - `ALLOW_E2E_DB_RESET=true` no longer bypasses DB-name safety check
   - Matrix suite currently covers users/clients/admin-summary/admin-assignments/projects/tasks/admin-user/admin-audit-logs/token-invalidation flows
-  - Latest authz pattern run: `6/6` suites, `152/152` tests passed
+  - Latest authz pattern run: `7/7` suites, `168/168` tests passed
 - Token strategy:
   - access token in response body (Bearer usage)
   - refresh token in HttpOnly cookie
@@ -295,8 +297,8 @@ Current backend baseline includes:
   - `npm run build` passed
   - `npm run check` passed
   - `npm run typecheck:spec` passed
-  - `DATABASE_URL=postgresql://ahmeteminkaya@localhost:5432/socialtech_test?schema=public ALLOW_E2E_DB_RESET=true npm run test:e2e:authz` passed (`6/6 suites`, `152/152 tests`, test DB name: `socialtech_test`)
-  - `adminandemployeePanel npm run build` / `npm run check` / `npm run test:run` passed (`10` test files, `82/82` tests)
+  - `DATABASE_URL=postgresql://ahmeteminkaya@localhost:5432/socialtech_test?schema=public ALLOW_E2E_DB_RESET=true npm run test:e2e:authz` passed (`7/7 suites`, `168/168 tests`, test DB name: `socialtech_test`)
+  - `adminandemployeePanel npm run build` / `npm run check` / `npm run test:run` passed (`15` test files, `115/115` tests)
   - manual auth flow tests passed (`login`, `me`, `refresh`, `logout`, `logout` sonrası `refresh=401`)
   - `server/tsconfig.build.json` uses `incremental: false` to avoid missing-module runtime issues from stale/incomplete dist output
 
@@ -546,3 +548,66 @@ Latest reported checks: `adminandemployeePanel npm run check`, `clientPanel npm 
 - Owner picker şu an genel admin users endpointini kullanıyor; dedicated owner-candidates endpoint planned.
 - Client deactivate sırasında owner user otomatik pasifleştirme policy henüz yok.
 - Vite bundle/chunk uyarısı devam edebilir (optimizasyon planned).
+
+## Update - 2026-04-30 (Employee Assignment UI Milestone)
+
+### Admin Panel Frontend
+- Yeni admin sayfası eklendi: `Çalışan Atamaları` (`/calisanlar/atamalar`).
+- `RootLayout` menüsüne `Atamalar` girdisi eklendi.
+- `Employees` sayfasına hızlı geçiş CTA’sı eklendi (`Atamaları Yönet`).
+- Assignment ekranı artık backend-driven:
+  - listeleme
+  - filtreleme (`employeeUserId`, `clientProfileId`, `scope`, `isActive`)
+  - create / update scope / activate / deactivate akışları
+  - loading / error / empty / success durumları
+  - permission-aware buton disable davranışları
+
+### RTK Query / API Integration
+- Yeni feature: `adminandemployeePanel/src/app/features/adminAssignments/*`
+  - `useGetAdminAssignmentsQuery`
+  - `useCreateAdminAssignmentMutation`
+  - `useUpdateAdminAssignmentMutation`
+  - `useDeactivateAdminAssignmentMutation`
+  - `useActivateAdminAssignmentMutation`
+- `baseApi` tag listesine `AdminAssignments` eklendi.
+- Assignment mutasyonları sonrası invalidation:
+  - `AdminAssignments`
+  - `AuditLogs`
+  - `AdminSummary`
+  - `Clients` (liste + ilgili client id)
+- Employee/client picker’larda debounced arama (275ms) kullanıldı:
+  - employee picker: `accountType=EMPLOYEE`, `isActive=true`, `limit=8`
+  - client picker: `status=ACTIVE`, `limit=8`
+
+### Auth & RBAC Summary
+- Frontend tarafında assignment ekranı `assignments.read` ve `assignments.manage` izinlerine göre davranıyor.
+- Backend tarafında assignment aktivasyon güvenliği güçlendirildi:
+  - inactive employee veya inactive client profile ile create/activate engelleniyor (`400`).
+- Route + service-level admin-only kontrol zinciri korunuyor.
+
+### Employee Panel Frontend
+- `employee/pages/Musterilerim.tsx` mock kaynaklardan çıkarılıp `GET /api/v1/clients` ile API-driven hale getirildi.
+- Employee assignment-scope davranışı backend’e bırakıldı; sayfa `clients.read.assigned` izniyle çalışıyor.
+- `employee/pages/Gorevlerim.tsx` mock görev datasından çıkarılıp `GET /api/v1/tasks` ile API-driven hale getirildi.
+- `Gorevlerim` query’i employee kullanıcı için `assigneeUserId=currentUser.id` gönderiyor ve `tasks.read.assigned` yoksa query `skip` ediliyor.
+
+### Frontend Testing
+- Yeni test dosyaları:
+  - `adminandemployeePanel/src/app/pages/__tests__/EmployeeAssignments.test.tsx`
+  - `adminandemployeePanel/src/app/employee/pages/__tests__/Musterilerim.test.tsx`
+  - `adminandemployeePanel/src/app/employee/pages/__tests__/Gorevlerim.test.tsx`
+- Coverage:
+  - assignment render/loading/empty
+  - create payload
+  - activate/deactivate
+  - permission-disabled states
+  - debounced employee/client query davranışı
+  - `Musterilerim` loading/error/empty/unauthorized + query skip
+  - `Gorevlerim` loading/error/empty/success/unauthorized + query param/skip
+- Son frontend checkpoint: `15/15` test file, `115/115` test passed.
+
+### Known Risks / Notes
+- Admin assignment list endpointinde sayfalama yok; veri büyüdükçe backend-side pagination gerekecek.
+- `Musterilerim` sayfasında `limit=100` geçici değer; büyük tenant’larda sayfalama ihtiyacı oluşabilir.
+- `Gorevlerim` tarafında status update UX bu milestone’da eklenmedi; sonraki adımda kontrollü şekilde `PATCH /tasks/:id` ile entegre edilebilir.
+- Frontend bundle/chunk warning devam ediyor (`>500kB` ana chunk), fonksiyonel bloklayıcı değil.

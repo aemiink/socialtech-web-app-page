@@ -1192,3 +1192,68 @@ Affected files:
 - Önleyici filtre:
   - listeden dönen CLIENT kullanıcıları içinde `clientProfile.id` dolu olanlar (varsa) picker’da elenir
   - backend yine de linked user için fail-safe reject (409) yapar
+
+---
+
+## 2026-04-30 - Employee Assignment UI Integration
+
+Context:
+Admin assignment management API (`/api/v1/admin/assignments`) backend’de hazırdı ancak admin panel tarafında assignment yönetimi için API-driven bir ekran bulunmuyordu. Employee panelde `Musterilerim` sayfası da hâlâ mock/static yaklaşımdan tamamen çıkmamıştı.
+
+Decision:
+- `adminandemployeePanel` içinde yeni admin ekranı eklendi: `Çalışan Atamaları` (`/calisanlar/atamalar`).
+- Mevcut `baseApi.injectEndpoints` pattern’i ile yeni `adminAssignments` feature katmanı eklendi:
+  - `useGetAdminAssignmentsQuery`
+  - `useCreateAdminAssignmentMutation`
+  - `useUpdateAdminAssignmentMutation`
+  - `useDeactivateAdminAssignmentMutation`
+  - `useActivateAdminAssignmentMutation`
+- Assignment ekranında:
+  - employee/client/scope/isActive filtreleri
+  - debounced employee picker (`accountType=EMPLOYEE`, `isActive=true`, `limit=8`)
+  - debounced client picker (`status=ACTIVE`, `limit=8`)
+  - create/edit/activate/deactivate akışları
+  - permission-aware UX (`assignments.read`, `assignments.manage`)
+  - loading/error/empty/success durumları
+- Scope kontrollü ikinci migration olarak employee `Musterilerim` sayfası backend `GET /clients` ile API-driven hale getirildi (assignment-scope veri).
+- Backend tarafında assignment aktivasyon güvenliği sıkılaştırıldı:
+  - inactive employee veya inactive client profile için assignment create/activate engeli (`400`).
+  - ilgili authz e2e senaryoları eklendi/güncellendi.
+
+Reason:
+Admin tarafında assignment lifecycle’ını gerçek API ile yönetilebilir hale getirirken, employee tarafında assignment-scope müşteri görünümünü mock’tan çıkarıp backend ile hizalamak; RBAC ve veri bütünlüğünü frontend + backend doğrulamasıyla birlikte korumak.
+
+Affected files:
+- `adminandemployeePanel/src/app/features/adminAssignments/*`
+- `adminandemployeePanel/src/app/pages/EmployeeAssignments.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/EmployeeAssignments.test.tsx`
+- `adminandemployeePanel/src/app/routes.tsx`
+- `adminandemployeePanel/src/app/components/RootLayout.tsx`
+- `adminandemployeePanel/src/app/pages/Employees.tsx`
+- `adminandemployeePanel/src/app/employee/pages/Musterilerim.tsx`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/Musterilerim.test.tsx`
+- `adminandemployeePanel/src/app/services/baseApi.ts`
+- `server/src/admin-assignments/admin-assignments.service.ts`
+- `server/test/authz.e2e-spec.ts`
+
+---
+
+## 2026-04-30 - Employee Tasks API Integration
+
+Context:
+Employee panelde `Gorevlerim` sayfası hâlâ mock/static görev verisi kullanıyordu. Backend tarafında `GET /api/v1/tasks` ve employee assignment-scope authorization hazırdı.
+
+Decision:
+- `Gorevlerim` sayfası mock veriden çıkarılıp `useGetTasksQuery` ile backend’e bağlandı.
+- Query employee kullanıcı için `assigneeUserId=currentUser.id` ile çağrılıyor.
+- Sayfa yalnızca `EMPLOYEE` + `tasks.read.assigned` durumunda query çalıştırıyor; aksi durumda `skip` + unauthorized state gösteriyor.
+- KPI kartları API’den dönen görevlerden hesaplanıyor (bugün, geciken, bu hafta teslim, incelemede, tamamlanan).
+- Loading / error / empty / success state’leri standart employee page pattern’iyle işlendi.
+- `Gorevlerim` için yeni frontend test dosyası eklendi.
+
+Reason:
+Employee görev görünümünü gerçek assignment-aware backend verisine taşımak, mock-data bağımlılığını azaltmak ve yetki davranışını frontend UX seviyesinde netleştirmek.
+
+Affected files:
+- `adminandemployeePanel/src/app/employee/pages/Gorevlerim.tsx`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/Gorevlerim.test.tsx`

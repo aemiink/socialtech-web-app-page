@@ -2,6 +2,7 @@ import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Test, TestingModule } from "@nestjs/testing";
 import {
+  AccountType,
   ClientStatus,
   EmployeeClientAssignmentScope,
   Priority,
@@ -9,6 +10,7 @@ import {
   ProjectStatus,
   TaskStatus,
   UserRole,
+  UserStatus,
 } from "@prisma/client";
 import { randomUUID } from "crypto";
 import cookieParser from "cookie-parser";
@@ -166,6 +168,8 @@ describe("Authorization Matrix (e2e)", () => {
   let clientToken = "";
 
   let allClientIds: string[] = [];
+  let activeClientIds: string[] = [];
+  let createdUnassignedActiveClientId: string | null = null;
   let clientOwnProfileId = "";
   let employeeAssignedClientIds: string[] = [];
   let employeeAssignedClientId = "";
@@ -216,10 +220,13 @@ describe("Authorization Matrix (e2e)", () => {
     clientToken = await loginWithDemoUser("client@socialtech.com");
 
     const clientProfiles = await prisma.clientProfile.findMany({
-      select: { id: true, slug: true },
+      select: { id: true, slug: true, status: true },
       orderBy: { companyName: "asc" },
     });
     allClientIds = clientProfiles.map((item) => item.id);
+    activeClientIds = clientProfiles
+      .filter((item) => item.status === ClientStatus.ACTIVE)
+      .map((item) => item.id);
     if (allClientIds.length < 2) {
       throw new Error("Expected at least 2 client profiles for authz e2e tests.");
     }
@@ -259,9 +266,23 @@ describe("Authorization Matrix (e2e)", () => {
 
     employeeAssignedAssignmentId = assignmentRows[0].id;
     employeeAssignedClientId = employeeAssignedClientIds[0];
-    const unassigned = allClientIds.find((clientId) => !employeeAssignedClientIds.includes(clientId));
+    let unassigned = activeClientIds.find(
+      (clientId) => !employeeAssignedClientIds.includes(clientId),
+    );
     if (!unassigned) {
-      throw new Error("Expected at least one unassigned client profile for performance employee.");
+      const generatedSlug = `authz-unassigned-${randomUUID()}`.toLowerCase();
+      const createdClient = await prisma.clientProfile.create({
+        data: {
+          slug: generatedSlug,
+          companyName: "Authz Unassigned Active Client",
+          status: ClientStatus.ACTIVE,
+        },
+        select: { id: true },
+      });
+      createdUnassignedActiveClientId = createdClient.id;
+      allClientIds.push(createdClient.id);
+      activeClientIds.push(createdClient.id);
+      unassigned = createdClient.id;
     }
     employeeUnassignedClientId = unassigned;
 
@@ -279,6 +300,12 @@ describe("Authorization Matrix (e2e)", () => {
     if (createdAssignmentId) {
       await prisma.employeeClientAssignment.deleteMany({
         where: { id: createdAssignmentId },
+      });
+    }
+
+    if (createdUnassignedActiveClientId) {
+      await prisma.clientProfile.deleteMany({
+        where: { id: createdUnassignedActiveClientId },
       });
     }
 
@@ -906,6 +933,61 @@ describe("Authorization Matrix (e2e)", () => {
     expectApiError(response.body, /client profile|not found/i);
   });
 
+  it("admin assignment create inactive employeeUserId ile oluşturamaz", async () => {
+    const inactiveEmployee = await prisma.user.create({
+      data: {
+        email: `inactive-assignment-${randomUUID()}@socialtech.test`,
+        displayName: "Inactive Assignment Employee",
+        passwordHash: await bcrypt.hash("demo123", 10),
+        accountType: AccountType.EMPLOYEE,
+        role: UserRole.DESIGNER,
+        status: UserStatus.INACTIVE,
+      },
+      select: { id: true },
+    });
+
+    try {
+      const response = await request(app.getHttpServer())
+        .post(ASSIGNMENT_BASE_PATH)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({
+          ...assignmentCreatePayload,
+          employeeUserId: inactiveEmployee.id,
+        })
+        .expect(400);
+
+      expectApiError(response.body, /employee|inactive|not found|not an employee/i);
+    } finally {
+      await prisma.user.deleteMany({ where: { id: inactiveEmployee.id } });
+    }
+  });
+
+  it("admin assignment create inactive clientProfileId ile oluşturamaz", async () => {
+    const inactiveClient = await prisma.clientProfile.create({
+      data: {
+        slug: `inactive-assignment-${randomUUID()}`,
+        companyName: "Inactive Assignment Client",
+        status: ClientStatus.INACTIVE,
+      },
+      select: { id: true },
+    });
+
+    try {
+      const response = await request(app.getHttpServer())
+        .post(ASSIGNMENT_BASE_PATH)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({
+          ...assignmentCreatePayload,
+          clientProfileId: inactiveClient.id,
+        })
+        .expect(400);
+
+      expectApiError(response.body, /client profile|inactive|not found/i);
+    } finally {
+      await prisma.clientProfile.deleteMany({ where: { id: inactiveClient.id } });
+    }
+  });
+
   it("admin assignment create CLIENT account employeeUserId ile oluşturamaz", async () => {
     const response = await request(app.getHttpServer())
       .post(ASSIGNMENT_BASE_PATH)
@@ -1028,6 +1110,48 @@ describe("Authorization Matrix (e2e)", () => {
       .expect(404);
 
     expectApiError(response.body, /assignment|not found/i);
+  });
+
+  it("admin assignment inactive client için PATCH veya activate ile aktif edemez", async () => {
+    const inactiveClient = await prisma.clientProfile.create({
+      data: {
+        slug: `inactive-activate-assignment-${randomUUID()}`,
+        companyName: "Inactive Activate Assignment Client",
+        status: ClientStatus.INACTIVE,
+      },
+      select: { id: true },
+    });
+    const inactiveAssignment = await prisma.employeeClientAssignment.create({
+      data: {
+        employeeUserId,
+        clientProfileId: inactiveClient.id,
+        scope: EmployeeClientAssignmentScope.DESIGN,
+        isActive: false,
+      },
+      select: { id: true },
+    });
+
+    try {
+      const updateResponse = await request(app.getHttpServer())
+        .patch(`${ASSIGNMENT_BASE_PATH}/${inactiveAssignment.id}`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ isActive: true })
+        .expect(400);
+
+      expectApiError(updateResponse.body, /client profile|inactive|not found/i);
+
+      const activateResponse = await request(app.getHttpServer())
+        .patch(`${ASSIGNMENT_BASE_PATH}/${inactiveAssignment.id}/activate`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .expect(400);
+
+      expectApiError(activateResponse.body, /client profile|inactive|not found/i);
+    } finally {
+      await prisma.employeeClientAssignment.deleteMany({
+        where: { id: inactiveAssignment.id },
+      });
+      await prisma.clientProfile.deleteMany({ where: { id: inactiveClient.id } });
+    }
   });
 
   it("admin assignment deactivate edebilir ve employee client detail erişimini kaybeder", async () => {

@@ -1,81 +1,185 @@
-import { Card } from "../../components/ui/card";
+import { useMemo } from "react";
+import { AlertCircle, Clock, RefreshCw, Users } from "lucide-react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
-import { Users, TrendingUp, AlertCircle } from "lucide-react";
-import { clients, projects } from "../../data/mockData";
+import { Card } from "../../components/ui/card";
+import { useGetClientsQuery } from "../../features/clients/clientsApi";
+import type { ClientsListQuery } from "../../features/clients/clientsTypes";
+import {
+  extractApiErrorMessage,
+  formatClientDate,
+  formatClientDateTime,
+  getClientStatusBadgeClass,
+  getClientStatusLabel,
+} from "../../features/clients/clientsUtils";
+import { selectCurrentUser } from "../../features/auth/authSelectors";
+import { useAppSelector } from "../../store/hooks";
 
-const activeClients = clients.filter(c => c.status === "active");
-const riskyClients = clients.filter(c => c.riskLevel === "high" || c.riskLevel === "medium");
-const activeProjects = projects.filter(p => p.status === "in-progress");
+const ASSIGNED_CLIENTS_LIMIT = 100;
 
 export function Musterilerim() {
+  const currentUser = useAppSelector(selectCurrentUser);
+  const canReadAssignedClients =
+    currentUser?.accountType === "EMPLOYEE" &&
+    currentUser.permissions.includes("clients.read.assigned");
+
+  const clientsQuery = useMemo<ClientsListQuery>(
+    () => ({
+      status: "ACTIVE",
+      limit: ASSIGNED_CLIENTS_LIMIT,
+      sortBy: "name",
+      sortOrder: "asc",
+    }),
+    [],
+  );
+
+  const {
+    data: clientsResponse,
+    error,
+    isError,
+    isFetching,
+    isLoading,
+    refetch,
+  } = useGetClientsQuery(clientsQuery, { skip: !canReadAssignedClients });
+
+  if (!canReadAssignedClients) {
+    return (
+      <Card className="border-red-500/30 bg-red-500/10 p-6 text-red-200">
+        Atanmış müşteri listesini görüntüleme yetkiniz bulunmuyor.
+      </Card>
+    );
+  }
+
+  const clients = clientsResponse?.data ?? [];
+  const totalClients = clientsResponse?.meta.total ?? clients.length;
+  const recentlyUpdatedCount = clients.filter((client) =>
+    isWithinLastDays(client.updatedAt, 30),
+  ).length;
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold mb-1">Müşterilerim</h1>
-        <p className="text-[#A0A0A0]">Sorumlu olduğum müşteriler</p>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="mb-1 text-2xl font-semibold">Müşterilerim</h1>
+          <p className="text-[#A0A0A0]">Aktif atamalarınıza bağlı müşteri profilleri</p>
+        </div>
+        <Button type="button" variant="outline" className="gap-2" onClick={() => refetch()}>
+          <RefreshCw className="h-4 w-4" />
+          Yenile
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="bg-[#1A1A1A] border-white/[0.06] p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <Users className="w-5 h-5 text-[#AAFF01]" />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <Card className="border-white/[0.06] bg-[#1A1A1A] p-5">
+          <div className="mb-3 flex items-center gap-3">
+            <Users className="h-5 w-5 text-[#AAFF01]" />
             <span className="text-sm text-[#A0A0A0]">Aktif Müşteri</span>
           </div>
-          <div className="text-2xl font-semibold">{activeClients.length}</div>
-        </Card>
-        <Card className="bg-[#1A1A1A] border-white/[0.06] p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <TrendingUp className="w-5 h-5 text-[#AAFF01]" />
-            <span className="text-sm text-[#A0A0A0]">Aktif Proje</span>
+          <div className="text-2xl font-semibold">
+            {isLoading || isError ? "—" : totalClients}
           </div>
-          <div className="text-2xl font-semibold">{activeProjects.length}</div>
         </Card>
-        <Card className="bg-[#1A1A1A] border-white/[0.06] p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <AlertCircle className="w-5 h-5 text-orange-500" />
-            <span className="text-sm text-[#A0A0A0]">Dikkat Gerekli</span>
+        <Card className="border-white/[0.06] bg-[#1A1A1A] p-5">
+          <div className="mb-3 flex items-center gap-3">
+            <Clock className="h-5 w-5 text-[#AAFF01]" />
+            <span className="text-sm text-[#A0A0A0]">Son 30 Gün Güncellenen</span>
           </div>
-          <div className="text-2xl font-semibold text-orange-500">{riskyClients.length}</div>
+          <div className="text-2xl font-semibold">
+            {isLoading || isError ? "—" : recentlyUpdatedCount}
+          </div>
+        </Card>
+        <Card className="border-white/[0.06] bg-[#1A1A1A] p-5">
+          <div className="mb-3 flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-orange-400" />
+            <span className="text-sm text-[#A0A0A0]">Liste Durumu</span>
+          </div>
+          <div className="text-2xl font-semibold">
+            {isFetching && !isLoading ? "Güncelleniyor" : "Hazır"}
+          </div>
         </Card>
       </div>
 
-      <Card className="bg-[#1A1A1A] border-white/[0.06] overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-[#202020]">
-              <tr>
-                <th className="text-left p-4 text-sm font-medium text-[#A0A0A0]">Müşteri</th>
-                <th className="text-left p-4 text-sm font-medium text-[#A0A0A0]">Hizmetler</th>
-                <th className="text-left p-4 text-sm font-medium text-[#A0A0A0]">Açık Görev</th>
-                <th className="text-left p-4 text-sm font-medium text-[#A0A0A0]">Son İletişim</th>
-                <th className="text-left p-4 text-sm font-medium text-[#A0A0A0]">Durum</th>
-                <th className="text-left p-4 text-sm font-medium text-[#A0A0A0]"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {clients.map((client) => (
-                <tr key={client.id} className="border-t border-white/[0.06] hover:bg-white/5">
-                  <td className="p-4 font-medium">{client.name}</td>
-                  <td className="p-4 text-sm text-[#A0A0A0]">{client.services.join(", ")}</td>
-                  <td className="p-4">
-                    <Badge variant="outline">{client.activeProjects} proje</Badge>
-                  </td>
-                  <td className="p-4 text-sm text-[#A0A0A0]">1 gün önce</td>
-                  <td className="p-4">
-                    <Badge variant={client.riskLevel === "low" ? "default" : "destructive"} className={client.riskLevel === "low" ? "bg-[#AAFF01] text-[#131313]" : ""}>
-                      {client.riskLevel === "low" ? "Aktif" : "Dikkat"}
-                    </Badge>
-                  </td>
-                  <td className="p-4">
-                    <Button size="sm" variant="outline">Detay</Button>
-                  </td>
+      {isLoading && (
+        <Card className="border-white/[0.06] bg-[#1A1A1A] p-8 text-center text-[#A0A0A0]">
+          Müşteriler yükleniyor...
+        </Card>
+      )}
+
+      {isError && !isLoading && (
+        <Card className="border-red-500/30 bg-red-500/10 p-6 text-center text-red-200">
+          <p>{extractApiErrorMessage(error, "Müşteriler alınamadı.")}</p>
+          <Button type="button" variant="outline" className="mt-4" onClick={() => refetch()}>
+            Tekrar Dene
+          </Button>
+        </Card>
+      )}
+
+      {!isLoading && !isError && clients.length === 0 && (
+        <Card className="border-white/[0.06] bg-[#1A1A1A] p-8 text-center text-[#A0A0A0]">
+          Henüz atanmış aktif müşteri bulunmuyor.
+        </Card>
+      )}
+
+      {!isLoading && !isError && clients.length > 0 && (
+        <Card className="overflow-hidden border-white/[0.06] bg-[#1A1A1A]">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-[#202020]">
+                <tr>
+                  <th className="p-4 text-left text-sm font-medium text-[#A0A0A0]">Müşteri</th>
+                  <th className="p-4 text-left text-sm font-medium text-[#A0A0A0]">Portal Slug</th>
+                  <th className="p-4 text-left text-sm font-medium text-[#A0A0A0]">İletişim</th>
+                  <th className="p-4 text-left text-sm font-medium text-[#A0A0A0]">Durum</th>
+                  <th className="p-4 text-left text-sm font-medium text-[#A0A0A0]">Oluşturulma</th>
+                  <th className="p-4 text-left text-sm font-medium text-[#A0A0A0]">Güncelleme</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+              </thead>
+              <tbody>
+                {clients.map((client) => (
+                  <tr
+                    key={client.id}
+                    className="border-t border-white/[0.06] transition-colors hover:bg-white/5"
+                  >
+                    <td className="p-4 font-medium text-white">{client.companyName}</td>
+                    <td className="p-4">
+                      <Badge variant="outline" className="font-mono text-xs">
+                        {client.slug}
+                      </Badge>
+                    </td>
+                    <td className="p-4 text-sm text-[#A0A0A0]">
+                      {client.contactEmail ?? "—"}
+                    </td>
+                    <td className="p-4">
+                      <Badge className={getClientStatusBadgeClass(client.status)}>
+                        {getClientStatusLabel(client.status)}
+                      </Badge>
+                    </td>
+                    <td className="p-4 text-sm text-[#A0A0A0]">
+                      {formatClientDate(client.createdAt)}
+                    </td>
+                    <td className="p-4 text-sm text-[#A0A0A0]">
+                      {formatClientDateTime(client.updatedAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
     </div>
   );
+}
+
+function isWithinLastDays(value: string, days: number): boolean {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return false;
+  }
+
+  const threshold = new Date();
+  threshold.setDate(threshold.getDate() - days);
+
+  return date >= threshold;
 }
