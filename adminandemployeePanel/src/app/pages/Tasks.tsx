@@ -35,6 +35,7 @@ import {
   hasAdminPermission,
   selectCurrentUser,
 } from "../features/auth/authSelectors";
+import { useGetAdminAssignmentsQuery } from "../features/adminAssignments/adminAssignmentsApi";
 import { useGetAdminUsersQuery } from "../features/adminUsers/adminUsersApi";
 import type {
   AdminUser,
@@ -215,11 +216,23 @@ export function Tasks() {
 
   const updateCreateForm = (field: TaskFormField, value: TaskFormValue) => {
     setCreateSubmitError(null);
+    if (field === "projectId") {
+      setCreateSelectedAssignee(null);
+      setCreateForm((prev) => ({ ...prev, [field]: value, assigneeUserId: "" }));
+      return;
+    }
+
     setCreateForm((prev) => ({ ...prev, [field]: value }));
   };
 
   const updateEditForm = (field: TaskFormField, value: TaskFormValue) => {
     setEditSubmitError(null);
+    if (field === "projectId") {
+      setEditSelectedAssignee(null);
+      setEditForm((prev) => (prev ? { ...prev, [field]: value, assigneeUserId: "" } : prev));
+      return;
+    }
+
     setEditForm((prev) => (prev ? { ...prev, [field]: value } : prev));
   };
 
@@ -657,6 +670,7 @@ function TaskFormFields({
   disabled: boolean;
 }) {
   const projectOptions = getProjectOptions(projects, form.projectId);
+  const selectedProject = projects.find((project) => project.id === form.projectId);
 
   return (
     <>
@@ -752,6 +766,7 @@ function TaskFormFields({
             label="Atanan Çalışan"
             selectedAssignee={selectedAssignee}
             selectedAssigneeId={form.assigneeUserId}
+            selectedClientProfileId={selectedProject?.clientProfileId ?? ""}
             onSelect={onAssigneeSelect}
             onClear={onAssigneeClear}
             disabled={disabled}
@@ -778,6 +793,7 @@ function EmployeePicker({
   label,
   selectedAssignee,
   selectedAssigneeId,
+  selectedClientProfileId,
   onSelect,
   onClear,
   disabled,
@@ -786,6 +802,7 @@ function EmployeePicker({
   label: string;
   selectedAssignee: AssigneeSelection | null;
   selectedAssigneeId: string;
+  selectedClientProfileId?: string;
   onSelect: (employee: AdminUser) => void;
   onClear: () => void;
   disabled: boolean;
@@ -822,9 +839,36 @@ function EmployeePicker({
     refetch,
   } = useGetAdminUsersQuery(employeeQuery);
 
-  const employees = (employeesResponse?.data ?? []).filter(
+  const normalizedSelectedClientProfileId =
+    typeof selectedClientProfileId === "string" ? selectedClientProfileId.trim() : "";
+  const shouldQueryAssignments =
+    normalizedSelectedClientProfileId.length > 0 && isValidUuid(normalizedSelectedClientProfileId);
+  const {
+    data: assignmentsResponse,
+    isError: isAssignmentsError,
+    isFetching: isAssignmentsFetching,
+    isLoading: isAssignmentsLoading,
+  } = useGetAdminAssignmentsQuery(
+    shouldQueryAssignments
+      ? {
+          clientProfileId: normalizedSelectedClientProfileId,
+          isActive: true,
+        }
+      : undefined,
+    { skip: !shouldQueryAssignments },
+  );
+
+  const assignmentScopedEmployeeIds = new Set(
+    (assignmentsResponse ?? []).map((assignment) => assignment.employeeUserId),
+  );
+
+  const baseEmployees = (employeesResponse?.data ?? []).filter(
     (employee) => employee.accountType === "EMPLOYEE" && employee.status === "ACTIVE",
   );
+  const shouldApplyAssignmentFilter = shouldQueryAssignments && !isAssignmentsError;
+  const employees = shouldApplyAssignmentFilter
+    ? baseEmployees.filter((employee) => assignmentScopedEmployeeIds.has(employee.id))
+    : baseEmployees;
   const selectedLabel = selectedAssignee
     ? formatAssigneeSelection(selectedAssignee)
     : selectedAssigneeId
@@ -859,7 +903,13 @@ function EmployeePicker({
         <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-2 text-xs text-[#A0A0A0]">
           <span>Aktif çalışanlar</span>
           {isFetching && !isLoading && <span>Güncelleniyor...</span>}
+          {isAssignmentsFetching && !isAssignmentsLoading && <span>Atama kontrolü...</span>}
         </div>
+        {shouldQueryAssignments && isAssignmentsError && (
+          <div className="border-b border-white/[0.06] px-3 py-2 text-xs text-orange-200">
+            Atama filtresi alınamadı, tüm aktif çalışanlar listeleniyor.
+          </div>
+        )}
         {isLoading && <div className="px-3 py-3 text-sm text-[#A0A0A0]">Çalışanlar yükleniyor...</div>}
         {!isLoading && isError && (
           <div className="space-y-2 px-3 py-3 text-sm text-red-200">
@@ -871,7 +921,11 @@ function EmployeePicker({
         )}
         {!isLoading && !isError && employees.length === 0 && (
           <div className="px-3 py-3 text-sm text-[#A0A0A0]">
-            {search ? "Aramaya uygun aktif çalışan bulunamadı." : "Aktif çalışan bulunamadı."}
+            {search
+              ? "Aramaya uygun aktif çalışan bulunamadı."
+              : shouldApplyAssignmentFilter
+                ? "Bu müşteriye atanmış aktif çalışan bulunamadı."
+                : "Aktif çalışan bulunamadı."}
           </div>
         )}
         {!isLoading && !isError && employees.length > 0 && (

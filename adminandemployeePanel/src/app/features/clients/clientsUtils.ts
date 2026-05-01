@@ -668,8 +668,8 @@ function normalizeClientSummaryMeta(value: unknown): ClientSummaryResponse["meta
   };
 }
 
-function isDefined<T>(value: T | null): value is T {
-  return value !== null;
+function isDefined<T>(value: T | null | undefined): value is T {
+  return value !== null && value !== undefined;
 }
 
 function readNested(value: unknown, key: string): unknown {

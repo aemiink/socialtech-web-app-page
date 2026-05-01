@@ -12,6 +12,7 @@ import {
   PlayCircle,
   RefreshCw,
   Search,
+  UserCog,
   UserPlus,
   Users,
   X,
@@ -40,6 +41,18 @@ import type {
   AdminUser,
   AdminUsersListQuery,
 } from "../features/adminUsers/adminUsersTypes";
+import { getRoleLabel, isActiveStatus } from "../features/adminUsers/adminUsersUtils";
+import {
+  useCreateAdminAssignmentMutation,
+} from "../features/adminAssignments/adminAssignmentsApi";
+import type {
+  AdminAssignmentScope,
+  CreateAdminAssignmentRequest,
+} from "../features/adminAssignments/adminAssignmentsTypes";
+import {
+  ADMIN_ASSIGNMENT_SCOPE_OPTIONS,
+  getAssignmentScopeLabel,
+} from "../features/adminAssignments/adminAssignmentsUtils";
 import {
   useActivateAdminClientMutation,
   useCreateAdminClientMutation,
@@ -90,11 +103,16 @@ const CLIENT_SORT_OPTIONS: Array<{ value: ClientsSortBy; label: string }> = [
 
 const SEARCH_DEBOUNCE_MS = 275;
 const OWNER_PICKER_LIMIT = 8;
+const EMPLOYEE_PICKER_LIMIT = 8;
 const EXISTING_OWNER_REQUIRED_MESSAGE = "Bağlanacak mevcut portal sahibini seçin.";
 
 type ClientStatusFilter = ClientStatus | "ALL";
 type ClientOwnerMode = "NONE" | "CREATE" | "LINK_EXISTING";
 type PendingClientStatusAction = "activate" | "deactivate";
+type AssignmentFormState = {
+  employee: AdminUser | null;
+  scope: AdminAssignmentScope;
+};
 
 type ClientFormState = {
   name: string;
@@ -123,9 +141,15 @@ const initialClientForm: ClientFormState = {
   purchasedServices: [],
 };
 
+const initialAssignmentForm: AssignmentFormState = {
+  employee: null,
+  scope: "PROJECT",
+};
+
 export function Clients() {
   const currentUser = useAppSelector(selectCurrentUser);
   const canManageClients = hasAdminPermission(currentUser, ["clients.manage"]);
+  const canManageAssignments = hasAdminPermission(currentUser, ["assignments.manage"]);
   const canReadAdminUsers = hasAdminPermission(currentUser, ["users.manage"]);
 
   const [selectedClient, setSelectedClient] = useState<ClientProfile | null>(null);
@@ -155,6 +179,10 @@ export function Clients() {
     action: PendingClientStatusAction;
   } | null>(null);
   const [statusSubmitError, setStatusSubmitError] = useState<string | null>(null);
+
+  const [assignmentTargetClient, setAssignmentTargetClient] = useState<ClientProfile | null>(null);
+  const [assignmentForm, setAssignmentForm] = useState<AssignmentFormState>(initialAssignmentForm);
+  const [assignmentSubmitError, setAssignmentSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -203,6 +231,8 @@ export function Clients() {
   const [activateAdminClient, { isLoading: isActivating }] = useActivateAdminClientMutation();
   const [createOrLinkClientOwner, { isLoading: isLinkingOwner }] =
     useCreateOrLinkClientOwnerMutation();
+  const [createAdminAssignment, { isLoading: isCreatingAssignment }] =
+    useCreateAdminAssignmentMutation();
 
   const clients = clientsResponse?.data ?? [];
   const responsePage = currentClientsResponse?.meta.page;
@@ -227,7 +257,12 @@ export function Clients() {
     (client) => isDateInCurrentMonth(client.createdAt) || isWithinLastDays(client.updatedAt, 30),
   ).length;
   const isMutating =
-    isCreating || isUpdating || isDeactivating || isActivating || isLinkingOwner;
+    isCreating ||
+    isUpdating ||
+    isDeactivating ||
+    isActivating ||
+    isLinkingOwner ||
+    isCreatingAssignment;
 
   const kpiCards = [
     {
@@ -407,6 +442,58 @@ export function Clients() {
   function closeStatusDialog() {
     setStatusActionTarget(null);
     setStatusSubmitError(null);
+  }
+
+  function openAssignmentDialog(client: ClientProfile) {
+    setPageError(null);
+    setPageSuccess(null);
+    setAssignmentSubmitError(null);
+    setAssignmentTargetClient(client);
+    setAssignmentForm(initialAssignmentForm);
+  }
+
+  function closeAssignmentDialog() {
+    setAssignmentTargetClient(null);
+    setAssignmentSubmitError(null);
+    setAssignmentForm(initialAssignmentForm);
+  }
+
+  async function handleCreateAssignmentSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!assignmentTargetClient || isCreatingAssignment) {
+      return;
+    }
+
+    setAssignmentSubmitError(null);
+    setPageError(null);
+    setPageSuccess(null);
+
+    if (!canReadAdminUsers) {
+      setAssignmentSubmitError("Çalışan listesini görmek için `users.manage` yetkisi gerekir.");
+      return;
+    }
+
+    if (!assignmentForm.employee) {
+      setAssignmentSubmitError("Atanacak çalışanı seçin.");
+      return;
+    }
+
+    const payload: CreateAdminAssignmentRequest = {
+      employeeUserId: assignmentForm.employee.id,
+      clientProfileId: assignmentTargetClient.id,
+      scope: assignmentForm.scope,
+    };
+
+    try {
+      await createAdminAssignment(payload).unwrap();
+      closeAssignmentDialog();
+      setPageSuccess("Çalışan ataması başarıyla oluşturuldu.");
+    } catch (error) {
+      setAssignmentSubmitError(
+        extractApiErrorMessage(error, "Çalışan ataması oluşturulamadı. Lütfen tekrar deneyin."),
+      );
+    }
   }
 
   async function handleStatusActionConfirm() {
@@ -695,6 +782,22 @@ export function Clients() {
                           <Button
                             type="button"
                             size="sm"
+                            variant="outline"
+                            className="gap-2"
+                            onClick={() => openAssignmentDialog(client)}
+                            disabled={!canManageAssignments || isMutating}
+                            title={
+                              canManageAssignments
+                                ? undefined
+                                : "Bu işlem için assignments.manage yetkisi gerekir."
+                            }
+                          >
+                            <UserCog className="h-4 w-4" />
+                            Çalışan Ata
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
                             variant={nextStatusAction === "deactivate" ? "destructive" : "outline"}
                             className="gap-2"
                             onClick={() => openStatusDialog(client)}
@@ -933,6 +1036,96 @@ export function Clients() {
                   : "Aktifleştir"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(assignmentTargetClient)}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeAssignmentDialog();
+          }
+        }}
+      >
+        <DialogContent className="border-white/[0.08] bg-[#1A1A1A] text-white">
+          <DialogHeader>
+            <DialogTitle>Çalışan Ata</DialogTitle>
+            <DialogDescription className="text-[#A0A0A0]">
+              {assignmentTargetClient
+                ? `${assignmentTargetClient.companyName} müşterisi için aktif çalışan ataması oluşturun.`
+                : "Müşteri için çalışan ataması oluşturun."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleCreateAssignmentSubmit} className="space-y-4" noValidate>
+            {assignmentSubmitError && (
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+                {assignmentSubmitError}
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="client-assignment-scope">Atama Kapsamı</Label>
+              <SelectControl
+                id="client-assignment-scope"
+                ariaLabel="Atama Kapsamı"
+                value={assignmentForm.scope}
+                onChange={(value) =>
+                  setAssignmentForm((previous) => ({
+                    ...previous,
+                    scope: value as AdminAssignmentScope,
+                  }))
+                }
+                disabled={isCreatingAssignment}
+              >
+                {ADMIN_ASSIGNMENT_SCOPE_OPTIONS.map((scopeOption) => (
+                  <option key={scopeOption} value={scopeOption}>
+                    {getAssignmentScopeLabel(scopeOption)}
+                  </option>
+                ))}
+              </SelectControl>
+            </div>
+
+            <AssignmentEmployeePicker
+              idPrefix="client-assignment-employee"
+              selectedEmployee={assignmentForm.employee}
+              onSelect={(employee) =>
+                setAssignmentForm((previous) => ({ ...previous, employee }))
+              }
+              onClear={() =>
+                setAssignmentForm((previous) => ({ ...previous, employee: null }))
+              }
+              disabled={isCreatingAssignment || !canReadAdminUsers}
+              helperText={
+                canReadAdminUsers
+                  ? undefined
+                  : "Çalışan listesini görmek için `users.manage` yetkisi gerekir."
+              }
+            />
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={closeAssignmentDialog}
+                disabled={isCreatingAssignment}
+              >
+                Vazgeç
+              </Button>
+              <Button
+                type="submit"
+                className="bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
+                disabled={isCreatingAssignment || !canManageAssignments}
+                title={
+                  canManageAssignments
+                    ? undefined
+                    : "Bu işlem için assignments.manage yetkisi gerekir."
+                }
+              >
+                {isCreatingAssignment ? "Kaydediliyor..." : "Atamayı Oluştur"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>
@@ -1327,6 +1520,167 @@ function ClientOwnerPicker({
                     </span>
                     <span className="block truncate text-xs text-[#A0A0A0]">
                       {owner.email}
+                    </span>
+                  </span>
+                  <Badge
+                    variant={isSelected ? "default" : "outline"}
+                    className={isSelected ? "bg-[#AAFF01] text-[#131313]" : undefined}
+                  >
+                    {isSelected ? "Seçili" : "Seç"}
+                  </Badge>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AssignmentEmployeePicker({
+  idPrefix,
+  selectedEmployee,
+  onSelect,
+  onClear,
+  disabled,
+  helperText,
+}: {
+  idPrefix: string;
+  selectedEmployee: AdminUser | null;
+  onSelect: (employee: AdminUser) => void;
+  onClear: () => void;
+  disabled: boolean;
+  helperText?: string;
+}) {
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setSearch(searchInput.trim());
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [searchInput]);
+
+  const employeeQuery = useMemo<AdminUsersListQuery>(
+    () => ({
+      accountType: "EMPLOYEE",
+      isActive: true,
+      limit: EMPLOYEE_PICKER_LIMIT,
+      search: search.length > 0 ? search : undefined,
+    }),
+    [search],
+  );
+
+  const {
+    data: employeesResponse,
+    error: employeesError,
+    isError: isEmployeesError,
+    isFetching: isEmployeesFetching,
+    isLoading: isEmployeesLoading,
+    refetch,
+  } = useGetAdminUsersQuery(employeeQuery);
+
+  const employees = (employeesResponse?.data ?? []).filter(
+    (employee) => employee.accountType === "EMPLOYEE" && isActiveStatus(employee.status),
+  );
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <Label htmlFor={`${idPrefix}-search`}>Çalışan Ara</Label>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#A0A0A0]" />
+          <Input
+            id={`${idPrefix}-search`}
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
+            className="border-white/[0.08] bg-[#202020] pl-10"
+            placeholder="Çalışan adı veya e-posta ara..."
+            disabled={disabled}
+          />
+        </div>
+      </div>
+
+      {helperText && <p className="text-xs text-[#A0A0A0]">{helperText}</p>}
+
+      {selectedEmployee && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#AAFF01]/30 bg-[#AAFF01]/10 px-3 py-2">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className="bg-[#AAFF01] text-[#131313]">Seçili çalışan</Badge>
+              <span className="truncate text-sm font-medium text-white">
+                {formatOwnerDisplayName(selectedEmployee)}
+              </span>
+            </div>
+            <p className="mt-1 truncate text-xs text-[#d2ff8a]">
+              {selectedEmployee.email} · {getRoleLabel(selectedEmployee.role)}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="gap-1 text-[#d2ff8a]"
+            onClick={onClear}
+            disabled={disabled}
+          >
+            <X className="h-3 w-3" />
+            Seçimi Temizle
+          </Button>
+        </div>
+      )}
+
+      <div className="rounded-lg border border-white/[0.06] bg-[#202020]">
+        <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-2 text-xs text-[#A0A0A0]">
+          <span>Aktif çalışanlar</span>
+          {isEmployeesFetching && !isEmployeesLoading && <span>Güncelleniyor...</span>}
+        </div>
+
+        {isEmployeesLoading && (
+          <div className="px-3 py-4 text-sm text-[#A0A0A0]">Çalışanlar yükleniyor...</div>
+        )}
+
+        {!isEmployeesLoading && isEmployeesError && (
+          <div className="space-y-3 px-3 py-4 text-sm text-red-200">
+            <p>{extractApiErrorMessage(employeesError, "Çalışanlar alınamadı.")}</p>
+            <Button type="button" variant="outline" size="sm" onClick={() => refetch()}>
+              Tekrar Dene
+            </Button>
+          </div>
+        )}
+
+        {!isEmployeesLoading && !isEmployeesError && employees.length === 0 && (
+          <div className="px-3 py-4 text-sm text-[#A0A0A0]">
+            {search.length > 0 ? "Aramaya uygun çalışan bulunamadı." : "Aktif çalışan bulunamadı."}
+          </div>
+        )}
+
+        {!isEmployeesLoading && !isEmployeesError && employees.length > 0 && (
+          <div className="max-h-56 divide-y divide-white/[0.06] overflow-y-auto">
+            {employees.map((employee) => {
+              const isSelected = selectedEmployee?.id === employee.id;
+              return (
+                <button
+                  key={employee.id}
+                  type="button"
+                  className={`flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50 ${
+                    isSelected ? "bg-[#AAFF01]/10" : ""
+                  }`}
+                  onClick={() => onSelect(employee)}
+                  disabled={disabled}
+                  aria-label={`Çalışanı seç: ${formatOwnerDisplayName(employee)} ${employee.email}`}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium text-white">
+                      {formatOwnerDisplayName(employee)}
+                    </span>
+                    <span className="block truncate text-xs text-[#A0A0A0]">
+                      {employee.email} · {getRoleLabel(employee.role)}
                     </span>
                   </span>
                   <Badge

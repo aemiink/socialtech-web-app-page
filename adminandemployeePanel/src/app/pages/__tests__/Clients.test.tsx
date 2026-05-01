@@ -19,6 +19,10 @@ import type {
   CreateOrLinkClientOwnerRequest,
   UpdateAdminClientRequest,
 } from "../../features/clients/clientsTypes";
+import type {
+  AdminAssignment,
+  CreateAdminAssignmentRequest,
+} from "../../features/adminAssignments/adminAssignmentsTypes";
 import { Clients } from "../Clients";
 
 type MutationResponse<T> = {
@@ -60,6 +64,10 @@ type CreateOrLinkClientOwnerTrigger = (payload: {
   body: CreateOrLinkClientOwnerRequest;
 }) => MutationResponse<ClientProfile>;
 
+type CreateAdminAssignmentTrigger = (
+  payload: CreateAdminAssignmentRequest,
+) => MutationResponse<AdminAssignment>;
+
 const mockUseGetClientsQuery = vi.fn<(query: ClientsListQuery) => ClientsQueryResult>();
 const mockUseGetAdminUsersQuery = vi.fn<
   (query: AdminUsersListQuery) => AdminUsersQueryResult
@@ -79,6 +87,9 @@ const mockUseActivateAdminClientMutation = vi.fn<
 const mockUseCreateOrLinkClientOwnerMutation = vi.fn<
   () => [CreateOrLinkClientOwnerTrigger, { isLoading: boolean }]
 >();
+const mockUseCreateAdminAssignmentMutation = vi.fn<
+  () => [CreateAdminAssignmentTrigger, { isLoading: boolean }]
+>();
 
 let currentUser: AuthUserProfile | null = null;
 
@@ -97,6 +108,10 @@ vi.mock("../../features/clients/clientsApi", () => ({
 
 vi.mock("../../features/adminUsers/adminUsersApi", () => ({
   useGetAdminUsersQuery: (query: AdminUsersListQuery) => mockUseGetAdminUsersQuery(query),
+}));
+
+vi.mock("../../features/adminAssignments/adminAssignmentsApi", () => ({
+  useCreateAdminAssignmentMutation: () => mockUseCreateAdminAssignmentMutation(),
 }));
 
 const client: ClientProfile = {
@@ -128,13 +143,18 @@ const adminUser: AuthUserProfile = {
   accountType: "ADMIN",
   role: "ADMIN",
   status: "ACTIVE",
-  permissions: ["clients.manage", "clients.read", "users.manage"],
+  permissions: ["clients.manage", "clients.read", "users.manage", "assignments.manage"],
   clientProfile: null,
 };
 
 const adminWithoutClientManagePermission: AuthUserProfile = {
   ...adminUser,
-  permissions: ["clients.read"],
+  permissions: ["clients.read", "users.manage", "assignments.manage"],
+};
+
+const adminWithoutAssignmentManagePermission: AuthUserProfile = {
+  ...adminUser,
+  permissions: ["clients.manage", "clients.read", "users.manage"],
 };
 
 const existingClientOwner: AdminUser = {
@@ -260,6 +280,30 @@ function setupMutationState() {
     }),
   }));
 
+  const createAdminAssignment = vi.fn<CreateAdminAssignmentTrigger>((payload) => ({
+    unwrap: async () => ({
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      employeeUserId: payload.employeeUserId,
+      clientProfileId: payload.clientProfileId,
+      scope: payload.scope,
+      isActive: true,
+      createdAt: "2026-04-30T10:00:00.000Z",
+      updatedAt: "2026-04-30T10:00:00.000Z",
+      employee: {
+        id: payload.employeeUserId,
+        email: "employee@example.com",
+        displayName: "Employee User",
+        role: "PROJECT_MANAGER",
+        accountType: "EMPLOYEE",
+      },
+      client: {
+        id: payload.clientProfileId,
+        slug: "acme-e-ticaret",
+        name: "Acme E-ticaret",
+      },
+    }),
+  }));
+
   mockUseCreateAdminClientMutation.mockReturnValue([createAdminClient, { isLoading: false }]);
   mockUseUpdateAdminClientMutation.mockReturnValue([updateAdminClient, { isLoading: false }]);
   mockUseDeactivateAdminClientMutation.mockReturnValue([
@@ -271,6 +315,10 @@ function setupMutationState() {
     createOrLinkClientOwner,
     { isLoading: false },
   ]);
+  mockUseCreateAdminAssignmentMutation.mockReturnValue([
+    createAdminAssignment,
+    { isLoading: false },
+  ]);
 
   return {
     createAdminClient,
@@ -278,6 +326,7 @@ function setupMutationState() {
     deactivateAdminClient,
     activateAdminClient,
     createOrLinkClientOwner,
+    createAdminAssignment,
   };
 }
 
@@ -380,6 +429,11 @@ function renderClients() {
       <Clients />
     </MemoryRouter>,
   );
+}
+
+function openAssignmentDialog() {
+  fireEvent.click(screen.getByRole("button", { name: "Çalışan Ata" }));
+  return screen.getByRole("dialog", { name: "Çalışan Ata" });
 }
 
 function openCreateDialog() {
@@ -581,7 +635,16 @@ describe("Clients", () => {
 
     expect(screen.getByRole("button", { name: "Yeni Müşteri Ekle" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Düzenle" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Çalışan Ata" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Aktifleştir" })).toBeEnabled();
+  });
+
+  it("disables assignment action without assignments.manage permission", () => {
+    currentUser = adminWithoutAssignmentManagePermission;
+
+    renderClients();
+
+    expect(screen.getByRole("button", { name: "Çalışan Ata" })).toBeDisabled();
   });
 
   it("shows purchased service badges in list and preview", () => {
@@ -729,6 +792,58 @@ describe("Clients", () => {
       "mode",
       "userId",
     ]);
+  });
+
+  it("requires selecting employee before creating assignment", async () => {
+    const { createAdminAssignment } = setupMutationState();
+
+    renderClients();
+    const dialog = openAssignmentDialog();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Atamayı Oluştur" }));
+
+    expect(await within(dialog).findByText("Atanacak çalışanı seçin.")).toBeInTheDocument();
+    expect(createAdminAssignment).not.toHaveBeenCalled();
+  });
+
+  it("creates assignment payload with selected employee and scope", async () => {
+    const { createAdminAssignment } = setupMutationState();
+    const employeeCandidate: AdminUser = {
+      id: "99999999-9999-4999-8999-999999999999",
+      email: "employee@example.com",
+      displayName: "Employee User",
+      accountType: "EMPLOYEE",
+      role: "PROJECT_MANAGER",
+      status: "ACTIVE",
+      lastLoginAt: null,
+      createdAt: "2026-04-10T10:00:00.000Z",
+      updatedAt: "2026-04-20T10:00:00.000Z",
+    };
+    setupOwnerPickerState({
+      data: {
+        data: [employeeCandidate],
+        meta: defaultAdminUsersResponse.meta,
+      },
+    });
+
+    renderClients();
+    const dialog = openAssignmentDialog();
+
+    fireEvent.change(within(dialog).getByLabelText("Atama Kapsamı"), {
+      target: { value: "DEVELOPMENT" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /employee@example.com/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Atamayı Oluştur" }));
+
+    await waitFor(() => {
+      expect(createAdminAssignment).toHaveBeenCalledTimes(1);
+    });
+    expect(createAdminAssignment).toHaveBeenCalledWith({
+      employeeUserId: employeeCandidate.id,
+      clientProfileId: client.id,
+      scope: "DEVELOPMENT",
+    });
+    expect(await screen.findByText("Çalışan ataması başarıyla oluşturuldu.")).toBeInTheDocument();
   });
 
   it("submits create client without owner payload when owner mode is NONE", async () => {

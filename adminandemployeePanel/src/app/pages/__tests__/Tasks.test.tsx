@@ -6,6 +6,10 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
+  AdminAssignmentsListQuery,
+  AdminAssignmentsListResponse,
+} from "../../features/adminAssignments/adminAssignmentsTypes";
+import type {
   AdminUser,
   AdminUsersListQuery,
   AdminUsersListResponse,
@@ -52,6 +56,15 @@ type AdminUsersQueryResult = {
   refetch: () => void;
 };
 
+type AdminAssignmentsQueryResult = {
+  data?: AdminAssignmentsListResponse;
+  error?: unknown;
+  isError: boolean;
+  isLoading: boolean;
+  isFetching: boolean;
+  refetch: () => void;
+};
+
 type CreateTaskTrigger = (payload: CreateTaskRequest) => MutationResponse<Task>;
 
 type UpdateTaskTrigger = (payload: {
@@ -67,6 +80,9 @@ const mockUseGetProjectsQuery = vi.fn<
 >();
 const mockUseGetAdminUsersQuery = vi.fn<
   (query: AdminUsersListQuery) => AdminUsersQueryResult
+>();
+const mockUseGetAdminAssignmentsQuery = vi.fn<
+  (query?: AdminAssignmentsListQuery) => AdminAssignmentsQueryResult
 >();
 
 let currentUser: AuthUserProfile | null = null;
@@ -87,6 +103,11 @@ vi.mock("../../features/projects/projectsApi", () => ({
 
 vi.mock("../../features/adminUsers/adminUsersApi", () => ({
   useGetAdminUsersQuery: (query: AdminUsersListQuery) => mockUseGetAdminUsersQuery(query),
+}));
+
+vi.mock("../../features/adminAssignments/adminAssignmentsApi", () => ({
+  useGetAdminAssignmentsQuery: (query?: AdminAssignmentsListQuery) =>
+    mockUseGetAdminAssignmentsQuery(query),
 }));
 
 const clientProfileId = "11111111-1111-4111-8111-111111111111";
@@ -217,6 +238,30 @@ const adminUsersResponse: AdminUsersListResponse = {
   },
 };
 
+const assignmentsResponse: AdminAssignmentsListResponse = [
+  {
+    id: "77777777-7777-4777-8777-777777777777",
+    employeeUserId: assigneeUserId,
+    clientProfileId,
+    scope: "DEVELOPMENT",
+    isActive: true,
+    createdAt: "2026-04-20T10:00:00.000Z",
+    updatedAt: "2026-04-29T10:00:00.000Z",
+    employee: {
+      id: assigneeUserId,
+      email: employeeUser.email,
+      displayName: employeeUser.displayName,
+      role: employeeUser.role,
+      accountType: employeeUser.accountType,
+    },
+    client: {
+      id: clientProfileId,
+      slug: "acme-e-ticaret",
+      name: "Acme E-ticaret",
+    },
+  },
+];
+
 function setupPointerMocks() {
   Object.defineProperty(window.HTMLElement.prototype, "hasPointerCapture", {
     configurable: true,
@@ -254,6 +299,18 @@ function setupProjectsState(response: ProjectsListResponse = projectsResponse) {
 function setupEmployeesState(overrides: Partial<AdminUsersQueryResult> = {}) {
   mockUseGetAdminUsersQuery.mockReturnValue({
     data: adminUsersResponse,
+    error: undefined,
+    isError: false,
+    isLoading: false,
+    isFetching: false,
+    refetch: vi.fn(),
+    ...overrides,
+  });
+}
+
+function setupAssignmentsState(overrides: Partial<AdminAssignmentsQueryResult> = {}) {
+  mockUseGetAdminAssignmentsQuery.mockReturnValue({
+    data: assignmentsResponse,
     error: undefined,
     isError: false,
     isLoading: false,
@@ -342,6 +399,7 @@ describe("Tasks", () => {
     setupTasksState();
     setupProjectsState();
     setupEmployeesState();
+    setupAssignmentsState();
     setupMutationState();
   });
 
