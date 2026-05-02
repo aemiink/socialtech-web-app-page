@@ -36,10 +36,8 @@ export function Gorevlerim() {
     currentUser.permissions.includes("tasks.read.assigned");
 
   const tasksQuery = useMemo<TasksListQuery>(
-    () => ({
-      assigneeUserId: currentUser?.accountType === "EMPLOYEE" ? currentUser.id : undefined,
-    }),
-    [currentUser],
+    () => ({}),
+    [],
   );
 
   const {
@@ -65,11 +63,6 @@ export function Gorevlerim() {
   const metricValue = (value: number) => (isLoading || isError ? "—" : value);
 
   async function handleTodoToggle(task: Task, todo: TaskTodo) {
-    if (!currentUser || task.assigneeUserId !== currentUser.id) {
-      setTodoActionError("Yalnızca size atanmış görevlerin todo durumunu değiştirebilirsiniz.");
-      return;
-    }
-
     setTodoActionError(null);
 
     try {
@@ -87,7 +80,7 @@ export function Gorevlerim() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold mb-1">Görevlerim</h1>
-        <p className="text-[#A0A0A0]">Bana atanan tüm görevler</p>
+        <p className="text-[#A0A0A0]">Atama kapsamımdaki görevler</p>
       </div>
 
       {/* KPI Cards */}
@@ -143,7 +136,7 @@ export function Gorevlerim() {
 
       {!isLoading && !isError && assignedTasks.length === 0 && (
         <Card className="border-white/[0.06] bg-[#1A1A1A] p-8 text-center text-[#A0A0A0]">
-          Henüz size atanmış görev bulunmuyor.
+          Atama kapsamınızda görev bulunmuyor.
         </Card>
       )}
 
@@ -167,7 +160,24 @@ export function Gorevlerim() {
                 {assignedTasks.map((task) => (
                   <tr key={task.id} className="border-t border-white/[0.06] hover:bg-white/5">
                     <td className="max-w-[360px] p-4">
-                      <div className="font-medium">{task.title}</div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">{task.title}</span>
+                        <Badge
+                          className={
+                            task.assigneeUserId === currentUser?.id
+                              ? "bg-[#AAFF01] text-[#131313]"
+                              : task.assigneeUserId
+                                ? "border-blue-400/40 bg-blue-500/15 text-blue-200"
+                                : "border-white/[0.12] bg-white/[0.04] text-[#A0A0A0]"
+                          }
+                        >
+                          {task.assigneeUserId === currentUser?.id
+                            ? "Bana Atandı"
+                            : task.assigneeUserId
+                              ? "Ekip Görevi"
+                              : "Atanmamış"}
+                        </Badge>
+                      </div>
                       <TaskTodoPreview
                         task={task}
                         disabled={isTogglingTodo}

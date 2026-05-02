@@ -110,9 +110,11 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
   let employeeOwnTaskOriginalStatus: TaskStatus = TaskStatus.TODO;
   let taskWithMixedTodosId = "";
   let employeeOwnTaskTodoId = "";
-  let employeeOtherTaskId = "";
-  let employeeOtherTaskProjectId = "";
-  let employeeOtherTaskTodoId = "";
+  let employeeScopedOtherTaskId = "";
+  let employeeScopedOtherTaskProjectId = "";
+  let employeeScopedOtherTaskTodoId = "";
+  let employeeOutOfScopeTaskId = "";
+  let employeeOutOfScopeTaskTodoId = "";
   let clientVisibleTodoId = "";
   let createdProjectId = "";
   const taskStatusRestores: TaskStatusRestore[] = [];
@@ -432,7 +434,7 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
     taskStatusRestores.push({ taskId: employeeOwnTaskId, status: employeeOwnTaskOriginalStatus });
   });
 
-  it("employee can toggle a todo only on own assigned task", async () => {
+  it("employee can toggle todos on tasks within assignment scope", async () => {
     const todoBefore = await getTaskTodoState(employeeOwnTaskTodoId);
     taskTodoRestores.push({
       todoId: employeeOwnTaskTodoId,
@@ -454,8 +456,29 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
     expect(todo.completedByUserId).toBe(nextIsCompleted ? employeeUserId : null);
     expectCompletionMatchesTodos(task);
 
+    const scopedTodoBefore = await getTaskTodoState(employeeScopedOtherTaskTodoId);
+    taskTodoRestores.push({
+      todoId: employeeScopedOtherTaskTodoId,
+      isCompleted: scopedTodoBefore.isCompleted,
+      completedAt: scopedTodoBefore.completedAt,
+      completedByUserId: scopedTodoBefore.completedByUserId,
+    });
+
+    const scopedNextIsCompleted = !scopedTodoBefore.isCompleted;
+    const scopedResponse = await request(app.getHttpServer())
+      .patch(`${TASKS_PATH}/${employeeScopedOtherTaskId}/todos/${employeeScopedOtherTaskTodoId}/toggle`)
+      .set("Authorization", `Bearer ${employeeToken}`)
+      .send({ isCompleted: scopedNextIsCompleted })
+      .expect(200);
+
+    const scopedTask = expectTaskResponse(scopedResponse.body);
+    const scopedTodo = expectTodoById(scopedTask, employeeScopedOtherTaskTodoId);
+    expect(scopedTodo.isCompleted).toBe(scopedNextIsCompleted);
+    expect(scopedTodo.completedByUserId).toBe(scopedNextIsCompleted ? employeeUserId : null);
+    expectCompletionMatchesTodos(scopedTask);
+
     await request(app.getHttpServer())
-      .patch(`${TASKS_PATH}/${employeeOtherTaskId}/todos/${employeeOtherTaskTodoId}/toggle`)
+      .patch(`${TASKS_PATH}/${employeeOutOfScopeTaskId}/todos/${employeeOutOfScopeTaskTodoId}/toggle`)
       .set("Authorization", `Bearer ${employeeToken}`)
       .send({ isCompleted: true })
       .expect(404);
@@ -463,12 +486,12 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
 
   it("employee cannot update another task title, assignee, or project", async () => {
     await request(app.getHttpServer())
-      .patch(`${TASKS_PATH}/${employeeOtherTaskId}`)
+      .patch(`${TASKS_PATH}/${employeeScopedOtherTaskId}`)
       .set("Authorization", `Bearer ${employeeToken}`)
       .send({
         title: "Unauthorized title change",
         assigneeUserId: employeeUserId,
-        projectId: employeeOtherTaskProjectId,
+        projectId: employeeScopedOtherTaskProjectId,
       })
       .expect(403);
   });
@@ -629,20 +652,47 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
     const ownTodo = await findOrCreateTodoForTask(employeeOwnTaskId, "Employee Own");
     employeeOwnTaskTodoId = ownTodo.id;
 
-    const employeeOtherTask = await prisma.task.findFirst({
+    const employeeScopedOtherTask = await prisma.task.findFirst({
       where: {
         assigneeUserId: { not: employeeUserId },
+        project: {
+          clientProfileId: { in: employeeAssignedClientIds },
+        },
       },
       select: { id: true, projectId: true },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
-    if (!employeeOtherTask) {
-      throw new Error("Expected at least one task not assigned to the performance employee.");
+    if (!employeeScopedOtherTask) {
+      throw new Error(
+        "Expected at least one scoped task that is not directly assigned to the performance employee.",
+      );
     }
-    employeeOtherTaskId = employeeOtherTask.id;
-    employeeOtherTaskProjectId = employeeOtherTask.projectId;
-    const otherTodo = await findOrCreateTodoForTask(employeeOtherTaskId, "Employee Other");
-    employeeOtherTaskTodoId = otherTodo.id;
+    employeeScopedOtherTaskId = employeeScopedOtherTask.id;
+    employeeScopedOtherTaskProjectId = employeeScopedOtherTask.projectId;
+    const scopedOtherTodo = await findOrCreateTodoForTask(
+      employeeScopedOtherTaskId,
+      "Employee Scoped Other",
+    );
+    employeeScopedOtherTaskTodoId = scopedOtherTodo.id;
+
+    const employeeOutOfScopeTask = await prisma.task.findFirst({
+      where: {
+        project: {
+          clientProfileId: { notIn: employeeAssignedClientIds },
+        },
+      },
+      select: { id: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    if (!employeeOutOfScopeTask) {
+      throw new Error("Expected at least one task outside performance employee assignment scope.");
+    }
+    employeeOutOfScopeTaskId = employeeOutOfScopeTask.id;
+    const outOfScopeTodo = await findOrCreateTodoForTask(
+      employeeOutOfScopeTaskId,
+      "Employee Out Of Scope",
+    );
+    employeeOutOfScopeTaskTodoId = outOfScopeTodo.id;
 
     const mixedTodoTask = await prisma.task.findFirst({
       where: {

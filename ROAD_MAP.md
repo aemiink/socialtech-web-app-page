@@ -17,6 +17,7 @@
 - Todo audit logging
 - Dashboard fail-fast contract validation decision (normalize-to-default vs throw-on-malformed)
 - Employee assignment analytics/reporting cards (summary endpoint support)
+- Visual QA screenshot artifacts for critical role flows
 - Bundle/code splitting optimization
 - Platform integrations: Meta/TikTok/Amazon Ads
 
@@ -44,6 +45,7 @@
 - Client owner user create/link
 - Client audit logging
 - Admin Client Owner Picker UI
+- Clients quick employee assignment entry (list-row action)
 - Clients/Dashboard store+baseApi integration tests
 - Clients search debounce
 - Radix Dialog ref warning cleanup
@@ -61,6 +63,8 @@
 - Task assignee picker (manual ID input kaldırıldı)
 - Task todo/checklist backend model/API
 - Employee todo toggle/progress UI
+- Employee task scope visibility fix (forced assignee filter removal)
+- Employee todo toggle scope alignment (assignment scope)
 - Client-visible task progress UI
 - Related backend e2e tests (projects/tasks/todo/authz)
 - Related frontend tests (admin, employee, client portal)
@@ -72,7 +76,7 @@ None identified.
 ## Notes
 
 - Latest backend validation checkpoint: `7/7` authz suites, `176/176` tests.
-- Latest admin/employee frontend validation checkpoint: `15` test files, `120/120` tests.
+- Latest admin/employee frontend validation checkpoint: `15` test files, `124/124` tests.
 - Latest client portal frontend validation checkpoint: `1` test file, `6/6` tests.
 - Summary query optimization and summary-side cache/TTL remain relevant follow-ups as data volume grows.
 ## 2026-04-29 Checkpoint
@@ -128,7 +132,10 @@ None identified.
 - [x] Task todo/checklist endpointleri + completion/progress hesapları
 - [x] Employee todo toggle/progress akışı
 - [x] Client-visible todo/progress render akışı
-- [x] Related validation: backend `176/176`, admin/employee frontend `120/120`, client portal `6/6`
+- [x] Clients list üzerinden hızlı çalışan atama (quick assignment entry)
+- [x] Employee görev görünürlüğü assignment scope ile hizalandı (`assigneeUserId` zorunlu filtre kaldırıldı)
+- [x] Employee todo toggle yetkisi assignment scope ile hizalandı (out-of-scope safe `404`)
+- [x] Related validation: backend `176/176`, admin/employee frontend `124/124`, client portal `6/6`
 
 ### Planned
 - [ ] Employee task status update UX integration (`PATCH /tasks/:id`, scope keep-small)
@@ -136,3 +143,4 @@ None identified.
 - [ ] Assignment-scoped assignee candidates endpoint
 - [ ] Dedicated owner candidates endpoint + frontend migration
 - [ ] Todo audit logging
+- [ ] Visual QA screenshot artifact üretimi (admin/employee/client kritik akışlar)

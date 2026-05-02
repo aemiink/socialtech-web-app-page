@@ -530,3 +530,23 @@ The `client/` directory is the public/marketing Social Tech website, not the Cli
 - `clientPanel/src/app/features/tasks/tasksUtils.ts`
 - `clientPanel/src/app/__tests__/client-portal.test.tsx`
 - `clientPanel/src/test/setup.ts`
+
+## 2026-05-01 Update Map (Clients Quick Assignment + Employee Task Scope Alignment)
+
+### Admin + Employee Panel Frontend
+- `adminandemployeePanel/src/app/pages/Clients.tsx`
+  - client satırından hızlı "Çalışan Ata" aksiyonu
+  - müşteri bağlamında küçük assignment modal akışı
+- `adminandemployeePanel/src/app/pages/__tests__/Clients.test.tsx`
+  - hızlı assignment açılışı, payload ve permission davranışı testleri
+- `adminandemployeePanel/src/app/employee/pages/Gorevlerim.tsx`
+  - employee görev sorgusunda zorunlu `assigneeUserId` filtresi kaldırıldı
+  - assignment scope görünürlüğü + ekip görevi badge ayrımı
+- `adminandemployeePanel/src/app/employee/pages/__tests__/Gorevlerim.test.tsx`
+  - scope tabanlı listeleme ve scoped-team todo toggle testleri
+
+### Backend
+- `server/src/tasks/tasks.service.ts`
+  - employee todo toggle yetkisi assignment scope davranışıyla hizalandı
+- `server/test/projects-tasks-authz.e2e-spec.ts`
+  - scoped-other ve out-of-scope toggle ayrımıyla authz matris güncellemesi

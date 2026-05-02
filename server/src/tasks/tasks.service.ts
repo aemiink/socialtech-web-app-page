@@ -440,7 +440,6 @@ export class TasksService {
     const task = await this.prisma.task.findFirst({
       where: {
         id: taskId,
-        assigneeUserId: currentUser.id,
         project: {
           clientProfile: {
             employeeAssignments: {

@@ -1352,3 +1352,48 @@ Affected files:
 - `adminandemployeePanel/src/app/employee/pages/Gorevlerim.tsx`
 - `clientPanel/src/app/components/client-visible-tasks-section.tsx`
 - `clientPanel/src/app/features/tasks/*`
+
+---
+
+## 2026-05-01 - Clients Quick Employee Assignment Entry
+
+Context:
+Admin kullanıcılar müşteri satırında hızlıca çalışan ataması başlatmak istiyordu; mevcut akışta yalnızca ayrı `Çalışan Atamaları` ekranına gidip işlem yapmak gerekiyordu.
+
+Decision:
+- `Clients` listesinde her müşteri satırına `Çalışan Ata` aksiyonu eklendi.
+- Bu aksiyon, ilgili müşteri için scope + employee seçimi alan küçük bir modal açıyor.
+- Employee adayları mevcut admin users endpointinden (`accountType=EMPLOYEE`, `isActive=true`) searchable picker ile getiriliyor.
+- Oluşturma işlemi doğrudan `POST /api/v1/admin/assignments` ile yapılıyor.
+- Permission-aware UX korundu:
+  - `assignments.manage` yoksa aksiyon disabled.
+  - `users.manage` yoksa employee picker kullanılabilir değil.
+
+Reason:
+Müşteri operasyonunda assignment adımını kısaltmak, admin panelde context switch ihtiyacını azaltmak ve atama hızını artırmak.
+
+Affected files:
+- `adminandemployeePanel/src/app/pages/Clients.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/Clients.test.tsx`
+
+---
+
+## 2026-05-01 - Employee Task Scope Visibility and Todo Toggle Alignment
+
+Context:
+`Gorevlerim` sayfası frontend tarafında `assigneeUserId=currentUser.id` filtresi gönderdiği için assignment scope içindeki ancak kullanıcıya doğrudan atanmamış görevler görünmüyordu. Ek olarak todo toggle kontrolü backend’de yalnızca own-assigned görevlerde çalışıyordu.
+
+Decision:
+- Employee `Gorevlerim` query’sinden zorunlu `assigneeUserId` filtresi kaldırıldı; görev görünürlüğü backend assignment-scope kuralına bırakıldı.
+- Backend `toggle task todo` yetkisi own-assigned kısıtından assignment-scope kuralına hizalandı.
+- Scope dışı todo toggle davranışı safe `404` olarak korundu.
+- Employee task **status update** kuralı değişmedi: status mutation hâlâ own-assigned task sınırında.
+
+Reason:
+Listeleme, görüntüleme ve todo toggle davranışını aynı authorization modelinde (assignment scope) tutarlı hale getirmek; frontend filtre kaynaklı yanlış-negatif görev görünmezliğini kaldırmak.
+
+Affected files:
+- `adminandemployeePanel/src/app/employee/pages/Gorevlerim.tsx`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/Gorevlerim.test.tsx`
+- `server/src/tasks/tasks.service.ts`
+- `server/test/projects-tasks-authz.e2e-spec.ts`

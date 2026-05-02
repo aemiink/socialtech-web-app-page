@@ -613,7 +613,7 @@ Latest reported checks: `adminandemployeePanel npm run check`, `clientPanel npm 
 - `employee/pages/Musterilerim.tsx` mock kaynaklardan çıkarılıp `GET /api/v1/clients` ile API-driven hale getirildi.
 - Employee assignment-scope davranışı backend’e bırakıldı; sayfa `clients.read.assigned` izniyle çalışıyor.
 - `employee/pages/Gorevlerim.tsx` mock görev datasından çıkarılıp `GET /api/v1/tasks` ile API-driven hale getirildi.
-- `Gorevlerim` query’i employee kullanıcı için `assigneeUserId=currentUser.id` gönderiyor ve `tasks.read.assigned` yoksa query `skip` ediliyor.
+- `Gorevlerim` query’i assignment-scope görünürlüğe hizalıdır (forced `assigneeUserId` filtresi kaldırıldı) ve `tasks.read.assigned` yoksa query `skip` ediliyor.
 
 ### Frontend Testing
 - Yeni test dosyaları:
@@ -697,3 +697,36 @@ Latest reported checks: `adminandemployeePanel npm run check`, `clientPanel npm 
 - Owner picker hâlâ admin users endpointine bağlı; dedicated owner-candidates endpoint planned.
 - Todo audit logging henüz genişletilmedi (mutation authz + data visibility uygulanmış durumda).
 - Bundle/chunk warningleri fonksiyonel bloklayıcı değil ama performans iyileştirme backlog’unda kalmalı.
+
+## Update - 2026-05-01 (Task Scope + Todo Toggle Fix, Clients Quick Assignment)
+
+### Admin Panel Frontend
+- `Clients` listesine müşteri satırı üzerinden hızlı atama aksiyonu eklendi (`Çalışan Ata`).
+- Hızlı atama modalı, scope + employee picker ile `POST /api/v1/admin/assignments` çağrısı yapar.
+- Permission-aware davranış:
+  - `assignments.manage` yoksa aksiyon disabled.
+  - `users.manage` yoksa employee picker erişimi engellenir.
+
+### Employee Panel Frontend
+- `Gorevlerim` sayfası artık assignment scope içindeki görevleri backend’den doğrudan listeler; frontend forced assignee filtresi kaldırıldı.
+- Todo kartlarında görev sahipliği badge’i eklendi (`Bana Atandı`, `Ekip Görevi`, `Atanmamış`).
+- Todo toggle akışı scope içi görevlerde çalışır; scope dışı çağrılar backend tarafından güvenli şekilde engellenir.
+
+### Auth & RBAC Summary
+- Employee task visibility: active assignment scope.
+- Employee todo toggle: active assignment scope.
+- Employee task status update: yalnızca own-assigned task (değişmedi).
+- Bu ayrım backend service-level guardlarla korunur ve e2e testlerle doğrulanır.
+
+### RTK Query / API Integration
+- `Gorevlerim` task query çağrısı scope-aware backend görünürlüğe bırakıldı (`useGetTasksQuery({})`).
+- Clients hızlı atama akışında mevcut `adminAssignments` mutation endpointi yeniden kullanıldı; yeni API surface açılmadı.
+
+### Testing
+- Backend authz e2e: `7/7` suite, `176/176` test passed.
+- Admin/Employee frontend: `15` test file, `124/124` test passed.
+- `Gorevlerim` test seti scope içi team-task todo toggle senaryosunu kapsayacak şekilde güncellendi.
+
+### Known Risks / Notes
+- Ürün politikası açısından “employee todo toggle scope’i own-only mi assignment-scope mu?” kararı artık teknik olarak assignment-scope’a hizalıdır; policy değişirse backend guard ve test matrix birlikte revize edilmelidir.
+- Görsel QA kanıtı (kritik akış screenshot artifact’ları) henüz otomatikleştirilmedi; roadmap’te planned.
