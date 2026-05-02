@@ -1397,3 +1397,64 @@ Affected files:
 - `adminandemployeePanel/src/app/employee/pages/__tests__/Gorevlerim.test.tsx`
 - `server/src/tasks/tasks.service.ts`
 - `server/test/projects-tasks-authz.e2e-spec.ts`
+
+---
+
+## 2026-05-02 - CRM Lead Management and CRM Specialist Module
+
+Context:
+Social Tech operasyon panelinde satış/CRM lead takibi ayrı bir domain olarak yoktu. Admin’in manuel lead oluşturması, CRM çalışanına ataması, timeline/takip yönetmesi ve satış başarılı olduğunda lead’i müşteri kaydına dönüştürmesi gerekiyordu.
+
+Decision:
+- Backend’e `CRM_SPECIALIST` employee rolü ve CRM permission seti eklendi.
+- Prisma schema’ya `CrmLead`, `CrmLeadActivity` modelleri ve CRM enumları eklendi.
+- Admin CRM API’si admin-only + permission protected olarak eklendi.
+- Employee CRM API’si yalnızca `CRM_SPECIALIST` çalışanların kendilerine atanmış leadleri görüp güncelleyebileceği şekilde eklendi.
+- Convert işlemi sadece admin tarafında çalışır; lead `WON` olur ve yeni `ClientProfile` oluşturulur.
+- CRM çalışanı lead create/convert/owner değişimi yapamaz; status sınırı `CONTACTED`, `FOLLOW_UP`, `QUALIFIED`, `LOST` ile kısıtlandı.
+- Admin/Employee panelde RTK Query CRM feature’ı, admin CRM ekranları ve CRM specialist employee ekranları eklendi.
+
+Reason:
+Satış operasyonunu mevcut NestJS + Prisma + RBAC mimarisine bağlı, assignment-safe ve audit-log uyumlu bir V1 domain olarak başlatmak; public website form entegrasyonu ve otomasyonları sonraki fazlara bırakmak.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260502000000_add_crm_leads/migration.sql`
+- `server/prisma/seed.ts`
+- `server/src/crm/*`
+- `server/src/audit-log/audit-log.service.ts`
+- `server/test/crm-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/crm/*`
+- `adminandemployeePanel/src/app/pages/CrmLeads.tsx`
+- `adminandemployeePanel/src/app/pages/CrmLeadDetail.tsx`
+- `adminandemployeePanel/src/app/employee/pages/CrmLeadlerim.tsx`
+- `adminandemployeePanel/src/app/employee/pages/CrmLeadDetail.tsx`
+- `adminandemployeePanel/src/app/employee/pages/BugunkuTakipler.tsx`
+
+---
+
+## 2026-05-02 - Public Website Contact Form to CRM Lead Integration
+
+Context:
+CRM V1 manuel admin lead oluşturma ile başlamıştı. Public website iletişim formundaki gerçek başvuruların CRM kuyruğuna düşmesi gerekiyordu.
+
+Decision:
+- Public, unauthenticated `POST /api/v1/public/crm/leads` endpointi eklendi.
+- Endpoint form payload’ını validate eder, KVKK/iletişim onayı ister ve lead’i `WEBSITE_FORM` source ile oluşturur.
+- Lead aktif `CRM_SPECIALIST` çalışana otomatik atanır.
+- Public response minimum tutulur (`id`, `status`) ve CRM owner/user detayları dışarı verilmez.
+- Website formu backend endpointine bağlandı; submit/loading/success/error ve basit frontend validation eklendi.
+- Public site CORS origin’i `CLIENT_ORIGIN_PUBLIC` olarak konfigüre edildi.
+
+Reason:
+Satış hattına gerçek public website başvurularını kontrollü şekilde almak, CRM timeline/audit akışını bozmadan lead kaynağını ayrıştırmak ve sonraki reminder/automation fazına zemin hazırlamak.
+
+Affected files:
+- `server/src/crm/public-crm-leads.controller.ts`
+- `server/src/crm/dto/create-public-crm-lead.dto.ts`
+- `server/src/crm/crm-leads.service.ts`
+- `server/src/config/cors.config.ts`
+- `server/src/config/env.validation.ts`
+- `server/.env.example`
+- `server/test/crm-authz.e2e-spec.ts`
+- `client/src/app/components/contact/sections/FormSection.tsx`

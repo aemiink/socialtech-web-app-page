@@ -15,6 +15,7 @@ export const envValidationSchema = Joi.object({
   DATABASE_URL: Joi.string().min(1).required(),
   CLIENT_ORIGIN_ADMIN: Joi.string().uri().default("http://localhost:5173"),
   CLIENT_ORIGIN_PORTAL: Joi.string().uri().default("http://localhost:5174"),
+  CLIENT_ORIGIN_PUBLIC: Joi.string().uri().default("http://localhost:5175"),
   JWT_ACCESS_SECRET: secureSecretSchema,
   JWT_REFRESH_SECRET: secureSecretSchema,
   JWT_ACCESS_EXPIRES_IN: Joi.string()

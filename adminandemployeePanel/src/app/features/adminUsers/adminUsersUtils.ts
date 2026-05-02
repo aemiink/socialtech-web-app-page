@@ -12,6 +12,7 @@ const ROLE_LABELS_TR: Record<UserRole, string> = {
   DEVELOPER: "Developer",
   SUPPORT_SPECIALIST: "Destek Uzmanı",
   SEO_SPECIALIST: "SEO Uzmanı",
+  CRM_SPECIALIST: "CRM / Satış Uzmanı",
 };
 
 const STATUS_LABELS_TR: Record<AdminUserStatus, string> = {
@@ -28,6 +29,7 @@ export const EMPLOYEE_ROLE_OPTIONS: EmployeeRole[] = [
   "DEVELOPER",
   "SUPPORT_SPECIALIST",
   "SEO_SPECIALIST",
+  "CRM_SPECIALIST",
 ];
 
 export function getRoleLabel(role: UserRole): string {

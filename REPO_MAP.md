@@ -3,7 +3,7 @@
 ## High-Level Structure
 
 - `adminandemployeePanel/` - Vite + React SPA for the Admin Panel and role-based Employee Panel.
-- `client/` - public/marketing Social Tech website. This is not the Client Portal.
+- `client/` - public/marketing Social Tech website. This is not the Client Portal; contact form submissions now create public CRM leads.
 - `clientPanel/` - Client Portal Vite + React SPA for customer service visibility.
 - `server/` - NestJS + TypeScript backend (single shared REST API with implemented auth core).
 - `PROJECT_CONTEXT.md` - shared product, stack, architecture, and convention memory.
@@ -48,6 +48,9 @@ Location: `adminandemployeePanel/`
   - `adminandemployeePanel/src/app/features/tasks/tasksApi.ts`
   - `adminandemployeePanel/src/app/features/tasks/tasksTypes.ts`
   - `adminandemployeePanel/src/app/features/tasks/tasksUtils.ts`
+  - `adminandemployeePanel/src/app/features/crm/crmApi.ts`
+  - `adminandemployeePanel/src/app/features/crm/crmTypes.ts`
+  - `adminandemployeePanel/src/app/features/crm/crmUtils.ts`
 - Admin layout: `adminandemployeePanel/src/app/components/RootLayout.tsx`
 - Employee layout: `adminandemployeePanel/src/app/employee/EmployeeLayout.tsx`
 - Role context: `adminandemployeePanel/src/app/contexts/RoleContext.tsx` (compatibility layer; Redux auth state is source of truth)
@@ -61,6 +64,8 @@ Location: `adminandemployeePanel/`
   - `adminandemployeePanel/src/app/pages/ProjectDetail.tsx`
   - `adminandemployeePanel/src/app/pages/Tasks.tsx`
   - `adminandemployeePanel/src/app/pages/TaskDetail.tsx`
+  - `adminandemployeePanel/src/app/pages/CrmLeads.tsx`
+  - `adminandemployeePanel/src/app/pages/CrmLeadDetail.tsx`
 - Frontend tests (Vitest/RTL):
   - `adminandemployeePanel/src/app/pages/EmployeeDetail.test.tsx`
   - `adminandemployeePanel/src/app/pages/AuditLogs.test.tsx`
@@ -72,11 +77,19 @@ Location: `adminandemployeePanel/`
   - `adminandemployeePanel/src/app/pages/__tests__/ProjectDetail.test.tsx`
   - `adminandemployeePanel/src/app/pages/__tests__/Tasks.test.tsx`
   - `adminandemployeePanel/src/app/pages/__tests__/TaskDetail.test.tsx`
+  - `adminandemployeePanel/src/app/pages/__tests__/CrmLeads.test.tsx`
+  - `adminandemployeePanel/src/app/pages/__tests__/CrmLeadDetail.test.tsx`
 - Employee pages: `adminandemployeePanel/src/app/employee/pages/`
+- Employee CRM pages:
+  - `adminandemployeePanel/src/app/employee/pages/CrmLeadlerim.tsx`
+  - `adminandemployeePanel/src/app/employee/pages/CrmLeadDetail.tsx`
+  - `adminandemployeePanel/src/app/employee/pages/BugunkuTakipler.tsx`
 - Employee API-migrated page:
   - `adminandemployeePanel/src/app/employee/pages/Musterilerim.tsx`
 - Employee page tests:
   - `adminandemployeePanel/src/app/employee/pages/__tests__/Musterilerim.test.tsx`
+  - `adminandemployeePanel/src/app/employee/pages/__tests__/CrmLeadDetail.test.tsx`
+  - `adminandemployeePanel/src/app/employee/__tests__/EmployeeLayout.crm.test.tsx`
 - Employee dashboards: `adminandemployeePanel/src/app/employee/dashboards/`
 - UI primitives: `adminandemployeePanel/src/app/components/ui/`
 - Mock data: `adminandemployeePanel/src/app/data/mockData.ts`
@@ -199,8 +212,8 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 
 - `server/src/main.ts` - Nest bootstrap, `/api/v1` global prefix, global ValidationPipe, global exception filter, CORS setup
 - `server/src/app.module.ts` - root module imports for config/database/health/auth/users/clients/admin-summary/admin-assignments/admin-clients/admin-users/admin-audit-logs/projects/tasks
-- `server/src/config/env.validation.ts` - Joi env validation schema
-- `server/src/config/cors.config.ts` - env-based CORS whitelist
+- `server/src/config/env.validation.ts` - Joi env validation schema, including `CLIENT_ORIGIN_PUBLIC`
+- `server/src/config/cors.config.ts` - env-based CORS whitelist, including public site origin support
 - `server/src/common/filters/global-exception.filter.ts` - centralized error response format
 
 ### Database Foundation
@@ -209,10 +222,12 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - Core models: `User`, `RefreshToken`, `ClientProfile`, `AuditLog`, `EmployeeClientAssignment`
   - Delivery models: `Project`, `Task`, `TaskTodo`
   - Client service model: `ClientPurchasedService`
+  - CRM models: `CrmLead`, `CrmLeadActivity`
   - Hybrid RBAC models: `Permission`, `RolePermission`
   - Assignment scope enum: `EmployeeClientAssignmentScope`
   - Delivery enums: `ProjectStatus`, `TaskStatus`, `Priority`
   - Additional enums: `PurchasedServiceKey`, `PurchasedServiceStatus`, `TaskTodoVisibility`
+  - CRM enums: `CrmLeadStatus`, `CrmLeadSource`, `CrmLeadActivityType`
   - `User.role` enum remains the primary fixed role field
   - `User.sessionInvalidatedAt` is used for access-token invalidation lifecycle
   - `ClientProfile.slug` is unique
@@ -232,6 +247,7 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 - `server/prisma/migrations/20260428211614_add_session_invalidated_at/migration.sql` - adds `User.sessionInvalidatedAt` column
 - `server/prisma/migrations/20260430000000_add_client_profile_status/migration.sql` - adds `ClientProfile.status` and `ClientProfile_status_idx`
 - `server/prisma/migrations/20260501000000_add_purchased_services_and_task_todos/migration.sql` - adds purchased-services, project serviceKey, and task-todo checklist schema
+- `server/prisma/migrations/20260502000000_add_crm_leads/migration.sql` - adds `CRM_SPECIALIST`, CRM lead/activity enums, lead tables, relations, and indexes
 - `server/prisma/seed.ts` - demo seed foundation:
   - seeds admin + 7 employee roles + 1 client owner
   - seeds permission catalog and role-permission mappings
@@ -293,6 +309,19 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - `dto/update-admin-user.dto.ts` - update payload validation (`displayName`, `role`, `isActive`)
   - `dto/reset-admin-user-password.dto.ts` - reset-password payload validation
   - `admin-users.module.ts` - module wiring
+- `server/src/crm/` - CRM lead management module:
+  - `crm.module.ts` - module wiring
+  - `admin-crm-leads.controller.ts` - admin CRM lead list/create/detail/update/activity/convert routes
+  - `employee-crm-leads.controller.ts` - assigned CRM lead list/detail/update/activity routes
+  - `public-crm-leads.controller.ts` - public website lead intake route (`POST /api/v1/public/crm/leads`)
+  - `crm-leads.service.ts` - RBAC/object authorization, owner validation, public website intake, activity timeline, conversion to `ClientProfile`, and audit writes
+  - `dto/admin-crm-lead-query.dto.ts`
+  - `dto/create-crm-lead.dto.ts`
+  - `dto/create-public-crm-lead.dto.ts`
+  - `dto/update-crm-lead.dto.ts`
+  - `dto/create-crm-lead-activity.dto.ts`
+  - `dto/update-assigned-crm-lead.dto.ts`
+  - `dto/convert-crm-lead.dto.ts`
 - `server/src/projects/` - projects API foundation:
   - `projects.controller.ts` - `GET /api/v1/projects`, `GET /api/v1/projects/:id`, `POST /api/v1/projects`, `PATCH /api/v1/projects/:id`
   - `projects.service.ts` - admin full write scope, employee assignment-scope read, client own-scope read, object-level visibility checks, client purchased-service validation for `serviceKey`
@@ -331,11 +360,12 @@ From `server/package.json`:
 - `server/test/admin-users-management-authz.e2e-spec.ts` - admin users management authz matrix (list/detail/update/deactivate/activate/reset-password + role restrictions + list pagination/sorting/validation + audit write assertions)
 - `server/test/admin-audit-logs-authz.e2e-spec.ts` - admin audit logs read authz matrix (list/detail authorization + pagination/sorting/filter/date/search + metadata sensitivity checks)
 - `server/test/access-token-invalidation-authz.e2e-spec.ts` - access-token invalidation matrix (password change/reset, deactivate/activate, role/displayName update behavior)
+- `server/test/crm-authz.e2e-spec.ts` - CRM admin/employee/public authz matrix, assigned-only safe `404`, activity/status limits, conversion, duplicate convert, public website lead intake, validation, and converted-lead employee lock
 - `server/package.json` test scripts:
   - `npm run test:e2e:prepare`
   - `npm run test:e2e`
   - `npm run test:e2e:authz`
-- latest DB-connected authz pattern run: `7/7 suites`, `176/176` tests passed
+- latest DB-connected authz pattern run: `8/8 suites`, `187/187` tests passed
 
 ### Styles
 
@@ -355,7 +385,9 @@ From `server/package.json`:
 
 Location: `client/`
 
-The `client/` directory is the public/marketing Social Tech website, not the Client Portal. It was only checked enough to disambiguate it from `clientPanel/` for the portal mapping task.
+The `client/` directory is the public/marketing Social Tech website, not the Client Portal.
+
+- `client/src/app/components/contact/sections/FormSection.tsx` - public contact form; submits validated, consent-gated lead payloads to `POST /api/v1/public/crm/leads`
 
 ## Start Here For Client Portal Work
 

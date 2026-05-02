@@ -77,6 +77,8 @@ export const baseApi = createApi({
     "Projects",
     "Tasks",
     "TaskTodos",
+    "CrmLeads",
+    "CrmActivities",
   ],
   endpoints: () => ({}),
 });

@@ -31,7 +31,7 @@ import {
 } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../components/ui/sheet";
 import {
   hasAdminPermission,
   selectCurrentUser,
@@ -835,6 +835,9 @@ export function Clients() {
             <>
               <SheetHeader>
                 <SheetTitle className="text-xl text-white">{selectedClient.companyName}</SheetTitle>
+                <SheetDescription className="sr-only">
+                  Seçili müşterinin durum, kayıt ve satın alınan hizmet detayları.
+                </SheetDescription>
                 <div className="mt-2 flex items-center gap-2">
                   <Badge className={getClientStatusBadgeClass(selectedClient.status)}>
                     {getClientStatusLabel(selectedClient.status)}

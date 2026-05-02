@@ -9,6 +9,7 @@ import { AuthModule } from "./auth/auth.module";
 import { ClientsModule } from "./clients/clients.module";
 import { envValidationSchema } from "./config/env.validation";
 import { DatabaseModule } from "./database/database.module";
+import { CrmModule } from "./crm/crm.module";
 import { HealthModule } from "./health/health.module";
 import { ProjectsModule } from "./projects/projects.module";
 import { TasksModule } from "./tasks/tasks.module";
@@ -30,6 +31,7 @@ import { UsersModule } from "./users/users.module";
     AuthModule,
     UsersModule,
     ClientsModule,
+    CrmModule,
     AdminSummaryModule,
     AdminAssignmentsModule,
     AdminAuditLogsModule,

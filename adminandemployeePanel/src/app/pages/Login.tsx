@@ -50,6 +50,7 @@ const SEEDED_DEMO_USERS: DemoSeedUser[] = [
   { email: "developer@socialtech.com", accountType: "EMPLOYEE", role: "DEVELOPER" },
   { email: "support@socialtech.com", accountType: "EMPLOYEE", role: "SUPPORT_SPECIALIST" },
   { email: "seo@socialtech.com", accountType: "EMPLOYEE", role: "SEO_SPECIALIST" },
+  { email: "crm@socialtech.com", accountType: "EMPLOYEE", role: "CRM_SPECIALIST" },
 ];
 
 const accountTypeLabels: Record<LoginAccountType, string> = {

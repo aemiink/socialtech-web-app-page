@@ -4,6 +4,8 @@ import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
 import { Clients } from "./pages/Clients";
 import { ClientDetail } from "./pages/ClientDetail";
+import { CrmLeads } from "./pages/CrmLeads";
+import { CrmLeadDetail } from "./pages/CrmLeadDetail";
 import { Services } from "./pages/Services";
 import { ServiceDetail } from "./pages/ServiceDetail";
 import { Projects } from "./pages/Projects";
@@ -72,6 +74,9 @@ import { SayfaHizi } from "./employee/pages/SayfaHizi";
 import { IndexDurumu } from "./employee/pages/IndexDurumu";
 import { SearchConsole } from "./employee/pages/SearchConsole";
 import { AksiyonPlani } from "./employee/pages/AksiyonPlani";
+import { CrmLeadlerim } from "./employee/pages/CrmLeadlerim";
+import { CrmLeadDetail as EmployeeCrmLeadDetail } from "./employee/pages/CrmLeadDetail";
+import { BugunkuTakipler } from "./employee/pages/BugunkuTakipler";
 
 function LoginRedirect() {
   return <Navigate to="/login" replace />;
@@ -89,6 +94,8 @@ export const router = createBrowserRouter([
       { index: true, Component: Dashboard },
       { path: "musteriler", Component: Clients },
       { path: "musteriler/:id", Component: ClientDetail },
+      { path: "crm", Component: CrmLeads },
+      { path: "crm/:id", Component: CrmLeadDetail },
       { path: "hizmetler", Component: Services },
       { path: "hizmetler/:id", Component: ServiceDetail },
       { path: "projeler", Component: Projects },
@@ -120,6 +127,9 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="dashboard" replace /> },
       { path: "dashboard", Component: EmployeeDashboard },
+      { path: "crm/leads", Component: CrmLeadlerim },
+      { path: "crm/leads/:id", Component: EmployeeCrmLeadDetail },
+      { path: "crm/follow-ups", Component: BugunkuTakipler },
       { path: "gorevlerim", Component: Gorevlerim },
       { path: "musterilerim", Component: Musterilerim },
       { path: "takvim", Component: Takvim },

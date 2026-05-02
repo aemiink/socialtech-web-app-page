@@ -3,7 +3,8 @@ import {
   LayoutDashboard, CheckSquare, Users, Calendar, Bell, Folder, Settings,
   FileText, ThumbsUp, UserCheck, FolderKanban, TrendingUp, Zap, Image,
   MessageSquare, BookOpen, Code, Bug, Rocket, Headphones, Wrench, Shield,
-  Search as SearchIcon, BarChart, Globe, Search, Plus, LogOut, LucideIcon
+  Search as SearchIcon, BarChart, Globe, Search, Plus, LogOut, LucideIcon,
+  PhoneCall
 } from "lucide-react";
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
@@ -130,6 +131,14 @@ const roleMenus: Record<EmployeePanelRole, SidebarItem[]> = {
     { path: "/employee/takvim", label: "Takvim", icon: Calendar },
     { path: "/employee/bildirimler", label: "Bildirimler", icon: Bell },
     { path: "/employee/dosyalar", label: "Dosyalar", icon: Folder },
+    { path: "/employee/ayarlar", label: "Ayarlar", icon: Settings },
+  ],
+  "crm-specialist": [
+    { path: "/employee/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { path: "/employee/crm/leads", label: "CRM Leadleri", icon: PhoneCall },
+    { path: "/employee/crm/follow-ups", label: "Bugünkü Takipler", icon: Calendar },
+    { path: "/employee/takvim", label: "Takvim", icon: Calendar },
+    { path: "/employee/bildirimler", label: "Bildirimler", icon: Bell },
     { path: "/employee/ayarlar", label: "Ayarlar", icon: Settings },
   ],
 };

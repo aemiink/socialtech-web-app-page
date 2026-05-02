@@ -37,6 +37,7 @@ const USER_ROLES: UserRole[] = [
   "DEVELOPER",
   "SUPPORT_SPECIALIST",
   "SEO_SPECIALIST",
+  "CRM_SPECIALIST",
 ];
 
 const ACCOUNT_TYPES: AccountType[] = ["ADMIN", "EMPLOYEE", "CLIENT"];

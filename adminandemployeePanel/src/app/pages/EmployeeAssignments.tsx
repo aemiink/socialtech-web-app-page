@@ -896,6 +896,7 @@ function ClientPicker({
   } = useGetClientsQuery(clientsQuery);
 
   const clients = (clientsResponse?.data ?? []).filter((client) => client.status === "ACTIVE");
+  const shouldShowClientOptions = search.length > 0;
 
   return (
     <div className="space-y-3">
@@ -916,49 +917,49 @@ function ClientPicker({
           disabled={disabled}
         />
       )}
-      <PickerList
-        title="Aktif müşteriler"
-        isLoading={isClientsLoading}
-        isFetching={isClientsFetching}
-        isError={isClientsError}
-        errorText={extractApiErrorMessage(clientsError, "Müşteriler alınamadı.")}
-        onRetry={() => refetch()}
-        emptyText={
-          search.length > 0
-            ? "Aramaya uygun müşteri bulunamadı."
-            : "Aktif müşteri bulunamadı."
-        }
-      >
-        {clients.map((client) => {
-          const isSelected = selectedClient?.id === client.id;
+      {shouldShowClientOptions ? (
+        <PickerList
+          title="Müşteri sonuçları"
+          isLoading={isClientsLoading}
+          isFetching={isClientsFetching}
+          isError={isClientsError}
+          errorText={extractApiErrorMessage(clientsError, "Müşteriler alınamadı.")}
+          onRetry={() => refetch()}
+          emptyText="Aramaya uygun müşteri bulunamadı."
+        >
+          {clients.map((client) => {
+            const isSelected = selectedClient?.id === client.id;
 
-          return (
-            <button
-              key={client.id}
-              type="button"
-              className={`flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50 ${
-                isSelected ? "bg-[#AAFF01]/10" : ""
-              }`}
-              onClick={() => onSelect(client)}
-              disabled={disabled}
-              aria-label={`Müşteriyi seç: ${client.companyName} ${client.slug}`}
-            >
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-medium text-white">
-                  {client.companyName}
-                </span>
-                <span className="block truncate text-xs text-[#A0A0A0]">{client.slug}</span>
-              </span>
-              <Badge
-                variant={isSelected ? "default" : "outline"}
-                className={isSelected ? "bg-[#AAFF01] text-[#131313]" : undefined}
+            return (
+              <button
+                key={client.id}
+                type="button"
+                className={`flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50 ${
+                  isSelected ? "bg-[#AAFF01]/10" : ""
+                }`}
+                onClick={() => onSelect(client)}
+                disabled={disabled}
+                aria-label={`Müşteriyi seç: ${client.companyName} ${client.slug}`}
               >
-                {isSelected ? "Seçili" : "Seç"}
-              </Badge>
-            </button>
-          );
-        })}
-      </PickerList>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium text-white">
+                    {client.companyName}
+                  </span>
+                  <span className="block truncate text-xs text-[#A0A0A0]">{client.slug}</span>
+                </span>
+                <Badge
+                  variant={isSelected ? "default" : "outline"}
+                  className={isSelected ? "bg-[#AAFF01] text-[#131313]" : undefined}
+                >
+                  {isSelected ? "Seçili" : "Seç"}
+                </Badge>
+              </button>
+            );
+          })}
+        </PickerList>
+      ) : (
+        <PickerHint text="Müşteri seçmek için müşteri adı veya slug ile arama yapın." />
+      )}
     </div>
   );
 }
@@ -1077,6 +1078,14 @@ function PickerList({
       {!isLoading && !isError && hasChildren && (
         <div className="max-h-56 divide-y divide-white/[0.06] overflow-y-auto">{children}</div>
       )}
+    </div>
+  );
+}
+
+function PickerHint({ text }: { text: string }) {
+  return (
+    <div className="rounded-lg border border-white/[0.06] bg-[#202020] px-3 py-4 text-sm text-[#A0A0A0]">
+      {text}
     </div>
   );
 }

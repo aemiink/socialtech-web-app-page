@@ -19,13 +19,22 @@ export const ADMIN_CLIENT_AUDIT_ACTIONS = {
   ownerLinked: "ADMIN_CLIENT_OWNER_LINKED",
 } as const;
 
+export const CRM_LEAD_AUDIT_ACTIONS = {
+  created: "CRM_LEAD_CREATED",
+  updated: "CRM_LEAD_UPDATED",
+  activityCreated: "CRM_LEAD_ACTIVITY_CREATED",
+  converted: "CRM_LEAD_CONVERTED",
+} as const;
+
 export type AdminUserAuditAction =
   (typeof ADMIN_USER_AUDIT_ACTIONS)[keyof typeof ADMIN_USER_AUDIT_ACTIONS];
 
 export type AdminClientAuditAction =
   (typeof ADMIN_CLIENT_AUDIT_ACTIONS)[keyof typeof ADMIN_CLIENT_AUDIT_ACTIONS];
+export type CrmLeadAuditAction =
+  (typeof CRM_LEAD_AUDIT_ACTIONS)[keyof typeof CRM_LEAD_AUDIT_ACTIONS];
 
-export type AuditLogAction = AdminUserAuditAction | AdminClientAuditAction;
+export type AuditLogAction = AdminUserAuditAction | AdminClientAuditAction | CrmLeadAuditAction;
 
 export type AuditLogRequestContext = {
   ipAddress: string | null;

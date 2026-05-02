@@ -7,7 +7,8 @@ export type EmployeePanelRole =
   | "designer"
   | "developer"
   | "support-specialist"
-  | "seo-specialist";
+  | "seo-specialist"
+  | "crm-specialist";
 
 const BACKEND_ROLE_TO_EMPLOYEE_ROLE: Record<UserRole, EmployeePanelRole | null> = {
   ADMIN: null,
@@ -18,6 +19,7 @@ const BACKEND_ROLE_TO_EMPLOYEE_ROLE: Record<UserRole, EmployeePanelRole | null> 
   DEVELOPER: "developer",
   SUPPORT_SPECIALIST: "support-specialist",
   SEO_SPECIALIST: "seo-specialist",
+  CRM_SPECIALIST: "crm-specialist",
 };
 
 const BACKEND_ROLE_LABELS: Record<UserRole, string> = {
@@ -29,6 +31,7 @@ const BACKEND_ROLE_LABELS: Record<UserRole, string> = {
   DEVELOPER: "Developer",
   SUPPORT_SPECIALIST: "Support Specialist",
   SEO_SPECIALIST: "SEO Specialist",
+  CRM_SPECIALIST: "CRM / Satış Uzmanı",
 };
 
 export function mapBackendRoleToEmployeeRole(role: UserRole): EmployeePanelRole | null {

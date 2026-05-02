@@ -20,6 +20,10 @@
 - Visual QA screenshot artifacts for critical role flows
 - Bundle/code splitting optimization
 - Platform integrations: Meta/TikTok/Amazon Ads
+- CRM automation/reminder notifications
+- CRM pipeline analytics
+- CRM lead duplicate detection
+- CRM email/WhatsApp integration
 
 ## In Progress
 
@@ -68,6 +72,16 @@
 - Client-visible task progress UI
 - Related backend e2e tests (projects/tasks/todo/authz)
 - Related frontend tests (admin, employee, client portal)
+- CRM backend schema and permissions
+- CRM specialist role
+- Admin CRM lead management API
+- Employee assigned CRM lead API
+- CRM lead conversion to ClientProfile
+- Admin CRM panel
+- CRM specialist employee panel
+- CRM frontend tests
+- CRM backend e2e tests
+- Public website contact form -> CRM lead integration
 
 ## Blocked
 
@@ -75,8 +89,8 @@ None identified.
 
 ## Notes
 
-- Latest backend validation checkpoint: `7/7` authz suites, `176/176` tests.
-- Latest admin/employee frontend validation checkpoint: `15` test files, `124/124` tests.
+- Latest backend validation checkpoint: `8/8` authz suites, `187/187` tests.
+- Latest admin/employee frontend validation checkpoint: `19` test files, `134/134` tests.
 - Latest client portal frontend validation checkpoint: `1` test file, `6/6` tests.
 - Summary query optimization and summary-side cache/TTL remain relevant follow-ups as data volume grows.
 ## 2026-04-29 Checkpoint
@@ -144,3 +158,24 @@ None identified.
 - [ ] Dedicated owner candidates endpoint + frontend migration
 - [ ] Todo audit logging
 - [ ] Visual QA screenshot artifact üretimi (admin/employee/client kritik akışlar)
+
+## 2026-05-02 Checkpoint
+
+### Completed
+- [x] CRM backend schema and permissions
+- [x] CRM specialist role (`CRM_SPECIALIST`)
+- [x] Admin CRM lead management API
+- [x] Employee assigned CRM lead API
+- [x] CRM lead conversion to `ClientProfile`
+- [x] Admin CRM panel (`/crm`, `/crm/:id`)
+- [x] CRM specialist employee panel (`/employee/crm/leads`, `/employee/crm/leads/:id`, `/employee/crm/follow-ups`)
+- [x] CRM frontend tests
+- [x] CRM backend e2e tests
+- [x] Public website contact form -> CRM lead integration
+
+### Planned / Follow-up
+- [ ] CRM automation/reminder notifications
+- [ ] CRM pipeline analytics
+- [ ] CRM lead duplicate detection
+- [ ] CRM email/WhatsApp integration
+- [ ] Employee CRM list/follow-up page test coverage expansion

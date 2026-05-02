@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, Briefcase, FolderKanban,
   CheckSquare, ThumbsUp, Megaphone, FileText,
   BarChart3, Calendar, UserCheck, DollarSign,
-  Zap, Settings, Search, Plus, Bell, LogOut, History, UserCog
+  Zap, Settings, Search, Plus, Bell, LogOut, History, UserCog, PhoneCall
 } from "lucide-react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
@@ -21,6 +21,7 @@ import { getUserDisplayName, getUserInitials } from "../features/auth/roleMappin
 const menuItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
   { path: "/musteriler", label: "Müşteriler", icon: Users },
+  { path: "/crm", label: "CRM", icon: PhoneCall },
   { path: "/hizmetler", label: "Hizmetler", icon: Briefcase },
   { path: "/projeler", label: "Projeler", icon: FolderKanban },
   { path: "/gorevler", label: "Görevler", icon: CheckSquare },

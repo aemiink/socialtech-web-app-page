@@ -8,7 +8,8 @@ export type UserRole =
   | "DESIGNER"
   | "DEVELOPER"
   | "SUPPORT_SPECIALIST"
-  | "SEO_SPECIALIST";
+  | "SEO_SPECIALIST"
+  | "CRM_SPECIALIST";
 
 export type UserStatus = "ACTIVE" | "INACTIVE";
 

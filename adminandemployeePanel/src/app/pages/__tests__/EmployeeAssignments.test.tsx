@@ -335,6 +335,13 @@ describe("EmployeeAssignments", () => {
 
     const dialog = screen.getByRole("dialog", { name: "Yeni Çalışan Ataması" });
     fireEvent.click(within(dialog).getByRole("button", { name: /employee@example.com/i }));
+    expect(within(dialog).queryByRole("button", { name: /acme-e-ticaret/i })).not.toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText("Müşteri"), {
+      target: { value: "Acme" },
+    });
+    await waitFor(() => {
+      expect(within(dialog).getByRole("button", { name: /acme-e-ticaret/i })).toBeInTheDocument();
+    });
     fireEvent.click(within(dialog).getByRole("button", { name: /acme-e-ticaret/i }));
     fireEvent.change(within(dialog).getByLabelText("Kapsam"), {
       target: { value: "SEO" },

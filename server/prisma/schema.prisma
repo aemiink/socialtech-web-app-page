@@ -24,6 +24,7 @@ enum UserRole {
   SEO_SPECIALIST
   CLIENT_OWNER
   CLIENT_MEMBER
+  CRM_SPECIALIST
 }
 
 enum UserStatus {
@@ -97,6 +98,28 @@ enum TaskTodoVisibility {
   CLIENT_VISIBLE
 }
 
+enum CrmLeadStatus {
+  NEW
+  CONTACTED
+  FOLLOW_UP
+  QUALIFIED
+  WON
+  LOST
+}
+
+enum CrmLeadSource {
+  MANUAL
+  WEBSITE_FORM
+}
+
+enum CrmLeadActivityType {
+  CALL
+  EMAIL
+  WHATSAPP
+  NOTE
+  STATUS_CHANGE
+}
+
 model Permission {
   id          String   @id @default(uuid()) @db.Uuid
   slug        String   @unique
@@ -138,6 +161,8 @@ model User {
   employeeClientAssignments EmployeeClientAssignment[] @relation("EmployeeClientAssignments")
   assignedTasks             Task[]                     @relation("TaskAssignee")
   completedTaskTodos        TaskTodo[]                 @relation("TaskTodoCompletedBy")
+  ownedCrmLeads             CrmLead[]                  @relation("CrmLeadOwner")
+  crmLeadActivities         CrmLeadActivity[]          @relation("CrmLeadActivityActor")
   auditLogs                 AuditLog[]                 @relation("AuditActor")
 
   @@index([accountType, role])
@@ -174,6 +199,7 @@ model ClientProfile {
   employeeAssignments EmployeeClientAssignment[]
   purchasedServices   ClientPurchasedService[]
   projects            Project[]
+  convertedCrmLeads   CrmLead[]                 @relation("CrmLeadConvertedClient")
 
   @@index([status])
 }
@@ -261,6 +287,51 @@ model TaskTodo {
   @@index([taskId, isCompleted])
   @@index([taskId, sortOrder])
   @@index([completedByUserId])
+}
+
+model CrmLead {
+  id                       String        @id @default(uuid()) @db.Uuid
+  companyName              String
+  contactName              String
+  contactEmail             String?
+  phone                    String?
+  source                   CrmLeadSource @default(MANUAL)
+  status                   CrmLeadStatus @default(NEW)
+  ownerUserId              String        @db.Uuid
+  convertedClientProfileId String?       @db.Uuid
+  nextFollowUpAt           DateTime?
+  createdAt                DateTime      @default(now())
+  updatedAt                DateTime      @updatedAt
+
+  ownerUser              User              @relation("CrmLeadOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  convertedClientProfile ClientProfile?    @relation("CrmLeadConvertedClient", fields: [convertedClientProfileId], references: [id], onDelete: SetNull)
+  activities             CrmLeadActivity[]
+
+  @@index([ownerUserId])
+  @@index([status])
+  @@index([source])
+  @@index([nextFollowUpAt])
+  @@index([convertedClientProfileId])
+  @@index([createdAt])
+}
+
+model CrmLeadActivity {
+  id          String               @id @default(uuid()) @db.Uuid
+  leadId      String               @db.Uuid
+  actorUserId String?              @db.Uuid
+  type        CrmLeadActivityType
+  note        String
+  nextFollowUpAt DateTime?
+  createdAt   DateTime             @default(now())
+
+  lead  CrmLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  actor User?   @relation("CrmLeadActivityActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([leadId])
+  @@index([actorUserId])
+  @@index([type])
+  @@index([createdAt])
+  @@index([nextFollowUpAt])
 }
 
 model AuditLog {

@@ -55,6 +55,7 @@ const EMPLOYEE_ROLES: readonly UserRole[] = [
   UserRole.DEVELOPER,
   UserRole.SUPPORT_SPECIALIST,
   UserRole.SEO_SPECIALIST,
+  UserRole.CRM_SPECIALIST,
 ];
 
 const USERS_MANAGE_PERMISSION = "users.manage";

@@ -8,7 +8,8 @@ export type EmployeeRole =
   | "DESIGNER"
   | "DEVELOPER"
   | "SUPPORT_SPECIALIST"
-  | "SEO_SPECIALIST";
+  | "SEO_SPECIALIST"
+  | "CRM_SPECIALIST";
 
 export type AdminUser = {
   id: string;

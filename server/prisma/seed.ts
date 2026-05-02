@@ -3,6 +3,9 @@ import {
   PrismaClient,
   AccountType,
   ClientStatus,
+  CrmLeadActivityType,
+  CrmLeadSource,
+  CrmLeadStatus,
   EmployeeClientAssignmentScope,
   Priority,
   ProjectStatus,
@@ -81,6 +84,23 @@ type TaskTodoSeed = {
   isCompleted?: boolean;
   completedAt?: Date;
   completedByEmail?: string;
+};
+
+type CrmLeadSeed = {
+  companyName: string;
+  contactName: string;
+  contactEmail?: string;
+  phone?: string;
+  ownerEmail: string;
+  source?: CrmLeadSource;
+  status: CrmLeadStatus;
+  nextFollowUpAt?: Date;
+  activities: Array<{
+    actorEmail: string;
+    type: CrmLeadActivityType;
+    note: string;
+    nextFollowUpAt?: Date;
+  }>;
 };
 
 const prisma = new PrismaClient();
@@ -369,6 +389,76 @@ const TASK_TODO_SEEDS: TaskTodoSeed[] = [
   },
 ];
 
+const CRM_LEAD_SEEDS: CrmLeadSeed[] = [
+  {
+    companyName: "Atlas Mobilya",
+    contactName: "Ece Arslan",
+    contactEmail: "ece@atlasmobilya.com",
+    phone: "+90 532 100 10 10",
+    ownerEmail: "crm@socialtech.com",
+    status: CrmLeadStatus.NEW,
+    nextFollowUpAt: new Date("2026-05-03T09:00:00.000Z"),
+    activities: [
+      {
+        actorEmail: "admin@socialtech.com",
+        type: CrmLeadActivityType.NOTE,
+        note: "Instagram reklam ve landing page ihtiyacı için manuel lead olarak eklendi.",
+      },
+    ],
+  },
+  {
+    companyName: "Vega Klinik",
+    contactName: "Dr. Mert Kaya",
+    contactEmail: "mert@vegaklinik.com",
+    phone: "+90 532 200 20 20",
+    ownerEmail: "crm@socialtech.com",
+    status: CrmLeadStatus.CONTACTED,
+    nextFollowUpAt: new Date("2026-05-04T11:00:00.000Z"),
+    activities: [
+      {
+        actorEmail: "crm@socialtech.com",
+        type: CrmLeadActivityType.CALL,
+        note: "İlk görüşme yapıldı; Meta Ads ve SEO Audit ilgisi var.",
+        nextFollowUpAt: new Date("2026-05-04T11:00:00.000Z"),
+      },
+    ],
+  },
+  {
+    companyName: "Luna Kids",
+    contactName: "Selin Aksoy",
+    contactEmail: "selin@lunakids.com",
+    phone: "+90 532 300 30 30",
+    ownerEmail: "crm@socialtech.com",
+    status: CrmLeadStatus.FOLLOW_UP,
+    nextFollowUpAt: new Date("2026-05-02T15:00:00.000Z"),
+    activities: [
+      {
+        actorEmail: "crm@socialtech.com",
+        type: CrmLeadActivityType.WHATSAPP,
+        note: "Katalog ve mevcut reklam hesabı ekran görüntüleri istendi.",
+        nextFollowUpAt: new Date("2026-05-02T15:00:00.000Z"),
+      },
+    ],
+  },
+  {
+    companyName: "Orion B2B",
+    contactName: "Burak Tunca",
+    contactEmail: "burak@orionb2b.com",
+    phone: "+90 532 400 40 40",
+    ownerEmail: "crm-backup@socialtech.com",
+    status: CrmLeadStatus.QUALIFIED,
+    nextFollowUpAt: new Date("2026-05-05T13:00:00.000Z"),
+    activities: [
+      {
+        actorEmail: "crm-backup@socialtech.com",
+        type: CrmLeadActivityType.EMAIL,
+        note: "Kurumsal web app ve CRM entegrasyonu için brief alındı.",
+        nextFollowUpAt: new Date("2026-05-05T13:00:00.000Z"),
+      },
+    ],
+  },
+];
+
 const PERMISSIONS: PermissionSeed[] = [
   { slug: "dashboard.read", description: "Read dashboard summaries." },
   { slug: "admin.summary.read", description: "Read admin summary dashboard data." },
@@ -413,6 +503,11 @@ const PERMISSIONS: PermissionSeed[] = [
   { slug: "settings.manage", description: "Manage global settings." },
   { slug: "settings.manage.own", description: "Manage own settings." },
   { slug: "audit_logs.read", description: "Read audit logs." },
+  { slug: "crm.leads.read.any", description: "Read all CRM leads." },
+  { slug: "crm.leads.manage.any", description: "Create and manage all CRM leads." },
+  { slug: "crm.leads.read.assigned", description: "Read assigned CRM leads." },
+  { slug: "crm.leads.update.assigned", description: "Update assigned CRM leads." },
+  { slug: "crm.leads.convert", description: "Convert CRM leads to client profiles." },
 ];
 
 const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
@@ -493,6 +588,12 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
     "reports.manage",
     "settings.read",
   ],
+  CRM_SPECIALIST: [
+    "dashboard.read",
+    "crm.leads.read.assigned",
+    "crm.leads.update.assigned",
+    "settings.read",
+  ],
   CLIENT_OWNER: [
     "portal.read.own",
     "clients.read.own",
@@ -568,6 +669,18 @@ const DEMO_USERS: DemoUserSeed[] = [
     displayName: "Demo SEO Specialist",
     accountType: AccountType.EMPLOYEE,
     role: UserRole.SEO_SPECIALIST,
+  },
+  {
+    email: "crm@socialtech.com",
+    displayName: "CRM / Satış Uzmanı",
+    accountType: AccountType.EMPLOYEE,
+    role: UserRole.CRM_SPECIALIST,
+  },
+  {
+    email: "crm-backup@socialtech.com",
+    displayName: "CRM / Satış Uzmanı 2",
+    accountType: AccountType.EMPLOYEE,
+    role: UserRole.CRM_SPECIALIST,
   },
   {
     email: "client@socialtech.com",
@@ -1025,6 +1138,89 @@ async function seedTaskTodos(projectIdByKey: Map<string, string>): Promise<void>
   }
 }
 
+async function seedCrmLeads(): Promise<void> {
+  const userEmails = Array.from(
+    new Set(
+      CRM_LEAD_SEEDS.flatMap((lead) => [
+        lead.ownerEmail,
+        ...lead.activities.map((activity) => activity.actorEmail),
+      ]),
+    ),
+  );
+  const users = await prisma.user.findMany({
+    where: { email: { in: userEmails } },
+    select: {
+      id: true,
+      email: true,
+    },
+  });
+  const userByEmail = new Map(users.map((user) => [user.email, user]));
+
+  for (const lead of CRM_LEAD_SEEDS) {
+    const owner = userByEmail.get(lead.ownerEmail);
+    if (!owner) {
+      throw new Error(`Missing CRM lead owner user: ${lead.ownerEmail}`);
+    }
+
+    const existingLead = await prisma.crmLead.findFirst({
+      where: {
+        companyName: lead.companyName,
+        contactName: lead.contactName,
+      },
+      select: { id: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+
+    const crmLead = existingLead
+      ? await prisma.crmLead.update({
+          where: { id: existingLead.id },
+          data: {
+            contactEmail: lead.contactEmail ?? null,
+            phone: lead.phone ?? null,
+            ownerUserId: owner.id,
+            source: lead.source ?? CrmLeadSource.MANUAL,
+            status: lead.status,
+            nextFollowUpAt: lead.nextFollowUpAt ?? null,
+          },
+          select: { id: true },
+        })
+      : await prisma.crmLead.create({
+          data: {
+            companyName: lead.companyName,
+            contactName: lead.contactName,
+            contactEmail: lead.contactEmail ?? null,
+            phone: lead.phone ?? null,
+            ownerUserId: owner.id,
+            source: lead.source ?? CrmLeadSource.MANUAL,
+            status: lead.status,
+            nextFollowUpAt: lead.nextFollowUpAt ?? null,
+          },
+          select: { id: true },
+        });
+
+    await prisma.crmLeadActivity.deleteMany({
+      where: { leadId: crmLead.id },
+    });
+
+    await prisma.crmLeadActivity.createMany({
+      data: lead.activities.map((activity) => {
+        const actor = userByEmail.get(activity.actorEmail);
+        if (!actor) {
+          throw new Error(`Missing CRM activity actor user: ${activity.actorEmail}`);
+        }
+
+        return {
+          leadId: crmLead.id,
+          actorUserId: actor.id,
+          type: activity.type,
+          note: activity.note,
+          nextFollowUpAt: activity.nextFollowUpAt ?? null,
+        };
+      }),
+    });
+  }
+}
+
 async function main(): Promise<void> {
   const permissionIdBySlug = await seedPermissions();
   await seedRolePermissions(permissionIdBySlug);
@@ -1035,6 +1231,7 @@ async function main(): Promise<void> {
   const projectIdByKey = await seedProjects(clientProfileIdBySlug);
   await seedTasks(projectIdByKey);
   await seedTaskTodos(projectIdByKey);
+  await seedCrmLeads();
 }
 
 main()

@@ -34,6 +34,7 @@ Backend role enum values are mapped in frontend via `roleMapping.ts`:
 - `developer` — sprints, frontend/backend tasks, bugs, testing
 - `support-specialist` — support tickets, maintenance, security, backups
 - `seo-specialist` — SEO audit, keyword tracking, index status, Search Console
+- `crm-specialist` — CRM/sales lead follow-up, assigned lead activities, follow-up scheduling
 
 There are two panel types:
 - Admin Panel (protected by backend auth via Redux/RTK Query)
@@ -45,9 +46,11 @@ There is also a Client Portal as a separate sub-app at `clientPanel/`.
 
 ### Admin Panel (`/` routes)
 Dashboard, Clients (Müşteriler), Services (Hizmetler), Projects (Projeler), Tasks (Görevler), Approvals (Onaylar), Campaigns (Kampanyalar), Contents (İçerikler), Reports (Raporlar), Meetings (Toplantılar), Employees (Çalışanlar), Finance (Finans), Automations (Otomasyonlar), Settings (Ayarlar)
+CRM (`/crm`) is now an admin module for lead creation, CRM owner assignment, timeline management, status updates, and conversion to `ClientProfile`.
 
 ### Employee Panel (`/employee` routes)
 Role-based sidebar. Common pages: Dashboard, Gorevlerim, Musterilerim, Takvim, Bildirimler, Dosyalar, Ayarlar. Specialist pages vary per role (see routes.tsx).
+`CRM_SPECIALIST` employees receive CRM Leadleri and Bugünkü Takipler routes and only see assigned CRM leads.
 
 ### Client Portal
 Separate Vite + React SPA at `clientPanel/`. It is a customer-facing visibility panel, not a public SaaS product.
@@ -113,6 +116,14 @@ Portal areas:
   - `PATCH /api/v1/tasks/:taskId/todos/:todoId`
   - `PATCH /api/v1/tasks/:taskId/todos/:todoId/toggle`
   - `DELETE /api/v1/tasks/:taskId/todos/:todoId`
+- CRM lead management API is now active:
+  - Admin: `GET/POST /api/v1/admin/crm/leads`, `GET/PATCH /api/v1/admin/crm/leads/:id`, `POST /api/v1/admin/crm/leads/:id/activities`, `POST /api/v1/admin/crm/leads/:id/convert`
+  - Employee CRM: `GET /api/v1/crm/leads`, `GET/PATCH /api/v1/crm/leads/:id`, `POST /api/v1/crm/leads/:id/activities`
+  - Public website: `POST /api/v1/public/crm/leads`
+  - Admin endpoints require admin account/role plus CRM permissions; employee endpoints require `CRM_SPECIALIST` plus assigned-lead permissions.
+  - Employee CRM detail access is object-scoped by `ownerUserId`; non-owned lead detail returns safe `404`.
+  - Convert is admin-only, creates a `ClientProfile`, sets lead status `WON`, and prevents duplicate conversion with `409`.
+  - Public website contact form creates `WEBSITE_FORM` leads, requires consent, returns only minimal receipt data, and auto-assigns the lead to an active CRM specialist.
 - `GET /users` enforces `users.read`; service-level object authorization protects `/users/:id` and `/clients/:id`.
 - Admin can read full users/client profile scopes; client users are limited to their own `ClientProfile` scope.
 - Employee assignment scope is now modeled via `EmployeeClientAssignment` + active assignment checks.
@@ -120,7 +131,7 @@ Portal areas:
 - Employee users can read only active-assignment-scope projects/tasks and can update only `status` on tasks assigned to them within active assignment scope.
 - Client users can read only own `clientProfileId`-scope projects/tasks; out-of-scope detail access resolves as safe `404`.
 - Assignment admin endpoints are admin-only via `JwtAuthGuard` + `PermissionsGuard` + `RequirePermissions`, plus service-level `ADMIN` account/role and permission checks (`assignments.read`, `assignments.manage`).
-- Authz e2e matrix is now automated in backend tests and validated with real guard chain behavior (`7/7 suites`, `176/176` tests).
+- Authz e2e matrix is now automated in backend tests and validated with real guard chain behavior (`8/8 suites`, `187/187` tests).
 - Admin dashboard summary endpoint is active: `GET /api/v1/admin/summary` (permission: `admin.summary.read`).
 - Admin summary contract is now fixed and consumed by frontend as dedicated KPI source:
   - `users`: `total`, `active`, `inactive`, `employees`, `clients`, `admins`
@@ -135,7 +146,7 @@ Portal areas:
   - service-level `ADMIN` accountType + `ADMIN` role + permission check
   - non-admin access returns `403` even with temporary permission mutation attempts
 - `GET /api/v1/clients` now supports validated server-side pagination/filter/sorting and returns a standard `data + meta` envelope.
-- Full domain endpoint authorization rollout beyond users/clients/admin-assignments/projects/tasks remains pending.
+- Full domain endpoint authorization rollout beyond users/clients/admin-assignments/projects/tasks/crm remains pending.
 
 ## Frontend Architecture
 
@@ -160,6 +171,7 @@ Portal areas:
   - `adminandemployeePanel/src/app/features/clients/*` (`GET /clients`, `GET /clients/:id`)
   - `adminandemployeePanel/src/app/features/projects/*` (`GET/POST/PATCH /projects*`)
   - `adminandemployeePanel/src/app/features/tasks/*` (`GET/POST/PATCH /tasks*`)
+  - `adminandemployeePanel/src/app/features/crm/*` (admin + employee CRM lead queries/mutations)
 - Admin pages now backend-driven for core operations:
   - `Dashboard` uses dedicated summary endpoint (`/admin/summary`)
   - `Clients` uses server-side paginated/filterable/sortable list response (`data + meta`) and syncs pagination from `currentData.meta.page` to avoid stale-page snapback
@@ -169,12 +181,17 @@ Portal areas:
   - `Projects` create/edit flow uses searchable client picker + `serviceKey` selection
   - `Tasks` create/edit flow uses searchable assignee picker
   - `TaskDetail` includes todo/checklist management (`INTERNAL` / `CLIENT_VISIBLE`)
+  - `CrmLeads` and `CrmLeadDetail` provide admin CRM list/detail/create/activity/status/convert workflows.
 - Layouts:
   - `RootLayout` — Admin Panel shell (sidebar + topbar + `<Outlet />`)
   - `EmployeeLayout` — Employee Panel shell (role-aware sidebar + topbar + `<Outlet />`)
 - Contexts: `adminandemployeePanel/src/app/contexts/RoleContext.tsx` (compatibility layer; auth source of truth is Redux)
 - Pages: `adminandemployeePanel/src/app/pages/` (admin pages)
 - Employee pages: `adminandemployeePanel/src/app/employee/pages/`
+- Employee CRM pages:
+  - `CrmLeadlerim` — assigned lead list, priority cards, status/search filters
+  - `CrmLeadDetail` — assigned lead detail, limited status update, activity/timeline entry
+  - `BugunkuTakipler` — date-range filtered follow-up view
 - Employee dashboards: `adminandemployeePanel/src/app/employee/dashboards/`
 - UI primitives: `adminandemployeePanel/src/app/components/ui/` (Radix-based, shadcn style)
 - Mock data: `adminandemployeePanel/src/app/data/mockData.ts`
@@ -237,12 +254,15 @@ Current backend baseline includes:
   - Assignment scope: `EmployeeClientAssignment` + `EmployeeClientAssignmentScope`
   - Project tracking: `Project`, `Task`, `TaskTodo` + enums (`ProjectStatus`, `TaskStatus`, `Priority`, `TaskTodoVisibility`)
   - Client purchased services: `ClientPurchasedService` + enums (`PurchasedServiceKey`, `PurchasedServiceStatus`)
+  - CRM sales pipeline: `CrmLead`, `CrmLeadActivity` + enums (`CrmLeadStatus`, `CrmLeadSource`, `CrmLeadActivityType`)
 - Hybrid RBAC strategy selected: fixed `User.role` enum is kept, permission expansion is modeled via `Permission` + `RolePermission`
 - Demo seed foundation exists at `server/prisma/seed.ts`:
   - Seeds demo admin/employee/client accounts
   - Seeds permission catalog and role-permission mappings
   - Seeds 3 demo client profiles (`acme-e-ticaret`, `nova-performance`, `mavi-sosyal`)
   - Links `client@socialtech.com` to `acme-e-ticaret`
+  - Seeds demo CRM employee `crm@socialtech.com` and backup CRM owner `crm-backup@socialtech.com`
+  - Seeds 4 demo CRM leads and starter timeline activities
   - Seeds active employee-client assignments for `project@socialtech.com`, `performance@socialtech.com`, and `social@socialtech.com`
   - Seeds 3 projects and 7 tasks mapped to seeded clients and employee assignees
 - Auth implementation:
@@ -302,8 +322,8 @@ Current backend baseline includes:
   - E2E runner: `server/test/run-e2e.cjs` (Prisma prepare + Jest execution)
   - DB safety guard in runner: strict test DB-name check (`_test`, `test_`, `testing`) with delimiter-aware matching
   - `ALLOW_E2E_DB_RESET=true` no longer bypasses DB-name safety check
-  - Matrix suite currently covers users/clients/admin-summary/admin-assignments/projects/tasks/admin-user/admin-audit-logs/token-invalidation flows
-  - Latest authz pattern run: `7/7` suites, `176/176` tests passed
+  - Matrix suite currently covers users/clients/admin-summary/admin-assignments/projects/tasks/admin-user/admin-audit-logs/token-invalidation/crm flows
+  - Latest authz pattern run: `8/8` suites, `187/187` tests passed
 - Token strategy:
   - access token in response body (Bearer usage)
   - refresh token in HttpOnly cookie
@@ -317,8 +337,8 @@ Current backend baseline includes:
   - `npm run build` passed
   - `npm run check` passed
   - `npm run typecheck:spec` passed
-  - `DATABASE_URL=postgresql://ahmeteminkaya@localhost:5432/socialtech_test?schema=public ALLOW_E2E_DB_RESET=true npm run test:e2e:authz` passed (`7/7 suites`, `176/176 tests`, test DB name: `socialtech_test`)
-  - `adminandemployeePanel npm run build` / `npm run check` / `npm run test:run` passed (`15` test files, `120/120` tests)
+  - `DATABASE_URL=postgresql://ahmeteminkaya@localhost:5432/socialtech_test?schema=public ALLOW_E2E_DB_RESET=true npm run test:e2e:authz` passed (`8/8 suites`, `187/187 tests`, test DB name: `socialtech_test`)
+  - `adminandemployeePanel npm run build` / `npm run check` / `npm run test:run` passed (`19` test files, `134/134` tests)
   - `clientPanel npm run build` / `npm run check` / `npm test` passed (`1` test file, `6/6` tests)
   - manual auth flow tests passed (`login`, `me`, `refresh`, `logout`, `logout` sonrası `refresh=401`)
   - `server/tsconfig.build.json` uses `incremental: false` to avoid missing-module runtime issues from stale/incomplete dist output
@@ -427,7 +447,7 @@ From `server/package.json`:
 npm run check                  # typecheck + seed typecheck + spec typecheck + build
 npm run test:e2e:prepare       # e2e db safety check + prisma generate/migrate/seed
 npm run test:e2e               # full backend e2e suite
-npm run test:e2e:authz         # backend authz e2e suites (users/clients/admin-summary, assignments, projects/tasks, admin-users, audit-logs, token invalidation)
+npm run test:e2e:authz         # backend authz e2e suites (users/clients/admin-summary, assignments, projects/tasks, admin-users, audit-logs, token invalidation, crm)
 DATABASE_URL=postgresql://user:pass@localhost:5432/socialtech_test?schema=public ALLOW_E2E_DB_RESET=true npm run test:e2e:authz
 ```
 `run-e2e.cjs` now requires test DB naming (`_test`, `test_`, or `testing` in DB name); `ALLOW_E2E_DB_RESET=true` does not bypass this requirement.
@@ -730,3 +750,64 @@ Latest reported checks: `adminandemployeePanel npm run check`, `clientPanel npm 
 ### Known Risks / Notes
 - Ürün politikası açısından “employee todo toggle scope’i own-only mi assignment-scope mu?” kararı artık teknik olarak assignment-scope’a hizalıdır; policy değişirse backend guard ve test matrix birlikte revize edilmelidir.
 - Görsel QA kanıtı (kritik akış screenshot artifact’ları) henüz otomatikleştirilmedi; roadmap’te planned.
+
+## Update - 2026-05-02 (CRM Lead Management + CRM Specialist Module)
+
+### Backend Architecture
+- `CRM_SPECIALIST` employee role added to backend Prisma enum, seed data, admin user role allowlist, and frontend role mapping (`crm-specialist`, label: `CRM / Satış Uzmanı`).
+- CRM schema added:
+  - `CrmLead`
+  - `CrmLeadActivity`
+  - `CrmLeadStatus`
+  - `CrmLeadSource`
+  - `CrmLeadActivityType`
+- CRM module added under `server/src/crm/*` with admin and employee controllers.
+- Admin CRM endpoints support lead list/create/detail/update/activity/convert.
+- Employee CRM endpoints support assigned-only list/detail/status-follow-up update/activity.
+- Employee object auth is owner-scoped; non-owned detail returns safe `404`.
+- Converted/WON leads are locked from employee update/activity mutations.
+- Convert creates a `ClientProfile`, marks lead `WON`, stores `convertedClientProfileId`, and returns `409` on duplicate convert.
+- CRM create/activity/convert actions write audit logs through existing `AuditLogService`.
+- Public website contact form now posts into CRM as `WEBSITE_FORM` leads, requires explicit consent, and returns only a minimal receipt response.
+
+### Admin Panel Frontend
+- Admin sidebar now includes `CRM`.
+- Admin routes added:
+  - `/crm`
+  - `/crm/:id`
+- `CrmLeads` supports KPI band, filters/search, table, pagination, create dialog, and CRM owner picker.
+- `CrmLeadDetail` supports lead summary, activity timeline, admin status/follow-up update, activity creation, and convert action.
+
+### Employee Panel Frontend
+- `CRM_SPECIALIST` sidebar menu added:
+  - Dashboard
+  - CRM Leadleri
+  - Bugünkü Takipler
+  - Takvim
+  - Bildirimler
+  - Ayarlar
+- Employee CRM routes added:
+  - `/employee/crm/leads`
+  - `/employee/crm/leads/:id`
+  - `/employee/crm/follow-ups`
+- CRM employee UI can list assigned leads, view details, add activities, update allowed statuses, and update next follow-up dates.
+- Employee UI does not expose WON/convert/owner mutation flows.
+
+### RTK Query / API Integration
+- New feature folder: `adminandemployeePanel/src/app/features/crm/*`.
+- Hooks added for admin and employee CRM query/mutation flows.
+- Cache tags include `CrmLeads`, `CrmActivities`, `Clients`, `AdminSummary`, and `AuditLogs`.
+- Empty query params are omitted before requests.
+
+### Frontend Testing
+- CRM frontend tests added:
+  - Admin CRM list/create/permission states
+  - Admin CRM detail update/activity/convert behavior
+  - CRM specialist employee sidebar visibility
+  - Employee CRM detail status/activity and no-convert/WON UI
+- Latest admin/employee frontend checkpoint: `19` test files, `134/134` tests passed.
+
+### Known Risks / Notes
+- Employee CRM list and Bugünkü Takipler pages have functional implementation and e2e-backed API behavior, but direct page-level frontend tests remain a useful follow-up.
+- Admin CRM owner picker uses `GET /api/v1/admin/users` with `role=CRM_SPECIALIST`; a dedicated CRM owner candidates endpoint can reduce coupling later.
+- CRM reminders, duplicate detection, analytics, and real email/WhatsApp integrations are planned follow-ups.
