@@ -72,11 +72,24 @@ const lead: CrmLeadDetailType = {
   },
   convertedClientProfile: null,
   latestActivity: null,
+  importMetadata: {
+    website: "atlasmobilya.com",
+    address: "Maslak, Istanbul",
+    sourceUrl: "https://maps.example.com/atlas",
+  },
+  draftCopy: "Atlas Mobilya icin ilk temas taslagi",
   activities: [],
 };
 
+const writeText = vi.fn(async () => undefined);
+
 describe("Admin CrmLeadDetail", () => {
   beforeEach(() => {
+    writeText.mockClear();
+    Object.defineProperty(window.navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
     currentUser = adminUser;
     mockUseGetAdminCrmLeadQuery.mockReturnValue({
       data: lead,
@@ -143,6 +156,25 @@ describe("Admin CrmLeadDetail", () => {
         body: { clientName: "Atlas Client", slug: "atlas-client" },
       });
     });
+  });
+
+  it("renders imported lead details and copies draft content", async () => {
+    renderDetail();
+
+    expect(screen.getByText("İçe Aktarılan Veri")).toBeInTheDocument();
+    expect(screen.getByText("atlasmobilya.com")).toBeInTheDocument();
+
+    const draftText = screen.getByText("Atlas Mobilya icin ilk temas taslagi");
+    const draftCard = draftText.closest("div");
+    const copyButton = draftCard?.querySelector("button");
+
+    expect(copyButton).not.toBeNull();
+    fireEvent.click(copyButton as HTMLButtonElement);
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith("Atlas Mobilya icin ilk temas taslagi");
+    });
+    expect(screen.getByText("Taslak kopyalandı.")).toBeInTheDocument();
   });
 
   it("shows unauthorized state without read permission", () => {

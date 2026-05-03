@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
-import { CalendarClock, Plus, Search, Target, Trophy, Users } from "lucide-react";
+import { CalendarClock, LoaderCircle, Plus, Radar, Search, Target, Trophy, Users } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -19,13 +20,16 @@ import { useGetAdminUsersQuery } from "../features/adminUsers/adminUsersApi";
 import { selectCurrentUser, hasAdminPermission } from "../features/auth/authSelectors";
 import {
   useCreateAdminCrmLeadMutation,
+  useGetAdminCrmLeadScanLogsQuery,
   useGetAdminCrmLeadsQuery,
+  useRunAdminCrmLeadScanMutation,
 } from "../features/crm/crmApi";
-import type { CrmLeadStatus } from "../features/crm/crmTypes";
+import type { CrmLeadScanLogSummary, RunAdminCrmLeadScanResponse, CrmLeadStatus } from "../features/crm/crmTypes";
 import {
   CRM_LEAD_STATUS_OPTIONS,
   extractCrmApiErrorMessage,
   formatCrmDateTime,
+  getCrmLeadScanUsageItems,
   getCrmLeadSourceLabel,
   getCrmLeadStatusClass,
   getCrmLeadStatusLabel,
@@ -55,10 +59,24 @@ const initialCreateForm: CreateFormState = {
   nextFollowUpAt: "",
 };
 
+type ScanFormState = {
+  cities: string;
+  sectors: string;
+  queryLimit: string;
+};
+
+const initialScanForm: ScanFormState = {
+  cities: "",
+  sectors: "",
+  queryLimit: "5",
+};
+
 export function CrmLeads() {
   const currentUser = useAppSelector(selectCurrentUser);
   const canRead = hasAdminPermission(currentUser, ["crm.leads.read.any"]);
   const canManage = hasAdminPermission(currentUser, ["crm.leads.manage.any"]);
+  const canScanRun = hasAdminPermission(currentUser, ["crm.leadScan.run"]);
+  const canScanRead = hasAdminPermission(currentUser, ["crm.leadScan.read"]);
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -68,6 +86,9 @@ export function CrmLeads() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState<CreateFormState>(initialCreateForm);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [scanForm, setScanForm] = useState<ScanFormState>(initialScanForm);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [scanSummary, setScanSummary] = useState<RunAdminCrmLeadScanResponse | null>(null);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => setSearch(searchInput.trim()), SEARCH_DEBOUNCE_MS);
@@ -103,9 +124,15 @@ export function CrmLeads() {
     skip: !isCreateOpen || !canManage,
   });
   const [createLead, { isLoading: isCreating }] = useCreateAdminCrmLeadMutation();
+  const [runLeadScan, { isLoading: isScanning }] = useRunAdminCrmLeadScanMutation();
+  const { data: scanLogsResponse } = useGetAdminCrmLeadScanLogsQuery(undefined, {
+    skip: !canScanRead,
+  });
   const response = currentData ?? data;
   const leads = response?.data ?? [];
   const meta = response?.meta;
+  const latestScan = scanLogsResponse?.data[0] ?? null;
+  const usage = scanSummary?.usage ?? scanLogsResponse?.meta;
   const today = getTodayIsoRange();
   const todayFollowUps = leads.filter((lead) => {
     if (!lead.nextFollowUpAt) return false;
@@ -141,6 +168,54 @@ export function CrmLeads() {
     }
   }
 
+  async function handleScanSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canScanRun || isScanning) {
+      return;
+    }
+
+    const cities = splitCommaValues(scanForm.cities);
+    const sectors = splitCommaValues(scanForm.sectors);
+    if (cities.length === 0 && sectors.length === 0 && !scanForm.queryLimit.trim()) {
+      setScanError("Varsayılan taramayı kullanabilir veya şehir/sektör override girebilirsin.");
+      toast.error("Lead taraması başlatılamadı.", {
+        description: "Varsayılan taramayı kullanabilir veya şehir/sektör override girebilirsin.",
+      });
+      return;
+    }
+
+    const parsedLimit = Number.parseInt(scanForm.queryLimit, 10);
+    if (!Number.isFinite(parsedLimit) || parsedLimit < 1 || parsedLimit > 6) {
+      setScanError("Sorgu limiti 1 ile 6 arasında olmalıdır.");
+      toast.error("Lead taraması başlatılamadı.", {
+        description: "Sorgu limiti 1 ile 6 arasında olmalıdır.",
+      });
+      return;
+    }
+
+    setScanError(null);
+
+    try {
+      const result = await runLeadScan({
+        queryLimit: parsedLimit,
+        ...(cities.length > 0 ? { cities } : {}),
+        ...(sectors.length > 0 ? { sectors } : {}),
+      }).unwrap();
+      setScanSummary(result);
+      setPage(1);
+      setScanForm(initialScanForm);
+      toast.success("Lead taraması tamamlandı.", {
+        description: result.summary,
+      });
+    } catch (scanErrorValue) {
+      const message = extractCrmApiErrorMessage(scanErrorValue, "Lead taraması başlatılamadı.");
+      setScanError(message);
+      toast.error("Lead taraması başlatılamadı.", {
+        description: message,
+      });
+    }
+  }
+
   if (!canRead) {
     return <UnauthorizedState text="CRM leadlerini görüntülemek için crm.leads.read.any yetkisi gerekir." />;
   }
@@ -168,6 +243,68 @@ export function CrmLeads() {
         <MetricCard icon={<Target />} label="Qualified" value={String(qualified)} />
         <MetricCard icon={<Trophy />} label="Won/Lost" value={String(wonLost)} />
       </div>
+
+      {(canScanRun || canScanRead) && (
+        <Card className="border-white/[0.06] bg-[#1A1A1A] p-4">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="flex items-center gap-2 text-base font-semibold text-white">
+              <Radar className="h-4 w-4 text-[#AAFF01]" />
+              SerpAPI Lead Taraması
+            </h2>
+            <p className="mt-1 text-sm text-[#A0A0A0]">
+              Backend taramasını başlatır, yeni leadleri içe aktarır ve CRM listesini yeniler.
+            </p>
+          </div>
+          <div className="rounded-full border border-white/[0.06] px-3 py-1 text-xs text-[#A0A0A0]">
+            Günlük güvenli SerpAPI limiti
+          </div>
+        </div>
+
+        <form className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_120px_auto]" onSubmit={handleScanSubmit}>
+          <FormInput
+            label="Şehirler"
+            value={scanForm.cities}
+            onChange={(value) => setScanForm((prev) => ({ ...prev, cities: value }))}
+            placeholder="İstanbul, Ankara"
+            disabled={!canScanRun || isScanning}
+          />
+          <FormInput
+            label="Sektörler"
+            value={scanForm.sectors}
+            onChange={(value) => setScanForm((prev) => ({ ...prev, sectors: value }))}
+            placeholder="güzellik merkezi, diş kliniği"
+            disabled={!canScanRun || isScanning}
+          />
+          <FormInput
+            label="Sorgu Limiti"
+            type="number"
+            value={scanForm.queryLimit}
+            onChange={(value) => setScanForm((prev) => ({ ...prev, queryLimit: value }))}
+            disabled={!canScanRun || isScanning}
+          />
+          <div className="flex items-end">
+            <Button
+              type="submit"
+              className="w-full bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
+              disabled={!canScanRun || isScanning}
+            >
+              {isScanning ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Radar className="h-4 w-4" />}
+              {isScanning ? "Taranıyor..." : "Lead Tara"}
+            </Button>
+          </div>
+        </form>
+
+        {!canScanRun && canScanRead && (
+          <div className="mt-3 rounded-lg border border-white/[0.06] bg-[#202020] px-3 py-2 text-sm text-[#A0A0A0]">
+            Bu hesabın tarama özetlerini görme yetkisi var, ancak yeni tarama başlatamaz.
+          </div>
+        )}
+        {scanError && <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">{scanError}</div>}
+        <ScanUsageCard usage={usage} latestScan={latestScan} />
+        {scanSummary && <ScanSummaryCard summary={scanSummary} />}
+        </Card>
+      )}
 
       <Card className="border-white/[0.06] bg-[#1A1A1A] p-4">
         <div className="grid gap-3 md:grid-cols-[1fr_220px_auto]">
@@ -296,6 +433,83 @@ export function CrmLeads() {
   );
 }
 
+function ScanSummaryCard({ summary }: { summary: RunAdminCrmLeadScanResponse }) {
+  const statItems = [
+    { label: "Kullanılan Sorgu", value: String(summary.totalQueriesUsed) },
+    { label: "İşletme", value: String(summary.totalBusinessesFetched) },
+    { label: "Duplicate", value: String(summary.totalDuplicates) },
+    { label: "Analiz", value: String(summary.totalWebsitesAnalyzed) },
+    { label: "Qualified", value: String(summary.totalQualified) },
+    { label: "Kaydedilen Lead", value: String(summary.totalSaved) },
+    { label: "Failed", value: String(summary.totalFailed) },
+  ];
+  const usageItems = getCrmLeadScanUsageItems(summary.usage);
+
+  return (
+    <div className="mt-4 rounded-xl border border-[#AAFF01]/20 bg-[#AAFF01]/5 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-medium text-white">Son tarama özeti</p>
+          <p className="text-xs text-[#A0A0A0]">{summary.summary}</p>
+        </div>
+        <Badge className="border-emerald-400/30 bg-emerald-400/10 text-emerald-200">
+          {summary.totalSaved} lead kaydedildi
+        </Badge>
+      </div>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {statItems.map((item) => (
+          <div key={item.label} className="rounded-lg border border-white/[0.06] bg-[#202020] px-3 py-2">
+            <p className="text-[11px] uppercase tracking-[0.16em] text-[#A0A0A0]">{item.label}</p>
+            <p className="mt-1 text-lg font-semibold text-white">{item.value}</p>
+          </div>
+        ))}
+      </div>
+
+      {usageItems.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {usageItems.map((item) => (
+            <div key={item.label} className="rounded-full border border-white/[0.06] bg-[#202020] px-3 py-1.5 text-xs text-[#D7D7D7]">
+              <span className="text-[#A0A0A0]">{item.label}:</span> {item.value}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ScanUsageCard({
+  usage,
+  latestScan,
+}: {
+  usage: RunAdminCrmLeadScanResponse["usage"] | undefined;
+  latestScan: CrmLeadScanLogSummary | null;
+}) {
+  const usageItems = getCrmLeadScanUsageItems(usage);
+
+  return (
+    <div className="mt-4 grid gap-3 lg:grid-cols-[0.9fr_1.1fr]">
+      <div className="rounded-lg border border-white/[0.06] bg-[#202020] p-4">
+        <p className="mb-2 text-sm font-medium text-white">Bugünkü SerpAPI Kullanımı</p>
+        <div className="flex flex-wrap gap-2">
+          {usageItems.map((item) => (
+            <div key={item.label} className="rounded-full border border-white/[0.06] px-3 py-1 text-xs text-[#D7D7D7]">
+              <span className="text-[#A0A0A0]">{item.label}:</span> {item.value}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="rounded-lg border border-white/[0.06] bg-[#202020] p-4">
+        <p className="mb-1 text-sm font-medium text-white">Son Tarama Özeti</p>
+        <p className="text-sm text-[#A0A0A0]">
+          {latestScan?.summary ?? "Henüz otomatik lead taraması çalıştırılmadı."}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function MetricCard({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return (
     <Card className="border-white/[0.06] bg-[#1A1A1A] p-5">
@@ -305,12 +519,26 @@ function MetricCard({ icon, label, value }: { icon: ReactNode; label: string; va
   );
 }
 
-function FormInput({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
+function FormInput({
+  label,
+  value,
+  onChange,
+  type = "text",
+  placeholder,
+  disabled,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  placeholder?: string;
+  disabled?: boolean;
+}) {
   const id = `crm-create-${label.toLowerCase().replace(/\s+/g, "-")}`;
   return (
     <div className="space-y-2">
       <Label htmlFor={id} className="text-xs text-[#A0A0A0]">{label}</Label>
-      <Input id={id} type={type} value={value} onChange={(event) => onChange(event.target.value)} className="border-white/[0.06] bg-[#202020] text-white" />
+      <Input id={id} type={type} value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} disabled={disabled} className="border-white/[0.06] bg-[#202020] text-white" />
     </div>
   );
 }
@@ -321,4 +549,11 @@ function PanelState({ text, tone = "muted" }: { text: string; tone?: "muted" | "
 
 function UnauthorizedState({ text }: { text: string }) {
   return <PanelState text={text} tone="error" />;
+}
+
+function splitCommaValues(value: string): string[] {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item, index, array) => item.length > 0 && array.indexOf(item) === index);
 }

@@ -12,7 +12,9 @@ import {
   CrmLeadActivityType,
   CrmLeadSource,
   CrmLeadStatus,
+  CrmLeadWebsiteStatus,
   Prisma,
+  Priority,
   UserRole,
   UserStatus,
 } from "@prisma/client";
@@ -89,8 +91,29 @@ const leadListSelect = {
   phone: true,
   source: true,
   status: true,
+  priority: true,
   ownerUserId: true,
   convertedClientProfileId: true,
+  address: true,
+  city: true,
+  sector: true,
+  website: true,
+  websiteStatus: true,
+  websiteIssues: true,
+  detectedPainPoints: true,
+  recommendedServices: true,
+  outreachAngle: true,
+  emailSubject: true,
+  emailBody: true,
+  whatsappMessage: true,
+  sourceQuery: true,
+  sourceProvider: true,
+  googleMapsUrl: true,
+  googleRating: true,
+  reviewCount: true,
+  instagramUrl: true,
+  whatsappPhone: true,
+  leadScore: true,
   nextFollowUpAt: true,
   createdAt: true,
   updatedAt: true,
@@ -136,8 +159,29 @@ type LeadListResponse = {
   phone: string | null;
   source: CrmLeadSource;
   status: CrmLeadStatus;
+  priority: Priority | null;
   ownerUserId: string;
   convertedClientProfileId: string | null;
+  address: string | null;
+  city: string | null;
+  sector: string | null;
+  website: string | null;
+  websiteStatus: CrmLeadWebsiteStatus | null;
+  websiteIssues: Prisma.JsonValue | null;
+  detectedPainPoints: Prisma.JsonValue | null;
+  recommendedServices: Prisma.JsonValue | null;
+  outreachAngle: string | null;
+  emailSubject: string | null;
+  emailBody: string | null;
+  whatsappMessage: string | null;
+  sourceQuery: string | null;
+  sourceProvider: string | null;
+  googleMapsUrl: string | null;
+  googleRating: number | null;
+  reviewCount: number | null;
+  instagramUrl: string | null;
+  whatsappPhone: string | null;
+  leadScore: number | null;
   nextFollowUpAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -569,6 +613,9 @@ export class CrmLeadsService {
               { contactName: { contains: query.search, mode: "insensitive" } },
               { contactEmail: { contains: query.search, mode: "insensitive" } },
               { phone: { contains: query.search, mode: "insensitive" } },
+              { address: { contains: query.search, mode: "insensitive" } },
+              { city: { contains: query.search, mode: "insensitive" } },
+              { sector: { contains: query.search, mode: "insensitive" } },
             ],
           }
         : {}),
@@ -815,8 +862,29 @@ export class CrmLeadsService {
       phone: lead.phone,
       source: lead.source,
       status: lead.status,
+      priority: lead.priority,
       ownerUserId: lead.ownerUserId,
       convertedClientProfileId: lead.convertedClientProfileId,
+      address: lead.address,
+      city: lead.city,
+      sector: lead.sector,
+      website: lead.website,
+      websiteStatus: lead.websiteStatus,
+      websiteIssues: lead.websiteIssues,
+      detectedPainPoints: lead.detectedPainPoints,
+      recommendedServices: lead.recommendedServices,
+      outreachAngle: lead.outreachAngle,
+      emailSubject: lead.emailSubject,
+      emailBody: lead.emailBody,
+      whatsappMessage: lead.whatsappMessage,
+      sourceQuery: lead.sourceQuery,
+      sourceProvider: lead.sourceProvider,
+      googleMapsUrl: lead.googleMapsUrl,
+      googleRating: lead.googleRating,
+      reviewCount: lead.reviewCount,
+      instagramUrl: lead.instagramUrl,
+      whatsappPhone: lead.whatsappPhone,
+      leadScore: lead.leadScore,
       nextFollowUpAt: lead.nextFollowUpAt,
       createdAt: lead.createdAt,
       updatedAt: lead.updatedAt,

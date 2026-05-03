@@ -7,10 +7,19 @@ import type {
   CrmLeadDetail,
   CrmLeadListQuery,
   CrmLeadListResponse,
+  CrmLeadScanLogSummary,
+  CrmLeadScanLogsResponse,
+  RunAdminCrmLeadScanRequest,
+  RunAdminCrmLeadScanResponse,
   UpdateAdminCrmLeadRequest,
   UpdateAssignedCrmLeadRequest,
 } from "./crmTypes";
-import { isCrmLeadListResponse } from "./crmUtils";
+import {
+  isCrmLeadListResponse,
+  normalizeCrmLeadScanLogsResponse,
+  normalizeCrmLeadScanLogSummary,
+  normalizeCrmLeadScanResponse,
+} from "./crmUtils";
 
 const CRM_LEADS_LIST_ID = "LIST";
 const CLIENTS_LIST_ID = "LIST";
@@ -38,6 +47,24 @@ export const crmApi = baseApi.injectEndpoints({
         { type: "CrmLeads", id: CRM_LEADS_LIST_ID },
         { type: "AuditLogs", id: AUDIT_LOGS_LIST_ID },
       ],
+    }),
+    runAdminCrmLeadScan: builder.mutation<RunAdminCrmLeadScanResponse, RunAdminCrmLeadScanRequest>({
+      query: (body) => ({ url: "/admin/crm/lead-scan/run", method: "POST", body }),
+      transformResponse: normalizeCrmLeadScanResponse,
+      invalidatesTags: [
+        { type: "CrmLeads", id: CRM_LEADS_LIST_ID },
+        { type: "AuditLogs", id: AUDIT_LOGS_LIST_ID },
+      ],
+    }),
+    getAdminCrmLeadScanLogs: builder.query<CrmLeadScanLogsResponse, void>({
+      query: () => ({ url: "/admin/crm/lead-scan/logs", method: "GET" }),
+      transformResponse: normalizeCrmLeadScanLogsResponse,
+      providesTags: [{ type: "AuditLogs", id: AUDIT_LOGS_LIST_ID }],
+    }),
+    getAdminCrmLeadScanLog: builder.query<CrmLeadScanLogSummary, string>({
+      query: (id) => ({ url: `/admin/crm/lead-scan/logs/${id}`, method: "GET" }),
+      transformResponse: normalizeCrmLeadScanLogSummary,
+      providesTags: (_result, _error, id) => [{ type: "AuditLogs", id }],
     }),
     updateAdminCrmLead: builder.mutation<CrmLeadDetail, { id: string; body: UpdateAdminCrmLeadRequest }>({
       query: ({ id, body }) => ({ url: `/admin/crm/leads/${id}`, method: "PATCH", body }),
@@ -92,6 +119,9 @@ export const {
   useGetAdminCrmLeadsQuery,
   useGetAdminCrmLeadQuery,
   useCreateAdminCrmLeadMutation,
+  useRunAdminCrmLeadScanMutation,
+  useGetAdminCrmLeadScanLogsQuery,
+  useGetAdminCrmLeadScanLogQuery,
   useUpdateAdminCrmLeadMutation,
   useCreateAdminCrmLeadActivityMutation,
   useConvertAdminCrmLeadMutation,

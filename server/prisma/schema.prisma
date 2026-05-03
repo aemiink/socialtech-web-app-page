@@ -110,6 +110,7 @@ enum CrmLeadStatus {
 enum CrmLeadSource {
   MANUAL
   WEBSITE_FORM
+  SERPAPI
 }
 
 enum CrmLeadActivityType {
@@ -118,6 +119,23 @@ enum CrmLeadActivityType {
   WHATSAPP
   NOTE
   STATUS_CHANGE
+}
+
+enum CrmLeadScanStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum CrmLeadScanTrigger {
+  MANUAL
+  CRON
+}
+
+enum CrmLeadWebsiteStatus {
+  NO_WEBSITE
+  FETCH_FAILED
+  ANALYZED
 }
 
 model Permission {
@@ -163,6 +181,7 @@ model User {
   completedTaskTodos        TaskTodo[]                 @relation("TaskTodoCompletedBy")
   ownedCrmLeads             CrmLead[]                  @relation("CrmLeadOwner")
   crmLeadActivities         CrmLeadActivity[]          @relation("CrmLeadActivityActor")
+  triggeredCrmLeadScans     CrmLeadScanLog[]          @relation("CrmLeadScanTriggeredBy")
   auditLogs                 AuditLog[]                 @relation("AuditActor")
 
   @@index([accountType, role])
@@ -297,8 +316,29 @@ model CrmLead {
   phone                    String?
   source                   CrmLeadSource @default(MANUAL)
   status                   CrmLeadStatus @default(NEW)
+  priority                 Priority?
   ownerUserId              String        @db.Uuid
   convertedClientProfileId String?       @db.Uuid
+  address                  String?
+  city                     String?
+  sector                   String?
+  website                  String?
+  websiteStatus            CrmLeadWebsiteStatus?
+  websiteIssues            Json?
+  detectedPainPoints       Json?
+  recommendedServices      Json?
+  outreachAngle            String?
+  emailSubject             String?
+  emailBody                String?
+  whatsappMessage          String?
+  sourceQuery              String?
+  sourceProvider           String?
+  googleMapsUrl            String?
+  googleRating             Float?
+  reviewCount              Int?
+  instagramUrl             String?
+  whatsappPhone            String?
+  leadScore                Int?
   nextFollowUpAt           DateTime?
   createdAt                DateTime      @default(now())
   updatedAt                DateTime      @updatedAt
@@ -309,9 +349,15 @@ model CrmLead {
 
   @@index([ownerUserId])
   @@index([status])
+  @@index([priority])
   @@index([source])
   @@index([nextFollowUpAt])
   @@index([convertedClientProfileId])
+  @@index([city])
+  @@index([phone])
+  @@index([website])
+  @@index([googleMapsUrl])
+  @@index([companyName, city])
   @@index([createdAt])
 }
 
@@ -332,6 +378,35 @@ model CrmLeadActivity {
   @@index([type])
   @@index([createdAt])
   @@index([nextFollowUpAt])
+}
+
+model CrmLeadScanLog {
+  id                     String             @id @default(uuid()) @db.Uuid
+  startedAt              DateTime           @default(now())
+  finishedAt             DateTime?
+  status                 CrmLeadScanStatus  @default(RUNNING)
+  triggeredBy            CrmLeadScanTrigger @default(MANUAL)
+  triggeredByUserId      String?            @db.Uuid
+  totalQueriesUsed       Int                @default(0)
+  totalBusinessesFetched Int                @default(0)
+  totalDuplicates        Int                @default(0)
+  totalWebsitesAnalyzed  Int                @default(0)
+  totalQualified         Int                @default(0)
+  totalSaved             Int                @default(0)
+  totalFailed            Int                @default(0)
+  queries                Json?
+  errors                 Json?
+  summary                String?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  triggeredByUser User? @relation("CrmLeadScanTriggeredBy", fields: [triggeredByUserId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([triggeredBy])
+  @@index([triggeredByUserId])
+  @@index([startedAt])
+  @@index([createdAt])
 }
 
 model AuditLog {

@@ -24,6 +24,8 @@ export const CRM_LEAD_AUDIT_ACTIONS = {
   updated: "CRM_LEAD_UPDATED",
   activityCreated: "CRM_LEAD_ACTIVITY_CREATED",
   converted: "CRM_LEAD_CONVERTED",
+  scanRunCreated: "CRM_LEAD_SCAN_RUN_CREATED",
+  scanRunCompleted: "CRM_LEAD_SCAN_RUN_COMPLETED",
 } as const;
 
 export type AdminUserAuditAction =

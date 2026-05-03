@@ -1458,3 +1458,57 @@ Affected files:
 - `server/.env.example`
 - `server/test/crm-authz.e2e-spec.ts`
 - `client/src/app/components/contact/sections/FormSection.tsx`
+
+---
+
+## 2026-05-03 - CRM Lead Scan Stays Backend-Native Inside `server/`
+
+Context:
+The repository already had an in-progress `server/src/crm-lead-scan/` module and extended CRM lead schema for scan-derived outreach data, but shared memory did not reflect it and backend hardening around env validation, migration coverage, permissions, and automated tests was still incomplete.
+
+Decision:
+- Keep the feature backend-native under `server/` and reuse the current NestJS + Prisma CRM structure.
+- Use SerpAPI Google Maps only as the lead acquisition source.
+- Enforce daily free-plan safety via DB-tracked scan logs and env-capped limits (`LEAD_SCAN_DAILY_QUERY_LIMIT`, default `5`, max `6`).
+- Run duplicate detection before website analysis and AI scoring.
+- Store Turkish-only outreach drafts and related scan metadata directly on created CRM leads.
+
+Reason:
+This preserves a single backend enforcement point for quota, duplication, auditability, and resilience without introducing n8n or a separate automation runtime.
+
+Affected files:
+- `server/prisma/migrations/20260503000000_add_crm_lead_scan_engine/migration.sql`
+- `server/prisma/schema.prisma`
+- `server/prisma/seed.ts`
+- `server/src/config/env.validation.ts`
+- `server/.env.example`
+- `server/src/crm-lead-scan/*`
+- `server/src/crm/crm.module.ts`
+- `server/src/crm/crm-leads.service.ts`
+- `server/test/crm-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/crm/*`
+- `adminandemployeePanel/src/app/pages/CrmLeads.tsx`
+- `adminandemployeePanel/src/app/pages/CrmLeadDetail.tsx`
+
+---
+
+## 2026-05-03 - CRM Lead Scoring Provider Switched From OpenAI To Gemini
+
+Context:
+The CRM lead scan scoring layer was wired to OpenAI-style chat completions, but the product requirement changed to use Gemini as the LLM provider while preserving the existing NestJS lead scan architecture and heuristic fallback path.
+
+Decision:
+- Keep the same `LeadScoringService` boundary and scoring contract.
+- Switch provider-specific env/config from `OPENAI_*` to `GEMINI_*`.
+- Use Gemini REST `models/{model}:generateContent` with structured JSON output for lead scoring.
+- Preserve heuristic fallback when `GEMINI_API_KEY` is missing or the Gemini response cannot be parsed safely.
+
+Reason:
+This keeps the implementation modular and minimally invasive while satisfying the provider change without introducing a new architecture or rewriting the CRM scan flow.
+
+Affected files:
+- `server/src/crm-lead-scan/lead-scoring.service.ts`
+- `server/src/config/env.validation.ts`
+- `server/.env.example`
+- `server/test/crm-authz.e2e-spec.ts`
+- `REPO_MAP.md`

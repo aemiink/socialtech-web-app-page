@@ -124,6 +124,12 @@ Portal areas:
   - Employee CRM detail access is object-scoped by `ownerUserId`; non-owned lead detail returns safe `404`.
   - Convert is admin-only, creates a `ClientProfile`, sets lead status `WON`, and prevents duplicate conversion with `409`.
   - Public website contact form creates `WEBSITE_FORM` leads, requires consent, returns only minimal receipt data, and auto-assigns the lead to an active CRM specialist.
+- Admin CRM lead scan API is now active:
+  - `POST /api/v1/admin/crm/lead-scan/run`
+  - `GET /api/v1/admin/crm/lead-scan/logs`
+  - `GET /api/v1/admin/crm/lead-scan/logs/:id`
+  - Admin-only via `crm.leadScan.run` / `crm.leadScan.read`.
+  - Uses SerpAPI Google Maps only, enforces DB-tracked daily query safety (`LEAD_SCAN_DAILY_QUERY_LIMIT`, default `5`, max `6`), skips duplicates before website/AI analysis, analyzes websites, and stores Turkish outreach drafts on created CRM leads.
 - `GET /users` enforces `users.read`; service-level object authorization protects `/users/:id` and `/clients/:id`.
 - Admin can read full users/client profile scopes; client users are limited to their own `ClientProfile` scope.
 - Employee assignment scope is now modeled via `EmployeeClientAssignment` + active assignment checks.
@@ -810,4 +816,4 @@ Latest reported checks: `adminandemployeePanel npm run check`, `clientPanel npm 
 ### Known Risks / Notes
 - Employee CRM list and Bugünkü Takipler pages have functional implementation and e2e-backed API behavior, but direct page-level frontend tests remain a useful follow-up.
 - Admin CRM owner picker uses `GET /api/v1/admin/users` with `role=CRM_SPECIALIST`; a dedicated CRM owner candidates endpoint can reduce coupling later.
-- CRM reminders, duplicate detection, analytics, and real email/WhatsApp integrations are planned follow-ups.
+- CRM reminders, pipeline analytics, and outbound email/WhatsApp sending integrations are planned follow-ups.

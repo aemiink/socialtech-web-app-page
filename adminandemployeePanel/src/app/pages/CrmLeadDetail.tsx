@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { FormEvent, useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
-import { ArrowLeft, CalendarClock, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, CalendarClock, CheckCircle2, Copy, MessageCircle } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -21,8 +21,11 @@ import {
   extractCrmApiErrorMessage,
   formatCrmDateTime,
   getCrmActivityTypeLabel,
+  getCrmLeadDraftSections,
+  getCrmLeadImportedDetails,
   getCrmLeadStatusClass,
   getCrmLeadStatusLabel,
+  normalizeJsonStringArray,
 } from "../features/crm/crmUtils";
 import { useAppSelector } from "../store/hooks";
 
@@ -129,6 +132,22 @@ export function CrmLeadDetail() {
   }
 
   const isConverted = Boolean(lead.convertedClientProfileId);
+  const importedDetails = getCrmLeadImportedDetails(lead);
+  const draftSections = getCrmLeadDraftSections(lead);
+  const painPoints = normalizeJsonStringArray(lead.detectedPainPoints);
+  const recommendedServices = normalizeJsonStringArray(lead.recommendedServices);
+
+  async function handleCopy(value: string, successText: string) {
+    setSubmitError(null);
+    setMessage(null);
+
+    try {
+      await navigator.clipboard.writeText(value);
+      setMessage(successText);
+    } catch {
+      setSubmitError("Kopyalama yapılamadı.");
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -164,6 +183,97 @@ export function CrmLeadDetail() {
               </Link>
             )}
           </Card>
+
+          {(importedDetails.length > 0 || draftSections.length > 0 || painPoints.length > 0 || recommendedServices.length > 0) && (
+            <Card className="border-white/[0.06] bg-[#1A1A1A] p-5">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold text-white">İçe Aktarılan Veri</h2>
+                  <p className="mt-1 text-sm text-[#A0A0A0]">
+                    SerpAPI veya dış kaynak alanları geldiyse burada görünür.
+                  </p>
+                </div>
+                {lead.whatsappMessage && (lead.whatsappPhone || lead.phone) && (
+                  <a
+                    href={buildWhatsappUrl(lead.whatsappPhone ?? lead.phone ?? "", lead.whatsappMessage)}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <Button variant="outline" size="sm">
+                      <MessageCircle className="h-4 w-4" />
+                      WhatsApp'ta Aç
+                    </Button>
+                  </a>
+                )}
+              </div>
+
+              {importedDetails.length > 0 && (
+                <div className="grid gap-3 md:grid-cols-2">
+                  {importedDetails.map((item) => (
+                    <div key={`${item.label}-${item.value}`} className="rounded-lg border border-white/[0.06] bg-[#202020] p-3">
+                      <p className="mb-1 text-xs text-[#A0A0A0]">{item.label}</p>
+                      {item.href ? (
+                        <a
+                          href={item.href}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="break-all text-sm font-medium text-[#d2ff8a] hover:text-white"
+                        >
+                          {item.value}
+                        </a>
+                      ) : (
+                        <p className="break-words text-sm font-medium text-white">{item.value}</p>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="mt-2 h-7 px-0 text-xs text-[#A0A0A0] hover:bg-transparent hover:text-white"
+                        onClick={() => void handleCopy(item.copyValue, `${item.label} panoya alındı.`)}
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                        Kopyala
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {painPoints.length > 0 && (
+                <div className="mt-4 rounded-lg border border-white/[0.06] bg-[#202020] p-4">
+                  <p className="mb-2 text-sm font-medium text-white">Tespit Edilen Pain Points</p>
+                  <ul className="space-y-1 text-sm text-[#D7D7D7]">
+                    {painPoints.map((item) => (
+                      <li key={item}>• {item}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {recommendedServices.length > 0 && (
+                <div className="mt-4 rounded-lg border border-white/[0.06] bg-[#202020] p-4">
+                  <p className="mb-2 text-sm font-medium text-white">Önerilen Servisler</p>
+                  <div className="flex flex-wrap gap-2">
+                    {recommendedServices.map((item) => (
+                      <Badge key={item} variant="outline">{item}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {draftSections.map((section) => (
+                <div key={section.title} className="mt-4 rounded-lg border border-white/[0.06] bg-[#202020] p-4">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium text-white">{section.title}</p>
+                    <Button variant="ghost" size="sm" className="h-7 text-xs text-[#A0A0A0] hover:bg-transparent hover:text-white" onClick={() => void handleCopy(section.body, section.copyLabel)}>
+                      <Copy className="h-3.5 w-3.5" />
+                      Kopyala
+                    </Button>
+                  </div>
+                  <p className="whitespace-pre-wrap text-sm text-[#D7D7D7]">{section.body}</p>
+                </div>
+              ))}
+            </Card>
+          )}
 
           <Card className="border-white/[0.06] bg-[#1A1A1A] p-5">
             <h2 className="mb-4 text-lg font-semibold text-white">Aktivite Timeline</h2>
@@ -252,4 +362,10 @@ function Select({ label, value, onChange, disabled, children }: { label: string;
 function PanelState({ text, tone = "muted" }: { text: string; tone?: "muted" | "error" | "success" }) {
   const className = tone === "error" ? "text-red-200" : tone === "success" ? "text-[#d2ff8a]" : "text-[#A0A0A0]";
   return <Card className={`border-white/[0.06] bg-[#1A1A1A] p-6 text-sm ${className}`}>{text}</Card>;
+}
+
+function buildWhatsappUrl(phone: string, message: string): string {
+  const normalizedPhone = phone.replace(/\D+/g, "");
+  const text = encodeURIComponent(message);
+  return `https://wa.me/${normalizedPhone}?text=${text}`;
 }

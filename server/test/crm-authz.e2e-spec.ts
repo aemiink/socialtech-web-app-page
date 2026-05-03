@@ -19,6 +19,8 @@ import { GlobalExceptionFilter } from "../src/common/filters/global-exception.fi
 import { createCorsOptions } from "../src/config/cors.config";
 
 const ADMIN_CRM_PATH = "/api/v1/admin/crm/leads";
+const ADMIN_CRM_SCAN_RUN_PATH = "/api/v1/admin/crm/lead-scan/run";
+const ADMIN_CRM_SCAN_LOGS_PATH = "/api/v1/admin/crm/lead-scan/logs";
 const EMPLOYEE_CRM_PATH = "/api/v1/crm/leads";
 const PUBLIC_CRM_PATH = "/api/v1/public/crm/leads";
 const AUTH_LOGIN_PATH = "/api/v1/auth/login";
@@ -83,8 +85,15 @@ describe("CRM Lead Authorization (e2e)", () => {
   let nonCrmEmployeeToken = "";
   let crmUserId = "";
   let otherOwnerLeadId = "";
+  const originalFetch = global.fetch;
 
   beforeAll(async () => {
+    process.env.SERPAPI_API_KEY = "test-serpapi-key";
+    process.env.GEMINI_API_KEY = "test-gemini-key";
+    process.env.LEAD_SCAN_DAILY_QUERY_LIMIT = "5";
+    process.env.LEAD_SCAN_MAX_DAILY_QUERY_LIMIT = "6";
+    global.fetch = createLeadScanFetchMock();
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -121,10 +130,15 @@ describe("CRM Lead Authorization (e2e)", () => {
     await cleanupRuntimeFixtures();
     await prisma.$disconnect();
     await app.close();
+    global.fetch = originalFetch;
   });
 
   it("rejects unauthenticated CRM requests", async () => {
     await request(app.getHttpServer()).get(EMPLOYEE_CRM_PATH).expect(401);
+  });
+
+  it("rejects unauthenticated CRM lead scan requests", async () => {
+    await request(app.getHttpServer()).post(ADMIN_CRM_SCAN_RUN_PATH).send({ queryLimit: 1 }).expect(401);
   });
 
   it("accepts public website contact form submissions as WEBSITE_FORM leads", async () => {
@@ -394,6 +408,81 @@ describe("CRM Lead Authorization (e2e)", () => {
       .expect(403);
   });
 
+  it("rejects non-admin users on admin lead scan endpoints", async () => {
+    await request(app.getHttpServer())
+      .post(ADMIN_CRM_SCAN_RUN_PATH)
+      .set("Authorization", `Bearer ${crmToken}`)
+      .send({ queryLimit: 1 })
+      .expect(403);
+  });
+
+  it("allows admin to run a lead scan and read scan logs", async () => {
+    const response = await request(app.getHttpServer())
+      .post(ADMIN_CRM_SCAN_RUN_PATH)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        queryLimit: 1,
+        cities: ["Ankara"],
+        sectors: ["diş kliniği"],
+      })
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      scanId: expect.any(String),
+      status: "COMPLETED",
+      totalQueriesUsed: 1,
+    });
+
+    const savedLead = await prisma.crmLead.findFirst({
+      where: {
+        source: CrmLeadSource.SERPAPI,
+        sourceQuery: "Ankara diş kliniği",
+      },
+      select: {
+        id: true,
+        emailBody: true,
+        whatsappMessage: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    expect(savedLead).not.toBeNull();
+    expect(savedLead?.emailBody).toContain("Merhaba");
+    expect(savedLead?.whatsappMessage).toContain("Merhaba");
+
+    const logsResponse = await request(app.getHttpServer())
+      .get(ADMIN_CRM_SCAN_LOGS_PATH)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(logsResponse.body.meta.usedToday).toBeGreaterThanOrEqual(1);
+    expect(Array.isArray(logsResponse.body.data)).toBe(true);
+    expect(logsResponse.body.data[0]?.id).toBe(response.body.scanId);
+
+    await request(app.getHttpServer())
+      .get(`${ADMIN_CRM_SCAN_LOGS_PATH}/${response.body.scanId as string}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+  });
+
+  it("enforces the daily lead scan limit", async () => {
+    await prisma.crmLeadScanLog.create({
+      data: {
+        status: "COMPLETED",
+        triggeredBy: "MANUAL",
+        triggeredByUserId: adminUserIdByTokenSubject(adminToken),
+        totalQueriesUsed: 5,
+        summary: "quota fixture",
+      },
+    });
+
+    await request(app.getHttpServer())
+      .post(ADMIN_CRM_SCAN_RUN_PATH)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ queryLimit: 1 })
+      .expect(400);
+  });
+
   async function loginWithDemoUser(email: string): Promise<LoginBody> {
     const response = await request(app.getHttpServer()).post(AUTH_LOGIN_PATH).send({
       email,
@@ -468,6 +557,14 @@ describe("CRM Lead Authorization (e2e)", () => {
       await prisma.crmLeadActivity.deleteMany({ where: { leadId: { in: leadIds } } });
       await prisma.crmLead.deleteMany({ where: { id: { in: leadIds } } });
     }
+    await prisma.crmLeadScanLog.deleteMany({
+      where: {
+        OR: [
+          { summary: { contains: "quota fixture" } },
+          { triggeredBy: "MANUAL" },
+        ],
+      },
+    });
     await prisma.clientProfile.deleteMany({
       where: {
         OR: [
@@ -478,3 +575,111 @@ describe("CRM Lead Authorization (e2e)", () => {
     });
   }
 });
+
+function createLeadScanFetchMock(): typeof fetch {
+  return (async (input: string | URL | Request) => {
+    const url = resolveRequestUrl(input);
+
+    if (url.includes("serpapi.com/search.json")) {
+      return new Response(
+        JSON.stringify({
+          local_results: [
+            {
+              title: "Ankara Dent Plus",
+              address: "Ankara, Türkiye",
+              phone: "+90 312 555 00 00",
+              website: "https://ankaradentplus.example.com",
+              rating: 4.6,
+              reviews: 87,
+              link: "https://maps.google.com/?cid=1",
+              place_id: "serp-place-1",
+            },
+            {
+              title: "Ankara Dent Plus",
+              address: "Ankara, Türkiye",
+              phone: "+90 312 555 00 00",
+              website: "https://ankaradentplus.example.com",
+              rating: 4.6,
+              reviews: 87,
+              link: "https://maps.google.com/?cid=1",
+              place_id: "serp-place-1",
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    if (url.includes("ankaradentplus.example.com")) {
+      return new Response(
+        `
+        <html>
+          <head>
+            <title>Ankara Dent Plus</title>
+            <meta name="description" content="Ankara diş kliniği" />
+          </head>
+          <body>
+            <a href="https://wa.me/905551234567">WhatsApp</a>
+            <a href="https://instagram.com/ankaradentplus">Instagram</a>
+            <form><input type="email" /></form>
+            <p>Randevu al</p>
+            <p>Bize ulaşın: hello@ankaradentplus.example.com</p>
+          </body>
+        </html>
+        `,
+        { status: 200, headers: { "Content-Type": "text/html" } },
+      );
+    }
+
+    if (url.includes("/models/") && url.includes(":generateContent")) {
+      return new Response(
+        JSON.stringify({
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    text: JSON.stringify({
+                  lead_score: 82,
+                  priority: "HOT",
+                  detected_pain_points: ["CTA zayıf", "SEO meta alanları sınırlı"],
+                  recommended_services: ["Web sitesi", "SEO", "Reklam yönetimi"],
+                  outreach_angle: "Kısa ve değer odaklı yaklaşım",
+                  email_subject: "Ankara Dent Plus için kısa dijital öneri",
+                  email_body: "Merhaba Ankara Dent Plus ekibi, kısa bir öneri paylaşabilirim.",
+                  whatsapp_message: "Merhaba, kısa bir dijital öneri paylaşabilirim.",
+                  reasoning_summary: "Güçlü ticari potansiyel ve geliştirilebilir dijital yapı.",
+                    }),
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    return new Response("not-found", { status: 404 });
+  }) as typeof fetch;
+}
+
+function resolveRequestUrl(input: string | URL | Request): string {
+  if (typeof input === "string") {
+    return input;
+  }
+  if (input instanceof URL) {
+    return input.toString();
+  }
+  return input.url;
+}
+
+function adminUserIdByTokenSubject(token: string): string | null {
+  const parts = token.split(".");
+  if (parts.length < 2) {
+    return null;
+  }
+
+  const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")) as { sub?: string };
+  return payload.sub ?? null;
+}

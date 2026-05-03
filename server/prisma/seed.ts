@@ -508,6 +508,8 @@ const PERMISSIONS: PermissionSeed[] = [
   { slug: "crm.leads.read.assigned", description: "Read assigned CRM leads." },
   { slug: "crm.leads.update.assigned", description: "Update assigned CRM leads." },
   { slug: "crm.leads.convert", description: "Convert CRM leads to client profiles." },
+  { slug: "crm.leadScan.read", description: "Read CRM lead scan logs." },
+  { slug: "crm.leadScan.run", description: "Run CRM lead scans." },
 ];
 
 const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {

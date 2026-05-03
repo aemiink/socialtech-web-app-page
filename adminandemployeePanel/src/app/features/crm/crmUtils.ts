@@ -1,4 +1,14 @@
-import type { CrmLeadActivityType, CrmLeadListResponse, CrmLeadStatus, CrmLeadSource } from "./crmTypes";
+import type {
+  CrmLeadActivityType,
+  CrmLeadDetail,
+  CrmLeadListResponse,
+  CrmLeadScanLogSummary,
+  CrmLeadScanLogsResponse,
+  CrmLeadScanUsageSummary,
+  CrmLeadStatus,
+  CrmLeadSource,
+  RunAdminCrmLeadScanResponse,
+} from "./crmTypes";
 
 export const CRM_LEAD_STATUS_OPTIONS: CrmLeadStatus[] = [
   "NEW",
@@ -36,7 +46,13 @@ export function getCrmLeadStatusLabel(status: CrmLeadStatus): string {
 }
 
 export function getCrmLeadSourceLabel(source: CrmLeadSource): string {
-  return source === "WEBSITE_FORM" ? "Web Form" : "Manuel";
+  if (source === "WEBSITE_FORM") {
+    return "Web Form";
+  }
+  if (source === "SERPAPI") {
+    return "SerpAPI Tarama";
+  }
+  return "Manuel";
 }
 
 export function getCrmActivityTypeLabel(type: CrmLeadActivityType): string {
@@ -66,10 +82,12 @@ export function formatCrmDateTime(value: string | null | undefined): string {
   if (!value) {
     return "—";
   }
+
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return "—";
   }
+
   return new Intl.DateTimeFormat("tr-TR", {
     day: "2-digit",
     month: "2-digit",
@@ -110,4 +128,157 @@ export function isCrmLeadListResponse(value: unknown): value is CrmLeadListRespo
     Array.isArray((value as Partial<CrmLeadListResponse>).data) &&
     typeof (value as Partial<CrmLeadListResponse>).meta === "object"
   );
+}
+
+export function normalizeCrmLeadScanResponse(response: unknown): RunAdminCrmLeadScanResponse {
+  const record = isRecord(response) ? response : {};
+
+  return {
+    scanId: getString(record.scanId) ?? "",
+    status: getString(record.status) as RunAdminCrmLeadScanResponse["status"],
+    totalQueriesUsed: getNumber(record.totalQueriesUsed) ?? 0,
+    totalBusinessesFetched: getNumber(record.totalBusinessesFetched) ?? 0,
+    totalDuplicates: getNumber(record.totalDuplicates) ?? 0,
+    totalWebsitesAnalyzed: getNumber(record.totalWebsitesAnalyzed) ?? 0,
+    totalQualified: getNumber(record.totalQualified) ?? 0,
+    totalSaved: getNumber(record.totalSaved) ?? 0,
+    totalFailed: getNumber(record.totalFailed) ?? 0,
+    summary: getString(record.summary) ?? "",
+    usage: normalizeCrmLeadScanUsageSummary(record.usage),
+  };
+}
+
+export function normalizeCrmLeadScanLogsResponse(response: unknown): CrmLeadScanLogsResponse {
+  const record = isRecord(response) ? response : {};
+  const data = Array.isArray(record.data) ? record.data.map((item) => normalizeCrmLeadScanLogSummary(item)) : [];
+
+  return {
+    data,
+    meta: normalizeCrmLeadScanUsageSummary(record.meta),
+  };
+}
+
+export function normalizeCrmLeadScanLogSummary(value: unknown): CrmLeadScanLogSummary {
+  const record = isRecord(value) ? value : {};
+
+  return {
+    id: getString(record.id) ?? "",
+    startedAt: getString(record.startedAt) ?? "",
+    finishedAt: getString(record.finishedAt),
+    status: (getString(record.status) as CrmLeadScanLogSummary["status"]) ?? "FAILED",
+    triggeredBy: (getString(record.triggeredBy) as CrmLeadScanLogSummary["triggeredBy"]) ?? "MANUAL",
+    triggeredByUserId: getString(record.triggeredByUserId),
+    totalQueriesUsed: getNumber(record.totalQueriesUsed) ?? 0,
+    totalBusinessesFetched: getNumber(record.totalBusinessesFetched) ?? 0,
+    totalDuplicates: getNumber(record.totalDuplicates) ?? 0,
+    totalWebsitesAnalyzed: getNumber(record.totalWebsitesAnalyzed) ?? 0,
+    totalQualified: getNumber(record.totalQualified) ?? 0,
+    totalSaved: getNumber(record.totalSaved) ?? 0,
+    totalFailed: getNumber(record.totalFailed) ?? 0,
+    summary: getString(record.summary),
+    queries: record.queries,
+    errors: record.errors,
+    createdAt: getString(record.createdAt) ?? "",
+    updatedAt: getString(record.updatedAt) ?? "",
+  };
+}
+
+export function getCrmLeadScanUsageItems(
+  usage: CrmLeadScanUsageSummary | null | undefined,
+): Array<{ label: string; value: string }> {
+  if (!usage) {
+    return [];
+  }
+
+  return [
+    { label: "Bugünkü Kullanım", value: String(usage.usedToday) },
+    { label: "Günlük Limit", value: String(usage.dailyQueryLimit) },
+    { label: "Kalan", value: String(usage.remainingToday) },
+    { label: "Absolute Max", value: String(usage.absoluteMaxDailyQueryLimit) },
+  ];
+}
+
+export function getCrmLeadImportedDetails(
+  lead: CrmLeadDetail,
+): Array<{ label: string; value: string; copyValue: string; href?: string }> {
+  const importMetadata = isRecord(lead.importMetadata) ? lead.importMetadata : {};
+  const scanMetadata = isRecord(lead.scanMetadata) ? lead.scanMetadata : {};
+  const rawItems = [
+    { label: "Adres", value: lead.address ?? getString(importMetadata.address) ?? getString(scanMetadata.address) },
+    { label: "Şehir", value: lead.city ?? getString(importMetadata.city) ?? getString(scanMetadata.city) },
+    { label: "Sektör", value: lead.sector ?? getString(importMetadata.category) ?? getString(scanMetadata.category) },
+    { label: "Website", value: lead.website ?? getString(importMetadata.website) ?? getString(importMetadata.websiteUrl), href: true },
+    { label: "Google Maps", value: lead.googleMapsUrl ?? getString(importMetadata.sourceUrl), href: true },
+    { label: "Instagram", value: lead.instagramUrl, href: true },
+    { label: "WhatsApp", value: lead.whatsappPhone },
+    { label: "Kaynak Sorgu", value: lead.sourceQuery },
+    { label: "Kaynak", value: lead.sourceProvider },
+    { label: "Website Durumu", value: lead.websiteStatus },
+    { label: "Skor", value: typeof lead.leadScore === "number" ? String(lead.leadScore) : null },
+    { label: "Google Puanı", value: typeof lead.googleRating === "number" ? String(lead.googleRating) : getNumber(importMetadata.rating)?.toString() ?? null },
+    { label: "Yorum Sayısı", value: typeof lead.reviewCount === "number" ? String(lead.reviewCount) : getNumber(importMetadata.reviewsCount)?.toString() ?? null },
+  ];
+
+  return rawItems
+    .filter((item): item is { label: string; value: string; href?: boolean } => typeof item.value === "string" && item.value.length > 0)
+    .map((item) => ({
+      label: item.label,
+      value: item.value,
+      copyValue: item.value,
+      ...(item.href ? { href: ensureExternalUrl(item.value) } : {}),
+    }));
+}
+
+export function getCrmLeadDraftSections(
+  lead: CrmLeadDetail,
+): Array<{ title: string; body: string; copyLabel: string }> {
+  const importMetadata = isRecord(lead.importMetadata) ? lead.importMetadata : {};
+  const legacyDraftCopy = getString(importMetadata.draftCopy) ?? getString(lead.draftCopy) ?? getString(lead.notesDraft);
+  const sections = [
+    legacyDraftCopy
+      ? { title: "Taslak Metin", body: legacyDraftCopy, copyLabel: "Taslak kopyalandı." }
+      : null,
+    lead.emailSubject ? { title: "E-posta Konusu", body: lead.emailSubject, copyLabel: "Konu kopyalandı." } : null,
+    lead.emailBody ? { title: "E-posta Taslağı", body: lead.emailBody, copyLabel: "E-posta taslağı kopyalandı." } : null,
+    lead.whatsappMessage
+      ? { title: "WhatsApp Taslağı", body: lead.whatsappMessage, copyLabel: "WhatsApp mesajı kopyalandı." }
+      : null,
+  ];
+
+  return sections.filter((item): item is { title: string; body: string; copyLabel: string } => Boolean(item));
+}
+
+export function normalizeJsonStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+}
+
+function normalizeCrmLeadScanUsageSummary(value: unknown): CrmLeadScanUsageSummary {
+  const record = isRecord(value) ? value : {};
+
+  return {
+    dailyQueryLimit: getNumber(record.dailyQueryLimit) ?? 5,
+    absoluteMaxDailyQueryLimit: getNumber(record.absoluteMaxDailyQueryLimit) ?? 6,
+    usedToday: getNumber(record.usedToday) ?? 0,
+    remainingToday: getNumber(record.remainingToday) ?? 0,
+  };
+}
+
+function ensureExternalUrl(value: string): string {
+  return /^https?:\/\//i.test(value) ? value : `https://${value}`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function getString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function getNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }

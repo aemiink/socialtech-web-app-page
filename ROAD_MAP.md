@@ -22,8 +22,7 @@
 - Platform integrations: Meta/TikTok/Amazon Ads
 - CRM automation/reminder notifications
 - CRM pipeline analytics
-- CRM lead duplicate detection
-- CRM email/WhatsApp integration
+- CRM outbound email/WhatsApp sending integrations
 
 ## In Progress
 
@@ -75,6 +74,8 @@
 - CRM backend schema and permissions
 - CRM specialist role
 - Admin CRM lead management API
+- Admin CRM SerpAPI lead scan engine
+- CRM lead duplicate detection
 - Employee assigned CRM lead API
 - CRM lead conversion to ClientProfile
 - Admin CRM panel
@@ -176,6 +177,5 @@ None identified.
 ### Planned / Follow-up
 - [ ] CRM automation/reminder notifications
 - [ ] CRM pipeline analytics
-- [ ] CRM lead duplicate detection
-- [ ] CRM email/WhatsApp integration
+- [ ] CRM outbound email/WhatsApp sending integrations
 - [ ] Employee CRM list/follow-up page test coverage expansion

@@ -322,6 +322,14 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - `dto/create-crm-lead-activity.dto.ts`
   - `dto/update-assigned-crm-lead.dto.ts`
   - `dto/convert-crm-lead.dto.ts`
+- `server/src/crm-lead-scan/` - admin-only CRM lead scan module:
+  - `admin-crm-lead-scan.controller.ts` - `POST /api/v1/admin/crm/lead-scan/run`, `GET /api/v1/admin/crm/lead-scan/logs`, `GET /api/v1/admin/crm/lead-scan/logs/:id`
+  - `crm-lead-scan.service.ts` - SerpAPI query execution, DB-tracked quota checks, duplicate filtering, website analysis, AI scoring, lead creation, and scan log persistence
+  - `query-generator.service.ts` - bounded city/sector query generation
+  - `serpapi.service.ts` - SerpAPI Google Maps fetch/normalization
+  - `website-analyzer.service.ts` - website fetch, contact extraction, CTA/booking/e-commerce signal checks
+  - `lead-scoring.service.ts` - Turkish outreach scoring, Gemini-backed with heuristic fallback
+  - `dto/run-crm-lead-scan.dto.ts` - lead scan request validation (`queryLimit`, `cities`, `sectors`)
 - `server/src/projects/` - projects API foundation:
   - `projects.controller.ts` - `GET /api/v1/projects`, `GET /api/v1/projects/:id`, `POST /api/v1/projects`, `PATCH /api/v1/projects/:id`
   - `projects.service.ts` - admin full write scope, employee assignment-scope read, client own-scope read, object-level visibility checks, client purchased-service validation for `serviceKey`
