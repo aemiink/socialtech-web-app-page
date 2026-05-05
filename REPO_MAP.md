@@ -48,6 +48,9 @@ Location: `adminandemployeePanel/`
   - `adminandemployeePanel/src/app/features/tasks/tasksApi.ts`
   - `adminandemployeePanel/src/app/features/tasks/tasksTypes.ts`
   - `adminandemployeePanel/src/app/features/tasks/tasksUtils.ts`
+  - `adminandemployeePanel/src/app/features/delivery/deliveryApi.ts`
+  - `adminandemployeePanel/src/app/features/delivery/deliveryTypes.ts`
+  - `adminandemployeePanel/src/app/features/delivery/deliveryUtils.ts`
   - `adminandemployeePanel/src/app/features/crm/crmApi.ts`
   - `adminandemployeePanel/src/app/features/crm/crmTypes.ts`
   - `adminandemployeePanel/src/app/features/crm/crmUtils.ts`
@@ -64,8 +67,10 @@ Location: `adminandemployeePanel/`
   - `adminandemployeePanel/src/app/pages/ProjectDetail.tsx`
   - `adminandemployeePanel/src/app/pages/Tasks.tsx`
   - `adminandemployeePanel/src/app/pages/TaskDetail.tsx`
-  - `adminandemployeePanel/src/app/pages/CrmLeads.tsx`
-  - `adminandemployeePanel/src/app/pages/CrmLeadDetail.tsx`
+- `adminandemployeePanel/src/app/pages/CrmLeads.tsx`
+- `adminandemployeePanel/src/app/pages/CrmLeadDetail.tsx`
+- `adminandemployeePanel/src/app/pages/ProjectDetail.tsx` now includes GitHub repository connect/manage/read UI for admin users
+- `adminandemployeePanel/src/app/pages/Tasks.tsx` now supports delivery taxonomy fields and bug-specific metadata
 - Frontend tests (Vitest/RTL):
   - `adminandemployeePanel/src/app/pages/EmployeeDetail.test.tsx`
   - `adminandemployeePanel/src/app/pages/AuditLogs.test.tsx`
@@ -80,17 +85,32 @@ Location: `adminandemployeePanel/`
   - `adminandemployeePanel/src/app/pages/__tests__/CrmLeads.test.tsx`
   - `adminandemployeePanel/src/app/pages/__tests__/CrmLeadDetail.test.tsx`
 - Employee pages: `adminandemployeePanel/src/app/employee/pages/`
+- Developer employee shared UI:
+  - `adminandemployeePanel/src/app/employee/components/DeveloperTasksPage.tsx`
 - Employee CRM pages:
   - `adminandemployeePanel/src/app/employee/pages/CrmLeadlerim.tsx`
   - `adminandemployeePanel/src/app/employee/pages/CrmLeadDetail.tsx`
   - `adminandemployeePanel/src/app/employee/pages/BugunkuTakipler.tsx`
 - Employee API-migrated page:
   - `adminandemployeePanel/src/app/employee/pages/Musterilerim.tsx`
+- Additional API-migrated developer pages:
+  - `adminandemployeePanel/src/app/employee/pages/Frontend.tsx`
+  - `adminandemployeePanel/src/app/employee/pages/BackendAPI.tsx`
+  - `adminandemployeePanel/src/app/employee/pages/Buglar.tsx`
+  - `adminandemployeePanel/src/app/employee/pages/Revizyonlar.tsx`
+  - `adminandemployeePanel/src/app/employee/pages/Sprintler.tsx`
+  - `adminandemployeePanel/src/app/employee/pages/TestYayin.tsx`
+  - `adminandemployeePanel/src/app/employee/pages/Projeler.tsx`
 - Employee page tests:
   - `adminandemployeePanel/src/app/employee/pages/__tests__/Musterilerim.test.tsx`
   - `adminandemployeePanel/src/app/employee/pages/__tests__/CrmLeadDetail.test.tsx`
+  - `adminandemployeePanel/src/app/employee/pages/__tests__/DeveloperTaskPages.test.tsx`
+  - `adminandemployeePanel/src/app/employee/pages/__tests__/Sprintler.test.tsx`
+  - `adminandemployeePanel/src/app/employee/pages/__tests__/TestYayin.test.tsx`
   - `adminandemployeePanel/src/app/employee/__tests__/EmployeeLayout.crm.test.tsx`
 - Employee dashboards: `adminandemployeePanel/src/app/employee/dashboards/`
+- Employee dashboard tests:
+  - `adminandemployeePanel/src/app/employee/dashboards/__tests__/DeveloperDashboard.test.tsx`
 - UI primitives: `adminandemployeePanel/src/app/components/ui/`
 - Mock data: `adminandemployeePanel/src/app/data/mockData.ts`
 - Styles: `adminandemployeePanel/src/styles/`
@@ -191,7 +211,7 @@ Additional portal pages exist under `clientPanel/src/app/pages/` and `clientPane
 - `clientPanel/src/app/lib/client-actions.ts` - browser `localStorage` action history, action type inference, action event dispatch, and local text-file download behavior.
 - `clientPanel/src/app/App.tsx` keeps service-selection/page state behavior; auth state is Redux-managed.
 - `selectedService` restore purchased-service yetkisine göre doğrulanır; yetkisiz seçim otomatik temizlenir.
-- Client Portal auth flow is backend-integrated; service/domain data is still partially mock/static.
+- Client Portal auth flow is backend-integrated; Web APP service pages (`service-tab-page`, `reports`, `meetings`, `web-app-dashboard`) are API-first with empty-state rendering (no mock fallback).
 
 ## Backend API
 
@@ -211,8 +231,8 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 ### App Bootstrap
 
 - `server/src/main.ts` - Nest bootstrap, `/api/v1` global prefix, global ValidationPipe, global exception filter, CORS setup
-- `server/src/app.module.ts` - root module imports for config/database/health/auth/users/clients/admin-summary/admin-assignments/admin-clients/admin-users/admin-audit-logs/projects/tasks
-- `server/src/config/env.validation.ts` - Joi env validation schema, including `CLIENT_ORIGIN_PUBLIC`
+- `server/src/app.module.ts` - root module imports for config/database/health/auth/users/clients/admin-summary/admin-assignments/admin-clients/admin-users/admin-audit-logs/projects/tasks/crm/delivery/github integrations
+- `server/src/config/env.validation.ts` - Joi env validation schema, including `CLIENT_ORIGIN_PUBLIC`, CRM lead scan envs, Gemini scoring envs, and `GITHUB_TOKEN_ENCRYPTION_KEY`
 - `server/src/config/cors.config.ts` - env-based CORS whitelist, including public site origin support
 - `server/src/common/filters/global-exception.filter.ts` - centralized error response format
 
@@ -220,12 +240,12 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 
 - `server/prisma/schema.prisma` - Prisma schema foundation:
   - Core models: `User`, `RefreshToken`, `ClientProfile`, `AuditLog`, `EmployeeClientAssignment`
-  - Delivery models: `Project`, `Task`, `TaskTodo`
+  - Delivery models: `Project`, `DeliverySprint`, `DeliveryRelease`, `Task`, `TaskTodo`, `ProjectRepository`
   - Client service model: `ClientPurchasedService`
   - CRM models: `CrmLead`, `CrmLeadActivity`
   - Hybrid RBAC models: `Permission`, `RolePermission`
   - Assignment scope enum: `EmployeeClientAssignmentScope`
-  - Delivery enums: `ProjectStatus`, `TaskStatus`, `Priority`
+  - Delivery enums: `ProjectStatus`, `TaskStatus`, `Priority`, `TaskType`, `TaskWorkstream`, `TaskSeverity`, `TaskEnvironment`, `DeliverySprintStatus`, `DeliveryReleaseStatus`, `RepositoryProvider`
   - Additional enums: `PurchasedServiceKey`, `PurchasedServiceStatus`, `TaskTodoVisibility`
   - CRM enums: `CrmLeadStatus`, `CrmLeadSource`, `CrmLeadActivityType`
   - `User.role` enum remains the primary fixed role field
@@ -238,6 +258,50 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
     - `@@index([employeeUserId, isActive])`
     - `@@index([clientProfileId, isActive])`
     - `@@index([scope, isActive])`
+
+## 2026-05-05 Incremental Map Update
+
+### Project Manager Pages (Admin/Employee Panel)
+- `adminandemployeePanel/src/app/employee/pages/ProjectManagerClientDetail.tsx`
+- `adminandemployeePanel/src/app/employee/pages/ProjectManagerServiceWorkspace.tsx`
+- `adminandemployeePanel/src/app/employee/dashboards/ProjectManagerDashboard.tsx`
+- `adminandemployeePanel/src/app/employee/pages/Musterilerim.tsx`
+- `adminandemployeePanel/src/app/employee/EmployeeLayout.tsx`
+- `adminandemployeePanel/src/app/routes.tsx`
+
+### Web APP Workspace Backend Touchpoints
+- `server/src/web-app-workspace/dto/create-workspace-message.dto.ts`
+- `server/src/web-app-workspace/web-app-workspace.service.ts`
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260505153000_add_workspace_message_threading/migration.sql`
+
+### Client Panel Message Tree Touchpoints
+- `clientPanel/src/app/features/webAppWorkspace/webAppWorkspaceTypes.ts`
+- `clientPanel/src/app/features/webAppWorkspace/webAppWorkspaceApi.ts`
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+
+### Admin/Employee Workspace Message Types
+- `adminandemployeePanel/src/app/features/projects/projectsTypes.ts`
+- `adminandemployeePanel/src/app/features/projects/projectsApi.ts`
+
+## 2026-05-05 PM Assigned Operations Update
+
+### Backend Authorization / Seed
+- `server/prisma/seed.ts` (PM assigned-manage permissionları)
+- `server/src/projects/projects.controller.ts` (`GET /projects/:id/assignee-candidates`)
+- `server/src/projects/projects.service.ts` (PM assigned project manage scope checks + assignee candidates)
+- `server/src/tasks/tasks.controller.ts` (task create route guard relaxation)
+- `server/src/tasks/tasks.service.ts` (PM assigned task/todo/assign manage branches)
+
+### PM Frontend Action Center
+- `adminandemployeePanel/src/app/employee/pages/ProjectManagerClientDetail.tsx` (service-card üzerinden project create)
+- `adminandemployeePanel/src/app/employee/pages/ProjectManagerServiceWorkspace.tsx` (task/sprint/release/message aksiyonları)
+- `adminandemployeePanel/src/app/features/projects/projectsApi.ts` (`useGetProjectAssigneeCandidatesQuery`)
+- `adminandemployeePanel/src/app/features/projects/projectsTypes.ts` (`ProjectAssigneeCandidate`)
+
+### Tests
+- `server/test/projects-tasks-authz.e2e-spec.ts` (PM assigned operations e2e cases)
+- `adminandemployeePanel/src/app/employee/pages/__tests__/ProjectManagerClientDetail.test.tsx`
   - Project/task indexes:
     - `Project`: `clientProfileId`, `status`, `priority`
     - `Task`: `projectId`, `assigneeUserId`, `status`, `priority`
@@ -248,6 +312,8 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 - `server/prisma/migrations/20260430000000_add_client_profile_status/migration.sql` - adds `ClientProfile.status` and `ClientProfile_status_idx`
 - `server/prisma/migrations/20260501000000_add_purchased_services_and_task_todos/migration.sql` - adds purchased-services, project serviceKey, and task-todo checklist schema
 - `server/prisma/migrations/20260502000000_add_crm_leads/migration.sql` - adds `CRM_SPECIALIST`, CRM lead/activity enums, lead tables, relations, and indexes
+- `server/prisma/migrations/20260503000000_add_crm_lead_scan_engine/migration.sql` - adds CRM lead scan log model, scan-derived CRM lead fields, and scan safety schema
+- `server/prisma/migrations/20260503120000_add_delivery_and_github_systems/migration.sql` - adds task taxonomy fields, delivery sprint/release tables, project repository table, enums, indexes, and relations
 - `server/prisma/seed.ts` - demo seed foundation:
   - seeds admin + 7 employee roles + 1 client owner
   - seeds permission catalog and role-permission mappings
@@ -258,9 +324,41 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
     - `acme-e-ticaret/growth-hub-launch`
     - `nova-performance/paid-acquisition-optimization`
     - `mavi-sosyal/social-calendar-refresh`
-  - seeds 7 project tasks with idempotent assignee resolution via email/natural keys
+  - seeds 7+ project tasks with idempotent assignee resolution via email/natural keys
+  - seeds task taxonomy coverage (bug/frontend/backend/revision/qa/deployment)
+  - seeds developer/project-manager delivery/github permissions
+  - seeds delivery sprints, releases, and demo repository linkage
   - uses `bcryptjs` hashes for demo passwords
 - `server/tsconfig.seed.json` - TypeScript check config for seed files
+
+### Delivery And GitHub Modules
+
+- `server/src/tasks/*`
+  - task DTOs and service now support taxonomy fields, sprint relation, and query filters for developer delivery pages
+- `server/src/delivery/*`
+  - `delivery.module.ts`
+  - `delivery.controller.ts`
+  - `delivery.service.ts`
+  - `dto/create-delivery-sprint.dto.ts`
+  - `dto/update-delivery-sprint.dto.ts`
+  - `dto/delivery-sprint-query.dto.ts`
+  - `dto/create-delivery-release.dto.ts`
+  - `dto/update-delivery-release.dto.ts`
+  - `dto/delivery-release-query.dto.ts`
+- `server/src/integrations/github/*`
+  - `github.module.ts`
+  - `github.controller.ts`
+  - `github.service.ts`
+  - `github-client.service.ts`
+  - `github-token.service.ts`
+  - `dto/connect-project-repository.dto.ts`
+  - `dto/github-query.dto.ts`
+- `server/test/delivery-github-authz.e2e-spec.ts`
+  - delivery summary authz
+  - sprint create/list authz
+  - github repository connect/read authz
+  - token non-exposure assertions
+  - mocked GitHub API mapping assertions
 
 ### Auth And Core Modules
 
@@ -590,3 +688,159 @@ The `client/` directory is the public/marketing Social Tech website, not the Cli
   - employee todo toggle yetkisi assignment scope davranışıyla hizalandı
 - `server/test/projects-tasks-authz.e2e-spec.ts`
   - scoped-other ve out-of-scope toggle ayrımıyla authz matris güncellemesi
+
+## 2026-05-03 Update Map (Delivery Links, Task Notes, Release Approval)
+
+### Backend
+- `server/prisma/schema.prisma`
+  - `Project.repositoryUrl`
+  - `Project.figmaProjectUrl`
+  - `Task.branchName`
+  - `Task.codePreparationNotes`
+  - `Task.codePreparedAt`
+  - `Task.codePreparedByUserId`
+  - `TaskWorkNote`
+  - `DeliveryRelease.approvalStatus/approvalNotes/approvalRequestedAt/approvalRespondedAt/approvalActorUserId`
+- `server/prisma/migrations/20260503153000_add_project_figma_task_notes_release_approval/migration.sql`
+- `server/prisma/seed.ts`
+  - project-manager assigned release manage permission wiring
+  - project repositoryUrl demo data
+- `server/src/projects/dto/create-project.dto.ts`
+- `server/src/projects/dto/update-project.dto.ts`
+- `server/src/projects/projects.service.ts`
+  - `WEB_APP` / `MOBILE_APP` için repository link zorunluluğu
+- `server/src/tasks/dto/create-task-work-note.dto.ts`
+- `server/src/tasks/dto/prepare-task-code.dto.ts`
+- `server/src/tasks/tasks.controller.ts`
+  - `GET/POST /tasks/:id/work-notes`
+  - `POST /tasks/:id/code-preparation`
+  - `GET /tasks/:id/related-commits`
+- `server/src/tasks/tasks.module.ts`
+- `server/src/tasks/tasks.service.ts`
+  - task code auto-generation
+  - developer work-note persistence
+  - repository-required code preparation checks
+  - related commit reads via GitHub integration
+- `server/src/integrations/github/dto/connect-project-repository.dto.ts`
+  - `installationId` preparation field
+- `server/src/integrations/github/github.service.ts`
+  - repository upsert includes `installationId`
+  - workflow summary / repository requirement helpers
+- `server/test/delivery-github-authz.e2e-spec.ts`
+  - repository-required WEB_APP flow
+  - work-note + related-commit authz coverage
+  - project-manager release manage-assigned coverage
+
+### Admin + Employee Panel Frontend
+- `adminandemployeePanel/src/app/features/projects/projectsTypes.ts`
+- `adminandemployeePanel/src/app/features/projects/projectsUtils.ts`
+- `adminandemployeePanel/src/app/features/projects/projectsApi.ts`
+  - repository connect payload supports `installationId`
+- `adminandemployeePanel/src/app/features/tasks/tasksTypes.ts`
+- `adminandemployeePanel/src/app/features/tasks/tasksUtils.ts`
+- `adminandemployeePanel/src/app/features/tasks/tasksApi.ts`
+  - task work-note, code-preparation, related-commit hooks
+- `adminandemployeePanel/src/app/features/delivery/deliveryTypes.ts`
+  - release approval state fields
+- `adminandemployeePanel/src/app/pages/Projects.tsx`
+  - admin create/edit project form now includes repository link + Figma link
+- `adminandemployeePanel/src/app/pages/ProjectDetail.tsx`
+  - business repository link visibility
+  - Figma quick link
+  - GitHub App installation ID preparation input
+- `adminandemployeePanel/src/app/pages/TaskDetail.tsx`
+  - assigned-scope employee task detail route support
+  - backend-native work-note saving
+  - code preparation CTA
+  - related commits panel
+- `adminandemployeePanel/src/app/employee/pages/Gorevlerim.tsx`
+  - detail links to assigned task detail screen
+- `adminandemployeePanel/src/app/employee/pages/Projeler.tsx`
+  - detail links to assigned project detail screen
+- `adminandemployeePanel/src/app/employee/pages/TestYayin.tsx`
+  - release approval badge rendering
+- `adminandemployeePanel/src/app/routes.tsx`
+  - employee project/task detail routes
+- `adminandemployeePanel/src/app/pages/__tests__/Projects.test.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/ProjectDetail.test.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/TaskDetail.test.tsx`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/Gorevlerim.test.tsx`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/TestYayin.test.tsx`
+
+## 2026-05-03 Update Map (Project Files Cloudinary V1)
+
+### Backend
+- `server/prisma/schema.prisma`
+  - `ProjectFileVisibility`, `ProjectFileCategory`
+  - `ProjectFile`, `ProjectFileShareLink`
+- `server/prisma/migrations/20260503190000_add_project_files_cloudinary/migration.sql`
+- `server/src/integrations/cloudinary/cloudinary.module.ts`
+- `server/src/integrations/cloudinary/cloudinary.service.ts`
+- `server/src/project-files/project-files.module.ts`
+- `server/src/project-files/project-files.controller.ts`
+- `server/src/project-files/project-file-shares.controller.ts`
+- `server/src/project-files/project-files.service.ts`
+- `server/src/project-files/dto/*`
+- `server/src/config/env.validation.ts`
+- `server/.env.example`
+- `server/prisma/seed.ts`
+- `server/test/delivery-github-authz.e2e-spec.ts`
+
+### Admin + Employee Panel Frontend
+- `adminandemployeePanel/src/app/features/projects/projectsTypes.ts`
+- `adminandemployeePanel/src/app/features/projects/projectsApi.ts`
+- `adminandemployeePanel/src/app/services/baseApi.ts`
+- `adminandemployeePanel/src/app/employee/pages/Dosyalar.tsx`
+- `adminandemployeePanel/src/app/employee/pages/TeslimDosyalari.tsx`
+
+### Client Panel Frontend
+- `clientPanel/src/app/features/projectFiles/projectFilesTypes.ts`
+- `clientPanel/src/app/features/projectFiles/projectFilesApi.ts`
+- `clientPanel/src/app/features/tasks/tasksTypes.ts`
+- `clientPanel/src/app/features/tasks/tasksUtils.ts`
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+- `clientPanel/src/app/__tests__/client-portal.test.tsx`
+
+## 2026-05-05 Update Map (Web APP Workspace Realtime)
+
+### Backend
+- `server/src/web-app-workspace/web-app-workspace.module.ts`
+- `server/src/web-app-workspace/web-app-workspace.controller.ts`
+- `server/src/web-app-workspace/web-app-workspace.service.ts`
+- `server/src/web-app-workspace/web-app-workspace.gateway.ts`
+- `server/src/web-app-workspace/dto/*`
+
+### Admin + Employee Panel Frontend
+- `adminandemployeePanel/src/app/features/projects/workspaceSocket.ts`
+- `adminandemployeePanel/src/app/features/projects/projectsApi.ts`
+- `adminandemployeePanel/src/app/features/projects/projectsTypes.ts`
+- `adminandemployeePanel/src/app/pages/ProjectDetail.tsx`
+
+### Client Panel Frontend
+- `clientPanel/src/app/features/projects/projectsApi.ts`
+- `clientPanel/src/app/features/webAppWorkspace/webAppWorkspaceApi.ts`
+- `clientPanel/src/app/features/webAppWorkspace/webAppWorkspaceTypes.ts`
+- `clientPanel/src/app/features/webAppWorkspace/workspaceSocket.ts`
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+- `clientPanel/src/app/pages/reports.tsx`
+- `clientPanel/src/app/pages/meetings.tsx`
+
+## 2026-05-05 Update Map (Client Mock Cleanup + Assignment Visibility)
+
+### Admin + Employee Panel Frontend
+- `adminandemployeePanel/src/app/pages/ClientDetail.tsx`
+  - selected client için aktif çalışan atamalarını listeler
+- `adminandemployeePanel/src/app/employee/dashboards/DeveloperDashboard.tsx`
+  - “Size Atanan Müşteriler” görünürlüğü
+
+### Client Panel Frontend
+- `clientPanel/src/app/App.tsx`
+  - `WebAppDashboard` projectId ile çağrılır
+- `clientPanel/src/app/pages/services/web-app-dashboard.tsx`
+  - API-first project/task/workspace özeti
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+  - `web-app` için mock tab content yerine workspace tab render
+- `clientPanel/src/app/pages/reports.tsx`
+  - API-first weekly report list + empty state
+- `clientPanel/src/app/pages/meetings.tsx`
+  - API-first meeting list + scheduled time önceliği + empty state

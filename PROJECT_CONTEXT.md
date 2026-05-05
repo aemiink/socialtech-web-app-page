@@ -21,7 +21,7 @@ Social Tech is a premium digital growth agency. This repository contains multipl
 - Package manager: npm (canonical) in `adminandemployeePanel/`, `clientPanel/`, and `server/` (`packageManager: npm@11.8.0`)
 - TypeScript: Yes (strict expected per CLAUDE.md)
 - Backend: NestJS + TypeScript in `server/` (single shared API with implemented auth endpoints and frontend auth integration)
-- Frontend business domain data is still partially mock/static while domain-by-domain API integration is phased in
+- Frontend business domain data is still partially mock/static while domain-by-domain API integration is phased in, but core admin operations, CRM, and developer delivery screens are now API-driven.
 
 ## Main User Roles
 
@@ -46,11 +46,13 @@ There is also a Client Portal as a separate sub-app at `clientPanel/`.
 
 ### Admin Panel (`/` routes)
 Dashboard, Clients (Müşteriler), Services (Hizmetler), Projects (Projeler), Tasks (Görevler), Approvals (Onaylar), Campaigns (Kampanyalar), Contents (İçerikler), Reports (Raporlar), Meetings (Toplantılar), Employees (Çalışanlar), Finance (Finans), Automations (Otomasyonlar), Settings (Ayarlar)
-CRM (`/crm`) is now an admin module for lead creation, CRM owner assignment, timeline management, status updates, and conversion to `ClientProfile`.
+CRM (`/crm`) is now an admin module for lead creation, CRM owner assignment, timeline management, status updates, conversion to `ClientProfile`, and backend-native SerpAPI lead scan automation.
+Developer/Delivery is now a backend-native operations module built on top of `Project -> DeliverySprint -> Task -> TaskTodo`, with release tracking and project-scoped GitHub visibility.
 
 ### Employee Panel (`/employee` routes)
 Role-based sidebar. Common pages: Dashboard, Gorevlerim, Musterilerim, Takvim, Bildirimler, Dosyalar, Ayarlar. Specialist pages vary per role (see routes.tsx).
 `CRM_SPECIALIST` employees receive CRM Leadleri and Bugünkü Takipler routes and only see assigned CRM leads.
+`DEVELOPER` employees now use API-driven Dashboard, Frontend, Backend/API, Buglar, Revizyonlar, Sprintler, Test & Yayın, and Projeler pages backed by delivery/task/repository endpoints.
 
 ### Client Portal
 Separate Vite + React SPA at `clientPanel/`. It is a customer-facing visibility panel, not a public SaaS product.
@@ -130,6 +132,28 @@ Portal areas:
   - `GET /api/v1/admin/crm/lead-scan/logs/:id`
   - Admin-only via `crm.leadScan.run` / `crm.leadScan.read`.
   - Uses SerpAPI Google Maps only, enforces DB-tracked daily query safety (`LEAD_SCAN_DAILY_QUERY_LIMIT`, default `5`, max `6`), skips duplicates before website/AI analysis, analyzes websites, and stores Turkish outreach drafts on created CRM leads.
+- Delivery module API is now active:
+  - `GET /api/v1/delivery/summary`
+  - `GET/POST /api/v1/delivery/sprints`
+  - `GET/PATCH /api/v1/delivery/sprints/:id`
+  - `GET/POST /api/v1/delivery/releases`
+  - `GET/PATCH /api/v1/delivery/releases/:id`
+  - Delivery uses assigned-project object scope for employee/developer reads and admin-only management in V1.
+- Tasks API now supports developer operations taxonomy:
+  - `type`: `FEATURE | BUG | REVISION | QA | DEPLOYMENT | MAINTENANCE`
+  - `workstream`: `FRONTEND | BACKEND | FULLSTACK | QA | DEVOPS | UI_INTEGRATION`
+  - `severity`: `LOW | MEDIUM | HIGH | CRITICAL`
+  - `environment`: `DEVELOPMENT | STAGING | PRODUCTION`
+  - Additional optional fields: `affectedUrl`, `reproductionSteps`, `reportedBy`, `code`, `sprintId`
+- Project GitHub integration API is now active:
+  - `PUT /api/v1/projects/:id/repository`
+  - `GET /api/v1/projects/:id/repository`
+  - `DELETE /api/v1/projects/:id/repository`
+  - `GET /api/v1/projects/:id/repository/branches`
+  - `GET /api/v1/projects/:id/repository/commits`
+  - `GET /api/v1/projects/:id/repository/pulls`
+  - `GET /api/v1/projects/:id/repository/workflows/runs`
+  - Repository config is project-scoped, GitHub token is encrypted at rest, and token plaintext is never returned in responses.
 - `GET /users` enforces `users.read`; service-level object authorization protects `/users/:id` and `/clients/:id`.
 - Admin can read full users/client profile scopes; client users are limited to their own `ClientProfile` scope.
 - Employee assignment scope is now modeled via `EmployeeClientAssignment` + active assignment checks.
@@ -177,6 +201,7 @@ Portal areas:
   - `adminandemployeePanel/src/app/features/clients/*` (`GET /clients`, `GET /clients/:id`)
   - `adminandemployeePanel/src/app/features/projects/*` (`GET/POST/PATCH /projects*`)
   - `adminandemployeePanel/src/app/features/tasks/*` (`GET/POST/PATCH /tasks*`)
+  - `adminandemployeePanel/src/app/features/delivery/*` (`GET/POST/PATCH /delivery/*`)
   - `adminandemployeePanel/src/app/features/crm/*` (admin + employee CRM lead queries/mutations)
 - Admin pages now backend-driven for core operations:
   - `Dashboard` uses dedicated summary endpoint (`/admin/summary`)
@@ -185,8 +210,9 @@ Portal areas:
   - `Dashboard` consumes normalized summary contract via `transformResponse + normalizeAdminSummaryResponse` guard layer
   - `Clients` create/edit flow supports purchased-services selection and owner mode (`NONE` / `CREATE` / `LINK_EXISTING`)
   - `Projects` create/edit flow uses searchable client picker + `serviceKey` selection
-  - `Tasks` create/edit flow uses searchable assignee picker
+  - `Tasks` create/edit flow uses searchable assignee picker and developer taxonomy fields (`type`, `workstream`, `severity`, `environment`, `affectedUrl`, `reproductionSteps`, `reportedBy`, `code`, `sprintId`)
   - `TaskDetail` includes todo/checklist management (`INTERNAL` / `CLIENT_VISIBLE`)
+  - `ProjectDetail` now includes admin GitHub repository connect/manage/read UX with recent branches, commits, pull requests, and workflow runs
   - `CrmLeads` and `CrmLeadDetail` provide admin CRM list/detail/create/activity/status/convert workflows.
 - Layouts:
   - `RootLayout` — Admin Panel shell (sidebar + topbar + `<Outlet />`)
@@ -194,6 +220,15 @@ Portal areas:
 - Contexts: `adminandemployeePanel/src/app/contexts/RoleContext.tsx` (compatibility layer; auth source of truth is Redux)
 - Pages: `adminandemployeePanel/src/app/pages/` (admin pages)
 - Employee pages: `adminandemployeePanel/src/app/employee/pages/`
+- Developer/Delivery employee pages are now API-driven:
+  - `DeveloperDashboard` -> `GET /delivery/summary`
+  - `Frontend` -> `GET /tasks?workstream=FRONTEND`
+  - `BackendAPI` -> `GET /tasks?workstream=BACKEND`
+  - `Buglar` -> `GET /tasks?type=BUG`
+  - `Revizyonlar` -> `GET /tasks?type=REVISION`
+  - `Sprintler` -> `GET /delivery/sprints`
+  - `TestYayin` -> `GET /delivery/releases`
+  - `Projeler` -> `GET /projects` + per-project GitHub read cards
 - Employee CRM pages:
   - `CrmLeadlerim` — assigned lead list, priority cards, status/search filters
   - `CrmLeadDetail` — assigned lead detail, limited status update, activity/timeline entry
@@ -303,6 +338,14 @@ Current backend baseline includes:
   - Admin user management actions are audit-logged via centralized `AuditLogService`:
     - `ADMIN_USER_CREATED`
     - `ADMIN_USER_UPDATED`
+
+## 2026-05-05 Realtime Workspace Status
+
+- Web APP workspace now runs with backend-native REST + Socket.IO together.
+- Socket namespace: `/web-app-workspace`, room strategy: `project:{projectId}`, event: `workspace:update`.
+- Event payloads now include entity snapshots for create/update flows (`message`, `revision`, `meeting-request`, `section`, `content-item`, `weekly-report`).
+- Event contract includes `sequence` + `emittedAt`; frontend listeners use per-view `lastSequence` guards to ignore stale/out-of-order events.
+- Admin/Employee and Client panels now use `updateQueryData` incremental RTK Query cache patching for workspace live sync instead of broad refetch.
     - `ADMIN_USER_DEACTIVATED`
     - `ADMIN_USER_ACTIVATED`
     - `ADMIN_USER_PASSWORD_RESET`
@@ -817,3 +860,171 @@ Latest reported checks: `adminandemployeePanel npm run check`, `clientPanel npm 
 - Employee CRM list and Bugünkü Takipler pages have functional implementation and e2e-backed API behavior, but direct page-level frontend tests remain a useful follow-up.
 - Admin CRM owner picker uses `GET /api/v1/admin/users` with `role=CRM_SPECIALIST`; a dedicated CRM owner candidates endpoint can reduce coupling later.
 - CRM reminders, pipeline analytics, and outbound email/WhatsApp sending integrations are planned follow-ups.
+
+## Update - 2026-05-03 (Developer / Delivery Operations Milestone)
+
+### Product Summary
+- Developer/Delivery tarafı artık mock ağırlıklı ekranlardan gerçek operasyon paneline taşındı.
+- Ana operasyon omurgası `Project -> DeliverySprint -> Task -> TaskTodo` olarak korunuyor.
+- Bug, frontend işi, backend işi, revision, QA ve deployment ayrı entity’lere bölünmedi; mevcut `Task` modeli taxonomy alanlarıyla genişletildi.
+
+### Main Modules
+- Delivery module eklendi:
+  - `DeliverySprint`
+  - `DeliveryRelease`
+  - delivery summary endpoint
+- Project bazlı GitHub repository integration eklendi.
+- Proje operasyon metadatası genişletildi:
+  - `repositoryUrl` (business-level GitHub/repo linki)
+  - `figmaProjectUrl` (tasarım/proje Figma linki)
+- Developer dashboard, sprintler, test & yayın, frontend/backend/bug/revizyon sayfaları backend-driven hale geldi.
+
+### Auth & RBAC Summary
+- Delivery tarafında developer ve project-manager kullanıcıları assigned project scope içinde okuma yapabiliyor.
+- Admin kullanıcı delivery ve GitHub repository config tarafında manage-any yetkisine sahip.
+- Client kullanıcılar delivery summary ve GitHub endpoint’lerine erişemiyor.
+- GitHub repository access token değerleri API response’larında asla dönmüyor.
+
+### Backend Architecture
+- `Task` modeli şu alanlarla genişletildi:
+  - `type`
+  - `workstream`
+  - `severity`
+  - `environment`
+  - `affectedUrl`
+  - `reproductionSteps`
+  - `reportedBy`
+  - `code`
+  - `sprintId`
+- `Task` execution takip alanları eklendi:
+  - `branchName`
+  - `codePreparationNotes`
+  - `codePreparedAt`
+  - `codePreparedByUserId`
+- `TaskWorkNote` modeli ile developer "yapılanlar" kayıtları backend-native hale getirildi.
+- `DeliveryRelease` approval alanları eklendi:
+  - `approvalStatus`
+  - `approvalNotes`
+  - `approvalRequestedAt`
+  - `approvalRespondedAt`
+  - `approvalActorUserId`
+- Yeni backend module/class grupları:
+  - `server/src/delivery/*`
+  - `server/src/integrations/github/*`
+- Yeni delivery endpointleri:
+  - `GET /api/v1/delivery/summary`
+  - `GET/POST /api/v1/delivery/sprints`
+  - `GET/PATCH /api/v1/delivery/sprints/:id`
+  - `GET/POST /api/v1/delivery/releases`
+  - `GET/PATCH /api/v1/delivery/releases/:id`
+
+### Admin Panel Frontend
+- `Tasks` create/edit ekranı delivery taxonomy alanlarını destekliyor.
+- `Projects` create/edit ekranı artık:
+  - `WEB_APP` ve `MOBILE_APP` için repository linkini zorunlu doğruluyor
+  - Figma proje linki kabul ediyor
+- `ProjectDetail` içinde admin için GitHub repository connect/manage/read alanı eklendi.
+- Token input write-only tutuluyor; mevcut token UI’da gösterilmiyor.
+- `ClientDetail` ekranında seçili müşteri için aktif çalışan atamaları görünür hale getirildi.
+
+### Employee Panel Frontend
+- Aşağıdaki developer sayfaları artık API-driven:
+  - `Frontend`
+  - `Backend / API`
+  - `Buglar`
+  - `Revizyonlar`
+  - `Sprintler`
+  - `Test & Yayın`
+  - `Projeler`
+  - `Developer Dashboard`
+- `Projeler` ekranında assigned project scope için GitHub branch/commit/PR/workflow özeti gösteriliyor.
+- Developer artık assigned project/task detail sayfalarını açabiliyor ve task detail içinde work note ekleyebiliyor.
+- `Developer Dashboard` ekranında atanan müşteri görünürlüğü için “Size Atanan Müşteriler” kartı eklendi.
+
+### GitHub Integration
+- V1 entegrasyon modeli project-scoped `ProjectRepository`.
+- Branches, commits, pull requests ve workflow runs GitHub REST üzerinden okunuyor.
+- Token storage encrypted-at-rest; plaintext saklanmıyor.
+- `WEB_APP` ve `MOBILE_APP` projelerinde business-level `repositoryUrl` zorunlu tutuluyor.
+- `installationId` alanı GitHub App migration hazırlığı olarak connect flow’a eklendi.
+- V1 intentionally PAT tabanlı; GitHub App installation flow follow-up olarak bırakıldı.
+
+### Project Files / Cloudinary
+- `Project Files` domain is now backend-native with:
+  - Cloudinary signed upload signature endpoint
+  - upload completion metadata persistence
+  - client-visible vs internal visibility
+  - expiring share links with token hash storage
+- `Dosyalar` and `Teslim Dosyaları` employee pages are API-driven.
+- Client panel delivery/files view now reads real `CLIENT_VISIBLE` project files instead of static placeholders.
+
+### Client Panel Web APP Data Mode
+- `web-app` servisinde `reports`, `meetings`, `service-tab-page`, `web-app-dashboard` akışları mock fallback yerine API-first hale getirildi.
+- Proje seçilmemişse veya ilgili kayıt yoksa UI artık açık empty-state mesajı gösteriyor; statik örnek içerik basılmıyor.
+
+### RTK Query / API Integration
+- Yeni delivery feature klasörü eklendi:
+  - `adminandemployeePanel/src/app/features/delivery/*`
+- `tasks` feature query params artık taxonomy filtrelerini destekliyor:
+  - `type`
+  - `workstream`
+  - `severity`
+  - `environment`
+  - `sprintId`
+- `projects` feature içine project repository GitHub endpoints eklendi.
+
+### Frontend Testing
+- Developer task page filtre testleri eklendi.
+- Sprintler, Test & Yayın ve Developer Dashboard ekranları için loading/error/empty/success testleri eklendi.
+- Project detail GitHub görünürlüğü ve task taxonomy form davranışı testlerle güncellendi.
+
+### Known Risks / Notes
+- GitHub integration V1 tek repository per project modeliyle çalışıyor.
+- Delivery management yetkileri V1’de kasıtlı olarak admin ağırlıklı tutuldu; assigned-manage genişletmesi follow-up olabilir.
+- GitHub App installation flow için sadece foundation/plumbing hazır; gerçek installation handshake hâlâ follow-up.
+- CI/CD tarafında V1 yalnızca workflow read visibility ve release badge seviyesi sunuyor; tam otomasyon pipeline’ı henüz yok.
+- Bundle/code splitting optimizasyonu hâlâ roadmap follow-up maddesi olarak geçerli.
+
+## 2026-05-05 Update - Project Manager Assigned Operations
+
+### Main User Roles
+- `PROJECT_MANAGER` artık assigned scope içinde yalnızca görüntüleme değil operasyonel create/update akışlarını da kullanır.
+
+### Auth & RBAC Summary
+- PM role permission setine assigned-manage yetkileri eklendi:
+  - `projects.manage.assigned`
+  - `tasks.manage.assigned`
+  - `tasks.assign.assigned`
+  - `tasks.todos.manage.assigned`
+- Global `manage.any` yetkileri admin’de kaldı; PM scope dışı erişimlerde safe `404/403` korunur.
+
+### Project Manager Module
+- PM müşteri detayında service bazlı “Proje Oluştur” aksiyonu eklendi.
+- PM service workspace ekranı task/sprint/release oluşturma + todo toggle + internal message reply ile aksiyon merkezine dönüştürüldü.
+- Assignee seçimleri project-scope aday endpointinden beslenir.
+
+### Web APP Workspace
+- PM internal/public message ayrımıyla cevap verebilir; internal mesajlar client görünürlüğünden gizli kalır.
+
+### Testing
+- PM assigned operation akışları backend authz e2e kapsamına eklendi (`projects-tasks-authz` genişletildi).
+- PM client-detail create action için frontend test eklendi.
+
+## 2026-05-05 Update - PM Service Workspace + Message Tree
+
+### Employee Panel Frontend
+- Project-manager akışı assigned-client merkezli gerçek API verisine taşındı.
+- PM akışı müşteri kartı -> satın alınan hizmet -> service-aware operasyon workspace şeklinde çalışır.
+- WEB_APP hizmetinde PM, proje bağlamında workspace sekmelerini yönetebilir.
+
+### Web APP Workspace
+- Mesaj modelinde `parentMessageId` ile parent/reply ilişkisi kalıcı hale getirildi.
+- Mesaj create/list akışı proje + tab bağlamında hizalandı.
+- Parent mesaj doğrulaması ve client internal-message reply kısıtı backend’de uygulanır.
+
+### Client Portal Architecture
+- Web APP mesaj akışında query/cache key standardı `{ projectId, tabKey }` olarak sabitlendi.
+- Socket event patch akışı bu key ile hizalandı; görünmeme/senkron kaybı problemleri azaltıldı.
+
+### Known Risks / Notes
+- Bazı eski frontend testlerinde timeout kaynaklı kırılganlık devam edebilir; hedefli test stabilizasyonu follow-up gerektirir.

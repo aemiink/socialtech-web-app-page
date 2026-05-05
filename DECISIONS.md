@@ -218,6 +218,102 @@ Reason:
 Provides a stable schema + seed baseline for the next task (real auth endpoints) while keeping scope controlled and avoiding premature full RBAC/auth implementation.
 
 Operational note:
+
+---
+
+## 2026-05-05 - Project Manager Service-Aware Flow and Web APP Workspace V1 Boundary
+
+Context:
+The repository now has a working delivery module and a project-scoped Web APP workspace module, but the intended ownership boundary for project-manager flows and the expected shape of workspace messaging needed to be fixed before additional UI/API work. The frontend also uses two navigation models: route-based admin/employee panels and state-based client portal navigation.
+
+Decision:
+Define V1 around the existing project-scoped contract instead of introducing a new orchestration layer or navigation rewrite.
+
+- Canonical scope anchor remains `Project`.
+- Delivery workflow stays in `server/src/delivery/*` under `/api/v1/delivery/*`.
+- Web APP collaboration stays in `server/src/web-app-workspace/*` under `/api/v1/projects/:projectId/web-app-workspace/*`.
+- Admin/employee entry remains route-based via `adminandemployeePanel/src/app/routes.tsx`, with Web APP workspace surfaced inside `ProjectDetail`.
+- Client Portal keeps its current state-driven navigation in `clientPanel/src/app/App.tsx`; no React Router migration is required for V1.
+- Service-aware behavior for project managers is resolved from `project.serviceKey`, assignment scope, and purchased-service/project linkage, not from a new standalone “project-manager workspace” aggregate.
+- Workspace messages remain a flat, append-only project/tab feed in V1. The message tree fix is limited to frontend presentation/query discipline and does not introduce threaded replies, parent-child persistence, or a new message domain model.
+
+V1 behavioral boundary:
+- Project managers are the only employee role that can manage delivery sprints/releases in assigned scope.
+- Assigned project managers, developers, and designers may operate within assigned Web APP workspace scope according to their existing permissions; clients can read/interact only in own scope and never manage internal records.
+- Revisions continue to be the structured change-request system of record; messages are lightweight discussion only.
+
+Out of scope for V1:
+- No architecture rewrite from Vite SPA to Next.js.
+- No client portal router rewrite.
+- No new backend aggregator/BFF that merges delivery + workspace into a separate service.
+- No threaded message schema (`parentMessageId`, reply trees, per-thread unread state, mentions, reactions).
+- No cross-service unified workspace for non-`WEB_APP` projects.
+
+Reason:
+This preserves the current architecture, aligns with already implemented backend/project scoping, avoids duplicating delivery/workspace responsibilities, and keeps the message-tree fix incremental instead of expanding into a new collaboration system.
+
+Affected files:
+- `DECISIONS.md`
+- `adminandemployeePanel/src/app/routes.tsx`
+- `adminandemployeePanel/src/app/pages/ProjectDetail.tsx`
+- `clientPanel/src/app/App.tsx`
+- `clientPanel/src/app/features/webAppWorkspace/*`
+- `server/src/delivery/*`
+- `server/src/web-app-workspace/*`
+
+---
+
+## 2026-05-05 - Project Manager Service-Aware Client Workspace Implementation
+
+Context:
+Project-manager employee panelinde müşteri operasyon akışı mock/static kalıyordu ve service-aware çalışma modeli net değildi.
+
+Decision:
+Project-manager akışı assigned-client merkezli olacak şekilde uygulandı:
+- PM girişinde müşteri listesi ve satın alınan hizmet odaklı kart akışı.
+- Müşteri detayında purchased services + serviceKey bazlı operasyon girişleri.
+- WEB_APP/MOBILE_APP/LANDING_PAGE için workspace sekmeli operasyon ekranı.
+- Non-web servislerde mock yerine gerçek project/task/file summary ve explicit empty-state yaklaşımı.
+
+Reason:
+PM operasyonunun müşteri ve hizmet bağlamında gerçek veriyle yönetilebilmesi ve mock bağımlılığının kaldırılması.
+
+Affected files:
+- `adminandemployeePanel/src/app/employee/dashboards/ProjectManagerDashboard.tsx`
+- `adminandemployeePanel/src/app/employee/pages/Musterilerim.tsx`
+- `adminandemployeePanel/src/app/employee/pages/ProjectManagerClientDetail.tsx`
+- `adminandemployeePanel/src/app/employee/pages/ProjectManagerServiceWorkspace.tsx`
+- `adminandemployeePanel/src/app/employee/EmployeeLayout.tsx`
+- `adminandemployeePanel/src/app/routes.tsx`
+
+---
+
+## 2026-05-05 - Web APP Workspace Message Tree Visibility and Reply Persistence Fix
+
+Context:
+Client panelde soru-cevap mesajları görünmeme, yanlış cache anahtarıyla patch, PM/admin tarafında cevap akışında kopukluk ve thread/reply bağının zayıf olması sorunları vardı.
+
+Decision:
+Mesaj akışı uçtan uca project+tab bağlamında hizalandı ve reply persistence eklendi:
+- `WebAppWorkspaceMessage.parentMessageId` ile parent/reply ilişkisi persist edildi.
+- Mesaj listeleme ve websocket patch akışında `{ projectId, tabKey }` cache anahtarı standardize edildi.
+- Client ve admin/employee panellerinde reply oluşturma `parentMessageId` ile desteklendi.
+- Socket sequence guard korunarak stale/out-of-order patch riski azaltıldı.
+
+Reason:
+Client mesajlarının PM/admin/employee tarafına güvenli ve tutarlı görünmesi, PM cevaplarının client tarafında doğru thread altında görünmesi.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260505153000_add_workspace_message_threading/migration.sql`
+- `server/src/web-app-workspace/dto/create-workspace-message.dto.ts`
+- `server/src/web-app-workspace/web-app-workspace.service.ts`
+- `adminandemployeePanel/src/app/features/projects/projectsTypes.ts`
+- `adminandemployeePanel/src/app/features/projects/projectsApi.ts`
+- `adminandemployeePanel/src/app/employee/pages/ProjectManagerServiceWorkspace.tsx`
+- `clientPanel/src/app/features/webAppWorkspace/webAppWorkspaceTypes.ts`
+- `clientPanel/src/app/features/webAppWorkspace/webAppWorkspaceApi.ts`
+- `clientPanel/src/app/pages/service-tab-page.tsx`
 - Current local schema sync uses `prisma db push`.
 - Prisma migration files are not created yet and remain a planned follow-up.
 - `package.json#prisma` seed config is currently valid but deprecated in Prisma 7; migrate later to `prisma.config.ts`.
@@ -258,6 +354,30 @@ Authorization baseline:
 - `/auth/me` is protected with backend guard and returns role + resolved permissions (+ `ClientProfile` for client users).
 
 Reason:
+
+---
+
+## 2026-05-05 - Client Web APP Mock Fallback Removal and Assignment Visibility Hardening
+
+Context:
+Client Portal Web APP experience still contained static/mock fallback content in shared reports/meetings/tab flows, and assignment visibility was not explicit enough in admin client detail and developer dashboard.
+
+Decision:
+- Removed Web APP-facing mock fallback behavior in client panel pages and switched to API-first rendering with explicit empty states when project/data is unavailable.
+- Made admin client detail show active assigned employees for the selected client.
+- Added developer dashboard visibility card for assigned clients to make assignment scope immediately visible after assignment.
+
+Reason:
+Ensures production-like behavior (no hidden mock data), improves assignment transparency for operations, and reduces confusion during onboarding/testing of newly assigned developer accounts.
+
+Affected files:
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+- `clientPanel/src/app/pages/reports.tsx`
+- `clientPanel/src/app/pages/meetings.tsx`
+- `clientPanel/src/app/pages/services/web-app-dashboard.tsx`
+- `clientPanel/src/app/App.tsx`
+- `adminandemployeePanel/src/app/pages/ClientDetail.tsx`
+- `adminandemployeePanel/src/app/employee/dashboards/DeveloperDashboard.tsx`
 Establishes secure, production-aligned auth mechanics early while preserving phased delivery for frontend integration and broader domain authorization.
 
 Operational verification:
@@ -1512,3 +1632,234 @@ Affected files:
 - `server/.env.example`
 - `server/test/crm-authz.e2e-spec.ts`
 - `REPO_MAP.md`
+
+---
+
+## 2026-05-03 - Delivery Task Taxonomy
+
+Context:
+Developer/Delivery operations needed backend-native task classification for frontend work, backend/API work, bugs, revisions, QA, deployment, severity, and target environment without splitting work into separate models.
+
+Decision:
+Extended the existing `Task` model with delivery taxonomy fields:
+- `type`
+- `workstream`
+- `severity`
+- `environment`
+- `affectedUrl`
+- `reproductionSteps`
+- `reportedBy`
+- `code`
+- `sprintId`
+
+Reason:
+Preserves the current `Project -> Task -> TaskTodo` architecture, keeps filtering/reporting centralized, and avoids duplicating workflow logic across multiple task-like entities.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260503120000_add_delivery_and_github_systems/migration.sql`
+- `server/src/tasks/*`
+- `adminandemployeePanel/src/app/features/tasks/*`
+- `adminandemployeePanel/src/app/pages/Tasks.tsx`
+- `adminandemployeePanel/src/app/employee/pages/Frontend.tsx`
+- `adminandemployeePanel/src/app/employee/pages/BackendAPI.tsx`
+- `adminandemployeePanel/src/app/employee/pages/Buglar.tsx`
+- `adminandemployeePanel/src/app/employee/pages/Revizyonlar.tsx`
+
+---
+
+## 2026-05-03 - Delivery Sprint and Release System
+
+Context:
+Developer Sprintler and Test & Yayın pages were still mock/static and there was no backend-native sprint or release tracking model.
+
+Decision:
+Added dedicated `DeliverySprint` and `DeliveryRelease` entities plus a `delivery` backend module, while keeping both linked to the existing project/task backbone.
+
+Reason:
+Sprints and releases represent planning and operational lifecycle layers above tasks, so they benefit from explicit persistence and API contracts without replacing the current project/task structure.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260503120000_add_delivery_and_github_systems/migration.sql`
+- `server/src/delivery/*`
+- `adminandemployeePanel/src/app/features/delivery/*`
+- `adminandemployeePanel/src/app/employee/pages/Sprintler.tsx`
+- `adminandemployeePanel/src/app/employee/pages/TestYayin.tsx`
+- `adminandemployeePanel/src/app/employee/dashboards/DeveloperDashboard.tsx`
+
+---
+
+## 2026-05-03 - Project GitHub Repository Integration
+
+Context:
+Project delivery teams needed repository visibility inside the existing admin/employee panel, but the system had no project-scoped repository persistence or GitHub integration.
+
+Decision:
+Added a `ProjectRepository` model with encrypted token storage and project-scoped GitHub REST reads for branches, commits, pull requests, and workflow runs. V1 uses encrypted PAT storage and defers GitHub App installation flow to a later milestone.
+
+Reason:
+Delivers operational repository visibility quickly while keeping secrets out of plaintext storage and API responses, and avoids introducing webhook/app-installation complexity in the current milestone.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260503120000_add_delivery_and_github_systems/migration.sql`
+- `server/src/integrations/github/*`
+- `server/src/app.module.ts`
+- `server/src/config/env.validation.ts`
+- `server/.env.example`
+- `adminandemployeePanel/src/app/features/projects/*`
+- `adminandemployeePanel/src/app/pages/ProjectDetail.tsx`
+- `adminandemployeePanel/src/app/employee/pages/Projeler.tsx`
+
+---
+
+## 2026-05-03 - Developer Dashboard Summary Integration
+
+Context:
+The developer dashboard still relied on inline/mock content and did not reflect assigned-scope task load, critical bugs, sprint progress, release queue, or repository activity.
+
+Decision:
+Added `GET /api/v1/delivery/summary` as the backend-native summary endpoint and migrated the developer dashboard to consume it via RTK Query.
+
+Reason:
+Provides a single assigned-scope source of truth for developer KPIs and keeps aggregation logic in the backend instead of duplicating it across multiple frontend screens.
+
+Affected files:
+- `server/src/delivery/*`
+- `adminandemployeePanel/src/app/features/delivery/*`
+- `adminandemployeePanel/src/app/employee/dashboards/DeveloperDashboard.tsx`
+
+---
+
+## 2026-05-03 - Project Delivery Links And Developer Execution Notes
+
+Context:
+Delivery teams needed stronger project-level source links and developers needed a backend-native place to record what was done on assigned tasks without exposing GitHub secrets or forcing client-facing visibility.
+
+Decision:
+Added business-level `repositoryUrl` and `figmaProjectUrl` fields on `Project`, made the repository link mandatory for `WEB_APP` and `MOBILE_APP` projects, and added task-level work notes plus code-preparation metadata (`branchName`, preparation notes, prepared-by timestamps) to support execution logging and GitHub follow-up.
+
+Reason:
+Keeps canonical delivery references on the project entity, gives designers a first-class Figma link, and lets developers document work inside the existing task model instead of using disconnected notes or mock UI state.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260503153000_add_project_figma_task_notes_release_approval/migration.sql`
+- `server/src/projects/*`
+- `server/src/tasks/*`
+- `adminandemployeePanel/src/app/features/projects/*`
+- `adminandemployeePanel/src/app/features/tasks/*`
+
+---
+
+## 2026-05-05 - Project Manager Assigned Operations Management
+
+Context:
+Project manager paneli müşteri/hizmet/workspace görünürlüğü sağlıyordu ancak operasyonel create/update akışlarında backend ve UI kısıtları nedeniyle pratikte read-only kalıyordu.
+
+Decision:
+PM rolü için assigned-scope yönetim modeli güçlendirildi:
+- Project create/update admin-only kuralı kaldırılarak `projects.manage.assigned` + assignment scope ile PM’e açıldı.
+- Task create/update/assignee/todo yönetimi `tasks.manage.assigned`, `tasks.assign.assigned`, `tasks.todos.manage.assigned` ile PM assigned scope’a açıldı.
+- PM workspace aksiyon merkezi üzerinden görev/sprint/release oluşturma, todo toggle ve internal/public message reply akışları eklendi.
+- Project-assignee candidates endpointi (`GET /projects/:id/assignee-candidates`) eklendi.
+
+Reason:
+PM’in kendi atanmış müşteri/proje scope’u içinde gerçek operasyon yönetebilmesini sağlarken global admin yetkilerini korumak.
+
+Affected files:
+- `server/prisma/seed.ts`
+- `server/src/projects/projects.controller.ts`
+- `server/src/projects/projects.service.ts`
+- `server/src/tasks/tasks.controller.ts`
+- `server/src/tasks/tasks.service.ts`
+- `server/test/projects-tasks-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/projects/projectsApi.ts`
+- `adminandemployeePanel/src/app/features/projects/projectsTypes.ts`
+- `adminandemployeePanel/src/app/employee/pages/ProjectManagerClientDetail.tsx`
+- `adminandemployeePanel/src/app/employee/pages/ProjectManagerServiceWorkspace.tsx`
+- `adminandemployeePanel/src/app/pages/Projects.tsx`
+- `adminandemployeePanel/src/app/pages/ProjectDetail.tsx`
+- `adminandemployeePanel/src/app/pages/TaskDetail.tsx`
+- `adminandemployeePanel/src/app/employee/pages/Gorevlerim.tsx`
+
+---
+
+## 2026-05-03 - Release Approval And GitHub App Preparation
+
+Context:
+The delivery release lifecycle needed explicit approval tracking, and GitHub integration needed a safe path toward GitHub App based installation without pretending a full OAuth/install flow already existed.
+
+Decision:
+Extended `DeliveryRelease` with explicit approval state fields and expanded project-manager assigned-scope release management. Also added `installationId` plumbing to the project repository connect flow as GitHub App preparation, while keeping PAT-based encrypted storage as the current active V1 authentication path.
+
+Reason:
+Approval state is part of real delivery operations and belongs in the release model. Separating installation preparation from the actual installation flow keeps the roadmap honest while still reducing future migration effort.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260503153000_add_project_figma_task_notes_release_approval/migration.sql`
+- `server/src/delivery/*`
+- `server/src/integrations/github/*`
+- `server/prisma/seed.ts`
+- `server/test/delivery-github-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/delivery/*`
+- `adminandemployeePanel/src/app/features/projects/*`
+- `adminandemployeePanel/src/app/employee/pages/TestYayin.tsx`
+- `adminandemployeePanel/src/app/pages/ProjectDetail.tsx`
+
+---
+
+## 2026-05-03 - Project Files Cloudinary V1
+
+Context:
+`Dosyalar` and `Teslim Dosyaları` screens were static/mock and there was no backend-native file sharing model across admin/employee/client scopes.
+
+Decision:
+Introduced backend-native project files with Cloudinary signed upload flow, metadata persistence, role/scope visibility, and expiring share link tokens. V1 uses Cloudinary public delivery URLs with app-level visibility controls and supports upload mode selection (new version vs overwrite).
+
+Reason:
+This delivers real operational file sharing quickly while preserving RBAC/project scope constraints and avoids blocking on heavier storage orchestration work.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260503190000_add_project_files_cloudinary/migration.sql`
+- `server/src/project-files/*`
+- `server/src/integrations/cloudinary/*`
+- `server/src/config/env.validation.ts`
+- `server/.env.example`
+- `server/prisma/seed.ts`
+- `adminandemployeePanel/src/app/employee/pages/Dosyalar.tsx`
+- `adminandemployeePanel/src/app/employee/pages/TeslimDosyalari.tsx`
+- `adminandemployeePanel/src/app/features/projects/projectsApi.ts`
+- `clientPanel/src/app/features/projectFiles/*`
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+
+---
+
+## 2026-05-05 - Web APP Workspace Realtime Snapshot + Sequence Contract
+
+Context:
+Web APP workspace live updates were available, but some screens still relied on broad refetch patterns and could be exposed to out-of-order websocket deliveries.
+
+Decision:
+Extended `workspace:update` events to carry entity snapshots for create/update events (`message`, `revision`, `meeting-request`, `section`, `content-item`, `weekly-report`) and added monotonic `sequence` metadata next to `emittedAt`.
+
+Admin/Employee and Client panel listeners now use:
+- RTK Query `updateQueryData` incremental patching for covered events
+- local `lastSequence` guards to drop stale/out-of-order events
+- minimal fallback behavior only outside covered snapshot events
+
+Reason:
+Improves perceived realtime speed, reduces unnecessary API churn, and prevents stale event overwrite regressions in collaborative workspace screens.
+
+Affected files:
+- `server/src/web-app-workspace/web-app-workspace.gateway.ts`
+- `server/src/web-app-workspace/web-app-workspace.service.ts`
+- `adminandemployeePanel/src/app/features/projects/workspaceSocket.ts`
+- `adminandemployeePanel/src/app/pages/ProjectDetail.tsx`
+- `clientPanel/src/app/features/webAppWorkspace/workspaceSocket.ts`
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+- `clientPanel/src/app/pages/meetings.tsx`
+- `clientPanel/src/app/pages/reports.tsx`

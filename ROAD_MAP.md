@@ -19,10 +19,20 @@
 - Employee assignment analytics/reporting cards (summary endpoint support)
 - Visual QA screenshot artifacts for critical role flows
 - Bundle/code splitting optimization
+- GitHub App installation flow
+- GitHub webhook sync
+- Task code based commit/branch association
+- Branch naming convention parsing
+- Related commits in task detail enrichment
+- GitHub Actions release/deploy automation
+- CI/CD status automation
+- Advanced sprint planning
+- Full release approval workflow UX
 - Platform integrations: Meta/TikTok/Amazon Ads
 - CRM automation/reminder notifications
 - CRM pipeline analytics
 - CRM outbound email/WhatsApp sending integrations
+- Cloudinary asset malware scanning/quarantine flow
 
 ## In Progress
 
@@ -83,6 +93,45 @@
 - CRM frontend tests
 - CRM backend e2e tests
 - Public website contact form -> CRM lead integration
+- Task taxonomy fields
+- Developer task pages API migration
+- Delivery sprint backend/API/UI
+- Delivery release backend/API/UI
+- Project GitHub repository integration
+- Developer GitHub read visibility
+- Delivery summary endpoint/UI
+- Project repository link requirement for `WEB_APP` / `MOBILE_APP`
+- Project-level Figma link support
+- Developer task detail work notes
+- Task code preparation + suggested branch metadata
+- Related commits in task detail (V1 read visibility)
+- Release approval state tracking
+- Project-manager assigned release management
+- GitHub App installation metadata preparation (`installationId`)
+- Related backend e2e tests for delivery/github
+- Related frontend tests for developer delivery flows
+- Project files backend/API/UI (Cloudinary signed upload + share links)
+- Client panel client-visible file delivery integration
+- Web APP workspace backend module (sections/items/messages/revisions/reports/meeting requests)
+- Web APP workspace admin/employee management UI on project detail
+- Web APP workspace client panel API-driven reports/meetings/data binding
+- Web APP workspace Socket.IO realtime sync
+- Incremental cache patch strategy (`updateQueryData`) for workspace events
+- Out-of-order websocket protection via event `sequence` guards
+- Client Web APP panel mock fallback temizliği (API-first + empty-state)
+- Admin ClientDetail atanan çalışan görünürlüğü
+- Developer Dashboard atanan müşteri görünürlüğü
+- Project Manager assigned clients API-driven dashboard
+- Project Manager service-aware client detail/workspace
+- Project Manager Web APP workspace message tree visibility
+- Client Panel Web APP message tree görünürlük ve cache-key senkron düzeltmesi
+- Workspace message parent/reply persistence (`parentMessageId`)
+- Project Manager assigned-scope project management
+- Project Manager assigned-scope task management
+- Project Manager task todo/checklist management
+- Project Manager sprint/release management
+- Project Manager workspace message reply/visibility
+- Project Manager service workspace action center
 
 ## Blocked
 
@@ -179,3 +228,11 @@ None identified.
 - [ ] CRM pipeline analytics
 - [ ] CRM outbound email/WhatsApp sending integrations
 - [ ] Employee CRM list/follow-up page test coverage expansion
+- [ ] Service-specific full domain modules for ads/social/SEO/support
+- [ ] Project Manager message inbox (cross-project aggregate)
+- [ ] Advanced message assignment/routing to specific employee
+- [ ] Workspace message notification/reminder automation
+- [ ] Project Manager global message inbox
+- [ ] Advanced employee routing/notification system
+- [ ] Service-specific domain modules for ads/social/SEO/support
+- [ ] Assignment-scoped assignee candidates refinements
