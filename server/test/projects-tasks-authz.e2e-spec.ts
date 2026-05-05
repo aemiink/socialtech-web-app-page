@@ -99,11 +99,15 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
 
   let adminToken = "";
   let employeeToken = "";
+  let projectManagerToken = "";
   let clientToken = "";
 
   let clientOwnProfileId = "";
   let employeeUserId = "";
   let employeeAssignedClientIds: string[] = [];
+  let projectManagerUserId = "";
+  let projectManagerAssignedClientIds: string[] = [];
+  let projectManagerAssignedProjectId = "";
   let employeeUnassignedProjectId = "";
   let clientOtherTaskId = "";
   let employeeOwnTaskId = "";
@@ -149,6 +153,7 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
 
     adminToken = await loginWithDemoUser("admin@socialtech.com");
     employeeToken = await loginWithDemoUser("performance@socialtech.com");
+    projectManagerToken = await loginWithDemoUser("project@socialtech.com");
     clientToken = await loginWithDemoUser("client@socialtech.com");
 
     await resolveRuntimeFixtures();
@@ -259,6 +264,73 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
     );
     expect(project.slug).toEqual(expect.stringMatching(/^authz-e2e-project/));
     createdProjectId = project.id;
+  });
+
+  it("project manager can create project in assigned client scope", async () => {
+    const clientProfile = await prisma.clientProfile.findUnique({
+      where: { slug: "acme-e-ticaret" },
+      select: { id: true },
+    });
+    if (!clientProfile) {
+      throw new Error("Expected seeded client profile acme-e-ticaret.");
+    }
+
+    const projectName = `${E2E_PROJECT_NAME_PREFIX} PM ${Date.now()}`;
+    const response = await request(app.getHttpServer())
+      .post(PROJECTS_PATH)
+      .set("Authorization", `Bearer ${projectManagerToken}`)
+      .send({
+        clientProfileId: clientProfile.id,
+        serviceKey: "GROWTH_HUB",
+        name: projectName,
+        status: ProjectStatus.PLANNED,
+        priority: Priority.MEDIUM,
+      })
+      .expect(201);
+
+    const project = response.body as ProjectListItem;
+    expect(project.clientProfileId).toBe(clientProfile.id);
+    expect(project.name).toBe(projectName);
+    createdProjectId = project.id;
+  });
+
+  it("project manager cannot create project for out-of-scope client when assignment inactive", async () => {
+    const assignment = await prisma.employeeClientAssignment.findFirst({
+      where: {
+        employeeUserId: projectManagerUserId,
+        clientProfileId: { in: projectManagerAssignedClientIds },
+        isActive: true,
+      },
+      select: { id: true, clientProfileId: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    if (!assignment) {
+      throw new Error("Expected at least one active assignment for project manager.");
+    }
+
+    await prisma.employeeClientAssignment.update({
+      where: { id: assignment.id },
+      data: { isActive: false },
+    });
+
+    try {
+      await request(app.getHttpServer())
+        .post(PROJECTS_PATH)
+        .set("Authorization", `Bearer ${projectManagerToken}`)
+        .send({
+          clientProfileId: assignment.clientProfileId,
+          serviceKey: "GROWTH_HUB",
+          name: `${E2E_PROJECT_NAME_PREFIX} PM Blocked ${Date.now()}`,
+          status: ProjectStatus.PLANNED,
+          priority: Priority.MEDIUM,
+        })
+        .expect(404);
+    } finally {
+      await prisma.employeeClientAssignment.update({
+        where: { id: assignment.id },
+        data: { isActive: true },
+      });
+    }
   });
 
   it("non-admin cannot create project", async () => {
@@ -496,6 +568,85 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
       .expect(403);
   });
 
+  it("project manager can create task and manage todos in assigned project scope", async () => {
+    const response = await request(app.getHttpServer())
+      .post(TASKS_PATH)
+      .set("Authorization", `Bearer ${projectManagerToken}`)
+      .send({
+        projectId: projectManagerAssignedProjectId,
+        title: "PM Authz Task",
+        status: TaskStatus.TODO,
+        priority: Priority.MEDIUM,
+        assigneeUserId: employeeUserId,
+      })
+      .expect(201);
+
+    const task = expectTaskResponse(response.body);
+    expect(task.projectId).toBe(projectManagerAssignedProjectId);
+    expect(task.assigneeUserId).toBe(employeeUserId);
+
+    const todoCreate = await request(app.getHttpServer())
+      .post(`${TASKS_PATH}/${task.id}/todos`)
+      .set("Authorization", `Bearer ${projectManagerToken}`)
+      .send({
+        title: `${E2E_TODO_TITLE_PREFIX} PM`,
+        visibility: TaskTodoVisibility.INTERNAL,
+      })
+      .expect(201);
+
+    const taskWithTodo = expectTaskResponse(todoCreate.body);
+    const createdTodo = expectTodoByTitle(taskWithTodo, `${E2E_TODO_TITLE_PREFIX} PM`);
+
+    const toggleResponse = await request(app.getHttpServer())
+      .patch(`${TASKS_PATH}/${task.id}/todos/${createdTodo.id}/toggle`)
+      .set("Authorization", `Bearer ${projectManagerToken}`)
+      .send({ isCompleted: true })
+      .expect(200);
+
+    const toggledTask = expectTaskResponse(toggleResponse.body);
+    const toggledTodo = expectTodoById(toggledTask, createdTodo.id);
+    expect(toggledTodo.isCompleted).toBe(true);
+  });
+
+  it("project manager cannot assign task to employee outside client assignment scope", async () => {
+    const scopedProject = await prisma.project.findUnique({
+      where: { id: projectManagerAssignedProjectId },
+      select: { clientProfileId: true },
+    });
+    if (!scopedProject) {
+      throw new Error("Expected scoped project for project manager.");
+    }
+
+    const outOfScopeEmployee = await prisma.user.findFirst({
+      where: {
+        accountType: "EMPLOYEE",
+        employeeClientAssignments: {
+          none: {
+            clientProfileId: scopedProject.clientProfileId,
+            isActive: true,
+          },
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!outOfScopeEmployee) {
+      throw new Error("Expected an out-of-scope employee candidate for assignment test.");
+    }
+
+    await request(app.getHttpServer())
+      .post(TASKS_PATH)
+      .set("Authorization", `Bearer ${projectManagerToken}`)
+      .send({
+        projectId: projectManagerAssignedProjectId,
+        title: "PM Out Of Scope Assignee",
+        status: TaskStatus.TODO,
+        priority: Priority.MEDIUM,
+        assigneeUserId: outOfScopeEmployee.id,
+      })
+      .expect(400);
+  });
+
   it("client cannot mutate task todos", async () => {
     await request(app.getHttpServer())
       .patch(`${TASKS_PATH}/${taskWithMixedTodosId}/todos/${clientVisibleTodoId}`)
@@ -574,7 +725,12 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
     await prisma.user.updateMany({
       where: {
         email: {
-          in: ["admin@socialtech.com", "performance@socialtech.com", "client@socialtech.com"],
+          in: [
+            "admin@socialtech.com",
+            "performance@socialtech.com",
+            "project@socialtech.com",
+            "client@socialtech.com",
+          ],
         },
       },
       data: { passwordHash: deterministicPasswordHash },
@@ -600,6 +756,15 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
     }
     employeeUserId = employeeUser.id;
 
+    const projectManagerUser = await prisma.user.findUnique({
+      where: { email: "project@socialtech.com" },
+      select: { id: true },
+    });
+    if (!projectManagerUser) {
+      throw new Error("Project manager demo employee not found.");
+    }
+    projectManagerUserId = projectManagerUser.id;
+
     const assignmentRows = await prisma.employeeClientAssignment.findMany({
       where: {
         employeeUserId,
@@ -612,6 +777,31 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
     if (employeeAssignedClientIds.length === 0) {
       throw new Error("Expected performance employee to have active client assignments.");
     }
+
+    const projectManagerAssignmentRows = await prisma.employeeClientAssignment.findMany({
+      where: {
+        employeeUserId: projectManagerUserId,
+        isActive: true,
+      },
+      select: { clientProfileId: true },
+      orderBy: { clientProfileId: "asc" },
+    });
+    projectManagerAssignedClientIds = projectManagerAssignmentRows.map((assignment) => assignment.clientProfileId);
+    if (projectManagerAssignedClientIds.length === 0) {
+      throw new Error("Expected project manager to have active client assignments.");
+    }
+
+    const pmAssignedProject = await prisma.project.findFirst({
+      where: {
+        clientProfileId: { in: projectManagerAssignedClientIds },
+      },
+      select: { id: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    if (!pmAssignedProject) {
+      throw new Error("Expected at least one project in project manager assignment scope.");
+    }
+    projectManagerAssignedProjectId = pmAssignedProject.id;
 
     const employeeUnassignedProject = await prisma.project.findFirst({
       where: {

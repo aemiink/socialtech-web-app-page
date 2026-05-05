@@ -1,6 +1,5 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
-import { RequirePermissions } from "../auth/decorators/permissions.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
@@ -31,7 +30,6 @@ export class ProjectsController {
   }
 
   @Post()
-  @RequirePermissions("projects.manage.any")
   createProject(
     @CurrentUser() currentUser: AuthenticatedUser,
     @Body() dto: CreateProjectDto,
@@ -40,12 +38,19 @@ export class ProjectsController {
   }
 
   @Patch(":id")
-  @RequirePermissions("projects.manage.any")
   updateProject(
     @CurrentUser() currentUser: AuthenticatedUser,
     @Param("id", ParseUUIDPipe) projectId: string,
     @Body() dto: UpdateProjectDto,
   ) {
     return this.projectsService.updateProject(currentUser, projectId, dto);
+  }
+
+  @Get(":id/assignee-candidates")
+  getProjectAssigneeCandidates(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("id", ParseUUIDPipe) projectId: string,
+  ) {
+    return this.projectsService.getProjectAssigneeCandidates(currentUser, projectId);
   }
 }

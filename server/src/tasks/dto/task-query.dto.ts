@@ -1,6 +1,13 @@
 import { Transform } from "class-transformer";
 import { IsDateString, IsEnum, IsOptional, IsString, IsUUID, MaxLength, MinLength } from "class-validator";
-import { Priority, TaskStatus } from "@prisma/client";
+import {
+  Priority,
+  TaskEnvironment,
+  TaskSeverity,
+  TaskStatus,
+  TaskType,
+  TaskWorkstream,
+} from "@prisma/client";
 
 function normalizeOptionalString(value: unknown): unknown {
   if (typeof value !== "string") {
@@ -55,6 +62,11 @@ export class TaskQueryDto {
   assigneeUserId?: string;
 
   @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
+  @IsUUID()
+  sprintId?: string;
+
+  @IsOptional()
   @Transform(({ value }) => normalizeOptionalTaskStatus(value))
   @IsEnum(TaskStatus)
   status?: TaskStatus;
@@ -63,6 +75,26 @@ export class TaskQueryDto {
   @Transform(({ value }) => normalizeOptionalPriority(value))
   @IsEnum(Priority)
   priority?: Priority;
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalTaskStatus(value))
+  @IsEnum(TaskType)
+  type?: TaskType;
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalTaskStatus(value))
+  @IsEnum(TaskWorkstream)
+  workstream?: TaskWorkstream;
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalTaskStatus(value))
+  @IsEnum(TaskSeverity)
+  severity?: TaskSeverity;
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalTaskStatus(value))
+  @IsEnum(TaskEnvironment)
+  environment?: TaskEnvironment;
 
   @IsOptional()
   @Transform(({ value }) => normalizeOptionalString(value))

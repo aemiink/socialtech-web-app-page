@@ -9,11 +9,15 @@ import { AuthModule } from "./auth/auth.module";
 import { ClientsModule } from "./clients/clients.module";
 import { envValidationSchema } from "./config/env.validation";
 import { DatabaseModule } from "./database/database.module";
+import { DeliveryModule } from "./delivery/delivery.module";
 import { CrmModule } from "./crm/crm.module";
 import { HealthModule } from "./health/health.module";
+import { GithubModule } from "./integrations/github/github.module";
+import { ProjectFilesModule } from "./project-files/project-files.module";
 import { ProjectsModule } from "./projects/projects.module";
 import { TasksModule } from "./tasks/tasks.module";
 import { UsersModule } from "./users/users.module";
+import { WebAppWorkspaceModule } from "./web-app-workspace/web-app-workspace.module";
 
 @Module({
   imports: [
@@ -32,6 +36,9 @@ import { UsersModule } from "./users/users.module";
     UsersModule,
     ClientsModule,
     CrmModule,
+    GithubModule,
+    ProjectFilesModule,
+    DeliveryModule,
     AdminSummaryModule,
     AdminAssignmentsModule,
     AdminAuditLogsModule,
@@ -39,6 +46,7 @@ import { UsersModule } from "./users/users.module";
     AdminUsersModule,
     ProjectsModule,
     TasksModule,
+    WebAppWorkspaceModule,
   ],
 })
 export class AppModule {}

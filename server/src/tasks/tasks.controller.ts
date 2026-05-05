@@ -6,11 +6,14 @@ import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { CreateTaskDto } from "./dto/create-task.dto";
 import { CreateTaskTodoDto } from "./dto/create-task-todo.dto";
+import { CreateTaskWorkNoteDto } from "./dto/create-task-work-note.dto";
+import { PrepareTaskCodeDto } from "./dto/prepare-task-code.dto";
 import { TaskQueryDto } from "./dto/task-query.dto";
 import { ToggleTaskTodoDto } from "./dto/toggle-task-todo.dto";
 import { UpdateTaskDto } from "./dto/update-task.dto";
 import { UpdateTaskTodoDto } from "./dto/update-task-todo.dto";
 import { TasksService } from "./tasks.service";
+import { GithubQueryDto } from "../integrations/github/dto/github-query.dto";
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller("tasks")
@@ -34,7 +37,6 @@ export class TasksController {
   }
 
   @Post()
-  @RequirePermissions("tasks.manage.any")
   createTask(
     @CurrentUser() currentUser: AuthenticatedUser,
     @Body() dto: CreateTaskDto,
@@ -87,5 +89,44 @@ export class TasksController {
     @Param("todoId", ParseUUIDPipe) todoId: string,
   ) {
     return this.tasksService.deleteTaskTodo(currentUser, taskId, todoId);
+  }
+
+  @Get(":id/work-notes")
+  @RequirePermissions("tasks.read.assigned")
+  getTaskWorkNotes(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("id", ParseUUIDPipe) taskId: string,
+  ) {
+    return this.tasksService.getTaskWorkNotes(currentUser, taskId);
+  }
+
+  @Post(":id/work-notes")
+  @RequirePermissions("tasks.update.assigned")
+  createTaskWorkNote(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("id", ParseUUIDPipe) taskId: string,
+    @Body() dto: CreateTaskWorkNoteDto,
+  ) {
+    return this.tasksService.createTaskWorkNote(currentUser, taskId, dto);
+  }
+
+  @Post(":id/code-preparation")
+  @RequirePermissions("tasks.update.assigned")
+  prepareTaskCode(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("id", ParseUUIDPipe) taskId: string,
+    @Body() dto: PrepareTaskCodeDto,
+  ) {
+    return this.tasksService.prepareTaskCode(currentUser, taskId, dto);
+  }
+
+  @Get(":id/related-commits")
+  @RequirePermissions("tasks.read.assigned")
+  getRelatedCommits(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("id", ParseUUIDPipe) taskId: string,
+    @Query() query: GithubQueryDto,
+  ) {
+    return this.tasksService.getRelatedCommits(currentUser, taskId, query);
   }
 }

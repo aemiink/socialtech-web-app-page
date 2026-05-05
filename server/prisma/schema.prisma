@@ -98,6 +98,121 @@ enum TaskTodoVisibility {
   CLIENT_VISIBLE
 }
 
+enum TaskType {
+  FEATURE
+  BUG
+  REVISION
+  QA
+  DEPLOYMENT
+  MAINTENANCE
+}
+
+enum TaskWorkstream {
+  FRONTEND
+  BACKEND
+  FULLSTACK
+  QA
+  DEVOPS
+  UI_INTEGRATION
+}
+
+enum TaskSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum TaskEnvironment {
+  DEVELOPMENT
+  STAGING
+  PRODUCTION
+}
+
+enum DeliverySprintStatus {
+  PLANNED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum DeliveryReleaseStatus {
+  PLANNED
+  TESTING
+  READY
+  DEPLOYED
+  FAILED
+  ROLLED_BACK
+}
+
+enum DeliveryReleaseApprovalStatus {
+  NOT_REQUESTED
+  PENDING
+  APPROVED
+  CHANGES_REQUESTED
+  REJECTED
+}
+
+enum RepositoryProvider {
+  GITHUB
+}
+
+enum ProjectFileVisibility {
+  INTERNAL
+  CLIENT_VISIBLE
+}
+
+enum ProjectFileCategory {
+  WEB_SOURCE
+  WEB_BUILD
+  MOBILE_SOURCE
+  MOBILE_BUILD
+  ADS_CREATIVE
+  SEO_REPORT
+  BRAND_ASSET
+  DOCUMENT
+  CONTRACT
+  OTHER
+}
+
+enum WebAppWorkspaceTabKey {
+  OVERVIEW
+  TASKS
+  DELIVERY
+  FILES
+  CONTENT
+  MESSAGES
+  REVISIONS
+  REPORTS
+  MEETINGS
+}
+
+enum WebAppWorkspaceContentItemType {
+  TEXT
+  LINK
+  EMBED
+  CHECKLIST
+  METRIC
+}
+
+enum WebAppWorkspaceRevisionStatus {
+  REQUESTED
+  ACKNOWLEDGED
+  IN_PROGRESS
+  READY_FOR_REVIEW
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum WebAppWorkspaceMeetingRequestStatus {
+  REQUESTED
+  CONFIRMED
+  DECLINED
+  COMPLETED
+  CANCELLED
+}
+
 enum CrmLeadStatus {
   NEW
   CONTACTED
@@ -178,10 +293,25 @@ model User {
   clientProfile             ClientProfile?             @relation(fields: [clientProfileId], references: [id], onDelete: SetNull)
   employeeClientAssignments EmployeeClientAssignment[] @relation("EmployeeClientAssignments")
   assignedTasks             Task[]                     @relation("TaskAssignee")
+  codePreparedTasks         Task[]                     @relation("TaskCodePreparedBy")
   completedTaskTodos        TaskTodo[]                 @relation("TaskTodoCompletedBy")
+  taskWorkNotes             TaskWorkNote[]             @relation("TaskWorkNoteAuthor")
+  uploadedProjectFiles      ProjectFile[]              @relation("ProjectFileUploadedBy")
+  createdProjectFileFolders ProjectFileFolder[]        @relation("ProjectFileFolderCreatedBy")
+  assignedProjectFileFolders ProjectFileFolderAssignment[] @relation("ProjectFileFolderAssignedUser")
+  projectFileShareLinks     ProjectFileShareLink[]     @relation("ProjectFileShareLinkCreatedBy")
+  createdWorkspaceSections  WebAppWorkspaceSection[]   @relation("WorkspaceSectionCreatedBy")
+  workspaceMessages         WebAppWorkspaceMessage[]   @relation("WorkspaceMessageAuthor")
+  requestedWorkspaceRevisions WebAppWorkspaceRevision[] @relation("WorkspaceRevisionRequestedBy")
+  assignedWorkspaceRevisions WebAppWorkspaceRevision[] @relation("WorkspaceRevisionAssignedTo")
+  workspaceRevisionTransitions WebAppWorkspaceRevisionTransition[] @relation("WorkspaceRevisionTransitionActor")
+  createdWeeklyReports      WebAppWorkspaceWeeklyReport[] @relation("WorkspaceWeeklyReportAuthor")
+  requestedMeetingRequests  WebAppWorkspaceMeetingRequest[] @relation("WorkspaceMeetingRequestedBy")
+  respondedMeetingRequests  WebAppWorkspaceMeetingRequest[] @relation("WorkspaceMeetingRespondedBy")
   ownedCrmLeads             CrmLead[]                  @relation("CrmLeadOwner")
   crmLeadActivities         CrmLeadActivity[]          @relation("CrmLeadActivityActor")
-  triggeredCrmLeadScans     CrmLeadScanLog[]          @relation("CrmLeadScanTriggeredBy")
+  releaseApprovalActions    DeliveryRelease[]          @relation("DeliveryReleaseApprovalActor")
+  triggeredCrmLeadScans     CrmLeadScanLog[]           @relation("CrmLeadScanTriggeredBy")
   auditLogs                 AuditLog[]                 @relation("AuditActor")
 
   @@index([accountType, role])
@@ -218,7 +348,8 @@ model ClientProfile {
   employeeAssignments EmployeeClientAssignment[]
   purchasedServices   ClientPurchasedService[]
   projects            Project[]
-  convertedCrmLeads   CrmLead[]                 @relation("CrmLeadConvertedClient")
+  files               ProjectFile[]
+  convertedCrmLeads   CrmLead[]                  @relation("CrmLeadConvertedClient")
 
   @@index([status])
 }
@@ -241,21 +372,33 @@ model ClientPurchasedService {
 }
 
 model Project {
-  id              String        @id @default(uuid()) @db.Uuid
-  clientProfileId String        @db.Uuid
+  id              String               @id @default(uuid()) @db.Uuid
+  clientProfileId String               @db.Uuid
   serviceKey      PurchasedServiceKey?
+  repositoryUrl   String?
   name            String
   slug            String
   description     String?
-  status          ProjectStatus @default(PLANNED)
-  priority        Priority      @default(MEDIUM)
+  figmaProjectUrl String?
+  status          ProjectStatus        @default(PLANNED)
+  priority        Priority             @default(MEDIUM)
   startDate       DateTime?
   dueDate         DateTime?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
 
-  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
-  tasks         Task[]
+  clientProfile    ClientProfile      @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  tasks            Task[]
+  deliverySprints  DeliverySprint[]
+  deliveryReleases DeliveryRelease[]
+  repository       ProjectRepository?
+  files            ProjectFile[]
+  fileFolders      ProjectFileFolder[]
+  workspaceSections WebAppWorkspaceSection[]
+  workspaceMessages WebAppWorkspaceMessage[]
+  workspaceRevisions WebAppWorkspaceRevision[]
+  workspaceWeeklyReports WebAppWorkspaceWeeklyReport[]
+  workspaceMeetingRequests WebAppWorkspaceMeetingRequest[]
 
   @@unique([clientProfileId, slug])
   @@index([clientProfileId])
@@ -265,25 +408,368 @@ model Project {
 }
 
 model Task {
-  id             String     @id @default(uuid()) @db.Uuid
-  projectId      String     @db.Uuid
-  title          String
-  description    String?
-  status         TaskStatus @default(TODO)
-  priority       Priority   @default(MEDIUM)
-  assigneeUserId String?    @db.Uuid
-  dueDate        DateTime?
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  id                   String           @id @default(uuid()) @db.Uuid
+  projectId            String           @db.Uuid
+  sprintId             String?          @db.Uuid
+  title                String
+  description          String?
+  status               TaskStatus       @default(TODO)
+  priority             Priority         @default(MEDIUM)
+  type                 TaskType         @default(FEATURE)
+  workstream           TaskWorkstream   @default(FULLSTACK)
+  severity             TaskSeverity?
+  environment          TaskEnvironment?
+  affectedUrl          String?
+  reproductionSteps    String?
+  reportedBy           String?
+  code                 String?
+  branchName           String?
+  codePreparationNotes String?
+  codePreparedAt       DateTime?
+  codePreparedByUserId String?          @db.Uuid
+  assigneeUserId       String?          @db.Uuid
+  dueDate              DateTime?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
 
-  project  Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  assignee User?      @relation("TaskAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
-  todos    TaskTodo[]
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sprint         DeliverySprint? @relation(fields: [sprintId], references: [id], onDelete: SetNull)
+  assignee       User?           @relation("TaskAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
+  codePreparedBy User?           @relation("TaskCodePreparedBy", fields: [codePreparedByUserId], references: [id], onDelete: SetNull)
+  todos          TaskTodo[]
+  workNotes      TaskWorkNote[]
+  workspaceRevisions WebAppWorkspaceRevision[]
 
   @@index([projectId])
+  @@index([sprintId])
   @@index([assigneeUserId])
+  @@index([codePreparedByUserId])
   @@index([status])
   @@index([priority])
+  @@index([type])
+  @@index([workstream])
+  @@index([severity])
+  @@index([environment])
+  @@index([code])
+  @@index([branchName])
+}
+
+model DeliverySprint {
+  id        String               @id @default(uuid()) @db.Uuid
+  projectId String               @db.Uuid
+  name      String
+  goal      String?
+  status    DeliverySprintStatus @default(PLANNED)
+  startDate DateTime
+  endDate   DateTime
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks   Task[]
+
+  @@index([projectId])
+  @@index([status])
+  @@index([startDate])
+  @@index([endDate])
+}
+
+model DeliveryRelease {
+  id                  String                        @id @default(uuid()) @db.Uuid
+  projectId           String                        @db.Uuid
+  title               String
+  environment         TaskEnvironment
+  status              DeliveryReleaseStatus         @default(PLANNED)
+  approvalStatus      DeliveryReleaseApprovalStatus @default(NOT_REQUESTED)
+  version             String?
+  releaseNotes        String?
+  approvalNotes       String?
+  scheduledAt         DateTime?
+  deployedAt          DateTime?
+  approvalRequestedAt DateTime?
+  approvalRespondedAt DateTime?
+  approvalActorUserId String?                       @db.Uuid
+  createdAt           DateTime                      @default(now())
+  updatedAt           DateTime                      @updatedAt
+
+  project       Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  approvalActor User?   @relation("DeliveryReleaseApprovalActor", fields: [approvalActorUserId], references: [id], onDelete: SetNull)
+  workspaceRevisions WebAppWorkspaceRevision[]
+
+  @@index([projectId])
+  @@index([status])
+  @@index([approvalStatus])
+  @@index([environment])
+  @@index([scheduledAt])
+  @@index([deployedAt])
+  @@index([approvalActorUserId])
+}
+
+model ProjectRepository {
+  id              String             @id @default(uuid()) @db.Uuid
+  projectId       String             @unique @db.Uuid
+  provider        RepositoryProvider @default(GITHUB)
+  owner           String
+  repo            String
+  repositoryUrl   String
+  defaultBranch   String?
+  accessTokenEnc  String?
+  accessTokenHash String?
+  installationId  String?
+  isActive        Boolean            @default(true)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([provider])
+  @@index([owner, repo])
+  @@index([isActive])
+}
+
+model ProjectFile {
+  id               String                @id @default(uuid()) @db.Uuid
+  projectId        String                @db.Uuid
+  folderId         String?               @db.Uuid
+  clientProfileId  String                @db.Uuid
+  serviceKey       PurchasedServiceKey?
+  category         ProjectFileCategory
+  visibility       ProjectFileVisibility @default(INTERNAL)
+  title            String
+  description      String?
+  publicId         String
+  secureUrl        String
+  resourceType     String                @default("raw")
+  format           String?
+  bytes            Int
+  mimeType         String
+  originalFileName String
+  uploadedByUserId String                @db.Uuid
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  project    Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  folder     ProjectFileFolder?     @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  clientProfile ClientProfile       @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  uploader   User                   @relation("ProjectFileUploadedBy", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+  shareLinks ProjectFileShareLink[]
+  workspaceRevisions WebAppWorkspaceRevision[]
+
+  @@index([projectId, createdAt])
+  @@index([projectId, folderId, createdAt])
+  @@index([folderId])
+  @@index([clientProfileId, createdAt])
+  @@index([serviceKey])
+  @@index([category])
+  @@index([visibility])
+  @@index([uploadedByUserId])
+  @@unique([projectId, publicId])
+}
+
+model ProjectFileFolder {
+  id              String   @id @default(uuid()) @db.Uuid
+  projectId       String   @db.Uuid
+  name            String
+  createdByUserId String   @db.Uuid
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User          @relation("ProjectFileFolderCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  files     ProjectFile[]
+  assignees ProjectFileFolderAssignment[]
+
+  @@unique([projectId, name])
+  @@index([projectId, createdAt])
+  @@index([createdByUserId])
+}
+
+model ProjectFileFolderAssignment {
+  id             String   @id @default(uuid()) @db.Uuid
+  folderId       String   @db.Uuid
+  assignedUserId String   @db.Uuid
+  createdAt      DateTime @default(now())
+
+  folder       ProjectFileFolder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  assignedUser User              @relation("ProjectFileFolderAssignedUser", fields: [assignedUserId], references: [id], onDelete: Cascade)
+
+  @@unique([folderId, assignedUserId])
+  @@index([assignedUserId])
+  @@index([folderId, createdAt])
+}
+
+model ProjectFileShareLink {
+  id              String   @id @default(uuid()) @db.Uuid
+  projectFileId   String   @db.Uuid
+  tokenHash       String   @unique
+  expiresAt       DateTime
+  createdByUserId String   @db.Uuid
+  isRevoked       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  projectFile ProjectFile @relation(fields: [projectFileId], references: [id], onDelete: Cascade)
+  createdBy   User        @relation("ProjectFileShareLinkCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([projectFileId, createdAt])
+  @@index([expiresAt])
+  @@index([isRevoked])
+  @@index([createdByUserId, createdAt])
+}
+
+model WebAppWorkspaceSection {
+  id              String                   @id @default(uuid()) @db.Uuid
+  projectId       String                   @db.Uuid
+  tabKey          WebAppWorkspaceTabKey
+  key             String
+  title           String
+  description     String?
+  sortOrder       Int                      @default(0)
+  createdByUserId String                   @db.Uuid
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  project   Project                      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User                         @relation("WorkspaceSectionCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  items     WebAppWorkspaceContentItem[]
+
+  @@unique([projectId, tabKey, key])
+  @@index([projectId, tabKey, sortOrder])
+  @@index([createdByUserId])
+}
+
+model WebAppWorkspaceContentItem {
+  id          String                         @id @default(uuid()) @db.Uuid
+  sectionId   String                         @db.Uuid
+  itemType    WebAppWorkspaceContentItemType
+  title       String
+  body        String?
+  href        String?
+  sortOrder   Int                            @default(0)
+  createdAt   DateTime                       @default(now())
+  updatedAt   DateTime                       @updatedAt
+
+  section WebAppWorkspaceSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@index([sectionId, sortOrder])
+  @@index([itemType])
+}
+
+model WebAppWorkspaceMessage {
+  id           String                  @id @default(uuid()) @db.Uuid
+  projectId    String                  @db.Uuid
+  parentMessageId String?              @db.Uuid
+  tabKey       WebAppWorkspaceTabKey
+  authorUserId String                  @db.Uuid
+  body         String
+  isInternal   Boolean                 @default(false)
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author  User    @relation("WorkspaceMessageAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
+  parentMessage WebAppWorkspaceMessage? @relation("WorkspaceMessageReplies", fields: [parentMessageId], references: [id], onDelete: SetNull)
+  replies       WebAppWorkspaceMessage[] @relation("WorkspaceMessageReplies")
+
+  @@index([projectId, tabKey, createdAt])
+  @@index([authorUserId, createdAt])
+  @@index([parentMessageId, createdAt])
+}
+
+model WebAppWorkspaceRevision {
+  id               String                        @id @default(uuid()) @db.Uuid
+  projectId        String                        @db.Uuid
+  taskId           String?                       @db.Uuid
+  releaseId        String?                       @db.Uuid
+  projectFileId    String?                       @db.Uuid
+  title            String
+  description      String
+  requestedByUserId String                       @db.Uuid
+  assignedToUserId String?                       @db.Uuid
+  status           WebAppWorkspaceRevisionStatus @default(REQUESTED)
+  requestedAt      DateTime                      @default(now())
+  resolvedAt       DateTime?
+  createdAt        DateTime                      @default(now())
+  updatedAt        DateTime                      @updatedAt
+
+  project     Project                       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task        Task?                         @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  release     DeliveryRelease?              @relation(fields: [releaseId], references: [id], onDelete: SetNull)
+  projectFile ProjectFile?                  @relation(fields: [projectFileId], references: [id], onDelete: SetNull)
+  requestedBy User                          @relation("WorkspaceRevisionRequestedBy", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  assignedTo  User?                         @relation("WorkspaceRevisionAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  transitions WebAppWorkspaceRevisionTransition[]
+
+  @@index([projectId, status, requestedAt])
+  @@index([taskId])
+  @@index([releaseId])
+  @@index([projectFileId])
+  @@index([requestedByUserId, requestedAt])
+  @@index([assignedToUserId, status])
+}
+
+model WebAppWorkspaceRevisionTransition {
+  id          String                        @id @default(uuid()) @db.Uuid
+  revisionId  String                        @db.Uuid
+  fromStatus  WebAppWorkspaceRevisionStatus?
+  toStatus    WebAppWorkspaceRevisionStatus
+  actorUserId String                        @db.Uuid
+  note        String?
+  createdAt   DateTime                      @default(now())
+
+  revision WebAppWorkspaceRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  actor    User                    @relation("WorkspaceRevisionTransitionActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([revisionId, createdAt])
+  @@index([actorUserId, createdAt])
+}
+
+model WebAppWorkspaceWeeklyReport {
+  id             String   @id @default(uuid()) @db.Uuid
+  projectId      String   @db.Uuid
+  weekStartDate  DateTime
+  weekEndDate    DateTime
+  summary        String
+  accomplishments String?
+  plannedNext    String?
+  blockers       String?
+  authorUserId   String   @db.Uuid
+  publishedAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author  User    @relation("WorkspaceWeeklyReportAuthor", fields: [authorUserId], references: [id], onDelete: Restrict)
+
+  @@unique([projectId, weekStartDate])
+  @@index([projectId, weekEndDate])
+  @@index([authorUserId, weekStartDate])
+}
+
+model WebAppWorkspaceMeetingRequest {
+  id                String                             @id @default(uuid()) @db.Uuid
+  projectId         String                             @db.Uuid
+  title             String
+  agenda            String?
+  requestedByUserId String                             @db.Uuid
+  preferredStartAt  DateTime
+  preferredEndAt    DateTime
+  timezone          String
+  status            WebAppWorkspaceMeetingRequestStatus @default(REQUESTED)
+  responseNote      String?
+  responderUserId   String?                            @db.Uuid
+  scheduledStartAt  DateTime?
+  scheduledEndAt    DateTime?
+  createdAt         DateTime                           @default(now())
+  updatedAt         DateTime                           @updatedAt
+
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  requestedBy User    @relation("WorkspaceMeetingRequestedBy", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  responder   User?   @relation("WorkspaceMeetingRespondedBy", fields: [responderUserId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, status, preferredStartAt])
+  @@index([requestedByUserId, createdAt])
+  @@index([responderUserId, updatedAt])
 }
 
 model TaskTodo {
@@ -308,17 +794,32 @@ model TaskTodo {
   @@index([completedByUserId])
 }
 
+model TaskWorkNote {
+  id           String   @id @default(uuid()) @db.Uuid
+  taskId       String   @db.Uuid
+  authorUserId String   @db.Uuid
+  note         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author User @relation("TaskWorkNoteAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
+  @@index([authorUserId, createdAt])
+}
+
 model CrmLead {
-  id                       String        @id @default(uuid()) @db.Uuid
+  id                       String                @id @default(uuid()) @db.Uuid
   companyName              String
   contactName              String
   contactEmail             String?
   phone                    String?
-  source                   CrmLeadSource @default(MANUAL)
-  status                   CrmLeadStatus @default(NEW)
+  source                   CrmLeadSource         @default(MANUAL)
+  status                   CrmLeadStatus         @default(NEW)
   priority                 Priority?
-  ownerUserId              String        @db.Uuid
-  convertedClientProfileId String?       @db.Uuid
+  ownerUserId              String                @db.Uuid
+  convertedClientProfileId String?               @db.Uuid
   address                  String?
   city                     String?
   sector                   String?
@@ -340,8 +841,8 @@ model CrmLead {
   whatsappPhone            String?
   leadScore                Int?
   nextFollowUpAt           DateTime?
-  createdAt                DateTime      @default(now())
-  updatedAt                DateTime      @updatedAt
+  createdAt                DateTime              @default(now())
+  updatedAt                DateTime              @updatedAt
 
   ownerUser              User              @relation("CrmLeadOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
   convertedClientProfile ClientProfile?    @relation("CrmLeadConvertedClient", fields: [convertedClientProfileId], references: [id], onDelete: SetNull)
@@ -362,13 +863,13 @@ model CrmLead {
 }
 
 model CrmLeadActivity {
-  id          String               @id @default(uuid()) @db.Uuid
-  leadId      String               @db.Uuid
-  actorUserId String?              @db.Uuid
-  type        CrmLeadActivityType
-  note        String
+  id             String              @id @default(uuid()) @db.Uuid
+  leadId         String              @db.Uuid
+  actorUserId    String?             @db.Uuid
+  type           CrmLeadActivityType
+  note           String
   nextFollowUpAt DateTime?
-  createdAt   DateTime             @default(now())
+  createdAt      DateTime            @default(now())
 
   lead  CrmLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
   actor User?   @relation("CrmLeadActivityActor", fields: [actorUserId], references: [id], onDelete: SetNull)

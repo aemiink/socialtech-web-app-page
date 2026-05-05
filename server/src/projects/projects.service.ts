@@ -29,9 +29,11 @@ const projectReadSelect = {
   id: true,
   clientProfileId: true,
   serviceKey: true,
+  repositoryUrl: true,
   name: true,
   slug: true,
   description: true,
+  figmaProjectUrl: true,
   status: true,
   priority: true,
   startDate: true,
@@ -49,6 +51,7 @@ type ProjectUpdateState = {
   id: string;
   clientProfileId: string;
   serviceKey: PurchasedServiceKey | null;
+  repositoryUrl: string | null;
   name: string;
   startDate: Date | null;
   dueDate: Date | null;
@@ -60,6 +63,7 @@ const PROJECT_READ_ASSIGNED_PERMISSION = "projects.read.assigned";
 const PROJECT_OWN_READ_PERMISSIONS = ["projects.read.own", "portal.read.own", "clients.read.own"] as const;
 const PROJECT_MANAGE_ANY_PERMISSION = "projects.manage.any";
 const PROJECT_MANAGE_FALLBACK_PERMISSION = "projects.manage";
+const PROJECT_MANAGE_ASSIGNED_PERMISSION = "projects.manage.assigned";
 
 @Injectable()
 export class ProjectsService {
@@ -112,9 +116,10 @@ export class ProjectsService {
     dto: CreateProjectDto,
   ): Promise<ProjectReadModel> {
     this.assertBodyObject(dto);
-    this.assertCanManageProjects(currentUser);
     await this.assertClientProfileExists(dto.clientProfileId);
+    await this.assertCanManageProjectScope(currentUser, dto.clientProfileId);
     await this.assertClientAllowsServiceKey(dto.clientProfileId, dto.serviceKey ?? null);
+    this.assertRepositoryUrlRequirement(dto.serviceKey ?? null, dto.repositoryUrl ?? null);
 
     const startDate = this.parseNullableDate(dto.startDate) ?? null;
     const dueDate = this.parseNullableDate(dto.dueDate) ?? null;
@@ -128,6 +133,8 @@ export class ProjectsService {
           name: dto.name,
           slug,
           description: dto.description ?? null,
+          figmaProjectUrl: dto.figmaProjectUrl ?? null,
+          repositoryUrl: dto.repositoryUrl ?? null,
           serviceKey: dto.serviceKey ?? null,
           status: dto.status,
           priority: dto.priority,
@@ -154,20 +161,24 @@ export class ProjectsService {
     dto: UpdateProjectDto,
   ): Promise<ProjectReadModel> {
     this.assertBodyObject(dto);
-    this.assertCanManageProjects(currentUser);
     this.assertHasUpdatePayload(dto);
 
     const existingProject = await this.getProjectUpdateStateOrFail(projectId);
+    await this.assertCanManageProjectScope(currentUser, existingProject.clientProfileId);
     const nextClientProfileId = dto.clientProfileId ?? existingProject.clientProfileId;
     const nextServiceKey =
       dto.serviceKey === undefined ? existingProject.serviceKey : (dto.serviceKey ?? null);
+    const nextRepositoryUrl =
+      dto.repositoryUrl === undefined ? existingProject.repositoryUrl : (dto.repositoryUrl ?? null);
     if (dto.clientProfileId) {
       await this.assertClientProfileExists(dto.clientProfileId);
+      await this.assertCanManageProjectScope(currentUser, dto.clientProfileId);
       if (dto.clientProfileId !== existingProject.clientProfileId) {
         await this.assertExistingTaskAssigneesMatchClient(projectId, dto.clientProfileId);
       }
     }
     await this.assertClientAllowsServiceKey(nextClientProfileId, nextServiceKey);
+    this.assertRepositoryUrlRequirement(nextServiceKey, nextRepositoryUrl);
 
     const startDateUpdate = this.parseNullableDate(dto.startDate);
     const dueDateUpdate = this.parseNullableDate(dto.dueDate);
@@ -186,6 +197,8 @@ export class ProjectsService {
       ...(dto.name !== undefined ? { name: dto.name } : {}),
       ...(slug !== undefined ? { slug } : {}),
       ...(dto.description !== undefined ? { description: dto.description } : {}),
+      ...(dto.figmaProjectUrl !== undefined ? { figmaProjectUrl: dto.figmaProjectUrl } : {}),
+      ...(dto.repositoryUrl !== undefined ? { repositoryUrl: dto.repositoryUrl } : {}),
       ...(dto.status !== undefined ? { status: dto.status } : {}),
       ...(dto.priority !== undefined ? { priority: dto.priority } : {}),
       ...(startDateUpdate !== undefined ? { startDate: startDateUpdate } : {}),
@@ -205,6 +218,70 @@ export class ProjectsService {
 
       throw error;
     }
+  }
+
+  async getProjectAssigneeCandidates(
+    currentUser: AuthenticatedUser,
+    projectId: string,
+  ): Promise<Array<{ id: string; displayName: string | null; role: UserRole }>> {
+    const project = await this.prisma.project.findFirst({
+      where: {
+        id: projectId,
+        ...this.buildProjectVisibilityWhere(currentUser),
+      },
+      select: {
+        id: true,
+        clientProfileId: true,
+      },
+    });
+
+    if (!project) {
+      throw new NotFoundException("Project not found.");
+    }
+
+    if (this.isEmployee(currentUser)) {
+      this.assertHasAnyPermission(currentUser, [
+        PROJECT_MANAGE_ASSIGNED_PERMISSION,
+        "tasks.assign.assigned",
+        "tasks.manage.assigned",
+      ]);
+    } else if (this.isAdmin(currentUser)) {
+      this.assertHasPermission(
+        currentUser,
+        PROJECT_MANAGE_ANY_PERMISSION,
+        PROJECT_MANAGE_FALLBACK_PERMISSION,
+      );
+    } else {
+      throw new ForbiddenException("You are not allowed to view assignee candidates.");
+    }
+
+    const assignedEmployeeIds = await this.prisma.employeeClientAssignment.findMany({
+      where: {
+        clientProfileId: project.clientProfileId,
+        isActive: true,
+      },
+      select: {
+        employeeUserId: true,
+      },
+    });
+
+    const userIds = Array.from(new Set(assignedEmployeeIds.map((row) => row.employeeUserId)));
+    if (userIds.length === 0) {
+      return [];
+    }
+
+    return this.prisma.user.findMany({
+      where: {
+        id: { in: userIds },
+        accountType: AccountType.EMPLOYEE,
+      },
+      select: {
+        id: true,
+        displayName: true,
+        role: true,
+      },
+      orderBy: [{ displayName: "asc" }, { email: "asc" }],
+    });
   }
 
   private buildProjectVisibilityWhere(currentUser: AuthenticatedUser): Prisma.ProjectWhereInput {
@@ -279,6 +356,7 @@ export class ProjectsService {
         id: true,
         clientProfileId: true,
         serviceKey: true,
+        repositoryUrl: true,
         name: true,
         startDate: true,
         dueDate: true,
@@ -322,6 +400,24 @@ export class ProjectsService {
 
     if (!purchasedService) {
       throw new BadRequestException("Selected service is not active for this client.");
+    }
+  }
+
+  private assertRepositoryUrlRequirement(
+    serviceKey: PurchasedServiceKey | null,
+    repositoryUrl: string | null,
+  ): void {
+    if (
+      serviceKey !== PurchasedServiceKey.WEB_APP &&
+      serviceKey !== PurchasedServiceKey.MOBILE_APP
+    ) {
+      return;
+    }
+
+    if (!repositoryUrl || repositoryUrl.trim().length === 0) {
+      throw new BadRequestException(
+        "WEB_APP and MOBILE_APP projects require a GitHub repository link.",
+      );
     }
   }
 
@@ -372,6 +468,7 @@ export class ProjectsService {
       dto.clientProfileId === undefined &&
       dto.name === undefined &&
       dto.description === undefined &&
+      dto.figmaProjectUrl === undefined &&
       dto.status === undefined &&
       dto.priority === undefined &&
       dto.startDate === undefined &&
@@ -479,16 +576,36 @@ export class ProjectsService {
     return currentUser.clientProfileId;
   }
 
-  private assertCanManageProjects(currentUser: AuthenticatedUser): void {
-    if (!this.isAdmin(currentUser)) {
-      throw new ForbiddenException("Only admin users can create and update projects.");
+  private async assertCanManageProjectScope(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+  ): Promise<void> {
+    if (this.isAdmin(currentUser)) {
+      this.assertHasPermission(
+        currentUser,
+        PROJECT_MANAGE_ANY_PERMISSION,
+        PROJECT_MANAGE_FALLBACK_PERMISSION,
+      );
+      return;
     }
 
-    this.assertHasPermission(
-      currentUser,
-      PROJECT_MANAGE_ANY_PERMISSION,
-      PROJECT_MANAGE_FALLBACK_PERMISSION,
-    );
+    if (!this.isEmployee(currentUser) || currentUser.role !== UserRole.PROJECT_MANAGER) {
+      throw new ForbiddenException("Only admins or assigned project managers can manage projects.");
+    }
+
+    this.assertHasPermission(currentUser, PROJECT_MANAGE_ASSIGNED_PERMISSION);
+    const assignment = await this.prisma.employeeClientAssignment.findFirst({
+      where: {
+        employeeUserId: currentUser.id,
+        clientProfileId,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+
+    if (!assignment) {
+      throw new NotFoundException("Client profile not found.");
+    }
   }
 
   private assertHasPermission(

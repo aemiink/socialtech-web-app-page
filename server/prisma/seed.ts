@@ -6,13 +6,21 @@ import {
   CrmLeadActivityType,
   CrmLeadSource,
   CrmLeadStatus,
+  DeliveryReleaseApprovalStatus,
+  DeliveryReleaseStatus,
+  DeliverySprintStatus,
   EmployeeClientAssignmentScope,
   Priority,
   ProjectStatus,
   PurchasedServiceKey,
   PurchasedServiceStatus,
+  RepositoryProvider,
+  TaskEnvironment,
+  TaskSeverity,
   TaskStatus,
+  TaskType,
   TaskTodoVisibility,
+  TaskWorkstream,
   UserRole,
   UserStatus,
 } from "@prisma/client";
@@ -56,6 +64,8 @@ type ProjectSeed = {
   slug: string;
   name: string;
   description?: string;
+  figmaProjectUrl?: string;
+  repositoryUrl?: string;
   serviceKey?: PurchasedServiceKey;
   status: ProjectStatus;
   priority: Priority;
@@ -70,8 +80,51 @@ type TaskSeed = {
   description?: string;
   status: TaskStatus;
   priority: Priority;
+  type?: TaskType;
+  workstream?: TaskWorkstream;
+  severity?: TaskSeverity;
+  environment?: TaskEnvironment;
+  affectedUrl?: string;
+  reproductionSteps?: string;
+  reportedBy?: string;
+  code?: string;
+  sprintName?: string;
   assigneeEmail?: string;
   dueDate?: Date;
+};
+
+type DeliverySprintSeed = {
+  projectClientSlug: string;
+  projectSlug: string;
+  name: string;
+  goal?: string;
+  status: DeliverySprintStatus;
+  startDate: Date;
+  endDate: Date;
+};
+
+type DeliveryReleaseSeed = {
+  projectClientSlug: string;
+  projectSlug: string;
+  title: string;
+  environment: TaskEnvironment;
+  status: DeliveryReleaseStatus;
+  approvalStatus?: DeliveryReleaseApprovalStatus;
+  approvalNotes?: string;
+  version?: string;
+  releaseNotes?: string;
+  scheduledAt?: Date;
+  deployedAt?: Date;
+};
+
+type ProjectRepositorySeed = {
+  projectClientSlug: string;
+  projectSlug: string;
+  provider: RepositoryProvider;
+  owner: string;
+  repo: string;
+  repositoryUrl: string;
+  defaultBranch?: string;
 };
 
 type TaskTodoSeed = {
@@ -164,6 +217,21 @@ const EMPLOYEE_CLIENT_ASSIGNMENTS: EmployeeClientAssignmentSeed[] = [
     clientSlug: "mavi-sosyal",
     scope: EmployeeClientAssignmentScope.SOCIAL_MEDIA,
   },
+  {
+    employeeEmail: "developer@socialtech.com",
+    clientSlug: "acme-e-ticaret",
+    scope: EmployeeClientAssignmentScope.DEVELOPMENT,
+  },
+  {
+    employeeEmail: "developer@socialtech.com",
+    clientSlug: "nova-performance",
+    scope: EmployeeClientAssignmentScope.DEVELOPMENT,
+  },
+  {
+    employeeEmail: "developer@socialtech.com",
+    clientSlug: "mavi-sosyal",
+    scope: EmployeeClientAssignmentScope.DEVELOPMENT,
+  },
 ];
 
 const CLIENT_PURCHASED_SERVICE_SEEDS: ClientPurchasedServiceSeed[] = [
@@ -229,6 +297,7 @@ const PROJECT_SEEDS: ProjectSeed[] = [
     slug: "growth-hub-launch",
     name: "Growth Hub Launch",
     description: "Launch foundation for Acme E-ticaret growth operations.",
+    figmaProjectUrl: "https://www.figma.com/files/project/10001/acme-growth-hub",
     serviceKey: PurchasedServiceKey.GROWTH_HUB,
     status: ProjectStatus.IN_PROGRESS,
     priority: Priority.HIGH,
@@ -263,10 +332,123 @@ const TASK_SEEDS: TaskSeed[] = [
   {
     projectClientSlug: "acme-e-ticaret",
     projectSlug: "growth-hub-launch",
+    title: "Checkout akışındaki ödeme hatasını düzelt",
+    description: "Checkout akışında ödeme adımı bazı oturumlarda hata veriyor.",
+    status: TaskStatus.IN_PROGRESS,
+    priority: Priority.URGENT,
+    type: TaskType.BUG,
+    workstream: TaskWorkstream.FRONTEND,
+    severity: TaskSeverity.CRITICAL,
+    environment: TaskEnvironment.PRODUCTION,
+    affectedUrl: "https://acme.test/checkout",
+    reproductionSteps: "1. Sepete ürün ekle\n2. Ödeme adımına ilerle\n3. Kart alanını doldur ve kaydet",
+    reportedBy: "Acme operasyon ekibi",
+    code: "DEV-101",
+    sprintName: "Sprint Alpha",
+    assigneeEmail: "developer@socialtech.com",
+    dueDate: new Date("2026-05-05T00:00:00.000Z"),
+  },
+  {
+    projectClientSlug: "acme-e-ticaret",
+    projectSlug: "growth-hub-launch",
+    title: "Landing page hero revizyonlarını uygula",
+    description: "Revize edilmiş hero alanını ve CTA hiyerarşisini sayfaya uygula.",
+    status: TaskStatus.TODO,
+    priority: Priority.HIGH,
+    type: TaskType.REVISION,
+    workstream: TaskWorkstream.FRONTEND,
+    environment: TaskEnvironment.STAGING,
+    code: "DEV-102",
+    sprintName: "Sprint Alpha",
+    assigneeEmail: "developer@socialtech.com",
+    dueDate: new Date("2026-05-10T00:00:00.000Z"),
+  },
+  {
+    projectClientSlug: "acme-e-ticaret",
+    projectSlug: "growth-hub-launch",
+    title: "Sipariş özeti API payloadını genişlet",
+    description: "Ödeme öncesi özet ekranı için gerekli alanları backend response'una ekle.",
+    status: TaskStatus.REVIEW,
+    priority: Priority.MEDIUM,
+    type: TaskType.FEATURE,
+    workstream: TaskWorkstream.BACKEND,
+    environment: TaskEnvironment.STAGING,
+    code: "DEV-103",
+    sprintName: "Sprint Alpha",
+    assigneeEmail: "developer@socialtech.com",
+    dueDate: new Date("2026-05-12T00:00:00.000Z"),
+  },
+  {
+    projectClientSlug: "nova-performance",
+    projectSlug: "paid-acquisition-optimization",
+    title: "Tracking webhook retry mantığını geliştir",
+    description: "Düşen tracking eventleri için tekrar deneme kuyruğu ekle.",
+    status: TaskStatus.IN_PROGRESS,
+    priority: Priority.URGENT,
+    type: TaskType.FEATURE,
+    workstream: TaskWorkstream.BACKEND,
+    environment: TaskEnvironment.PRODUCTION,
+    code: "DEV-201",
+    sprintName: "Sprint Beta",
+    assigneeEmail: "developer@socialtech.com",
+    dueDate: new Date("2026-05-03T00:00:00.000Z"),
+  },
+  {
+    projectClientSlug: "nova-performance",
+    projectSlug: "paid-acquisition-optimization",
+    title: "Rapor ekranı loading sonsuz döngü bugını çöz",
+    description: "Dashboard üzerindeki rapor widget'ında state değişimi sonsuz render oluşturuyor.",
+    status: TaskStatus.IN_PROGRESS,
+    priority: Priority.HIGH,
+    type: TaskType.BUG,
+    workstream: TaskWorkstream.FULLSTACK,
+    severity: TaskSeverity.HIGH,
+    environment: TaskEnvironment.STAGING,
+    affectedUrl: "https://nova.test/dashboard",
+    reproductionSteps: "1. Dashboard aç\n2. Tarih filtresini değiştir\n3. Widget tekrar tekrar yüklenir",
+    reportedBy: "Performance ekibi",
+    code: "DEV-202",
+    sprintName: "Sprint Beta",
+    assigneeEmail: "developer@socialtech.com",
+    dueDate: new Date("2026-05-08T00:00:00.000Z"),
+  },
+  {
+    projectClientSlug: "mavi-sosyal",
+    projectSlug: "social-calendar-refresh",
+    title: "Staging QA checklistini tamamla",
+    description: "Takvim modülü için staging smoke test ve checklist doğrulaması.",
+    status: TaskStatus.TODO,
+    priority: Priority.HIGH,
+    type: TaskType.QA,
+    workstream: TaskWorkstream.QA,
+    environment: TaskEnvironment.STAGING,
+    code: "DEV-301",
+    assigneeEmail: "developer@socialtech.com",
+    dueDate: new Date("2026-05-07T00:00:00.000Z"),
+  },
+  {
+    projectClientSlug: "mavi-sosyal",
+    projectSlug: "social-calendar-refresh",
+    title: "Mayıs içerik takvimini production'a yayınla",
+    description: "Onaylanmış içerik akışını production ortamına geçir ve son kontrolü yap.",
+    status: TaskStatus.TODO,
+    priority: Priority.MEDIUM,
+    type: TaskType.DEPLOYMENT,
+    workstream: TaskWorkstream.DEVOPS,
+    environment: TaskEnvironment.PRODUCTION,
+    code: "DEV-302",
+    assigneeEmail: "developer@socialtech.com",
+    dueDate: new Date("2026-05-09T00:00:00.000Z"),
+  },
+  {
+    projectClientSlug: "acme-e-ticaret",
+    projectSlug: "growth-hub-launch",
     title: "Confirm kickoff scope and milestones",
     description: "Align Acme launch scope, milestone owners, and delivery checkpoints.",
     status: TaskStatus.IN_PROGRESS,
     priority: Priority.HIGH,
+    type: TaskType.MAINTENANCE,
+    workstream: TaskWorkstream.FULLSTACK,
     assigneeEmail: "project@socialtech.com",
     dueDate: new Date("2026-05-05T00:00:00.000Z"),
   },
@@ -277,58 +459,70 @@ const TASK_SEEDS: TaskSeed[] = [
     description: "Define campaign measurement events and reporting dimensions.",
     status: TaskStatus.TODO,
     priority: Priority.HIGH,
+    type: TaskType.FEATURE,
+    workstream: TaskWorkstream.BACKEND,
     assigneeEmail: "performance@socialtech.com",
     dueDate: new Date("2026-05-10T00:00:00.000Z"),
   },
+];
+
+const DELIVERY_SPRINT_SEEDS: DeliverySprintSeed[] = [
   {
     projectClientSlug: "acme-e-ticaret",
     projectSlug: "growth-hub-launch",
-    title: "Draft launch content calendar",
-    description: "Prepare launch-week social captions, post themes, and approval dates.",
-    status: TaskStatus.TODO,
-    priority: Priority.MEDIUM,
-    assigneeEmail: "social@socialtech.com",
-    dueDate: new Date("2026-05-12T00:00:00.000Z"),
+    name: "Sprint Alpha",
+    goal: "Checkout dönüşüm akışını stabil hale getirmek ve landing page revizyonlarını tamamlamak.",
+    status: DeliverySprintStatus.ACTIVE,
+    startDate: new Date("2026-05-01T00:00:00.000Z"),
+    endDate: new Date("2026-05-14T00:00:00.000Z"),
   },
   {
     projectClientSlug: "nova-performance",
     projectSlug: "paid-acquisition-optimization",
-    title: "Review paid media audit findings",
-    description: "Validate channel findings and prepare optimization recommendations.",
-    status: TaskStatus.REVIEW,
-    priority: Priority.URGENT,
-    assigneeEmail: "performance@socialtech.com",
-    dueDate: new Date("2026-05-03T00:00:00.000Z"),
+    name: "Sprint Beta",
+    goal: "Tracking güvenilirliğini ve dashboard stabilitesini artırmak.",
+    status: DeliverySprintStatus.ACTIVE,
+    startDate: new Date("2026-05-02T00:00:00.000Z"),
+    endDate: new Date("2026-05-16T00:00:00.000Z"),
   },
+];
+
+const DELIVERY_RELEASE_SEEDS: DeliveryReleaseSeed[] = [
   {
-    projectClientSlug: "nova-performance",
-    projectSlug: "paid-acquisition-optimization",
-    title: "Coordinate optimization approval",
-    description: "Collect client approval requirements and package next-step recommendations.",
-    status: TaskStatus.IN_PROGRESS,
-    priority: Priority.HIGH,
-    assigneeEmail: "project@socialtech.com",
-    dueDate: new Date("2026-05-08T00:00:00.000Z"),
-  },
-  {
-    projectClientSlug: "mavi-sosyal",
-    projectSlug: "social-calendar-refresh",
-    title: "Build May social calendar",
-    description: "Create content themes, caption briefs, and posting cadence for May.",
-    status: TaskStatus.TODO,
-    priority: Priority.HIGH,
-    assigneeEmail: "social@socialtech.com",
-    dueDate: new Date("2026-05-07T00:00:00.000Z"),
+    projectClientSlug: "acme-e-ticaret",
+    projectSlug: "growth-hub-launch",
+    title: "Checkout Stabilization Release",
+    environment: TaskEnvironment.STAGING,
+    status: DeliveryReleaseStatus.TESTING,
+    approvalStatus: DeliveryReleaseApprovalStatus.PENDING,
+    approvalNotes: "Client QA sign-off bekleniyor.",
+    version: "v0.9.4",
+    releaseNotes: "Checkout bugfixleri ve landing page revizyonları için test adayı.",
+    scheduledAt: new Date("2026-05-12T10:00:00.000Z"),
   },
   {
     projectClientSlug: "mavi-sosyal",
     projectSlug: "social-calendar-refresh",
-    title: "Set approval workflow checkpoints",
-    description: "Confirm review dates and responsible contacts for calendar approval.",
-    status: TaskStatus.TODO,
-    priority: Priority.MEDIUM,
-    assigneeEmail: "project@socialtech.com",
-    dueDate: new Date("2026-05-09T00:00:00.000Z"),
+    title: "May Calendar Production Release",
+    environment: TaskEnvironment.PRODUCTION,
+    status: DeliveryReleaseStatus.READY,
+    approvalStatus: DeliveryReleaseApprovalStatus.APPROVED,
+    approvalNotes: "Project manager deployment onayını verdi.",
+    version: "v1.2.0",
+    releaseNotes: "İçerik takvimi yayın hazırlığı ve son QA düzeltmeleri.",
+    scheduledAt: new Date("2026-05-09T14:00:00.000Z"),
+  },
+];
+
+const PROJECT_REPOSITORY_SEEDS: ProjectRepositorySeed[] = [
+  {
+    projectClientSlug: "acme-e-ticaret",
+    projectSlug: "growth-hub-launch",
+    provider: RepositoryProvider.GITHUB,
+    owner: "facebook",
+    repo: "react",
+    repositoryUrl: "https://github.com/facebook/react",
+    defaultBranch: "main",
   },
 ];
 
@@ -373,7 +567,7 @@ const TASK_TODO_SEEDS: TaskTodoSeed[] = [
   {
     projectClientSlug: "nova-performance",
     projectSlug: "paid-acquisition-optimization",
-    taskTitle: "Review paid media audit findings",
+    taskTitle: "Tracking webhook retry mantığını geliştir",
     title: "Publish audit summary for client review",
     visibility: TaskTodoVisibility.CLIENT_VISIBLE,
     isCompleted: true,
@@ -383,7 +577,7 @@ const TASK_TODO_SEEDS: TaskTodoSeed[] = [
   {
     projectClientSlug: "mavi-sosyal",
     projectSlug: "social-calendar-refresh",
-    taskTitle: "Build May social calendar",
+    taskTitle: "Staging QA checklistini tamamla",
     title: "Upload client-visible draft calendar",
     visibility: TaskTodoVisibility.CLIENT_VISIBLE,
   },
@@ -475,12 +669,16 @@ const PERMISSIONS: PermissionSeed[] = [
   { slug: "projects.read.any", description: "Read all client projects." },
   { slug: "projects.manage.any", description: "Create and update all client projects." },
   { slug: "projects.read.assigned", description: "Read assigned projects." },
+  { slug: "projects.manage.assigned", description: "Create and update assigned client projects." },
   { slug: "projects.read.own", description: "Read own client projects." },
   { slug: "tasks.read", description: "Read tasks." },
   { slug: "tasks.manage", description: "Manage all tasks." },
   { slug: "tasks.read.any", description: "Read all project tasks." },
   { slug: "tasks.manage.any", description: "Create and update all project tasks." },
   { slug: "tasks.read.assigned", description: "Read assigned tasks." },
+  { slug: "tasks.manage.assigned", description: "Create and update tasks in assigned projects." },
+  { slug: "tasks.assign.assigned", description: "Assign tasks in assigned projects." },
+  { slug: "tasks.todos.manage.assigned", description: "Manage task todos in assigned projects." },
   { slug: "tasks.update.assigned", description: "Update assigned tasks." },
   { slug: "tasks.read.own", description: "Read own client tasks." },
   { slug: "tasks.update.own", description: "Update owned tasks." },
@@ -510,6 +708,28 @@ const PERMISSIONS: PermissionSeed[] = [
   { slug: "crm.leads.convert", description: "Convert CRM leads to client profiles." },
   { slug: "crm.leadScan.read", description: "Read CRM lead scan logs." },
   { slug: "crm.leadScan.run", description: "Run CRM lead scans." },
+  { slug: "delivery.sprints.read.assigned", description: "Read delivery sprints in assigned scope." },
+  { slug: "delivery.sprints.manage.assigned", description: "Manage delivery sprints in assigned scope." },
+  { slug: "delivery.sprints.manage.any", description: "Manage all delivery sprints." },
+  { slug: "delivery.releases.read.assigned", description: "Read delivery releases in assigned scope." },
+  { slug: "delivery.releases.manage.assigned", description: "Manage delivery releases in assigned scope." },
+  { slug: "delivery.releases.manage.any", description: "Manage all delivery releases." },
+  { slug: "delivery.summary.read.assigned", description: "Read delivery dashboard summary in assigned scope." },
+  { slug: "integrations.github.read.assigned", description: "Read GitHub repository data in assigned scope." },
+  { slug: "integrations.github.read.any", description: "Read any project GitHub repository data." },
+  { slug: "integrations.github.manage.any", description: "Manage any project GitHub repository connection." },
+  { slug: "projects.files.read.assigned", description: "Read project files in assigned scope." },
+  { slug: "projects.files.manage.assigned", description: "Manage project files in assigned scope." },
+  { slug: "projects.files.manage.any", description: "Manage any project files." },
+  { slug: "projects.files.share.assigned", description: "Create/revoke project file share links in assigned scope." },
+  { slug: "projects.files.read.own", description: "Read own client project files." },
+  { slug: "webapp.workspace.read.any", description: "Read any web-app workspace." },
+  { slug: "webapp.workspace.manage.any", description: "Manage any web-app workspace." },
+  { slug: "webapp.workspace.read.assigned", description: "Read assigned web-app workspaces." },
+  { slug: "webapp.workspace.manage.assigned", description: "Manage assigned web-app workspaces." },
+  { slug: "webapp.workspace.interact.assigned", description: "Interact with assigned web-app workspaces." },
+  { slug: "webapp.workspace.read.own", description: "Read own client web-app workspace." },
+  { slug: "webapp.workspace.interact.own", description: "Interact with own client web-app workspace." },
 ];
 
 const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
@@ -518,8 +738,24 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
     "dashboard.read",
     "clients.read.assigned",
     "projects.read.assigned",
+    "projects.manage.assigned",
     "tasks.read.assigned",
+    "tasks.manage.assigned",
+    "tasks.assign.assigned",
+    "tasks.todos.manage.assigned",
     "tasks.update.assigned",
+    "delivery.sprints.read.assigned",
+    "delivery.sprints.manage.assigned",
+    "delivery.releases.read.assigned",
+    "delivery.releases.manage.assigned",
+    "delivery.summary.read.assigned",
+    "integrations.github.read.assigned",
+    "projects.files.read.assigned",
+    "projects.files.manage.assigned",
+    "projects.files.share.assigned",
+    "webapp.workspace.read.assigned",
+    "webapp.workspace.manage.assigned",
+    "webapp.workspace.interact.assigned",
     "approvals.read",
     "approvals.manage",
     "reports.read",
@@ -535,6 +771,14 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
     "tasks.read.assigned",
     "tasks.update.assigned",
     "tasks.update.own",
+    "delivery.sprints.read.assigned",
+    "delivery.releases.read.assigned",
+    "delivery.summary.read.assigned",
+    "projects.files.read.assigned",
+    "projects.files.manage.assigned",
+    "projects.files.share.assigned",
+    "webapp.workspace.read.assigned",
+    "webapp.workspace.interact.assigned",
     "reports.read",
     "reports.manage",
     "settings.read",
@@ -546,6 +790,14 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
     "tasks.read.assigned",
     "tasks.update.assigned",
     "tasks.update.own",
+    "delivery.sprints.read.assigned",
+    "delivery.releases.read.assigned",
+    "delivery.summary.read.assigned",
+    "projects.files.read.assigned",
+    "projects.files.manage.assigned",
+    "projects.files.share.assigned",
+    "webapp.workspace.read.assigned",
+    "webapp.workspace.interact.assigned",
     "approvals.read",
     "reports.read",
     "reports.manage",
@@ -558,6 +810,15 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
     "tasks.read.assigned",
     "tasks.update.assigned",
     "tasks.update.own",
+    "delivery.sprints.read.assigned",
+    "delivery.releases.read.assigned",
+    "delivery.summary.read.assigned",
+    "projects.files.read.assigned",
+    "projects.files.manage.assigned",
+    "projects.files.share.assigned",
+    "webapp.workspace.read.assigned",
+    "webapp.workspace.manage.assigned",
+    "webapp.workspace.interact.assigned",
     "approvals.read",
     "settings.read",
   ],
@@ -568,6 +829,16 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
     "tasks.read.assigned",
     "tasks.update.assigned",
     "tasks.update.own",
+    "delivery.sprints.read.assigned",
+    "delivery.releases.read.assigned",
+    "delivery.summary.read.assigned",
+    "integrations.github.read.assigned",
+    "projects.files.read.assigned",
+    "projects.files.manage.assigned",
+    "projects.files.share.assigned",
+    "webapp.workspace.read.assigned",
+    "webapp.workspace.manage.assigned",
+    "webapp.workspace.interact.assigned",
     "settings.read",
   ],
   SUPPORT_SPECIALIST: [
@@ -577,6 +848,14 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
     "tasks.read.assigned",
     "tasks.update.assigned",
     "tasks.update.own",
+    "delivery.sprints.read.assigned",
+    "delivery.releases.read.assigned",
+    "delivery.summary.read.assigned",
+    "projects.files.read.assigned",
+    "projects.files.manage.assigned",
+    "projects.files.share.assigned",
+    "webapp.workspace.read.assigned",
+    "webapp.workspace.interact.assigned",
     "settings.read",
   ],
   SEO_SPECIALIST: [
@@ -586,6 +865,14 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
     "tasks.read.assigned",
     "tasks.update.assigned",
     "tasks.update.own",
+    "delivery.sprints.read.assigned",
+    "delivery.releases.read.assigned",
+    "delivery.summary.read.assigned",
+    "projects.files.read.assigned",
+    "projects.files.manage.assigned",
+    "projects.files.share.assigned",
+    "webapp.workspace.read.assigned",
+    "webapp.workspace.interact.assigned",
     "reports.read",
     "reports.manage",
     "settings.read",
@@ -601,6 +888,9 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
     "clients.read.own",
     "projects.read.own",
     "tasks.read.own",
+    "projects.files.read.own",
+    "webapp.workspace.read.own",
+    "webapp.workspace.interact.own",
     "approvals.respond.own",
     "reports.read.own",
     "meetings.read.own",
@@ -614,6 +904,9 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
     "clients.read.own",
     "projects.read.own",
     "tasks.read.own",
+    "projects.files.read.own",
+    "webapp.workspace.read.own",
+    "webapp.workspace.interact.own",
     "approvals.respond.own",
     "reports.read.own",
     "meetings.read.own",
@@ -774,6 +1067,34 @@ async function seedRolePermissions(permissionIdBySlug: Map<string, string>): Pro
       skipDuplicates: true,
     });
   }
+
+  await ensureAdminCoreProjectPermissions(permissionIdBySlug);
+}
+
+async function ensureAdminCoreProjectPermissions(
+  permissionIdBySlug: Map<string, string>,
+): Promise<void> {
+  const requiredAdminPermissionSlugs = [
+    "projects.read.any",
+    "projects.manage.any",
+    "projects.files.manage.any",
+  ] as const;
+
+  const permissionIds = requiredAdminPermissionSlugs
+    .map((slug) => permissionIdBySlug.get(slug))
+    .filter((value): value is string => Boolean(value));
+
+  if (permissionIds.length === 0) {
+    return;
+  }
+
+  await prisma.rolePermission.createMany({
+    data: permissionIds.map((permissionId) => ({
+      role: UserRole.ADMIN,
+      permissionId,
+    })),
+    skipDuplicates: true,
+  });
 }
 
 async function seedClientProfiles(): Promise<Map<string, string>> {
@@ -936,6 +1257,10 @@ function projectSeedKey(clientSlug: string, projectSlug: string): string {
   return `${clientSlug}:${projectSlug}`;
 }
 
+function sprintSeedKey(clientSlug: string, projectSlug: string, sprintName: string): string {
+  return `${clientSlug}:${projectSlug}:${sprintName}`;
+}
+
 async function seedProjects(clientProfileIdBySlug: Map<string, string>): Promise<Map<string, string>> {
   const projectIdByKey = new Map<string, string>();
 
@@ -955,6 +1280,8 @@ async function seedProjects(clientProfileIdBySlug: Map<string, string>): Promise
       update: {
         name: project.name,
         description: project.description ?? null,
+        figmaProjectUrl: project.figmaProjectUrl ?? null,
+        repositoryUrl: project.repositoryUrl ?? null,
         status: project.status,
         priority: project.priority,
         serviceKey: project.serviceKey ?? null,
@@ -966,6 +1293,8 @@ async function seedProjects(clientProfileIdBySlug: Map<string, string>): Promise
         name: project.name,
         slug: project.slug,
         description: project.description ?? null,
+        figmaProjectUrl: project.figmaProjectUrl ?? null,
+        repositoryUrl: project.repositoryUrl ?? null,
         status: project.status,
         priority: project.priority,
         serviceKey: project.serviceKey ?? null,
@@ -984,7 +1313,142 @@ async function seedProjects(clientProfileIdBySlug: Map<string, string>): Promise
   return projectIdByKey;
 }
 
-async function seedTasks(projectIdByKey: Map<string, string>): Promise<void> {
+async function seedDeliverySprints(projectIdByKey: Map<string, string>): Promise<Map<string, string>> {
+  const sprintIdByKey = new Map<string, string>();
+
+  for (const sprint of DELIVERY_SPRINT_SEEDS) {
+    const projectId = projectIdByKey.get(projectSeedKey(sprint.projectClientSlug, sprint.projectSlug));
+    if (!projectId) {
+      throw new Error(`Missing project for sprint seed: ${sprint.projectClientSlug}/${sprint.projectSlug}`);
+    }
+
+    const existing = await prisma.deliverySprint.findFirst({
+      where: {
+        projectId,
+        name: sprint.name,
+      },
+      select: { id: true },
+    });
+
+    const result = existing
+      ? await prisma.deliverySprint.update({
+          where: { id: existing.id },
+          data: {
+            goal: sprint.goal ?? null,
+            status: sprint.status,
+            startDate: sprint.startDate,
+            endDate: sprint.endDate,
+          },
+          select: { id: true },
+        })
+      : await prisma.deliverySprint.create({
+          data: {
+            projectId,
+            name: sprint.name,
+            goal: sprint.goal ?? null,
+            status: sprint.status,
+            startDate: sprint.startDate,
+            endDate: sprint.endDate,
+          },
+          select: { id: true },
+        });
+
+    sprintIdByKey.set(
+      sprintSeedKey(sprint.projectClientSlug, sprint.projectSlug, sprint.name),
+      result.id,
+    );
+  }
+
+  return sprintIdByKey;
+}
+
+async function seedDeliveryReleases(projectIdByKey: Map<string, string>): Promise<void> {
+  for (const release of DELIVERY_RELEASE_SEEDS) {
+    const projectId = projectIdByKey.get(projectSeedKey(release.projectClientSlug, release.projectSlug));
+    if (!projectId) {
+      throw new Error(`Missing project for release seed: ${release.projectClientSlug}/${release.projectSlug}`);
+    }
+
+    const existing = await prisma.deliveryRelease.findFirst({
+      where: {
+        projectId,
+        title: release.title,
+      },
+      select: { id: true },
+    });
+
+    if (existing) {
+      await prisma.deliveryRelease.update({
+        where: { id: existing.id },
+        data: {
+          environment: release.environment,
+          status: release.status,
+          approvalStatus: release.approvalStatus ?? DeliveryReleaseApprovalStatus.NOT_REQUESTED,
+          approvalNotes: release.approvalNotes ?? null,
+          version: release.version ?? null,
+          releaseNotes: release.releaseNotes ?? null,
+          scheduledAt: release.scheduledAt ?? null,
+          deployedAt: release.deployedAt ?? null,
+        },
+      });
+      continue;
+    }
+
+    await prisma.deliveryRelease.create({
+      data: {
+        projectId,
+        title: release.title,
+        environment: release.environment,
+        status: release.status,
+        approvalStatus: release.approvalStatus ?? DeliveryReleaseApprovalStatus.NOT_REQUESTED,
+        approvalNotes: release.approvalNotes ?? null,
+        version: release.version ?? null,
+        releaseNotes: release.releaseNotes ?? null,
+        scheduledAt: release.scheduledAt ?? null,
+        deployedAt: release.deployedAt ?? null,
+      },
+    });
+  }
+}
+
+async function seedProjectRepositories(projectIdByKey: Map<string, string>): Promise<void> {
+  for (const repository of PROJECT_REPOSITORY_SEEDS) {
+    const projectId = projectIdByKey.get(
+      projectSeedKey(repository.projectClientSlug, repository.projectSlug),
+    );
+    if (!projectId) {
+      throw new Error(
+        `Missing project for repository seed: ${repository.projectClientSlug}/${repository.projectSlug}`,
+      );
+    }
+
+    await prisma.projectRepository.upsert({
+      where: { projectId },
+      update: {
+        provider: repository.provider,
+        owner: repository.owner,
+        repo: repository.repo,
+        repositoryUrl: repository.repositoryUrl,
+        defaultBranch: repository.defaultBranch ?? null,
+        isActive: true,
+      },
+      create: {
+        projectId,
+        provider: repository.provider,
+        owner: repository.owner,
+        repo: repository.repo,
+        repositoryUrl: repository.repositoryUrl,
+        defaultBranch: repository.defaultBranch ?? null,
+        isActive: true,
+      },
+    });
+  }
+}
+
+async function seedTasks(
+  projectIdByKey: Map<string, string>,
+  sprintIdByKey: Map<string, string>,
+): Promise<void> {
   const assigneeEmails = Array.from(
     new Set(
       TASK_SEEDS.flatMap((task) => (task.assigneeEmail ? [task.assigneeEmail] : [])),
@@ -1018,6 +1482,10 @@ async function seedTasks(projectIdByKey: Map<string, string>): Promise<void> {
       throw new Error(`Task assignee is not employee: ${assignee.email}`);
     }
 
+    const sprintId = task.sprintName
+      ? sprintIdByKey.get(sprintSeedKey(task.projectClientSlug, task.projectSlug, task.sprintName))
+      : null;
+
     const existingTask = await prisma.task.findFirst({
       where: {
         projectId,
@@ -1034,6 +1502,15 @@ async function seedTasks(projectIdByKey: Map<string, string>): Promise<void> {
           description: task.description ?? null,
           status: task.status,
           priority: task.priority,
+          type: task.type ?? TaskType.FEATURE,
+          workstream: task.workstream ?? TaskWorkstream.FULLSTACK,
+          severity: task.severity ?? null,
+          environment: task.environment ?? null,
+          affectedUrl: task.affectedUrl ?? null,
+          reproductionSteps: task.reproductionSteps ?? null,
+          reportedBy: task.reportedBy ?? null,
+          code: task.code ?? null,
+          sprintId: sprintId ?? null,
           assigneeUserId: assignee?.id ?? null,
           dueDate: task.dueDate ?? null,
         },
@@ -1048,6 +1525,15 @@ async function seedTasks(projectIdByKey: Map<string, string>): Promise<void> {
         description: task.description ?? null,
         status: task.status,
         priority: task.priority,
+        type: task.type ?? TaskType.FEATURE,
+        workstream: task.workstream ?? TaskWorkstream.FULLSTACK,
+        severity: task.severity ?? null,
+        environment: task.environment ?? null,
+        affectedUrl: task.affectedUrl ?? null,
+        reproductionSteps: task.reproductionSteps ?? null,
+        reportedBy: task.reportedBy ?? null,
+        code: task.code ?? null,
+        sprintId: sprintId ?? null,
         assigneeUserId: assignee?.id ?? null,
         dueDate: task.dueDate ?? null,
       },
@@ -1231,7 +1717,10 @@ async function main(): Promise<void> {
   await seedUsers(clientProfileIdBySlug);
   await seedEmployeeClientAssignments(clientProfileIdBySlug);
   const projectIdByKey = await seedProjects(clientProfileIdBySlug);
-  await seedTasks(projectIdByKey);
+  const sprintIdByKey = await seedDeliverySprints(projectIdByKey);
+  await seedDeliveryReleases(projectIdByKey);
+  await seedProjectRepositories(projectIdByKey);
+  await seedTasks(projectIdByKey, sprintIdByKey);
   await seedTaskTodos(projectIdByKey);
   await seedCrmLeads();
 }

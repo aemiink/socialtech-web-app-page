@@ -4,15 +4,27 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { AccountType, Prisma, TaskTodoVisibility, UserRole, UserStatus } from "@prisma/client";
+import {
+  AccountType,
+  PurchasedServiceKey,
+  Prisma,
+  TaskType,
+  TaskTodoVisibility,
+  UserRole,
+  UserStatus,
+} from "@prisma/client";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { PrismaService } from "../database/prisma.service";
+import { GithubService } from "../integrations/github/github.service";
 import { CreateTaskDto } from "./dto/create-task.dto";
 import { CreateTaskTodoDto } from "./dto/create-task-todo.dto";
+import { CreateTaskWorkNoteDto } from "./dto/create-task-work-note.dto";
+import { PrepareTaskCodeDto } from "./dto/prepare-task-code.dto";
 import { TaskQueryDto } from "./dto/task-query.dto";
 import { ToggleTaskTodoDto } from "./dto/toggle-task-todo.dto";
 import { UpdateTaskDto } from "./dto/update-task.dto";
 import { UpdateTaskTodoDto } from "./dto/update-task-todo.dto";
+import { GithubQueryDto } from "../integrations/github/dto/github-query.dto";
 
 const clientSummarySelect = {
   id: true,
@@ -57,10 +69,23 @@ const taskTodoReadSelect = {
 const taskReadSelect = {
   id: true,
   projectId: true,
+  sprintId: true,
   title: true,
   description: true,
   status: true,
   priority: true,
+  type: true,
+  workstream: true,
+  severity: true,
+  environment: true,
+  affectedUrl: true,
+  reproductionSteps: true,
+  reportedBy: true,
+  code: true,
+  branchName: true,
+  codePreparationNotes: true,
+  codePreparedAt: true,
+  codePreparedByUserId: true,
   assigneeUserId: true,
   dueDate: true,
   createdAt: true,
@@ -71,14 +96,42 @@ const taskReadSelect = {
   assignee: {
     select: assigneeSummarySelect,
   },
+  codePreparedBy: {
+    select: assigneeSummarySelect,
+  },
+  sprint: {
+    select: {
+      id: true,
+      projectId: true,
+      name: true,
+      status: true,
+      startDate: true,
+      endDate: true,
+    },
+  },
   todos: {
     select: taskTodoReadSelect,
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+  },
+  workNotes: {
+    select: {
+      id: true,
+      taskId: true,
+      authorUserId: true,
+      note: true,
+      createdAt: true,
+      updatedAt: true,
+      author: {
+        select: assigneeSummarySelect,
+      },
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   },
 } satisfies Prisma.TaskSelect;
 
 type TaskReadModel = Prisma.TaskGetPayload<{ select: typeof taskReadSelect }>;
 type TaskTodoReadModel = Prisma.TaskTodoGetPayload<{ select: typeof taskTodoReadSelect }>;
+type TaskWorkNoteReadModel = TaskReadModel["workNotes"][number];
 
 type TaskCompletion = {
   totalTodos: number;
@@ -90,12 +143,14 @@ type TaskCompletion = {
 
 type TaskResponse = Omit<TaskReadModel, "todos"> & {
   todos: TaskTodoReadModel[];
+  workNotes: TaskWorkNoteReadModel[];
   completion: TaskCompletion;
 };
 
 type ProjectAssignmentContext = {
   id: string;
   clientProfileId: string;
+  serviceKey: PurchasedServiceKey | null;
 };
 
 type TaskUpdateState = {
@@ -103,6 +158,10 @@ type TaskUpdateState = {
   projectId: string;
   assigneeUserId: string | null;
   project: ProjectAssignmentContext;
+  title: string;
+  code: string | null;
+  branchName: string | null;
+  codePreparationNotes: string | null;
 };
 
 const TASK_READ_ANY_PERMISSION = "tasks.read.any";
@@ -111,12 +170,18 @@ const TASK_READ_ASSIGNED_PERMISSION = "tasks.read.assigned";
 const TASK_OWN_READ_PERMISSIONS = ["tasks.read.own", "portal.read.own", "clients.read.own"] as const;
 const TASK_MANAGE_ANY_PERMISSION = "tasks.manage.any";
 const TASK_MANAGE_FALLBACK_PERMISSION = "tasks.manage";
+const TASK_MANAGE_ASSIGNED_PERMISSION = "tasks.manage.assigned";
+const TASK_ASSIGN_ASSIGNED_PERMISSION = "tasks.assign.assigned";
+const TASK_TODOS_MANAGE_ASSIGNED_PERMISSION = "tasks.todos.manage.assigned";
 const TASK_UPDATE_ASSIGNED_PERMISSION = "tasks.update.assigned";
 const TASK_UPDATE_OWN_FALLBACK_PERMISSION = "tasks.update.own";
 
 @Injectable()
 export class TasksService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly githubService: GithubService,
+  ) {}
 
   async getTasks(
     currentUser: AuthenticatedUser,
@@ -165,10 +230,14 @@ export class TasksService {
     dto: CreateTaskDto,
   ): Promise<TaskResponse> {
     this.assertBodyObject(dto);
-    this.assertCanManageTasks(currentUser);
-
     const project = await this.getProjectAssignmentContextOrBadRequest(dto.projectId);
+    await this.assertCanManageTaskProject(currentUser, project.clientProfileId);
+    if (dto.assigneeUserId) {
+      this.assertCanAssignTaskWithinScope(currentUser);
+    }
     await this.assertAssigneeIsValidForProject(dto.assigneeUserId, project.clientProfileId);
+    await this.assertSprintBelongsToProject(dto.sprintId, project.id);
+    const generatedCode = dto.code?.trim() || (await this.generateTaskCode(dto.type ?? TaskType.FEATURE));
 
     const task = await this.prisma.task.create({
       data: {
@@ -176,10 +245,19 @@ export class TasksService {
         description: dto.description ?? null,
         status: dto.status,
         priority: dto.priority,
+        type: dto.type,
+        workstream: dto.workstream,
+        severity: dto.severity ?? null,
+        environment: dto.environment ?? null,
+        affectedUrl: dto.affectedUrl ?? null,
+        reproductionSteps: dto.reproductionSteps ?? null,
+        reportedBy: dto.reportedBy ?? null,
+        code: generatedCode,
         dueDate: this.parseNullableDate(dto.dueDate) ?? null,
         project: {
           connect: { id: dto.projectId },
         },
+        ...(dto.sprintId ? { sprint: { connect: { id: dto.sprintId } } } : {}),
         ...(dto.assigneeUserId
           ? { assignee: { connect: { id: dto.assigneeUserId } } }
           : {}),
@@ -202,6 +280,10 @@ export class TasksService {
       return this.updateTaskAsAdmin(currentUser, taskId, dto);
     }
 
+    if (this.isEmployee(currentUser) && currentUser.role === UserRole.PROJECT_MANAGER) {
+      return this.updateTaskAsAssignedManager(currentUser, taskId, dto);
+    }
+
     if (this.isEmployee(currentUser)) {
       return this.updateOwnTaskStatus(currentUser, taskId, dto);
     }
@@ -215,8 +297,7 @@ export class TasksService {
     dto: CreateTaskTodoDto,
   ): Promise<TaskResponse> {
     this.assertBodyObject(dto);
-    this.assertCanManageTasks(currentUser);
-    await this.assertTaskExistsForTodoMutation(taskId);
+    await this.assertCanManageTaskTodoScope(currentUser, taskId);
 
     await this.prisma.taskTodo.create({
       data: {
@@ -238,7 +319,7 @@ export class TasksService {
     dto: UpdateTaskTodoDto,
   ): Promise<TaskResponse> {
     this.assertBodyObject(dto);
-    this.assertCanManageTasks(currentUser);
+    await this.assertCanManageTaskTodoScope(currentUser, taskId);
     this.assertHasTodoUpdatePayload(dto);
     await this.assertTaskTodoExists(taskId, todoId);
 
@@ -297,7 +378,7 @@ export class TasksService {
     taskId: string,
     todoId: string,
   ): Promise<TaskResponse> {
-    this.assertCanManageTasks(currentUser);
+    await this.assertCanManageTaskTodoScope(currentUser, taskId);
 
     const result = await this.prisma.taskTodo.deleteMany({
       where: {
@@ -310,6 +391,74 @@ export class TasksService {
     }
 
     return this.getTaskById(currentUser, taskId);
+  }
+
+  async getTaskWorkNotes(currentUser: AuthenticatedUser, taskId: string) {
+    this.assertCanReadInternalTaskData(currentUser);
+    const task = await this.getTaskById(currentUser, taskId);
+    return task.workNotes;
+  }
+
+  async createTaskWorkNote(
+    currentUser: AuthenticatedUser,
+    taskId: string,
+    dto: CreateTaskWorkNoteDto,
+  ) {
+    this.assertBodyObject(dto);
+    const task = await this.assertTaskScopeForInternalWrite(currentUser, taskId);
+
+    await this.prisma.taskWorkNote.create({
+      data: {
+        taskId: task.id,
+        authorUserId: currentUser.id,
+        note: dto.note,
+      },
+    });
+
+    return this.getTaskById(currentUser, taskId);
+  }
+
+  async prepareTaskCode(
+    currentUser: AuthenticatedUser,
+    taskId: string,
+    dto: PrepareTaskCodeDto,
+  ) {
+    this.assertBodyObject(dto ?? {});
+    const task = await this.assertTaskScopeForInternalWrite(currentUser, taskId);
+    await this.assertRepositoryRequiredForApplicationProject(currentUser, task.project);
+
+    const branchName = dto.branchName ?? task.branchName ?? this.buildSuggestedBranchName(task);
+    const updatedTask = await this.prisma.task.update({
+      where: { id: taskId },
+      data: {
+        branchName,
+        codePreparationNotes: dto.notes === undefined ? task.codePreparationNotes : dto.notes,
+        codePreparedAt: new Date(),
+        codePreparedByUserId: currentUser.id,
+      },
+      select: taskReadSelect,
+    });
+
+    return this.toTaskResponse(updatedTask, currentUser);
+  }
+
+  async getRelatedCommits(currentUser: AuthenticatedUser, taskId: string, query: GithubQueryDto) {
+    this.assertCanReadInternalTaskData(currentUser);
+    const task = await this.getTaskById(currentUser, taskId);
+
+    const commits = await this.githubService.getCommits(currentUser, task.projectId, {
+      ...query,
+      branch: query.branch ?? task.branchName ?? undefined,
+      perPage: query.perPage ?? 20,
+    });
+
+    return commits.filter((commit) => {
+      if (task.code && commit.message.toLowerCase().includes(task.code.toLowerCase())) {
+        return true;
+      }
+
+      return task.branchName ? commit.branch === task.branchName : true;
+    });
   }
 
   private async updateTaskAsAdmin(
@@ -329,14 +478,108 @@ export class TasksService {
     if (dto.projectId || dto.assigneeUserId !== undefined) {
       await this.assertAssigneeIsValidForProject(nextAssigneeUserId, nextProject.clientProfileId);
     }
+    if (dto.sprintId !== undefined) {
+      await this.assertSprintBelongsToProject(dto.sprintId, nextProject.id);
+    }
 
     const dueDateUpdate = this.parseNullableDate(dto.dueDate);
     const data: Prisma.TaskUpdateInput = {
       ...(dto.projectId ? { project: { connect: { id: dto.projectId } } } : {}),
+      ...(dto.sprintId !== undefined
+        ? {
+            sprint:
+              dto.sprintId === null
+                ? { disconnect: true }
+                : { connect: { id: dto.sprintId } },
+          }
+        : {}),
       ...(dto.title !== undefined ? { title: dto.title } : {}),
       ...(dto.description !== undefined ? { description: dto.description } : {}),
       ...(dto.status !== undefined ? { status: dto.status } : {}),
       ...(dto.priority !== undefined ? { priority: dto.priority } : {}),
+      ...(dto.type !== undefined ? { type: dto.type } : {}),
+      ...(dto.workstream !== undefined ? { workstream: dto.workstream } : {}),
+      ...(dto.severity !== undefined ? { severity: dto.severity } : {}),
+      ...(dto.environment !== undefined ? { environment: dto.environment } : {}),
+      ...(dto.affectedUrl !== undefined ? { affectedUrl: dto.affectedUrl } : {}),
+      ...(dto.reproductionSteps !== undefined
+        ? { reproductionSteps: dto.reproductionSteps }
+        : {}),
+      ...(dto.reportedBy !== undefined ? { reportedBy: dto.reportedBy } : {}),
+      ...(dto.code !== undefined ? { code: dto.code } : {}),
+      ...(dueDateUpdate !== undefined ? { dueDate: dueDateUpdate } : {}),
+      ...(dto.assigneeUserId !== undefined
+        ? {
+            assignee:
+              dto.assigneeUserId === null
+                ? { disconnect: true }
+                : { connect: { id: dto.assigneeUserId } },
+          }
+        : {}),
+    };
+
+    const task = await this.prisma.task.update({
+      where: { id: taskId },
+      data,
+      select: taskReadSelect,
+    });
+
+    return this.toTaskResponse(task, currentUser);
+  }
+
+  private async updateTaskAsAssignedManager(
+    currentUser: AuthenticatedUser,
+    taskId: string,
+    dto: UpdateTaskDto,
+  ): Promise<TaskResponse> {
+    const existingTask = await this.getTaskUpdateStateOrFail(taskId);
+    await this.assertCanManageTaskProject(currentUser, existingTask.project.clientProfileId);
+
+    const nextProject = dto.projectId
+      ? await this.getProjectAssignmentContextOrBadRequest(dto.projectId)
+      : existingTask.project;
+    if (dto.projectId) {
+      await this.assertCanManageTaskProject(currentUser, nextProject.clientProfileId);
+    }
+
+    const nextAssigneeUserId =
+      dto.assigneeUserId === undefined ? existingTask.assigneeUserId : dto.assigneeUserId;
+
+    if (dto.assigneeUserId !== undefined) {
+      this.assertCanAssignTaskWithinScope(currentUser);
+    }
+    if (dto.projectId || dto.assigneeUserId !== undefined) {
+      await this.assertAssigneeIsValidForProject(nextAssigneeUserId, nextProject.clientProfileId);
+    }
+    if (dto.sprintId !== undefined) {
+      await this.assertSprintBelongsToProject(dto.sprintId, nextProject.id);
+    }
+
+    const dueDateUpdate = this.parseNullableDate(dto.dueDate);
+    const data: Prisma.TaskUpdateInput = {
+      ...(dto.projectId ? { project: { connect: { id: dto.projectId } } } : {}),
+      ...(dto.sprintId !== undefined
+        ? {
+            sprint:
+              dto.sprintId === null
+                ? { disconnect: true }
+                : { connect: { id: dto.sprintId } },
+          }
+        : {}),
+      ...(dto.title !== undefined ? { title: dto.title } : {}),
+      ...(dto.description !== undefined ? { description: dto.description } : {}),
+      ...(dto.status !== undefined ? { status: dto.status } : {}),
+      ...(dto.priority !== undefined ? { priority: dto.priority } : {}),
+      ...(dto.type !== undefined ? { type: dto.type } : {}),
+      ...(dto.workstream !== undefined ? { workstream: dto.workstream } : {}),
+      ...(dto.severity !== undefined ? { severity: dto.severity } : {}),
+      ...(dto.environment !== undefined ? { environment: dto.environment } : {}),
+      ...(dto.affectedUrl !== undefined ? { affectedUrl: dto.affectedUrl } : {}),
+      ...(dto.reproductionSteps !== undefined
+        ? { reproductionSteps: dto.reproductionSteps }
+        : {}),
+      ...(dto.reportedBy !== undefined ? { reportedBy: dto.reportedBy } : {}),
+      ...(dto.code !== undefined ? { code: dto.code } : {}),
       ...(dueDateUpdate !== undefined ? { dueDate: dueDateUpdate } : {}),
       ...(dto.assigneeUserId !== undefined
         ? {
@@ -435,6 +678,11 @@ export class TasksService {
       throw new ForbiddenException("Client accounts cannot update task todos.");
     }
 
+    if (currentUser.role === UserRole.PROJECT_MANAGER) {
+      await this.assertCanManageTaskTodoScope(currentUser, taskId);
+      return;
+    }
+
     this.assertCanUpdateOwnTask(currentUser);
 
     const task = await this.prisma.task.findFirst({
@@ -496,9 +744,14 @@ export class TasksService {
   private buildTaskQueryWhere(query: TaskQueryDto): Prisma.TaskWhereInput {
     const where: Prisma.TaskWhereInput = {
       ...(query.projectId ? { projectId: query.projectId } : {}),
+      ...(query.sprintId ? { sprintId: query.sprintId } : {}),
       ...(query.assigneeUserId ? { assigneeUserId: query.assigneeUserId } : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(query.priority ? { priority: query.priority } : {}),
+      ...(query.type ? { type: query.type } : {}),
+      ...(query.workstream ? { workstream: query.workstream } : {}),
+      ...(query.severity ? { severity: query.severity } : {}),
+      ...(query.environment ? { environment: query.environment } : {}),
       ...(query.clientProfileId ? { project: { clientProfileId: query.clientProfileId } } : {}),
     };
 
@@ -535,10 +788,16 @@ export class TasksService {
         id: true,
         projectId: true,
         assigneeUserId: true,
+        sprintId: true,
+        title: true,
+        code: true,
+        branchName: true,
+        codePreparationNotes: true,
         project: {
           select: {
             id: true,
             clientProfileId: true,
+            serviceKey: true,
           },
         },
       },
@@ -559,6 +818,7 @@ export class TasksService {
       select: {
         id: true,
         clientProfileId: true,
+        serviceKey: true,
       },
     });
 
@@ -604,13 +864,44 @@ export class TasksService {
     }
   }
 
+  private async assertSprintBelongsToProject(
+    sprintId: string | null | undefined,
+    projectId: string,
+  ): Promise<void> {
+    if (!sprintId) {
+      return;
+    }
+
+    const sprint = await this.prisma.deliverySprint.findUnique({
+      where: { id: sprintId },
+      select: { id: true, projectId: true },
+    });
+
+    if (!sprint) {
+      throw new BadRequestException("Sprint not found.");
+    }
+
+    if (sprint.projectId !== projectId) {
+      throw new BadRequestException("Sprint must belong to the same project as the task.");
+    }
+  }
+
   private assertHasUpdatePayload(dto: UpdateTaskDto): void {
     if (
       dto.projectId === undefined &&
+      dto.sprintId === undefined &&
       dto.title === undefined &&
       dto.description === undefined &&
       dto.status === undefined &&
       dto.priority === undefined &&
+      dto.type === undefined &&
+      dto.workstream === undefined &&
+      dto.severity === undefined &&
+      dto.environment === undefined &&
+      dto.affectedUrl === undefined &&
+      dto.reproductionSteps === undefined &&
+      dto.reportedBy === undefined &&
+      dto.code === undefined &&
       dto.assigneeUserId === undefined &&
       dto.dueDate === undefined
     ) {
@@ -637,9 +928,18 @@ export class TasksService {
   private assertEmployeeStatusOnlyUpdate(dto: UpdateTaskDto): void {
     if (
       dto.projectId !== undefined ||
+      dto.sprintId !== undefined ||
       dto.title !== undefined ||
       dto.description !== undefined ||
       dto.priority !== undefined ||
+      dto.type !== undefined ||
+      dto.workstream !== undefined ||
+      dto.severity !== undefined ||
+      dto.environment !== undefined ||
+      dto.affectedUrl !== undefined ||
+      dto.reproductionSteps !== undefined ||
+      dto.reportedBy !== undefined ||
+      dto.code !== undefined ||
       dto.assigneeUserId !== undefined ||
       dto.dueDate !== undefined
     ) {
@@ -684,14 +984,16 @@ export class TasksService {
   }
 
   private toTaskResponse(task: TaskReadModel, currentUser: AuthenticatedUser): TaskResponse {
-    const { todos, ...taskWithoutTodos } = task;
+    const { todos, workNotes, ...taskWithoutTodos } = task;
     const visibleTodos = this.isClient(currentUser)
       ? todos.filter((todo) => todo.visibility === TaskTodoVisibility.CLIENT_VISIBLE)
       : todos;
+    const visibleWorkNotes = this.isClient(currentUser) ? [] : workNotes;
 
     return {
       ...taskWithoutTodos,
       todos: visibleTodos,
+      workNotes: visibleWorkNotes,
       completion: this.buildTaskCompletion(visibleTodos),
     };
   }
@@ -724,6 +1026,87 @@ export class TasksService {
     );
   }
 
+  private async assertCanManageTaskProject(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+  ): Promise<void> {
+    if (this.isAdmin(currentUser)) {
+      this.assertHasPermission(
+        currentUser,
+        TASK_MANAGE_ANY_PERMISSION,
+        TASK_MANAGE_FALLBACK_PERMISSION,
+      );
+      return;
+    }
+
+    if (!this.isEmployee(currentUser) || currentUser.role !== UserRole.PROJECT_MANAGER) {
+      throw new ForbiddenException("Only admins or assigned project managers can manage tasks.");
+    }
+
+    this.assertHasPermission(currentUser, TASK_MANAGE_ASSIGNED_PERMISSION);
+    const assignment = await this.prisma.employeeClientAssignment.findFirst({
+      where: {
+        employeeUserId: currentUser.id,
+        clientProfileId,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    if (!assignment) {
+      throw new NotFoundException("Task not found.");
+    }
+  }
+
+  private assertCanAssignTaskWithinScope(currentUser: AuthenticatedUser): void {
+    if (this.isAdmin(currentUser)) {
+      this.assertHasPermission(
+        currentUser,
+        TASK_MANAGE_ANY_PERMISSION,
+        TASK_MANAGE_FALLBACK_PERMISSION,
+      );
+      return;
+    }
+
+    this.assertHasPermission(currentUser, TASK_ASSIGN_ASSIGNED_PERMISSION);
+  }
+
+  private async assertCanManageTaskTodoScope(
+    currentUser: AuthenticatedUser,
+    taskId: string,
+  ): Promise<void> {
+    if (this.isAdmin(currentUser)) {
+      this.assertCanManageTasks(currentUser);
+      await this.assertTaskExistsForTodoMutation(taskId);
+      return;
+    }
+
+    if (!this.isEmployee(currentUser) || currentUser.role !== UserRole.PROJECT_MANAGER) {
+      throw new ForbiddenException("Only admins or assigned project managers can manage task todos.");
+    }
+
+    this.assertHasPermission(currentUser, TASK_TODOS_MANAGE_ASSIGNED_PERMISSION);
+    const task = await this.prisma.task.findFirst({
+      where: {
+        id: taskId,
+        project: {
+          clientProfile: {
+            employeeAssignments: {
+              some: {
+                employeeUserId: currentUser.id,
+                isActive: true,
+              },
+            },
+          },
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!task) {
+      throw new NotFoundException("Task not found.");
+    }
+  }
+
   private assertCanUpdateOwnTask(currentUser: AuthenticatedUser): void {
     if (!this.isEmployee(currentUser)) {
       throw new ForbiddenException("Only employee users can update their assigned tasks.");
@@ -739,6 +1122,121 @@ export class TasksService {
   private assertCanReadOwnTasks(currentUser: AuthenticatedUser): void {
     this.assertHasAnyPermission(currentUser, TASK_OWN_READ_PERMISSIONS);
     this.getClientProfileIdOrFail(currentUser);
+  }
+
+  private assertCanReadInternalTaskData(currentUser: AuthenticatedUser): void {
+    if (this.isClient(currentUser)) {
+      throw new ForbiddenException("Clients cannot access internal task delivery notes.");
+    }
+  }
+
+  private async assertTaskScopeForInternalWrite(currentUser: AuthenticatedUser, taskId: string) {
+    if (this.isAdmin(currentUser)) {
+      this.assertCanManageTasks(currentUser);
+      return this.getTaskUpdateStateOrFail(taskId);
+    }
+
+    if (!this.isEmployee(currentUser)) {
+      throw new ForbiddenException("Only assigned employees can write internal task notes.");
+    }
+
+    this.assertCanUpdateOwnTask(currentUser);
+    if (
+      currentUser.role !== UserRole.DEVELOPER &&
+      currentUser.role !== UserRole.PROJECT_MANAGER
+    ) {
+      throw new ForbiddenException("Only developers and project managers can write task work notes.");
+    }
+
+    const task = await this.prisma.task.findFirst({
+      where: {
+        id: taskId,
+        project: {
+          clientProfile: {
+            employeeAssignments: {
+              some: {
+                employeeUserId: currentUser.id,
+                isActive: true,
+              },
+            },
+          },
+        },
+      },
+      select: {
+        id: true,
+        title: true,
+        code: true,
+        branchName: true,
+        codePreparationNotes: true,
+        project: {
+          select: {
+            id: true,
+            clientProfileId: true,
+            serviceKey: true,
+          },
+        },
+      },
+    });
+
+    if (!task) {
+      throw new NotFoundException("Task not found.");
+    }
+
+    return task;
+  }
+
+  private buildSuggestedBranchName(task: {
+    code: string | null;
+    title?: string;
+  }) {
+    const prefix = task.code ? `${task.code.toLowerCase()}-` : "";
+    const slug = (task.title ?? "task")
+      .trim()
+      .toLowerCase()
+      .replace(/ı/g, "i")
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+
+    return `feature/${prefix}${slug || "task"}`.slice(0, 160);
+  }
+
+  private async generateTaskCode(type: TaskType) {
+    const prefixByType: Record<TaskType, string> = {
+      FEATURE: "FEAT",
+      BUG: "BUG",
+      REVISION: "REV",
+      QA: "QA",
+      DEPLOYMENT: "REL",
+      MAINTENANCE: "MAIN",
+    };
+    const prefix = prefixByType[type] ?? "TASK";
+    const totalTasks = await this.prisma.task.count();
+    return `${prefix}-${String(totalTasks + 1).padStart(3, "0")}`;
+  }
+
+  private async assertRepositoryRequiredForApplicationProject(
+    currentUser: AuthenticatedUser,
+    project: ProjectAssignmentContext,
+  ) {
+    if (
+      project.serviceKey !== PurchasedServiceKey.WEB_APP &&
+      project.serviceKey !== PurchasedServiceKey.MOBILE_APP
+    ) {
+      return;
+    }
+
+    try {
+      await this.githubService.assertActiveRepositoryConfigured(currentUser, project.id);
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw new BadRequestException(
+          "WEB_APP and MOBILE_APP tasks require an active repository before code preparation.",
+        );
+      }
+      throw error;
+    }
   }
 
   private getClientProfileIdOrFail(currentUser: AuthenticatedUser): string {

@@ -26,6 +26,18 @@ export class CreateProjectDto {
   @MaxLength(2000)
   description?: string | null;
 
+  @ValidateIf((_, value: unknown) => value !== undefined && value !== null)
+  @Transform(({ value }) => trimString(value))
+  @IsString()
+  @MaxLength(500)
+  figmaProjectUrl?: string | null;
+
+  @ValidateIf((_, value: unknown) => value !== undefined && value !== null)
+  @Transform(({ value }) => trimString(value))
+  @IsString()
+  @MaxLength(500)
+  repositoryUrl?: string | null;
+
   @ValidateIf((_, value: unknown) => value !== undefined)
   @IsEnum(ProjectStatus)
   status?: ProjectStatus;
