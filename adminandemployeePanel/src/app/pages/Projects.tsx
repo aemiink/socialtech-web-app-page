@@ -68,6 +68,8 @@ type PriorityFilter = Priority | "ALL";
 type ProjectFormState = {
   clientProfileId: string;
   serviceKey: ServiceKey | "";
+  repositoryUrl: string;
+  figmaProjectUrl: string;
   name: string;
   description: string;
   status: ProjectStatus;
@@ -82,6 +84,8 @@ type ProjectFormValue = ProjectFormState[ProjectFormField];
 const initialProjectForm: ProjectFormState = {
   clientProfileId: "",
   serviceKey: "",
+  repositoryUrl: "",
+  figmaProjectUrl: "",
   name: "",
   description: "",
   status: "PLANNED",
@@ -663,6 +667,37 @@ function ProjectFormFields({
         {selectedClient && serviceOptions.length === 0 && (
           <p className="text-xs text-[#A0A0A0]">Seçili müşterinin aktif hizmeti bulunmuyor.</p>
         )}
+        {(form.serviceKey === "web-app" || form.serviceKey === "mobile-app") && (
+          <div className="rounded-lg border border-orange-400/30 bg-orange-500/10 px-3 py-2 text-xs text-orange-100">
+            WEB_APP ve MOBILE_APP projelerinde GitHub repository linki zorunludur.
+          </div>
+        )}
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor={`${idPrefix}-repository-url`}>GitHub Repository Linki</Label>
+        <Input
+          id={`${idPrefix}-repository-url`}
+          value={form.repositoryUrl}
+          onChange={(event) => onChange("repositoryUrl", event.target.value)}
+          className="border-white/[0.08] bg-[#202020]"
+          placeholder="https://github.com/org/repo"
+          disabled={disabled}
+        />
+        <p className="text-xs text-[#A0A0A0]">
+          WEB_APP ve MOBILE_APP projelerinde zorunludur. Tokenlı entegrasyon için proje detayında
+          repository bağlantısı ayrıca yönetilebilir.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor={`${idPrefix}-figma-url`}>Figma Proje Linki</Label>
+        <Input
+          id={`${idPrefix}-figma-url`}
+          value={form.figmaProjectUrl}
+          onChange={(event) => onChange("figmaProjectUrl", event.target.value)}
+          className="border-white/[0.08] bg-[#202020]"
+          placeholder="https://www.figma.com/file/..."
+          disabled={disabled}
+        />
       </div>
       <div className="space-y-2">
         <Label htmlFor={`${idPrefix}-name`}>Proje Adı</Label>
@@ -904,6 +939,13 @@ function validateProjectForm(form: ProjectFormState): string | null {
     return "Proje adı en az 2 karakter olmalıdır.";
   }
 
+  if (
+    (form.serviceKey === "web-app" || form.serviceKey === "mobile-app") &&
+    form.repositoryUrl.trim().length === 0
+  ) {
+    return "WEB_APP ve MOBILE_APP projelerinde GitHub repository linki zorunludur.";
+  }
+
   if (form.startDate && form.dueDate && form.startDate > form.dueDate) {
     return "Deadline başlangıç tarihinden önce olamaz.";
   }
@@ -915,6 +957,8 @@ function buildProjectPayload(form: ProjectFormState): CreateProjectRequest {
   return {
     clientProfileId: form.clientProfileId.trim(),
     ...(form.serviceKey ? { serviceKey: form.serviceKey } : {}),
+    repositoryUrl: toNullableText(form.repositoryUrl),
+    figmaProjectUrl: toNullableText(form.figmaProjectUrl),
     name: form.name.trim(),
     description: toNullableText(form.description),
     status: form.status,
@@ -928,6 +972,8 @@ function projectToForm(project: Project): ProjectFormState {
   return {
     clientProfileId: project.clientProfileId,
     serviceKey: project.serviceKey ?? "",
+    repositoryUrl: project.repositoryUrl ?? "",
+    figmaProjectUrl: project.figmaProjectUrl ?? "",
     name: project.name,
     description: project.description ?? "",
     status: project.status,

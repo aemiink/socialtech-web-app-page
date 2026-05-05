@@ -75,6 +75,7 @@ export const baseApi = createApi({
     "AdminSummary",
     "Clients",
     "Projects",
+    "ProjectFiles",
     "Tasks",
     "TaskTodos",
     "CrmLeads",

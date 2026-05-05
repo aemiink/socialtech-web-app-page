@@ -31,16 +31,93 @@ type ProjectWithSensitiveFields = Project & {
 const mockUseGetProjectQuery = vi.fn<
   (id: string, options: QueryOptions) => ProjectQueryResult
 >();
+const mockUseGetProjectRepositoryQuery = vi.fn();
+const mockUseGetProjectRepositoryBranchesQuery = vi.fn();
+const mockUseGetProjectRepositoryCommitsQuery = vi.fn();
+const mockUseGetProjectRepositoryPullsQuery = vi.fn();
+const mockUseGetProjectRepositoryWorkflowRunsQuery = vi.fn();
+const mockUseUpsertProjectRepositoryMutation = vi.fn();
+const mockUseDeleteProjectRepositoryMutation = vi.fn();
+const mockUseCreateProjectFileFolderMutation = vi.fn();
+const mockUseUpdateProjectFileFolderMutation = vi.fn();
+const mockUseUpdateProjectFileFolderAssigneesMutation = vi.fn();
+const mockUseGetProjectFileFoldersQuery = vi.fn();
+const mockUseGetProjectFileFolderAssigneesQuery = vi.fn();
+const mockUseGetProjectFilesQuery = vi.fn();
+const mockUseGetProjectWorkspaceSnapshotQuery = vi.fn();
+const mockUseCreateProjectWorkspaceSectionMutation = vi.fn();
+const mockUseCreateProjectWorkspaceItemMutation = vi.fn();
+const mockUseGetProjectWorkspaceRevisionsQuery = vi.fn();
+const mockUseUpdateProjectWorkspaceRevisionStatusMutation = vi.fn();
+const mockUseGetProjectWorkspaceReportsQuery = vi.fn();
+const mockUseCreateProjectWorkspaceReportMutation = vi.fn();
+const mockUseGetProjectWorkspaceMeetingRequestsQuery = vi.fn();
+const mockUseUpdateProjectWorkspaceMeetingRequestMutation = vi.fn();
+const mockUseGetProjectWorkspaceMessagesQuery = vi.fn();
+const mockUseCreateProjectWorkspaceMessageMutation = vi.fn();
+const mockDispatch = vi.fn();
 
 let currentUser: AuthUserProfile | null = null;
 
 vi.mock("../../store/hooks", () => ({
-  useAppSelector: () => currentUser,
+  useAppDispatch: () => mockDispatch,
+  useAppSelector: (selector: (state: { auth: { currentUser: AuthUserProfile | null; accessToken: string | null } }) => unknown) =>
+    selector({
+      auth: {
+        currentUser,
+        accessToken: null,
+      },
+    }),
 }));
 
 vi.mock("../../features/projects/projectsApi", () => ({
+  projectsApi: {
+    util: {
+      updateQueryData: vi.fn(() => ({ type: "mock/updateQueryData" })),
+    },
+  },
   useGetProjectQuery: (id: string, options: QueryOptions) =>
     mockUseGetProjectQuery(id, options),
+  useGetProjectRepositoryQuery: (id: string, options: QueryOptions) =>
+    mockUseGetProjectRepositoryQuery(id, options),
+  useGetProjectRepositoryBranchesQuery: (query: unknown, options?: unknown) =>
+    mockUseGetProjectRepositoryBranchesQuery(query, options),
+  useGetProjectRepositoryCommitsQuery: (query: unknown, options?: unknown) =>
+    mockUseGetProjectRepositoryCommitsQuery(query, options),
+  useGetProjectRepositoryPullsQuery: (query: unknown, options?: unknown) =>
+    mockUseGetProjectRepositoryPullsQuery(query, options),
+  useGetProjectRepositoryWorkflowRunsQuery: (query: unknown, options?: unknown) =>
+    mockUseGetProjectRepositoryWorkflowRunsQuery(query, options),
+  useUpsertProjectRepositoryMutation: () => mockUseUpsertProjectRepositoryMutation(),
+  useDeleteProjectRepositoryMutation: () => mockUseDeleteProjectRepositoryMutation(),
+  useCreateProjectFileFolderMutation: () => mockUseCreateProjectFileFolderMutation(),
+  useUpdateProjectFileFolderMutation: () => mockUseUpdateProjectFileFolderMutation(),
+  useUpdateProjectFileFolderAssigneesMutation: () =>
+    mockUseUpdateProjectFileFolderAssigneesMutation(),
+  useGetProjectFileFoldersQuery: (query: unknown, options?: unknown) =>
+    mockUseGetProjectFileFoldersQuery(query, options),
+  useGetProjectFileFolderAssigneesQuery: (query: unknown, options?: unknown) =>
+    mockUseGetProjectFileFolderAssigneesQuery(query, options),
+  useGetProjectFilesQuery: (query: unknown, options?: unknown) =>
+    mockUseGetProjectFilesQuery(query, options),
+  useGetProjectWorkspaceSnapshotQuery: (query: unknown, options?: unknown) =>
+    mockUseGetProjectWorkspaceSnapshotQuery(query, options),
+  useCreateProjectWorkspaceSectionMutation: () => mockUseCreateProjectWorkspaceSectionMutation(),
+  useCreateProjectWorkspaceItemMutation: () => mockUseCreateProjectWorkspaceItemMutation(),
+  useGetProjectWorkspaceRevisionsQuery: (query: unknown, options?: unknown) =>
+    mockUseGetProjectWorkspaceRevisionsQuery(query, options),
+  useUpdateProjectWorkspaceRevisionStatusMutation: () =>
+    mockUseUpdateProjectWorkspaceRevisionStatusMutation(),
+  useGetProjectWorkspaceReportsQuery: (query: unknown, options?: unknown) =>
+    mockUseGetProjectWorkspaceReportsQuery(query, options),
+  useCreateProjectWorkspaceReportMutation: () => mockUseCreateProjectWorkspaceReportMutation(),
+  useGetProjectWorkspaceMeetingRequestsQuery: (query: unknown, options?: unknown) =>
+    mockUseGetProjectWorkspaceMeetingRequestsQuery(query, options),
+  useUpdateProjectWorkspaceMeetingRequestMutation: () =>
+    mockUseUpdateProjectWorkspaceMeetingRequestMutation(),
+  useGetProjectWorkspaceMessagesQuery: (query: unknown, options?: unknown) =>
+    mockUseGetProjectWorkspaceMessagesQuery(query, options),
+  useCreateProjectWorkspaceMessageMutation: () => mockUseCreateProjectWorkspaceMessageMutation(),
 }));
 
 const projectId = "11111111-1111-4111-8111-111111111111";
@@ -60,6 +137,17 @@ const adminUser: AuthUserProfile = {
 const adminWithoutProjectReadPermission: AuthUserProfile = {
   ...adminUser,
   permissions: [],
+};
+
+const developerUser: AuthUserProfile = {
+  id: "developer-user-id",
+  email: "developer@socialtech.com",
+  displayName: "Developer User",
+  accountType: "EMPLOYEE",
+  role: "DEVELOPER",
+  status: "ACTIVE",
+  permissions: ["projects.read.assigned", "integrations.github.read.assigned"],
+  clientProfile: null,
 };
 
 const projectDetail: ProjectWithSensitiveFields = {
@@ -96,6 +184,33 @@ function setupQueryState(overrides: Partial<ProjectQueryResult> = {}) {
     refetch: vi.fn(),
     ...overrides,
   });
+  mockUseGetProjectRepositoryQuery.mockReturnValue({
+    data: undefined,
+    refetch: vi.fn(),
+  });
+  mockUseGetProjectRepositoryBranchesQuery.mockReturnValue({ data: [] });
+  mockUseGetProjectRepositoryCommitsQuery.mockReturnValue({ data: [] });
+  mockUseGetProjectRepositoryPullsQuery.mockReturnValue({ data: [] });
+  mockUseGetProjectRepositoryWorkflowRunsQuery.mockReturnValue({ data: [] });
+  mockUseUpsertProjectRepositoryMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
+  mockUseDeleteProjectRepositoryMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
+  mockUseCreateProjectFileFolderMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
+  mockUseUpdateProjectFileFolderMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
+  mockUseUpdateProjectFileFolderAssigneesMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
+  mockUseGetProjectFileFoldersQuery.mockReturnValue({ data: [] });
+  mockUseGetProjectFileFolderAssigneesQuery.mockReturnValue({ data: [] });
+  mockUseGetProjectFilesQuery.mockReturnValue({ data: { data: [] }, isFetching: false });
+  mockUseGetProjectWorkspaceSnapshotQuery.mockReturnValue({ data: undefined, isFetching: false });
+  mockUseCreateProjectWorkspaceSectionMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
+  mockUseCreateProjectWorkspaceItemMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
+  mockUseGetProjectWorkspaceRevisionsQuery.mockReturnValue({ data: [] });
+  mockUseUpdateProjectWorkspaceRevisionStatusMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
+  mockUseGetProjectWorkspaceReportsQuery.mockReturnValue({ data: [] });
+  mockUseCreateProjectWorkspaceReportMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
+  mockUseGetProjectWorkspaceMeetingRequestsQuery.mockReturnValue({ data: [] });
+  mockUseUpdateProjectWorkspaceMeetingRequestMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
+  mockUseGetProjectWorkspaceMessagesQuery.mockReturnValue({ data: [] });
+  mockUseCreateProjectWorkspaceMessageMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
 }
 
 function renderProjectDetail(id: string = projectId) {
@@ -176,6 +291,49 @@ describe("ProjectDetail", () => {
     expect(screen.getByText(clientProfileId)).toBeInTheDocument();
   });
 
+  it("allows assigned-scope employee users to read project detail", () => {
+    currentUser = developerUser;
+    setupQueryState({ data: projectDetail });
+
+    renderProjectDetail();
+
+    expect(screen.getByRole("heading", { name: "Growth Hub Launch" })).toBeInTheDocument();
+    expect(mockUseGetProjectQuery).toHaveBeenCalledWith(projectId, {
+      skip: false,
+    });
+  });
+
+  it("renders github repository section for admins with permission", () => {
+    currentUser = {
+      ...adminUser,
+      permissions: ["projects.read.any", "integrations.github.read.any", "integrations.github.manage.any"],
+    };
+    setupQueryState({ data: projectDetail });
+    mockUseGetProjectRepositoryQuery.mockReturnValue({
+      data: {
+        id: "repo-id",
+        projectId,
+        provider: "GITHUB",
+        owner: "facebook",
+        repo: "react",
+        repositoryUrl: "https://github.com/facebook/react",
+        defaultBranch: "main",
+        installationId: null,
+        isActive: true,
+        createdAt: "",
+        updatedAt: "",
+        project: null,
+      },
+      refetch: vi.fn(),
+    });
+
+    renderProjectDetail();
+
+    expect(screen.getByText("GitHub Repository")).toBeInTheDocument();
+    expect(screen.getByText("facebook/react")).toBeInTheDocument();
+    expect(screen.getByLabelText("PAT / Token")).toHaveAttribute("type", "password");
+  });
+
   it("does not render sensitive fields returned by the API", () => {
     setupQueryState({ data: projectDetail });
 
@@ -185,5 +343,22 @@ describe("ProjectDetail", () => {
     expect(document.body).not.toHaveTextContent(/reset-token-value/i);
     expect(document.body).not.toHaveTextContent(/api-secret-value/i);
     expect(document.body).not.toHaveTextContent(/Bearer sensitive-value/i);
+  });
+
+  it("shows repository-required guidance for web and mobile app projects without a repository", () => {
+    currentUser = {
+      ...adminUser,
+      permissions: ["projects.read.any", "integrations.github.read.any"],
+    };
+    setupQueryState({
+      data: {
+        ...projectDetail,
+        serviceKey: "web-app",
+      },
+    });
+
+    renderProjectDetail();
+
+    expect(screen.getByText("GitHub bağlantısı zorunlu")).toBeInTheDocument();
   });
 });

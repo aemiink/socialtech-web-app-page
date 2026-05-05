@@ -2,6 +2,7 @@
 /// <reference types="@testing-library/jest-dom" />
 
 import { fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthUserProfile } from "../../../features/auth/authTypes";
 import type {
@@ -69,6 +70,8 @@ const assignedTask: Task = {
   description: "Responsive kontroller",
   status: "IN_PROGRESS",
   priority: "HIGH",
+  type: "QA",
+  workstream: "FRONTEND",
   assigneeUserId: employeeUser.id,
   dueDate: "2026-05-01T09:00:00.000Z",
   createdAt: "2026-04-28T10:00:00.000Z",
@@ -120,6 +123,8 @@ const scopedTeamTask: Task = {
   description: "Takım içi koordinasyon görevleri",
   status: "TODO",
   priority: "MEDIUM",
+  type: "FEATURE",
+  workstream: "FULLSTACK",
   assigneeUserId: "88888888-8888-4888-8888-888888888888",
   dueDate: "2026-05-03T09:00:00.000Z",
   createdAt: "2026-04-28T10:00:00.000Z",
@@ -200,6 +205,14 @@ function setupTodoMutation() {
   return { toggleTodo };
 }
 
+function renderGorevlerim() {
+  render(
+    <MemoryRouter>
+      <Gorevlerim />
+    </MemoryRouter>,
+  );
+}
+
 describe("Gorevlerim", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -217,7 +230,7 @@ describe("Gorevlerim", () => {
   it("shows loading state", () => {
     setupTasksState({ data: undefined, isLoading: true });
 
-    render(<Gorevlerim />);
+    renderGorevlerim();
 
     expect(screen.getByText("Görevler yükleniyor...")).toBeInTheDocument();
   });
@@ -229,7 +242,7 @@ describe("Gorevlerim", () => {
       isError: true,
     });
 
-    render(<Gorevlerim />);
+    renderGorevlerim();
 
     expect(screen.getByText("Görev servisi kullanılamıyor.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Tekrar Dene" })).toBeInTheDocument();
@@ -238,13 +251,13 @@ describe("Gorevlerim", () => {
   it("shows empty state", () => {
     setupTasksState({ data: emptyTasksResponse });
 
-    render(<Gorevlerim />);
+    renderGorevlerim();
 
     expect(screen.getByText("Atama kapsamınızda görev bulunmuyor.")).toBeInTheDocument();
   });
 
   it("renders assigned tasks from the API response", () => {
-    render(<Gorevlerim />);
+    renderGorevlerim();
 
     expect(screen.getByText("Landing page QA")).toBeInTheDocument();
     expect(screen.getAllByText("Acme E-ticaret").length).toBeGreaterThan(0);
@@ -255,13 +268,13 @@ describe("Gorevlerim", () => {
     expect(screen.getByText("Mobile QA")).toBeInTheDocument();
     expect(screen.getByText("1/2 tamamlandı")).toBeInTheDocument();
     expect(screen.getByText("%50")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Detay" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "Detay" }).length).toBeGreaterThan(0);
   });
 
   it("toggles an own task todo", async () => {
     const { toggleTodo } = setupTodoMutation();
 
-    render(<Gorevlerim />);
+    renderGorevlerim();
 
     fireEvent.click(screen.getByLabelText("Mobile QA durumunu değiştir"));
 
@@ -275,7 +288,7 @@ describe("Gorevlerim", () => {
   it("toggles a scoped team task todo", async () => {
     const { toggleTodo } = setupTodoMutation();
 
-    render(<Gorevlerim />);
+    renderGorevlerim();
 
     fireEvent.click(screen.getByLabelText("Workshop notes durumunu değiştir"));
 
@@ -287,7 +300,7 @@ describe("Gorevlerim", () => {
   });
 
   it("queries tasks without assignee filter and does not skip for authorized employees", () => {
-    render(<Gorevlerim />);
+    renderGorevlerim();
 
     expect(mockUseGetTasksQuery).toHaveBeenCalledWith(
       {},
@@ -301,7 +314,7 @@ describe("Gorevlerim", () => {
       permissions: [],
     };
 
-    render(<Gorevlerim />);
+    renderGorevlerim();
 
     expect(screen.getByText("Atanmış görevleri görüntüleme yetkiniz bulunmuyor."))
       .toBeInTheDocument();

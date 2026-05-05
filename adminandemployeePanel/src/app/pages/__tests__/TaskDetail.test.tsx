@@ -46,7 +46,11 @@ type TaskWithSensitiveFields = Task & {
 const mockUseGetTaskQuery = vi.fn<
   (id: string, options: QueryOptions) => TaskQueryResult
 >();
+const mockUseGetProjectRepositoryQuery = vi.fn();
+const mockUseGetRelatedTaskCommitsQuery = vi.fn();
 const mockUseCreateTaskTodoMutation = vi.fn<() => [TodoMutationTrigger, { isLoading: boolean }]>();
+const mockUseCreateTaskWorkNoteMutation = vi.fn();
+const mockUsePrepareTaskCodeMutation = vi.fn();
 const mockUseUpdateTaskTodoMutation = vi.fn<() => [TodoMutationTrigger, { isLoading: boolean }]>();
 const mockUseToggleTaskTodoMutation = vi.fn<() => [TodoMutationTrigger, { isLoading: boolean }]>();
 const mockUseDeleteTaskTodoMutation = vi.fn<() => [DeleteTodoTrigger, { isLoading: boolean }]>();
@@ -61,9 +65,18 @@ vi.mock("../../features/tasks/tasksApi", () => ({
   useGetTaskQuery: (id: string, options: QueryOptions) =>
     mockUseGetTaskQuery(id, options),
   useCreateTaskTodoMutation: () => mockUseCreateTaskTodoMutation(),
+  useCreateTaskWorkNoteMutation: () => mockUseCreateTaskWorkNoteMutation(),
+  usePrepareTaskCodeMutation: () => mockUsePrepareTaskCodeMutation(),
+  useGetRelatedTaskCommitsQuery: (query: unknown, options?: unknown) =>
+    mockUseGetRelatedTaskCommitsQuery(query, options),
   useUpdateTaskTodoMutation: () => mockUseUpdateTaskTodoMutation(),
   useToggleTaskTodoMutation: () => mockUseToggleTaskTodoMutation(),
   useDeleteTaskTodoMutation: () => mockUseDeleteTaskTodoMutation(),
+}));
+
+vi.mock("../../features/projects/projectsApi", () => ({
+  useGetProjectRepositoryQuery: (id: string, options?: QueryOptions) =>
+    mockUseGetProjectRepositoryQuery(id, options),
 }));
 
 const taskId = "11111111-1111-4111-8111-111111111111";
@@ -92,6 +105,17 @@ const taskManagerUser: AuthUserProfile = {
   permissions: ["tasks.read.any", "tasks.manage.any"],
 };
 
+const developerUser: AuthUserProfile = {
+  id: "developer-user-id",
+  email: "developer@socialtech.com",
+  displayName: "Developer User",
+  accountType: "EMPLOYEE",
+  role: "DEVELOPER",
+  status: "ACTIVE",
+  permissions: ["tasks.read.assigned", "integrations.github.read.assigned"],
+  clientProfile: null,
+};
+
 const taskDetail: TaskWithSensitiveFields = {
   id: taskId,
   projectId,
@@ -99,6 +123,8 @@ const taskDetail: TaskWithSensitiveFields = {
   description: "Growth Hub landing page regresyon kontrolleri.",
   status: "IN_PROGRESS",
   priority: "URGENT",
+  type: "QA",
+  workstream: "FRONTEND",
   assigneeUserId,
   dueDate: "2026-05-15T18:00:00.000Z",
   createdAt: "2026-04-01T09:00:00.000Z",
@@ -157,6 +183,8 @@ function setupQueryState(overrides: Partial<TaskQueryResult> = {}) {
     refetch: vi.fn(),
     ...overrides,
   });
+  mockUseGetProjectRepositoryQuery.mockReturnValue({ data: undefined });
+  mockUseGetRelatedTaskCommitsQuery.mockReturnValue({ data: [] });
 }
 
 function setupTodoMutations() {
@@ -164,13 +192,17 @@ function setupTodoMutations() {
   const updateTodo = vi.fn<TodoMutationTrigger>(() => ({ unwrap: async () => ({}) }));
   const toggleTodo = vi.fn<TodoMutationTrigger>(() => ({ unwrap: async () => ({}) }));
   const deleteTodo = vi.fn<DeleteTodoTrigger>(() => ({ unwrap: async () => ({}) }));
+  const createWorkNote = vi.fn(() => ({ unwrap: async () => ({}) }));
+  const prepareTaskCode = vi.fn(() => ({ unwrap: async () => ({}) }));
 
   mockUseCreateTaskTodoMutation.mockReturnValue([createTodo, { isLoading: false }]);
+  mockUseCreateTaskWorkNoteMutation.mockReturnValue([createWorkNote, { isLoading: false }]);
+  mockUsePrepareTaskCodeMutation.mockReturnValue([prepareTaskCode, { isLoading: false }]);
   mockUseUpdateTaskTodoMutation.mockReturnValue([updateTodo, { isLoading: false }]);
   mockUseToggleTaskTodoMutation.mockReturnValue([toggleTodo, { isLoading: false }]);
   mockUseDeleteTaskTodoMutation.mockReturnValue([deleteTodo, { isLoading: false }]);
 
-  return { createTodo, updateTodo, toggleTodo, deleteTodo };
+  return { createTodo, createWorkNote, prepareTaskCode, updateTodo, toggleTodo, deleteTodo };
 }
 
 function renderTaskDetail(id: string = taskId) {
@@ -257,6 +289,18 @@ describe("TaskDetail", () => {
     expect(screen.getByText(assigneeUserId)).toBeInTheDocument();
   });
 
+  it("allows assigned-scope employee users to read task detail", () => {
+    currentUser = developerUser;
+    setupQueryState({ data: taskDetail });
+
+    renderTaskDetail();
+
+    expect(screen.getByRole("heading", { name: "Landing page QA tamamla" })).toBeInTheDocument();
+    expect(mockUseGetTaskQuery).toHaveBeenCalledWith(taskId, {
+      skip: false,
+    });
+  });
+
   it("allows admins with manage permission to create, toggle, update, and delete todos", async () => {
     currentUser = taskManagerUser;
     const { createTodo, toggleTodo, updateTodo, deleteTodo } = setupTodoMutations();
@@ -322,5 +366,47 @@ describe("TaskDetail", () => {
     expect(document.body).not.toHaveTextContent(/reset-token-value/i);
     expect(document.body).not.toHaveTextContent(/api-secret-value/i);
     expect(document.body).not.toHaveTextContent(/Bearer sensitive-value/i);
+  });
+
+  it("renders local work note section and related commits when repository data is available", () => {
+    currentUser = developerUser;
+    setupQueryState({
+      data: {
+        ...taskDetail,
+        code: "WEB-204",
+      },
+    });
+    mockUseGetProjectRepositoryQuery.mockReturnValue({
+      data: {
+        id: "repo-id",
+        projectId,
+        provider: "GITHUB",
+        owner: "socialtech",
+        repo: "growth-hub",
+        repositoryUrl: "https://github.com/socialtech/growth-hub",
+        defaultBranch: "main",
+        isActive: true,
+        createdAt: "",
+        updatedAt: "",
+      },
+    });
+    mockUseGetRelatedTaskCommitsQuery.mockReturnValue({
+      data: [
+        {
+          sha: "abc123",
+          shortSha: "abc123",
+          message: "WEB-204 landing page QA fixes",
+          githubAuthorLogin: "denizdev",
+          committedAt: "2026-05-10T10:00:00.000Z",
+          htmlUrl: "https://github.com/socialtech/growth-hub/commit/abc123",
+        },
+      ],
+    });
+
+    renderTaskDetail();
+
+    expect(screen.getByText("Yapılanlar / Çalışma Notu")).toBeInTheDocument();
+    expect(screen.getByText("İlgili Commitler")).toBeInTheDocument();
+    expect(screen.getByText("WEB-204 landing page QA fixes")).toBeInTheDocument();
   });
 });

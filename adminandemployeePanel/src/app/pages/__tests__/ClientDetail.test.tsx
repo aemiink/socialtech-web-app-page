@@ -30,10 +30,14 @@ type ClientSummaryWithSensitiveFields = ClientSummaryResponse & {
 const mockUseGetClientSummaryQuery = vi.fn<
   (id: string, options: QueryOptions) => ClientSummaryQueryResult
 >();
+const mockUseGetAdminAssignmentsQuery = vi.fn();
 
 vi.mock("../../features/clients/clientsApi", () => ({
   useGetClientSummaryQuery: (id: string, options: QueryOptions) =>
     mockUseGetClientSummaryQuery(id, options),
+}));
+vi.mock("../../features/adminAssignments/adminAssignmentsApi", () => ({
+  useGetAdminAssignmentsQuery: (...args: unknown[]) => mockUseGetAdminAssignmentsQuery(...args),
 }));
 
 const clientProfileId = "11111111-1111-4111-8111-111111111111";
@@ -117,6 +121,11 @@ describe("ClientDetail", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setupSummaryState();
+    mockUseGetAdminAssignmentsQuery.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: false,
+    });
   });
 
   it("shows invalid UUID state and skips the summary query", () => {

@@ -30,16 +30,14 @@ type SidebarItem = {
 const roleMenus: Record<EmployeePanelRole, SidebarItem[]> = {
   "project-manager": [
     { path: "/employee/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { path: "/employee/gorevlerim", label: "Görevlerim", icon: CheckSquare },
     { path: "/employee/musterilerim", label: "Müşterilerim", icon: Users },
     { path: "/employee/projeler", label: "Projeler", icon: FolderKanban },
-    { path: "/employee/onaylar", label: "Onaylar", icon: ThumbsUp },
-    { path: "/employee/teslimatlar", label: "Teslimatlar", icon: Rocket },
-    { path: "/employee/toplantilar", label: "Toplantılar", icon: Calendar },
-    { path: "/employee/rapor-takibi", label: "Rapor Takibi", icon: FileText },
+    { path: "/employee/gorevlerim", label: "Görevler", icon: CheckSquare },
+    { path: "/employee/musterilerim", label: "Mesajlar / Soru-Cevap", icon: MessageSquare },
+    { path: "/employee/dosyalar", label: "Dosyalar", icon: Folder },
+    { path: "/employee/toplantilar", label: "Raporlar / Toplantılar", icon: Calendar },
     { path: "/employee/takvim", label: "Takvim", icon: Calendar },
     { path: "/employee/bildirimler", label: "Bildirimler", icon: Bell },
-    { path: "/employee/dosyalar", label: "Dosyalar", icon: Folder },
     { path: "/employee/ayarlar", label: "Ayarlar", icon: Settings },
   ],
   "performance-specialist": [

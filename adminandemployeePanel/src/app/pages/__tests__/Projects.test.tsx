@@ -487,6 +487,8 @@ describe("Projects", () => {
     expect(createProject.mock.calls[0][0]).toEqual({
       clientProfileId,
       serviceKey: "growth-hub",
+      repositoryUrl: null,
+      figmaProjectUrl: null,
       name: "Yeni Proje",
       description: "Kapsam notu",
       status: "PLANNED",
@@ -548,6 +550,8 @@ describe("Projects", () => {
         clientProfileId,
         name: "Updated Launch",
         description: "Launch kapsamı",
+        repositoryUrl: null,
+        figmaProjectUrl: null,
         status: "IN_PROGRESS",
         priority: "HIGH",
         startDate: "2026-05-01",

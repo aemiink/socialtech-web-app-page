@@ -1,24 +1,33 @@
 import { FormEvent, useState } from "react";
-import { Link, useParams } from "react-router";
-import { ArrowLeft, CheckSquare, Plus, Trash2 } from "lucide-react";
+import { Link, useLocation, useParams } from "react-router";
+import { ArrowLeft, CheckSquare, Github, Plus, Trash2 } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
 import { Progress } from "../components/ui/progress";
+import { Textarea } from "../components/ui/textarea";
 import { useAppSelector } from "../store/hooks";
 import {
   hasAdminPermission,
+  hasUserPermission,
   selectCurrentUser,
 } from "../features/auth/authSelectors";
 import {
+  useGetProjectRepositoryQuery,
+} from "../features/projects/projectsApi";
+import {
+  useCreateTaskWorkNoteMutation,
   useCreateTaskTodoMutation,
+  useGetRelatedTaskCommitsQuery,
   useDeleteTaskTodoMutation,
   useGetTaskQuery,
+  usePrepareTaskCodeMutation,
   useToggleTaskTodoMutation,
   useUpdateTaskTodoMutation,
 } from "../features/tasks/tasksApi";
+import type { Task } from "../features/tasks/tasksTypes";
 import {
   extractApiErrorMessage,
   formatDate,
@@ -26,6 +35,7 @@ import {
   getTaskCompletion,
   getTaskCompletionLabel,
   getTaskCompletionPercent,
+  getTaskWorkNotes,
   getTaskTodos,
   getPriorityBadgeClass,
   getPriorityLabel,
@@ -40,15 +50,24 @@ import {
 
 export function TaskDetail() {
   const { id } = useParams();
+  const location = useLocation();
   const currentUser = useAppSelector(selectCurrentUser);
-  const canReadTasks = hasAdminPermission(currentUser, [
+  const isEmployeeScope = location.pathname.startsWith("/employee/");
+  const listPath = isEmployeeScope ? "/employee/gorevlerim" : "/gorevler";
+  const canReadTasks = hasUserPermission(currentUser, [
     "tasks.read.any",
     "tasks.manage.any",
     "tasks.read",
+    "tasks.read.assigned",
   ]);
   const canManageTasks = hasAdminPermission(currentUser, [
     "tasks.manage.any",
     "tasks.manage",
+  ]);
+  const canReadRepository = hasUserPermission(currentUser, [
+    "integrations.github.read.any",
+    "integrations.github.manage.any",
+    "integrations.github.read.assigned",
   ]);
   const [newTodoTitle, setNewTodoTitle] = useState("");
   const [newTodoVisibility, setNewTodoVisibility] = useState<"INTERNAL" | "CLIENT_VISIBLE">(
@@ -57,6 +76,9 @@ export function TaskDetail() {
   const [editingTodoId, setEditingTodoId] = useState<string | null>(null);
   const [editingTodoTitle, setEditingTodoTitle] = useState("");
   const [todoActionError, setTodoActionError] = useState<string | null>(null);
+  const [workNoteDraft, setWorkNoteDraft] = useState("");
+  const [workNoteFeedback, setWorkNoteFeedback] = useState<string | null>(null);
+  const [prepareCodeFeedback, setPrepareCodeFeedback] = useState<string | null>(null);
 
   const isValidId = typeof id === "string" && isUuid(id);
 
@@ -70,7 +92,16 @@ export function TaskDetail() {
   } = useGetTaskQuery(id ?? "", {
     skip: !canReadTasks || !isValidId,
   });
+  const { data: repository } = useGetProjectRepositoryQuery(task?.projectId ?? "", {
+    skip: !canReadRepository || !task?.projectId,
+  });
+  const { data: relatedCommits } = useGetRelatedTaskCommitsQuery(
+    { taskId: task?.id ?? "" },
+    { skip: !canReadRepository || !repository || !task?.id },
+  );
   const [createTaskTodo, { isLoading: isCreatingTodo }] = useCreateTaskTodoMutation();
+  const [createTaskWorkNote, { isLoading: isCreatingWorkNote }] = useCreateTaskWorkNoteMutation();
+  const [prepareTaskCode, { isLoading: isPreparingCode }] = usePrepareTaskCodeMutation();
   const [updateTaskTodo, { isLoading: isUpdatingTodo }] = useUpdateTaskTodoMutation();
   const [toggleTaskTodo, { isLoading: isTogglingTodo }] = useToggleTaskTodoMutation();
   const [deleteTaskTodo, { isLoading: isDeletingTodo }] = useDeleteTaskTodoMutation();
@@ -86,7 +117,7 @@ export function TaskDetail() {
   if (!isValidId) {
     return (
       <div className="space-y-4">
-        <Link to="/gorevler">
+        <Link to={listPath}>
           <Button variant="outline" className="gap-2">
             <ArrowLeft className="h-4 w-4" />
             Görevlere Dön
@@ -110,7 +141,7 @@ export function TaskDetail() {
   if (isError) {
     return (
       <div className="space-y-4">
-        <Link to="/gorevler">
+        <Link to={listPath}>
           <Button variant="outline" className="gap-2">
             <ArrowLeft className="h-4 w-4" />
             Görevlere Dön
@@ -131,7 +162,7 @@ export function TaskDetail() {
   if (!task) {
     return (
       <div className="space-y-4">
-        <Link to="/gorevler">
+        <Link to={listPath}>
           <Button variant="outline" className="gap-2">
             <ArrowLeft className="h-4 w-4" />
             Görevlere Dön
@@ -149,6 +180,7 @@ export function TaskDetail() {
   const completion = getTaskCompletion(taskDetail);
   const completionPercent = getTaskCompletionPercent(taskDetail);
   const isTodoMutating = isCreatingTodo || isUpdatingTodo || isTogglingTodo || isDeletingTodo;
+  const savedWorkNotes = getTaskWorkNotes(taskDetail);
 
   async function handleCreateTodoSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -216,10 +248,48 @@ export function TaskDetail() {
     }
   }
 
+  async function saveWorkNoteDraft() {
+    const note = workNoteDraft.trim();
+    if (!note) {
+      setWorkNoteFeedback("Not girmeden kaydetme yapılamaz.");
+      return;
+    }
+    try {
+      setWorkNoteFeedback(null);
+      await createTaskWorkNote({
+        taskId: taskDetail.id,
+        body: { note },
+      }).unwrap();
+      setWorkNoteDraft("");
+      setWorkNoteFeedback("Çalışma notu göreve kaydedildi.");
+    } catch (error) {
+      setWorkNoteFeedback(extractApiErrorMessage(error, "Çalışma notu kaydedilemedi."));
+    }
+  }
+
+  async function handlePrepareCode() {
+    try {
+      setPrepareCodeFeedback(null);
+      const preparedTask = await prepareTaskCode({
+        taskId: taskDetail.id,
+        body: {
+          notes: workNoteDraft.trim() || undefined,
+        },
+      }).unwrap();
+      setPrepareCodeFeedback(
+        preparedTask.branchName
+          ? `Branch önerisi hazırlandı: ${preparedTask.branchName}`
+          : "Task kod hazırlığı tamamlandı.",
+      );
+    } catch (error) {
+      setPrepareCodeFeedback(extractApiErrorMessage(error, "Task kod hazırlığı yapılamadı."));
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-4">
-        <Link to="/gorevler">
+        <Link to={listPath}>
           <Button variant="outline" className="gap-2">
             <ArrowLeft className="h-4 w-4" />
             Görevlere Dön
@@ -413,6 +483,116 @@ export function TaskDetail() {
           </div>
         )}
       </Card>
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <Card className="border-white/[0.08] bg-[#1A1A1A] p-6">
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-white">Yapılanlar / Çalışma Notu</h2>
+              <p className="mt-1 text-sm text-[#A0A0A0]">
+                Geliştirici veya proje yöneticisi olarak göreve iş notu bırakabilirsiniz.
+              </p>
+            </div>
+            <Badge variant="outline" className="border-white/[0.12] text-[#A0A0A0]">
+              Internal
+            </Badge>
+          </div>
+
+          <Textarea
+            value={workNoteDraft}
+            onChange={(event) => {
+              setWorkNoteDraft(event.target.value);
+              setWorkNoteFeedback(null);
+            }}
+            className="min-h-32 border-white/[0.08] bg-[#202020]"
+            placeholder="Bug fix, test, deploy veya entegrasyon sırasında yapılanları yazın..."
+          />
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="text-xs text-[#A0A0A0]">
+              {task.code && <p>Task Kodu: <span className="font-mono text-white">{task.code}</span></p>}
+              {task.branchName && <p>Önerilen Branch: <span className="font-mono text-white">{task.branchName}</span></p>}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" onClick={() => void handlePrepareCode()} disabled={isPreparingCode}>
+                Kod Hazırlığı
+              </Button>
+              <Button type="button" variant="outline" onClick={() => void saveWorkNoteDraft()} disabled={isCreatingWorkNote}>
+                Notu Kaydet
+              </Button>
+            </div>
+          </div>
+          {workNoteFeedback && <p className="mt-3 text-sm text-[#d2ff8a]">{workNoteFeedback}</p>}
+          {prepareCodeFeedback && <p className="mt-2 text-sm text-[#8dd8ff]">{prepareCodeFeedback}</p>}
+
+          {savedWorkNotes.length > 0 && (
+            <div className="mt-5 space-y-3 border-t border-white/[0.06] pt-5">
+              {savedWorkNotes.map((note) => (
+                <div key={note.id} className="rounded-lg border border-white/[0.06] bg-[#202020] p-3">
+                  <p className="whitespace-pre-wrap text-sm text-[#E5E5E5]">{note.body}</p>
+                  <p className="mt-2 text-xs text-[#A0A0A0]">
+                    {note.authorName ?? "Ekip"} · {formatDateTime(note.createdAt ?? null)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        <Card className="border-white/[0.08] bg-[#1A1A1A] p-6">
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-white">İlgili Commitler</h2>
+              <p className="mt-1 text-sm text-[#A0A0A0]">
+                Task kodu ve başlığına göre eşleşen commitler
+              </p>
+            </div>
+            <Github className="h-4 w-4 text-[#d2ff8a]" />
+          </div>
+
+          {!canReadRepository && (
+            <p className="rounded-lg border border-white/[0.06] bg-[#202020] px-3 py-4 text-sm text-[#A0A0A0]">
+              GitHub görünürlük yetkisi olmayan kullanıcılar için commit listesi gizlidir.
+            </p>
+          )}
+
+          {canReadRepository && !repository && (
+            <p className="rounded-lg border border-white/[0.06] bg-[#202020] px-3 py-4 text-sm text-[#A0A0A0]">
+              Bu görevin bağlı olduğu projede repository bağlantısı bulunmuyor.
+            </p>
+          )}
+
+          {canReadRepository && repository && (relatedCommits?.length ?? 0) === 0 && (
+            <p className="rounded-lg border border-white/[0.06] bg-[#202020] px-3 py-4 text-sm text-[#A0A0A0]">
+              Bu görevle ilişkili commit bulunamadı. Eşleştirme task kodu ve başlığa göre yapılır.
+            </p>
+          )}
+
+          {canReadRepository && repository && (relatedCommits?.length ?? 0) > 0 && (
+            <div className="space-y-3">
+              {(relatedCommits ?? []).map((commit) => (
+                <a
+                  key={commit.sha}
+                  href={commit.htmlUrl ?? repository.repositoryUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block rounded-lg border border-white/[0.06] bg-[#202020] p-3 transition-colors hover:border-[#AAFF01]/30"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-medium text-white">{commit.message}</p>
+                    <Badge variant="outline" className="font-mono text-xs">
+                      {commit.shortSha}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-xs text-[#A0A0A0]">
+                    {commit.githubAuthorLogin ?? commit.authorName ?? "Bilinmeyen geliştirici"} ·{" "}
+                    {formatDateTime(commit.committedAt ?? null)}
+                  </p>
+                </a>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         <InfoCard label="Atanan" value={getTaskAssigneeName(task)} />

@@ -77,6 +77,8 @@ import { AksiyonPlani } from "./employee/pages/AksiyonPlani";
 import { CrmLeadlerim } from "./employee/pages/CrmLeadlerim";
 import { CrmLeadDetail as EmployeeCrmLeadDetail } from "./employee/pages/CrmLeadDetail";
 import { BugunkuTakipler } from "./employee/pages/BugunkuTakipler";
+import { ProjectManagerClientDetail } from "./employee/pages/ProjectManagerClientDetail";
+import { ProjectManagerServiceWorkspace } from "./employee/pages/ProjectManagerServiceWorkspace";
 
 function LoginRedirect() {
   return <Navigate to="/login" replace />;
@@ -100,6 +102,7 @@ export const router = createBrowserRouter([
       { path: "hizmetler/:id", Component: ServiceDetail },
       { path: "projeler", Component: Projects },
       { path: "projeler/:id", Component: ProjectDetail },
+      { path: "dosyalar", Component: Dosyalar },
       { path: "gorevler", Component: Tasks },
       { path: "gorevler/:id", Component: TaskDetail },
       { path: "onaylar", Component: Approvals },
@@ -131,12 +134,16 @@ export const router = createBrowserRouter([
       { path: "crm/leads/:id", Component: EmployeeCrmLeadDetail },
       { path: "crm/follow-ups", Component: BugunkuTakipler },
       { path: "gorevlerim", Component: Gorevlerim },
+      { path: "gorevlerim/:id", Component: TaskDetail },
       { path: "musterilerim", Component: Musterilerim },
+      { path: "project-manager/clients/:clientId", Component: ProjectManagerClientDetail },
+      { path: "project-manager/clients/:clientId/services/:serviceKey", Component: ProjectManagerServiceWorkspace },
       { path: "takvim", Component: Takvim },
       { path: "bildirimler", Component: Bildirimler },
       { path: "dosyalar", Component: Dosyalar },
       { path: "ayarlar", Component: Ayarlar },
       { path: "projeler", Component: EmployeeProjeler },
+      { path: "projeler/:id", Component: ProjectDetail },
       { path: "onaylar", Component: Onaylar },
       { path: "teslimatlar", Component: Teslimatlar },
       { path: "toplantilar", Component: Toplantilar },

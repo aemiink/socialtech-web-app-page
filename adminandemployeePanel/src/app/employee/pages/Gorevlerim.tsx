@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
+import { Link } from "react-router";
 import { Card } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
@@ -212,7 +213,9 @@ export function Gorevlerim() {
                       </Badge>
                     </td>
                     <td className="p-4">
-                      <Button type="button" size="sm" variant="outline">Detay</Button>
+                      <Button asChild type="button" size="sm" variant="outline">
+                        <Link to={`/employee/gorevlerim/${task.id}`}>Detay</Link>
+                      </Button>
                     </td>
                   </tr>
                 ))}

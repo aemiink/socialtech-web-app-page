@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Social Tech">
+  <rect width="64" height="64" rx="18" fill="#0f172a" />
+  <path
+    d="M18 20h28v8H30v6h14v8H30v12h-12z"
+    fill="#f8fafc"
+  />
+  <circle cx="46" cy="18" r="6" fill="#22c55e" />
+</svg>

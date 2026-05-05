@@ -14,6 +14,9 @@ import {
 } from "../../features/clients/clientsUtils";
 import { selectCurrentUser } from "../../features/auth/authSelectors";
 import { useAppSelector } from "../../store/hooks";
+import { Link } from "react-router";
+import { useGetProjectsQuery } from "../../features/projects/projectsApi";
+import { useGetTasksQuery } from "../../features/tasks/tasksApi";
 
 const ASSIGNED_CLIENTS_LIMIT = 100;
 
@@ -51,6 +54,10 @@ export function Musterilerim() {
   }
 
   const clients = clientsResponse?.data ?? [];
+  const { data: projectsResponse } = useGetProjectsQuery();
+  const { data: tasksResponse } = useGetTasksQuery();
+  const projects = projectsResponse?.data ?? [];
+  const tasks = tasksResponse?.data ?? [];
   const totalClients = clientsResponse?.meta.total ?? clients.length;
   const recentlyUpdatedCount = clients.filter((client) =>
     isWithinLastDays(client.updatedAt, 30),
@@ -121,51 +128,53 @@ export function Musterilerim() {
       )}
 
       {!isLoading && !isError && clients.length > 0 && (
-        <Card className="overflow-hidden border-white/[0.06] bg-[#1A1A1A]">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-[#202020]">
-                <tr>
-                  <th className="p-4 text-left text-sm font-medium text-[#A0A0A0]">Müşteri</th>
-                  <th className="p-4 text-left text-sm font-medium text-[#A0A0A0]">Portal Slug</th>
-                  <th className="p-4 text-left text-sm font-medium text-[#A0A0A0]">İletişim</th>
-                  <th className="p-4 text-left text-sm font-medium text-[#A0A0A0]">Durum</th>
-                  <th className="p-4 text-left text-sm font-medium text-[#A0A0A0]">Oluşturulma</th>
-                  <th className="p-4 text-left text-sm font-medium text-[#A0A0A0]">Güncelleme</th>
-                </tr>
-              </thead>
-              <tbody>
-                {clients.map((client) => (
-                  <tr
-                    key={client.id}
-                    className="border-t border-white/[0.06] transition-colors hover:bg-white/5"
-                  >
-                    <td className="p-4 font-medium text-white">{client.companyName}</td>
-                    <td className="p-4">
-                      <Badge variant="outline" className="font-mono text-xs">
-                        {client.slug}
-                      </Badge>
-                    </td>
-                    <td className="p-4 text-sm text-[#A0A0A0]">
-                      {client.contactEmail ?? "—"}
-                    </td>
-                    <td className="p-4">
-                      <Badge className={getClientStatusBadgeClass(client.status)}>
-                        {getClientStatusLabel(client.status)}
-                      </Badge>
-                    </td>
-                    <td className="p-4 text-sm text-[#A0A0A0]">
-                      {formatClientDate(client.createdAt)}
-                    </td>
-                    <td className="p-4 text-sm text-[#A0A0A0]">
-                      {formatClientDateTime(client.updatedAt)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          {clients.map((client) => {
+            const clientProjects = projects.filter((project) => project.clientProfileId === client.id);
+            const openTasks = tasks.filter(
+              (task) => task.project?.clientProfile?.id === client.id && task.status !== "DONE",
+            );
+            return (
+              <Card key={client.id} className="border-white/[0.06] bg-[#1A1A1A] p-5">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">{client.companyName}</h3>
+                    <p className="text-xs text-[#A0A0A0]">{client.contactEmail ?? "—"}</p>
+                  </div>
+                  <Badge className={getClientStatusBadgeClass(client.status)}>
+                    {getClientStatusLabel(client.status)}
+                  </Badge>
+                </div>
+                <div className="mb-3 flex flex-wrap gap-2">
+                  {(client.purchasedServices ?? []).map((service) => (
+                    <Badge key={`${client.id}-${service.serviceKey}`} variant="outline" className="text-xs">
+                      {service.serviceKey}
+                    </Badge>
+                  ))}
+                  {(client.purchasedServices ?? []).length === 0 ? (
+                    <span className="text-xs text-[#A0A0A0]">Satın alınan hizmet bulunmuyor</span>
+                  ) : null}
+                </div>
+                <div className="mb-4 grid grid-cols-2 gap-3 text-sm">
+                  <div className="rounded border border-white/[0.06] bg-white/5 p-2">
+                    <p className="text-[#A0A0A0]">Aktif Proje</p>
+                    <p className="text-white">{clientProjects.length}</p>
+                  </div>
+                  <div className="rounded border border-white/[0.06] bg-white/5 p-2">
+                    <p className="text-[#A0A0A0]">Açık Task</p>
+                    <p className="text-white">{openTasks.length}</p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-[#A0A0A0]">Güncelleme: {formatClientDateTime(client.updatedAt)}</p>
+                  <Button asChild size="sm" variant="outline">
+                    <Link to={`/employee/project-manager/clients/${client.id}`}>Müşteri Operasyonu</Link>
+                  </Button>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
       )}
     </div>
   );

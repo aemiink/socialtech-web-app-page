@@ -2,7 +2,7 @@ import { Outlet, Link, Navigate, useLocation, useNavigate } from "react-router";
 import {
   LayoutDashboard, Users, Briefcase, FolderKanban,
   CheckSquare, ThumbsUp, Megaphone, FileText,
-  BarChart3, Calendar, UserCheck, DollarSign,
+  BarChart3, Calendar, UserCheck, DollarSign, Folder,
   Zap, Settings, Search, Plus, Bell, LogOut, History, UserCog, PhoneCall
 } from "lucide-react";
 import { Input } from "./ui/input";
@@ -24,6 +24,7 @@ const menuItems = [
   { path: "/crm", label: "CRM", icon: PhoneCall },
   { path: "/hizmetler", label: "Hizmetler", icon: Briefcase },
   { path: "/projeler", label: "Projeler", icon: FolderKanban },
+  { path: "/dosyalar", label: "Dosyalar", icon: Folder },
   { path: "/gorevler", label: "Görevler", icon: CheckSquare },
   { path: "/onaylar", label: "Onaylar", icon: ThumbsUp },
   { path: "/kampanyalar", label: "Kampanyalar", icon: Megaphone },

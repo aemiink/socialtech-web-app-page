@@ -28,3 +28,14 @@ export function hasAdminPermission(
 
   return permissions.some((permission) => user.permissions.includes(permission));
 }
+
+export function hasUserPermission(
+  user: AuthUserProfile | null,
+  permissions: readonly string[],
+): boolean {
+  if (!user) {
+    return false;
+  }
+
+  return permissions.some((permission) => user.permissions.includes(permission));
+}

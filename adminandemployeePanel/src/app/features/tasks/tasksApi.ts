@@ -2,7 +2,10 @@ import { baseApi } from "../../services/baseApi";
 import type {
   CreateTaskRequest,
   CreateTaskTodoRequest,
+  CreateTaskWorkNoteRequest,
+  PrepareTaskCodeRequest,
   Task,
+  TaskGithubCommit,
   TaskTodoMutationResponse,
   TasksListQuery,
   TasksListResponse,
@@ -73,6 +76,42 @@ export const tasksApi = baseApi.injectEndpoints({
         ...(body.projectId ? [{ type: "Projects" as const, id: body.projectId }] : []),
       ],
     }),
+    getTaskWorkNotes: builder.query<Task["workNotes"], string>({
+      query: (taskId) => ({
+        url: `/tasks/${taskId}/work-notes`,
+        method: "GET",
+      }),
+    }),
+    createTaskWorkNote: builder.mutation<Task, { taskId: string; body: CreateTaskWorkNoteRequest }>({
+      query: ({ taskId, body }) => ({
+        url: `/tasks/${taskId}/work-notes`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeTaskResponse(response),
+      invalidatesTags: (_result, _error, { taskId }) => [
+        { type: "Tasks", id: taskId },
+        { type: "Tasks", id: TASKS_LIST_ID },
+      ],
+    }),
+    prepareTaskCode: builder.mutation<Task, { taskId: string; body: PrepareTaskCodeRequest }>({
+      query: ({ taskId, body }) => ({
+        url: `/tasks/${taskId}/code-preparation`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeTaskResponse(response),
+      invalidatesTags: (_result, _error, { taskId }) => [
+        { type: "Tasks", id: taskId },
+        { type: "Tasks", id: TASKS_LIST_ID },
+      ],
+    }),
+    getRelatedTaskCommits: builder.query<TaskGithubCommit[], { taskId: string }>({
+      query: ({ taskId }) => ({
+        url: `/tasks/${taskId}/related-commits`,
+        method: "GET",
+      }),
+    }),
     createTaskTodo: builder.mutation<
       TaskTodoMutationResponse,
       { taskId: string; body: CreateTaskTodoRequest }
@@ -125,6 +164,10 @@ export const {
   useLazyGetTaskQuery,
   useCreateTaskMutation,
   useUpdateTaskMutation,
+  useGetTaskWorkNotesQuery,
+  useCreateTaskWorkNoteMutation,
+  usePrepareTaskCodeMutation,
+  useGetRelatedTaskCommitsQuery,
   useCreateTaskTodoMutation,
   useUpdateTaskTodoMutation,
   useToggleTaskTodoMutation,
@@ -164,12 +207,32 @@ function serializeTasksListQuery(
     params.assigneeUserId = query.assigneeUserId.trim();
   }
 
+  if (query.sprintId !== undefined && query.sprintId.trim().length > 0) {
+    params.sprintId = query.sprintId.trim();
+  }
+
   if (query.status !== undefined) {
     params.status = query.status;
   }
 
   if (query.priority !== undefined) {
     params.priority = query.priority;
+  }
+
+  if (query.type !== undefined) {
+    params.type = query.type;
+  }
+
+  if (query.workstream !== undefined) {
+    params.workstream = query.workstream;
+  }
+
+  if (query.severity !== undefined) {
+    params.severity = query.severity;
+  }
+
+  if (query.environment !== undefined) {
+    params.environment = query.environment;
   }
 
   if (query.q !== undefined && query.q.trim().length > 0) {

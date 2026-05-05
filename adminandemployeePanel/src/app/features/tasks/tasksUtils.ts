@@ -15,9 +15,13 @@ import type {
   Task,
   TaskAssigneeSummary,
   TaskCompletion,
+  TaskEnvironment,
   TaskProjectSummary,
+  TaskSeverity,
   TaskTodo,
   TaskTodoVisibility,
+  TaskType,
+  TaskWorkstream,
   TasksListMeta,
   TasksListResponse,
   TaskStatus,
@@ -42,6 +46,28 @@ export const TASK_STATUS_OPTIONS: TaskStatus[] = [
   "DONE",
   "BLOCKED",
 ];
+export const TASK_TYPE_OPTIONS: TaskType[] = [
+  "FEATURE",
+  "BUG",
+  "REVISION",
+  "QA",
+  "DEPLOYMENT",
+  "MAINTENANCE",
+];
+export const TASK_WORKSTREAM_OPTIONS: TaskWorkstream[] = [
+  "FRONTEND",
+  "BACKEND",
+  "FULLSTACK",
+  "QA",
+  "DEVOPS",
+  "UI_INTEGRATION",
+];
+export const TASK_SEVERITY_OPTIONS: TaskSeverity[] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
+export const TASK_ENVIRONMENT_OPTIONS: TaskEnvironment[] = [
+  "DEVELOPMENT",
+  "STAGING",
+  "PRODUCTION",
+];
 
 const PROJECT_STATUS_OPTIONS: ProjectStatus[] = [
   "PLANNED",
@@ -57,6 +83,33 @@ const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   REVIEW: "İncelemede",
   DONE: "Tamamlandı",
   BLOCKED: "Bloke",
+};
+const TASK_TYPE_LABELS: Record<TaskType, string> = {
+  FEATURE: "Feature",
+  BUG: "Bug",
+  REVISION: "Revizyon",
+  QA: "QA",
+  DEPLOYMENT: "Deployment",
+  MAINTENANCE: "Bakım",
+};
+const TASK_WORKSTREAM_LABELS: Record<TaskWorkstream, string> = {
+  FRONTEND: "Frontend",
+  BACKEND: "Backend / API",
+  FULLSTACK: "Fullstack",
+  QA: "QA",
+  DEVOPS: "DevOps",
+  UI_INTEGRATION: "UI Integration",
+};
+const TASK_SEVERITY_LABELS: Record<TaskSeverity, string> = {
+  LOW: "Düşük",
+  MEDIUM: "Orta",
+  HIGH: "Yüksek",
+  CRITICAL: "Kritik",
+};
+const TASK_ENVIRONMENT_LABELS: Record<TaskEnvironment, string> = {
+  DEVELOPMENT: "Development",
+  STAGING: "Staging",
+  PRODUCTION: "Production",
 };
 
 export function normalizeTasksListResponse(response: unknown): TasksListResponse {
@@ -82,6 +135,22 @@ export function getTaskStatusLabel(status: TaskStatus): string {
   return TASK_STATUS_LABELS[status] ?? status;
 }
 
+export function getTaskTypeLabel(type: TaskType): string {
+  return TASK_TYPE_LABELS[type] ?? type;
+}
+
+export function getTaskWorkstreamLabel(workstream: TaskWorkstream): string {
+  return TASK_WORKSTREAM_LABELS[workstream] ?? workstream;
+}
+
+export function getTaskSeverityLabel(severity: TaskSeverity): string {
+  return TASK_SEVERITY_LABELS[severity] ?? severity;
+}
+
+export function getTaskEnvironmentLabel(environment: TaskEnvironment): string {
+  return TASK_ENVIRONMENT_LABELS[environment] ?? environment;
+}
+
 export function getTaskStatusBadgeClass(status: TaskStatus): string {
   if (status === "DONE") {
     return "bg-[#AAFF01] text-[#131313]";
@@ -97,6 +166,48 @@ export function getTaskStatusBadgeClass(status: TaskStatus): string {
 
   if (status === "BLOCKED") {
     return "bg-red-600 text-white";
+  }
+
+  return "border-white/[0.12] bg-white/[0.04] text-[#A0A0A0]";
+}
+
+export function getTaskTypeBadgeClass(type: TaskType): string {
+  if (type === "BUG") {
+    return "bg-red-600 text-white";
+  }
+  if (type === "DEPLOYMENT") {
+    return "border-cyan-400/40 bg-cyan-500/15 text-cyan-200";
+  }
+  if (type === "REVISION") {
+    return "border-orange-400/40 bg-orange-500/15 text-orange-200";
+  }
+
+  return "border-white/[0.12] bg-white/[0.04] text-[#E5E5E5]";
+}
+
+export function getTaskWorkstreamBadgeClass(workstream: TaskWorkstream): string {
+  if (workstream === "FRONTEND") {
+    return "border-blue-400/40 bg-blue-500/15 text-blue-200";
+  }
+  if (workstream === "BACKEND") {
+    return "border-emerald-400/40 bg-emerald-500/15 text-emerald-200";
+  }
+  if (workstream === "DEVOPS") {
+    return "border-cyan-400/40 bg-cyan-500/15 text-cyan-200";
+  }
+
+  return "border-white/[0.12] bg-white/[0.04] text-[#A0A0A0]";
+}
+
+export function getTaskSeverityBadgeClass(severity: TaskSeverity): string {
+  if (severity === "CRITICAL") {
+    return "bg-red-600 text-white";
+  }
+  if (severity === "HIGH") {
+    return "bg-orange-500 text-white";
+  }
+  if (severity === "MEDIUM") {
+    return "border-yellow-400/40 bg-yellow-500/15 text-yellow-200";
   }
 
   return "border-white/[0.12] bg-white/[0.04] text-[#A0A0A0]";
@@ -174,6 +285,10 @@ export function getTaskCompletionLabel(task: Task): string {
   return `${completion.completedTodos}/${completion.totalTodos} tamamlandı`;
 }
 
+export function getTaskWorkNotes(task: Task) {
+  return task.workNotes ?? [];
+}
+
 function normalizeListMeta(meta: unknown, dataLength: number): TasksListMeta {
   if (!isRecord(meta)) {
     return createFallbackMeta(dataLength);
@@ -212,6 +327,7 @@ function normalizeTask(value: unknown): Task | null {
 
   const hasTodos = "todos" in value;
   const todos = hasTodos ? normalizeTaskTodos(value.todos) : undefined;
+  const workNotes = "workNotes" in value ? normalizeTaskWorkNotes(value.workNotes) : undefined;
   const hasCompletion = "completion" in value;
   const completion = hasCompletion
     ? normalizeTaskCompletion(value.completion, todos ?? [])
@@ -222,6 +338,7 @@ function normalizeTask(value: unknown): Task | null {
   return {
     ...value,
     ...(todos ? { todos } : {}),
+    ...(workNotes ? { workNotes } : {}),
     ...(completion ? { completion } : {}),
   };
 }
@@ -234,19 +351,49 @@ function isTask(value: unknown): value is Task {
   return (
     typeof value.id === "string" &&
     typeof value.projectId === "string" &&
+    (typeof value.sprintId === "undefined" || isStringOrNull(value.sprintId)) &&
     typeof value.title === "string" &&
     isStringOrNull(value.description) &&
     isTaskStatus(value.status) &&
     isPriority(value.priority) &&
+    isTaskType(value.type) &&
+    isTaskWorkstream(value.workstream) &&
+    (value.severity === null || typeof value.severity === "undefined" || isTaskSeverity(value.severity)) &&
+    (value.environment === null || typeof value.environment === "undefined" || isTaskEnvironment(value.environment)) &&
+    (typeof value.affectedUrl === "undefined" || isStringOrNull(value.affectedUrl)) &&
+    (typeof value.reproductionSteps === "undefined" || isStringOrNull(value.reproductionSteps)) &&
+    (typeof value.reportedBy === "undefined" || isStringOrNull(value.reportedBy)) &&
+    (typeof value.code === "undefined" || isStringOrNull(value.code)) &&
+    (typeof value.branchName === "undefined" || isStringOrNull(value.branchName)) &&
+    (typeof value.codePreparationNotes === "undefined" || isStringOrNull(value.codePreparationNotes)) &&
+    (typeof value.codePreparedAt === "undefined" || isStringOrNull(value.codePreparedAt)) &&
     isStringOrNull(value.assigneeUserId) &&
     isStringOrNull(value.dueDate) &&
     typeof value.createdAt === "string" &&
     typeof value.updatedAt === "string" &&
     (value.project === null || isTaskProjectSummary(value.project)) &&
     (value.assignee === null || isTaskAssigneeSummary(value.assignee)) &&
+    (typeof value.sprint === "undefined" || value.sprint === null || isTaskSprintSummary(value.sprint)) &&
     (typeof value.todos === "undefined" || Array.isArray(value.todos)) &&
-    (typeof value.completion === "undefined" || isRecord(value.completion))
+    (typeof value.completion === "undefined" || isRecord(value.completion)) &&
+    (typeof value.workNotes === "undefined" || Array.isArray(value.workNotes))
   );
+}
+
+function isTaskType(value: unknown): value is TaskType {
+  return typeof value === "string" && TASK_TYPE_OPTIONS.includes(value as TaskType);
+}
+
+function isTaskWorkstream(value: unknown): value is TaskWorkstream {
+  return typeof value === "string" && TASK_WORKSTREAM_OPTIONS.includes(value as TaskWorkstream);
+}
+
+function isTaskSeverity(value: unknown): value is TaskSeverity {
+  return typeof value === "string" && TASK_SEVERITY_OPTIONS.includes(value as TaskSeverity);
+}
+
+function isTaskEnvironment(value: unknown): value is TaskEnvironment {
+  return typeof value === "string" && TASK_ENVIRONMENT_OPTIONS.includes(value as TaskEnvironment);
 }
 
 function normalizeTaskTodos(value: unknown): TaskTodo[] {
@@ -255,6 +402,44 @@ function normalizeTaskTodos(value: unknown): TaskTodo[] {
   }
 
   return value.map(normalizeTaskTodo).filter(isDefined);
+}
+
+function normalizeTaskWorkNotes(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((note) => {
+      if (!isRecord(note) || typeof note.id !== "string") {
+        return null;
+      }
+
+      const body =
+        typeof note.body === "string"
+          ? note.body
+          : typeof note.note === "string"
+            ? note.note
+            : null;
+      if (!body) {
+        return null;
+      }
+
+      const authorName =
+        isRecord(note.author) && typeof note.author.displayName === "string"
+          ? note.author.displayName
+          : typeof note.authorName === "string"
+            ? note.authorName
+            : null;
+
+      return {
+        id: note.id,
+        body,
+        createdAt: isStringOrNull(note.createdAt) ? note.createdAt : null,
+        authorName,
+      };
+    })
+    .filter(isDefined);
 }
 
 function normalizeTaskTodo(value: unknown): TaskTodo | null {
@@ -316,6 +501,21 @@ function isTaskAssigneeSummary(value: unknown): value is TaskAssigneeSummary {
     typeof value.id === "string" &&
     isStringOrNull(value.displayName) &&
     typeof value.role === "string"
+  );
+}
+
+function isTaskSprintSummary(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    typeof value.id === "string" &&
+    typeof value.projectId === "string" &&
+    typeof value.name === "string" &&
+    typeof value.status === "string" &&
+    typeof value.startDate === "string" &&
+    typeof value.endDate === "string"
   );
 }
 

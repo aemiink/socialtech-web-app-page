@@ -12,6 +12,7 @@ import {
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import { useGetAdminAssignmentsQuery } from "../features/adminAssignments/adminAssignmentsApi";
 import { useGetClientSummaryQuery } from "../features/clients/clientsApi";
 import type {
   ClientSummaryRecentProject,
@@ -48,6 +49,14 @@ export function ClientDetail() {
   } = useGetClientSummaryQuery(clientProfileId ?? "", {
     skip: !isValidId,
   });
+  const {
+    data: assignments = [],
+    isLoading: isAssignmentsLoading,
+    isError: isAssignmentsError,
+  } = useGetAdminAssignmentsQuery(
+    { clientProfileId: clientProfileId ?? "", isActive: true },
+    { skip: !isValidId },
+  );
 
   if (!isValidId) {
     return (
@@ -187,6 +196,33 @@ export function ClientDetail() {
         <RecentProjectsSection projects={projects.recent} />
         <RecentTasksSection tasks={tasks.recent} />
       </div>
+
+      <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
+        <h2 className="mb-4 text-lg font-semibold text-white">Atanan Çalışanlar</h2>
+        {isAssignmentsLoading ? <p className="text-sm text-[#A0A0A0]">Atamalar yükleniyor...</p> : null}
+        {isAssignmentsError ? (
+          <p className="text-sm text-[#A0A0A0]">Atamalar görüntülenemedi.</p>
+        ) : null}
+        {!isAssignmentsLoading && !isAssignmentsError && assignments.length === 0 ? (
+          <p className="text-sm text-[#A0A0A0]">Bu müşteriye aktif çalışan ataması bulunmuyor.</p>
+        ) : null}
+        <div className="space-y-2">
+          {assignments.map((assignment) => (
+            <div
+              key={assignment.id}
+              className="flex items-center justify-between rounded-lg border border-white/[0.06] bg-white/[0.03] p-3"
+            >
+              <div>
+                <p className="text-sm text-white">
+                  {assignment.employee.displayName?.trim() || assignment.employee.email}
+                </p>
+                <p className="text-xs text-[#A0A0A0]">{assignment.employee.email}</p>
+              </div>
+              <Badge variant="outline">{assignment.scope}</Badge>
+            </div>
+          ))}
+        </div>
+      </Card>
     </div>
   );
 }

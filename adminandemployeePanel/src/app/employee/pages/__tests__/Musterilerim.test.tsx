@@ -2,6 +2,7 @@
 /// <reference types="@testing-library/jest-dom" />
 
 import { render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthUserProfile } from "../../../features/auth/authTypes";
 import type {
@@ -27,6 +28,8 @@ type ClientsQueryResult = {
 const mockUseGetClientsQuery = vi.fn<
   (query: ClientsListQuery, options?: QueryOptions) => ClientsQueryResult
 >();
+const mockUseGetProjectsQuery = vi.fn();
+const mockUseGetTasksQuery = vi.fn();
 
 let currentUser: AuthUserProfile | null = null;
 
@@ -37,6 +40,12 @@ vi.mock("../../../store/hooks", () => ({
 vi.mock("../../../features/clients/clientsApi", () => ({
   useGetClientsQuery: (query: ClientsListQuery, options?: QueryOptions) =>
     mockUseGetClientsQuery(query, options),
+}));
+vi.mock("../../../features/projects/projectsApi", () => ({
+  useGetProjectsQuery: (...args: unknown[]) => mockUseGetProjectsQuery(...args),
+}));
+vi.mock("../../../features/tasks/tasksApi", () => ({
+  useGetTasksQuery: (...args: unknown[]) => mockUseGetTasksQuery(...args),
 }));
 
 const employeeUser: AuthUserProfile = {
@@ -89,10 +98,16 @@ describe("Musterilerim", () => {
     vi.clearAllMocks();
     currentUser = employeeUser;
     setupClientsState();
+    mockUseGetProjectsQuery.mockReturnValue({ data: { data: [] } });
+    mockUseGetTasksQuery.mockReturnValue({ data: { data: [] } });
   });
 
   it("queries assigned active clients through the clients API", () => {
-    render(<Musterilerim />);
+    render(
+      <MemoryRouter>
+        <Musterilerim />
+      </MemoryRouter>,
+    );
 
     expect(mockUseGetClientsQuery).toHaveBeenCalledWith(
       {
@@ -109,7 +124,11 @@ describe("Musterilerim", () => {
 
   it("shows loading, error, and empty states", () => {
     setupClientsState({ data: undefined, isLoading: true });
-    const { rerender } = render(<Musterilerim />);
+    const { rerender } = render(
+      <MemoryRouter>
+        <Musterilerim />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByText("Müşteriler yükleniyor...")).toBeInTheDocument();
 
@@ -118,7 +137,11 @@ describe("Musterilerim", () => {
       error: { status: 500, data: { message: "Müşteri servisi kullanılamıyor." } },
       isError: true,
     });
-    rerender(<Musterilerim />);
+    rerender(
+      <MemoryRouter>
+        <Musterilerim />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByText("Müşteri servisi kullanılamıyor.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Tekrar Dene" })).toBeInTheDocument();
@@ -133,7 +156,11 @@ describe("Musterilerim", () => {
         },
       },
     });
-    rerender(<Musterilerim />);
+    rerender(
+      <MemoryRouter>
+        <Musterilerim />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByText("Henüz atanmış aktif müşteri bulunmuyor.")).toBeInTheDocument();
   });
@@ -144,7 +171,11 @@ describe("Musterilerim", () => {
       permissions: [],
     };
 
-    render(<Musterilerim />);
+    render(
+      <MemoryRouter>
+        <Musterilerim />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByText("Atanmış müşteri listesini görüntüleme yetkiniz bulunmuyor."))
       .toBeInTheDocument();

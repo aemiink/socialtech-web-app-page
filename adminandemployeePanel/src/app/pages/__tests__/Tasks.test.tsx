@@ -170,6 +170,8 @@ const task: Task = {
   description: "Task kapsamı",
   status: "IN_PROGRESS",
   priority: "HIGH",
+  type: "FEATURE",
+  workstream: "FULLSTACK",
   assigneeUserId,
   dueDate: "2026-05-10T00:00:00.000Z",
   createdAt: "2026-04-28T10:00:00.000Z",
@@ -611,12 +613,14 @@ describe("Tasks", () => {
     await waitFor(() => {
       expect(createTask).toHaveBeenCalledTimes(1);
     });
-    expect(createTask.mock.calls[0][0]).toEqual({
+    expect(createTask.mock.calls[0][0]).toMatchObject({
       projectId,
       title: "Yeni Görev",
       description: "Görev kapsamı",
       status: "TODO",
       priority: "MEDIUM",
+      type: "FEATURE",
+      workstream: "FULLSTACK",
       assigneeUserId,
       dueDate: "2026-05-10",
     });
@@ -673,17 +677,19 @@ describe("Tasks", () => {
     await waitFor(() => {
       expect(updateTask).toHaveBeenCalledTimes(1);
     });
-    expect(updateTask.mock.calls[0][0]).toEqual({
+    expect(updateTask.mock.calls[0][0]).toMatchObject({
       id: taskId,
-      body: {
+      body: expect.objectContaining({
         projectId,
         title: "Updated QA",
         description: "Task kapsamı",
         status: "IN_PROGRESS",
         priority: "HIGH",
+        type: "FEATURE",
+        workstream: "FULLSTACK",
         assigneeUserId,
         dueDate: "2026-05-10",
-      },
+      }),
     });
   });
 

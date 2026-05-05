@@ -53,21 +53,33 @@ import {
 import type {
   CreateTaskRequest,
   Task,
+  TaskEnvironment,
+  TaskSeverity,
   TasksListQuery,
   TaskStatus,
+  TaskType,
+  TaskWorkstream,
 } from "../features/tasks/tasksTypes";
 import {
+  TASK_ENVIRONMENT_OPTIONS,
   TASK_STATUS_OPTIONS,
+  TASK_SEVERITY_OPTIONS,
+  TASK_TYPE_OPTIONS,
+  TASK_WORKSTREAM_OPTIONS,
   extractApiErrorMessage,
   formatDate,
   formatDateInput,
   getPriorityBadgeClass,
+  getTaskEnvironmentLabel,
+  getTaskSeverityLabel,
   getPriorityLabel,
   getTaskAssigneeName,
   getTaskClientName,
   getTaskDueLabel,
   getTaskStatusBadgeClass,
   getTaskStatusLabel,
+  getTaskTypeLabel,
+  getTaskWorkstreamLabel,
   isTaskOverdue,
   shortId,
   toNullableText,
@@ -83,6 +95,14 @@ type TaskFormState = {
   description: string;
   status: TaskStatus;
   priority: Priority;
+  type: TaskType;
+  workstream: TaskWorkstream;
+  severity: TaskSeverity | "NONE";
+  environment: TaskEnvironment | "NONE";
+  affectedUrl: string;
+  reproductionSteps: string;
+  reportedBy: string;
+  code: string;
   assigneeUserId: string;
   dueDate: string;
 };
@@ -96,6 +116,14 @@ const initialTaskForm: TaskFormState = {
   description: "",
   status: "TODO",
   priority: "MEDIUM",
+  type: "FEATURE",
+  workstream: "FULLSTACK",
+  severity: "NONE",
+  environment: "NONE",
+  affectedUrl: "",
+  reproductionSteps: "",
+  reportedBy: "",
+  code: "",
   assigneeUserId: "",
   dueDate: "",
 };
@@ -443,6 +471,7 @@ export function Tasks() {
               <TableHead className="px-4 py-3 text-[#A0A0A0]">Müşteri</TableHead>
               <TableHead className="px-4 py-3 text-[#A0A0A0]">Proje</TableHead>
               <TableHead className="px-4 py-3 text-[#A0A0A0]">Atanan</TableHead>
+              <TableHead className="px-4 py-3 text-[#A0A0A0]">Taksonomi</TableHead>
               <TableHead className="px-4 py-3 text-[#A0A0A0]">Öncelik</TableHead>
               <TableHead className="px-4 py-3 text-[#A0A0A0]">Deadline</TableHead>
               <TableHead className="px-4 py-3 text-[#A0A0A0]">Durum</TableHead>
@@ -452,7 +481,7 @@ export function Tasks() {
           <TableBody>
             {isLoading && (
               <TableRow className="border-white/[0.06]">
-                <TableCell colSpan={8} className="px-4 py-8 text-center text-[#A0A0A0]">
+                <TableCell colSpan={9} className="px-4 py-8 text-center text-[#A0A0A0]">
                   Görevler yükleniyor...
                 </TableCell>
               </TableRow>
@@ -460,7 +489,7 @@ export function Tasks() {
 
             {isListError && !isLoading && (
               <TableRow className="border-white/[0.06]">
-                <TableCell colSpan={8} className="px-4 py-8 text-center text-red-300">
+                <TableCell colSpan={9} className="px-4 py-8 text-center text-red-300">
                   {extractApiErrorMessage(listError, "Görev listesi alınamadı. Lütfen tekrar deneyin.")}
                   <div className="mt-3">
                     <Button type="button" variant="outline" onClick={() => refetch()}>
@@ -473,7 +502,7 @@ export function Tasks() {
 
             {!isLoading && !isListError && tasks.length === 0 && (
               <TableRow className="border-white/[0.06]">
-                <TableCell colSpan={8} className="px-4 py-8 text-center text-[#A0A0A0]">
+                <TableCell colSpan={9} className="px-4 py-8 text-center text-[#A0A0A0]">
                   Filtrelere uygun görev bulunamadı.
                 </TableCell>
               </TableRow>
@@ -494,6 +523,12 @@ export function Tasks() {
                     {task.project?.name ?? shortId(task.projectId)}
                   </TableCell>
                   <TableCell className="px-4 py-3 text-sm text-white">{getTaskAssigneeName(task)}</TableCell>
+                  <TableCell className="px-4 py-3">
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="outline">{getTaskTypeLabel(task.type)}</Badge>
+                      <Badge variant="outline">{getTaskWorkstreamLabel(task.workstream)}</Badge>
+                    </div>
+                  </TableCell>
                   <TableCell className="px-4 py-3">
                     <Badge className={getPriorityBadgeClass(task.priority)}>
                       {getPriorityLabel(task.priority)}
@@ -758,6 +793,132 @@ function TaskFormFields({
             </SelectContent>
           </Select>
         </div>
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="space-y-2">
+          <Label>Task Type</Label>
+          <Select
+            value={form.type}
+            onValueChange={(value: TaskType) => onChange("type", value)}
+            disabled={disabled}
+          >
+            <SelectTrigger className="border-white/[0.08] bg-[#202020]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {TASK_TYPE_OPTIONS.map((type) => (
+                <SelectItem key={type} value={type}>
+                  {getTaskTypeLabel(type)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Workstream</Label>
+          <Select
+            value={form.workstream}
+            onValueChange={(value: TaskWorkstream) => onChange("workstream", value)}
+            disabled={disabled}
+          >
+            <SelectTrigger className="border-white/[0.08] bg-[#202020]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {TASK_WORKSTREAM_OPTIONS.map((workstream) => (
+                <SelectItem key={workstream} value={workstream}>
+                  {getTaskWorkstreamLabel(workstream)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Severity</Label>
+          <Select
+            value={form.severity}
+            onValueChange={(value: TaskSeverity | "NONE") => onChange("severity", value)}
+            disabled={disabled}
+          >
+            <SelectTrigger className="border-white/[0.08] bg-[#202020]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="NONE">Yok</SelectItem>
+              {TASK_SEVERITY_OPTIONS.map((severity) => (
+                <SelectItem key={severity} value={severity}>
+                  {getTaskSeverityLabel(severity)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Environment</Label>
+          <Select
+            value={form.environment}
+            onValueChange={(value: TaskEnvironment | "NONE") => onChange("environment", value)}
+            disabled={disabled}
+          >
+            <SelectTrigger className="border-white/[0.08] bg-[#202020]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="NONE">Yok</SelectItem>
+              {TASK_ENVIRONMENT_OPTIONS.map((environment) => (
+                <SelectItem key={environment} value={environment}>
+                  {getTaskEnvironmentLabel(environment)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor={`${idPrefix}-code`}>Task Code</Label>
+          <Input
+            id={`${idPrefix}-code`}
+            value={form.code}
+            onChange={(event) => onChange("code", event.target.value)}
+            className="border-white/[0.08] bg-[#202020]"
+            placeholder="DEV-101"
+            disabled={disabled}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${idPrefix}-reported-by`}>Reported By</Label>
+          <Input
+            id={`${idPrefix}-reported-by`}
+            value={form.reportedBy}
+            onChange={(event) => onChange("reportedBy", event.target.value)}
+            className="border-white/[0.08] bg-[#202020]"
+            placeholder="QA ekibi"
+            disabled={disabled}
+          />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor={`${idPrefix}-affected-url`}>Affected URL</Label>
+        <Input
+          id={`${idPrefix}-affected-url`}
+          value={form.affectedUrl}
+          onChange={(event) => onChange("affectedUrl", event.target.value)}
+          className="border-white/[0.08] bg-[#202020]"
+          placeholder="https://example.com/checkout"
+          disabled={disabled}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor={`${idPrefix}-reproduction`}>Reproduction Steps</Label>
+        <Textarea
+          id={`${idPrefix}-reproduction`}
+          value={form.reproductionSteps}
+          onChange={(event) => onChange("reproductionSteps", event.target.value)}
+          className="min-h-20 border-white/[0.08] bg-[#202020]"
+          placeholder="Hata adımları veya revizyon notları"
+          disabled={disabled}
+        />
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
@@ -1046,6 +1207,14 @@ function buildTaskPayload(form: TaskFormState): CreateTaskRequest {
     description: toNullableText(form.description),
     status: form.status,
     priority: form.priority,
+    type: form.type,
+    workstream: form.workstream,
+    severity: form.severity === "NONE" ? null : form.severity,
+    environment: form.environment === "NONE" ? null : form.environment,
+    affectedUrl: toNullableText(form.affectedUrl),
+    reproductionSteps: toNullableText(form.reproductionSteps),
+    reportedBy: toNullableText(form.reportedBy),
+    code: toNullableText(form.code),
     assigneeUserId: toNullableText(form.assigneeUserId),
     dueDate: form.dueDate || null,
   };
@@ -1058,6 +1227,14 @@ function taskToForm(task: Task): TaskFormState {
     description: task.description ?? "",
     status: task.status,
     priority: task.priority,
+    type: task.type,
+    workstream: task.workstream,
+    severity: task.severity ?? "NONE",
+    environment: task.environment ?? "NONE",
+    affectedUrl: task.affectedUrl ?? "",
+    reproductionSteps: task.reproductionSteps ?? "",
+    reportedBy: task.reportedBy ?? "",
+    code: task.code ?? "",
     assigneeUserId: task.assigneeUserId ?? "",
     dueDate: formatDateInput(task.dueDate),
   };

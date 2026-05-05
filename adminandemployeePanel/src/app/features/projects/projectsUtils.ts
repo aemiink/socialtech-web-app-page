@@ -126,6 +126,10 @@ export function getProjectServiceLabel(project: Project): string {
   return getServiceLabel(project.serviceKey);
 }
 
+export function projectRequiresRepository(project: Pick<Project, "serviceKey">): boolean {
+  return project.serviceKey === "web-app" || project.serviceKey === "mobile-app";
+}
+
 export function formatDate(value: string | null): string {
   if (!value) {
     return "—";
@@ -236,6 +240,8 @@ function normalizeProject(value: unknown): Project | null {
     typeof value.id !== "string" ||
     typeof value.clientProfileId !== "string" ||
     serviceKey === undefined ||
+    (typeof value.figmaProjectUrl !== "undefined" && !isStringOrNull(value.figmaProjectUrl)) ||
+    (typeof value.repositoryUrl !== "undefined" && !isStringOrNull(value.repositoryUrl)) ||
     typeof value.name !== "string" ||
     typeof value.slug !== "string" ||
     !isStringOrNull(value.description) ||
@@ -254,6 +260,8 @@ function normalizeProject(value: unknown): Project | null {
     id: value.id,
     clientProfileId: value.clientProfileId,
     serviceKey,
+    figmaProjectUrl: typeof value.figmaProjectUrl === "undefined" ? undefined : value.figmaProjectUrl,
+    repositoryUrl: typeof value.repositoryUrl === "undefined" ? undefined : value.repositoryUrl,
     name: value.name,
     slug: value.slug,
     description: value.description,
