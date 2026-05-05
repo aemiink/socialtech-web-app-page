@@ -36,6 +36,7 @@ import {
 } from "./features/auth/roleMapping";
 import { getActivePurchasedServiceIds, normalizeServiceId } from "./features/auth/authNormalizers";
 import type { AuthUserProfile } from "./features/auth/authTypes";
+import { useGetClientProjectsQuery } from "./features/projects/projectsApi";
 
 const SELECTED_SERVICE_STORAGE_KEY = "socialtech-client-selected-service";
 const CURRENT_PAGE_STORAGE_KEY = "socialtech-client-current-page";
@@ -65,6 +66,7 @@ export function ClientPortalApp() {
   const [login] = useLoginMutation();
   const [logout] = useLogoutMutation();
   const [selectedService, setSelectedService] = useState<ServiceId | null>(() => readStoredService());
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [currentPage, setCurrentPage] = useState(() => readStoredPage());
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const activePurchasedServiceIds = useMemo(
@@ -75,6 +77,20 @@ export function ClientPortalApp() {
     () => new Set<ServiceId>(activePurchasedServiceIds),
     [activePurchasedServiceIds],
   );
+  const { data: clientProjects = [] } = useGetClientProjectsQuery(undefined, {
+    skip: !isAuthenticated,
+  });
+  const scopedProjects = useMemo(() => {
+    if (!selectedService) {
+      return [];
+    }
+
+    return clientProjects.filter((project) => {
+      const normalizedService = normalizeServiceId(project.serviceKey);
+      return normalizedService ? normalizedService === selectedService : true;
+    });
+  }, [clientProjects, selectedService]);
+  const activeProjectId = selectedProjectId || scopedProjects[0]?.id || null;
 
   useEffect(() => {
     if (!isAuthenticated || !currentUser || isSupportedClientPortalUser(currentUser)) {
@@ -109,6 +125,19 @@ export function ClientPortalApp() {
     setCurrentPage(DEFAULT_PAGE);
     clearPortalSelectionStorage();
   }, [activePurchasedServiceSet, currentUser, isAuthenticated, selectedService]);
+
+  useEffect(() => {
+    if (!selectedService) {
+      setSelectedProjectId("");
+      return;
+    }
+
+    if (selectedProjectId && scopedProjects.some((project) => project.id === selectedProjectId)) {
+      return;
+    }
+
+    setSelectedProjectId(scopedProjects[0]?.id ?? "");
+  }, [scopedProjects, selectedProjectId, selectedService]);
 
   const handleLogin = async (email: string, password: string) => {
     try {
@@ -185,8 +214,8 @@ export function ClientPortalApp() {
   };
 
   const renderContent = () => {
-    if (currentPage === "reports") return <ReportsPage />;
-    if (currentPage === "meetings") return <MeetingsPage />;
+    if (currentPage === "reports") return <ReportsPage projectId={activeProjectId} />;
+    if (currentPage === "meetings") return <MeetingsPage projectId={activeProjectId} />;
     if (currentPage === "billing") return <BillingPage />;
     if (currentPage === "settings") return <SettingsPage />;
 
@@ -207,7 +236,7 @@ export function ClientPortalApp() {
         case "amazon-ads":
           return <AmazonAdsDashboard />;
         case "web-app":
-          return <WebAppDashboard />;
+          return <WebAppDashboard projectId={activeProjectId} />;
         case "mobile-app":
           return <MobileAppDashboard />;
         case "landing-pages":
@@ -223,7 +252,13 @@ export function ClientPortalApp() {
       }
     }
 
-    return <ServiceTabPage serviceId={selectedService || "growth-hub"} tabId={currentPage} />;
+    return (
+      <ServiceTabPage
+        serviceId={selectedService || "growth-hub"}
+        tabId={currentPage}
+        projectId={activeProjectId}
+      />
+    );
   };
 
   if (!isAuthenticated || !currentUser || !isSupportedClientPortalUser(currentUser)) {
@@ -274,6 +309,24 @@ export function ClientPortalApp() {
           onLogout={handleLogout}
         />
         <main className="flex-1 overflow-y-auto">
+          {selectedService === "web-app" && scopedProjects.length > 1 ? (
+            <div className="px-8 pt-6">
+              <div className="rounded-xl border border-white/[0.08] bg-[#1A1A1A] px-4 py-3">
+                <label className="mb-2 block text-xs text-[#A0A0A0]">Proje Seçimi</label>
+                <select
+                  className="w-full rounded-lg border border-white/[0.12] bg-[#202020] px-3 py-2 text-sm text-white"
+                  value={activeProjectId ?? ""}
+                  onChange={(event) => setSelectedProjectId(event.target.value)}
+                >
+                  {scopedProjects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ) : null}
           {renderContent()}
           {shouldShowClientTasksSection ? <ClientVisibleTasksSection selectedService={selectedService} /> : null}
         </main>

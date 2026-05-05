@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   AlertCircle,
@@ -35,11 +35,23 @@ import {
 } from 'lucide-react';
 import { Button } from '../components/button';
 import { getServiceTabContent, ServiceTabContent } from '../data/service-pages';
+import { useGetClientProjectFilesQuery } from '../features/projectFiles/projectFilesApi';
+import { useGetClientTasksQuery } from '../features/tasks/tasksApi';
+import {
+  webAppWorkspaceApi,
+  useCreateWebAppWorkspaceMessageMutation,
+  useGetWebAppWorkspaceQuery,
+} from '../features/webAppWorkspace/webAppWorkspaceApi';
+import type { WorkspaceMessage, WorkspaceRevision, WorkspaceTabKey } from '../features/webAppWorkspace/webAppWorkspaceTypes';
+import { createWorkspaceSocket, type WorkspaceUpdateEvent } from '../features/webAppWorkspace/workspaceSocket';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { selectAccessToken } from '../features/auth/authSelectors';
 import { runClientAction } from '../lib/client-actions';
 
 interface ServiceTabPageProps {
   serviceId: string;
   tabId: string;
+  projectId?: string | null;
 }
 
 type ViewKind =
@@ -70,18 +82,245 @@ const statusTone = {
 const cardClass = 'bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]';
 const innerClass = 'bg-[#202020] rounded-xl p-4 border border-white/[0.08]';
 
-export function ServiceTabPage({ serviceId, tabId }: ServiceTabPageProps) {
-  const content = getServiceTabContent(serviceId, tabId);
+export function ServiceTabPage({ serviceId, tabId, projectId }: ServiceTabPageProps) {
+  const dispatch = useAppDispatch();
+  const accessToken = useAppSelector(selectAccessToken);
+  const isWebAppService = serviceId === "web-app";
+  const workspaceTabKey = mapTabIdToWorkspaceTabKey(tabId);
   const viewKind = getViewKind(serviceId, tabId);
+  const shouldUseWorkspace = isWebAppService && Boolean(projectId);
+  const { data: workspaceData, isLoading: workspaceLoading } = useGetWebAppWorkspaceQuery(
+    { projectId: projectId ?? '', tabKey: workspaceTabKey },
+    { skip: !shouldUseWorkspace },
+  );
+  const [createWorkspaceMessage, { isLoading: isSendingWorkspaceMessage }] = useCreateWebAppWorkspaceMessageMutation();
+  const lastWorkspaceSequenceRef = useRef(0);
+
+  const handleWorkspaceMessageSend = async (message: string, parentMessageId?: string) => {
+    if (!projectId || !message.trim()) {
+      return;
+    }
+
+    await createWorkspaceMessage({
+      projectId,
+      tabKey: workspaceTabKey,
+      body: message.trim(),
+      parentMessageId,
+    }).unwrap();
+  };
+
+  useEffect(() => {
+    if (!shouldUseWorkspace || !projectId || !accessToken) {
+      return;
+    }
+
+    const socket = createWorkspaceSocket(accessToken);
+    const joinPayload = { projectId, tabKey: workspaceTabKey };
+
+    socket.emit('project:join', joinPayload);
+    const onWorkspaceUpdate = (event: WorkspaceUpdateEvent) => {
+      if (event.projectId !== projectId) {
+        return;
+      }
+      if (event.sequence <= lastWorkspaceSequenceRef.current) {
+        return;
+      }
+      lastWorkspaceSequenceRef.current = event.sequence;
+      const payload = event.payload ?? {};
+      const revision = (payload.revision ?? null) as WorkspaceRevision | null;
+      const message = (payload.message ?? null) as WorkspaceMessage | null;
+
+      if (event.event === 'message.created' && message) {
+        dispatch(
+          webAppWorkspaceApi.util.updateQueryData('getWebAppWorkspace', { projectId, tabKey: workspaceTabKey }, (draft) => {
+            const exists = draft.messages?.some((item) => item.id === message.id);
+            if (!exists) {
+              draft.messages = [message, ...(draft.messages ?? [])];
+            }
+          }),
+        );
+        return;
+      }
+
+      if (event.event === 'revision.created' && revision) {
+        dispatch(
+          webAppWorkspaceApi.util.updateQueryData('getWebAppWorkspace', { projectId, tabKey: workspaceTabKey }, (draft) => {
+            const exists = draft.revisions?.some((item) => item.id === revision.id);
+            if (!exists) {
+              draft.revisions = [revision, ...(draft.revisions ?? [])];
+            }
+          }),
+        );
+        return;
+      }
+
+      if (event.event === 'revision.updated' && revision) {
+        dispatch(
+          webAppWorkspaceApi.util.updateQueryData('getWebAppWorkspace', { projectId, tabKey: workspaceTabKey }, (draft) => {
+            const target = draft.revisions?.find((item) => item.id === revision.id);
+            if (target) {
+              Object.assign(target, revision);
+            }
+          }),
+        );
+      }
+    };
+
+    socket.on('workspace:update', onWorkspaceUpdate);
+
+    return () => {
+      socket.emit('project:leave', joinPayload);
+      socket.off('workspace:update', onWorkspaceUpdate);
+      socket.disconnect();
+    };
+  }, [accessToken, dispatch, projectId, shouldUseWorkspace, workspaceTabKey]);
+
+  if (isWebAppService) {
+    return (
+      <WebAppWorkspaceTab
+        tabId={tabId}
+        projectId={projectId}
+        workspaceLoading={workspaceLoading}
+        sections={workspaceData?.sections ?? []}
+        messages={workspaceData?.messages ?? []}
+        revisions={workspaceData?.revisions ?? []}
+        isSendingWorkspaceMessage={isSendingWorkspaceMessage}
+        onSendMessage={handleWorkspaceMessageSend}
+      />
+    );
+  }
+
+  const content = getServiceTabContent(serviceId, tabId);
 
   return (
     <div className="p-8 space-y-6">
       <PageHero content={content} tabId={tabId} />
       <SmartKpis content={content} tabId={tabId} />
-      {renderWorkspace(viewKind, content, serviceId, tabId)}
+      {renderWorkspace(viewKind, content, serviceId, tabId, projectId)}
+      {shouldUseWorkspace ? (
+        <WorkspaceConversationPanel
+          messages={workspaceData?.messages ?? []}
+          isLoading={workspaceLoading}
+          isSending={isSendingWorkspaceMessage}
+          onSend={handleWorkspaceMessageSend}
+        />
+      ) : null}
+      {shouldUseWorkspace && tabId.includes('revision') ? (
+        <WorkspaceRevisionPanel revisions={workspaceData?.revisions ?? []} />
+      ) : null}
       <ActionFooter content={content} />
     </div>
   );
+}
+
+function WebAppWorkspaceTab({
+  tabId,
+  projectId,
+  workspaceLoading,
+  sections,
+  messages,
+  revisions,
+  isSendingWorkspaceMessage,
+  onSendMessage,
+}: {
+  tabId: string;
+  projectId?: string | null;
+  workspaceLoading: boolean;
+  sections: Array<{ id: string; title: string; description?: string | null; items?: Array<{ id: string; title: string; body?: string | null }> }>;
+  messages: WorkspaceMessage[];
+  revisions: WorkspaceRevision[];
+  isSendingWorkspaceMessage: boolean;
+  onSendMessage: (message: string, parentMessageId?: string) => Promise<void>;
+}) {
+  return (
+    <div className="p-8 space-y-6">
+      <div className="relative overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br from-[#1A1A1A] via-[#151515] to-[#101010] p-8">
+        <h1 className="text-3xl text-white">Web APP Çalışma Alanı</h1>
+        <p className="mt-2 text-[#A0A0A0]">Sekme: {tabId}</p>
+      </div>
+      {!projectId ? (
+        <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-6 text-sm text-[#A0A0A0]">
+          Bu sekme için proje seçimi yapılmadı.
+        </div>
+      ) : null}
+      {workspaceLoading && projectId ? (
+        <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-6 text-sm text-[#A0A0A0]">
+          İçerikler yükleniyor...
+        </div>
+      ) : null}
+      {projectId && !workspaceLoading && sections.length === 0 ? (
+        <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-6 text-sm text-[#A0A0A0]">
+          Bu sekme için henüz içerik bulunmuyor.
+        </div>
+      ) : null}
+      <div className="space-y-4">
+        {sections.map((section) => (
+          <div key={section.id} className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-6">
+            <h2 className="text-xl text-white">{section.title}</h2>
+            {section.description ? <p className="mt-2 text-sm text-[#A0A0A0]">{section.description}</p> : null}
+            <div className="mt-4 space-y-3">
+              {(section.items ?? []).map((item) => (
+                <div key={item.id} className="rounded-xl border border-white/[0.08] bg-[#202020] p-4">
+                  <p className="text-white">{item.title}</p>
+                  {item.body ? <p className="mt-2 text-sm text-[#CFCFCF]">{item.body}</p> : null}
+                </div>
+              ))}
+              {(section.items ?? []).length === 0 ? (
+                <p className="text-sm text-[#A0A0A0]">Bu bölümde henüz içerik yok.</p>
+              ) : null}
+            </div>
+          </div>
+        ))}
+      </div>
+      {projectId ? (
+        <WorkspaceConversationPanel
+          messages={messages}
+          isLoading={workspaceLoading}
+          isSending={isSendingWorkspaceMessage}
+          onSend={onSendMessage}
+        />
+      ) : null}
+      {projectId && tabId.includes("revision") ? <WorkspaceRevisionPanel revisions={revisions} /> : null}
+    </div>
+  );
+}
+
+function WorkspaceRevisionPanel({
+  revisions,
+}: {
+  revisions: Array<{ id: string; title: string; status: string; requestedAt: string }>;
+}) {
+  return (
+    <div className={cardClass}>
+      <h2 className="mb-4 text-xl text-white">Revizyon Durumları</h2>
+      <div className="space-y-3">
+        {revisions.slice(0, 8).map((revision) => (
+          <div key={revision.id} className="rounded-xl border border-white/[0.08] bg-[#202020] p-3">
+            <p className="text-sm text-white">{revision.title}</p>
+            <p className="mt-1 text-xs text-[#A0A0A0]">
+              {revision.status} • {new Date(revision.requestedAt).toLocaleString('tr-TR')}
+            </p>
+          </div>
+        ))}
+        {revisions.length === 0 ? (
+          <p className="text-sm text-[#A0A0A0]">Bu sekme için revizyon kaydı bulunmuyor.</p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function mapTabIdToWorkspaceTabKey(tabId: string): WorkspaceTabKey {
+  if (tabId === 'messages' || tabId === 'soru-cevap' || tabId.includes('question') || tabId.includes('message')) {
+    return 'MESSAGES';
+  }
+  if (tabId === 'reports') return 'REPORTS';
+  if (tabId === 'meetings') return 'MEETINGS';
+  if (tabId === 'delivery-files' || tabId === 'files') return 'FILES';
+  if (tabId.includes('revision')) return 'REVISIONS';
+  if (tabId.includes('task') || tabId.includes('sprint')) return 'TASKS';
+  if (tabId.includes('content') || tabId.includes('copy') || tabId.includes('design')) return 'CONTENT';
+  return 'OVERVIEW';
 }
 
 function getViewKind(serviceId: string, tabId: string): ViewKind {
@@ -148,7 +387,13 @@ function SmartKpis({ content, tabId }: { content: ServiceTabContent; tabId: stri
   );
 }
 
-function renderWorkspace(kind: ViewKind, content: ServiceTabContent, serviceId: string, tabId: string) {
+function renderWorkspace(
+  kind: ViewKind,
+  content: ServiceTabContent,
+  serviceId: string,
+  tabId: string,
+  projectId?: string | null,
+) {
   switch (kind) {
     case 'growth':
       return <GrowthWorkspace content={content} />;
@@ -179,7 +424,7 @@ function renderWorkspace(kind: ViewKind, content: ServiceTabContent, serviceId: 
     case 'brief':
       return <BriefWorkspace content={content} />;
     case 'delivery':
-      return <DeliveryWorkspace content={content} />;
+      return <DeliveryWorkspace content={content} projectId={projectId} />;
     default:
       return <ProjectWorkspace content={content} tabId={tabId} />;
   }
@@ -771,14 +1016,49 @@ function BriefWorkspace({ content }: { content: ServiceTabContent }) {
   );
 }
 
-function DeliveryWorkspace({ content }: { content: ServiceTabContent }) {
+function DeliveryWorkspace({ content, projectId: externalProjectId }: { content: ServiceTabContent; projectId?: string | null }) {
+  const { data: tasks } = useGetClientTasksQuery();
+  const projectOptions = Array.from(
+    new Map(
+      (tasks ?? [])
+        .filter((task) => task.projectId)
+        .map((task) => [task.projectId as string, { id: task.projectId as string, name: task.projectName ?? "Proje" }]),
+    ).values(),
+  );
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const internalProjectId = selectedProjectId || null;
+  const projectId = externalProjectId ?? internalProjectId ?? projectOptions[0]?.id ?? null;
+  const { data: filesResponse, isLoading } = useGetClientProjectFilesQuery(
+    { projectId: projectId ?? "" },
+    { skip: !projectId },
+  );
+  const files = filesResponse?.data ?? [];
+
   return (
     <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
       <div className={`${cardClass} xl:col-span-2`}>
         <h2 className="text-xl text-white mb-5">Teslim Dosyaları</h2>
+        {!externalProjectId && projectOptions.length > 1 && (
+          <div className="mb-4">
+            <label className="text-xs text-[#A0A0A0] mb-2 block">Proje Seçimi</label>
+            <select
+              className="w-full rounded-lg border border-white/[0.12] bg-[#202020] px-3 py-2 text-sm text-white"
+              value={projectId ?? ""}
+              onChange={(event) => setSelectedProjectId(event.target.value)}
+            >
+              {projectOptions.map((project) => (
+                <option key={project.id} value={project.id}>{project.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+        {isLoading && <p className="text-sm text-[#A0A0A0]">Dosyalar yükleniyor...</p>}
+        {!isLoading && files.length === 0 && (
+          <p className="text-sm text-[#A0A0A0]">Müşteriye açık teslim dosyası bulunmuyor.</p>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {['Tasarım Linki', 'Export Assetleri', 'Style Guide', 'Dokümanlar'].map((file, index) => (
-            <div key={file} className={innerClass}>
+          {files.map((file, index) => (
+            <div key={file.id} className={innerClass}>
               <div className="flex items-center justify-between mb-4">
                 <div className="w-10 h-10 rounded-xl bg-[#AAFF01]/10 flex items-center justify-center">
                   <Download className="w-5 h-5 text-[#AAFF01]" />
@@ -787,9 +1067,16 @@ function DeliveryWorkspace({ content }: { content: ServiceTabContent }) {
                   {index < 2 ? 'Hazır' : 'Güncel'}
                 </span>
               </div>
-              <h3 className="text-white mb-2">{file}</h3>
-              <p className="text-xs text-[#A0A0A0] mb-4">Müşteri erişimine açık teslim paketi.</p>
-              <Button variant="secondary" className="text-xs px-3 py-2" icon={Link}>Görüntüle</Button>
+              <h3 className="text-white mb-2">{file.title}</h3>
+              <p className="text-xs text-[#A0A0A0] mb-4">{file.originalFileName}</p>
+              <Button
+                variant="secondary"
+                className="text-xs px-3 py-2"
+                icon={Link}
+                onClick={() => window.open(file.secureUrl, "_blank", "noopener,noreferrer")}
+              >
+                Görüntüle
+              </Button>
             </div>
           ))}
         </div>
@@ -843,6 +1130,140 @@ function ActionFooter({ content }: { content: ServiceTabContent }) {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+function WorkspaceConversationPanel({
+  messages,
+  isLoading,
+  isSending,
+  onSend,
+}: {
+  messages: Array<{
+    id: string;
+    parentMessageId?: string | null;
+    body: string;
+    createdAt: string;
+    author?: { displayName?: string | null } | null;
+  }>;
+  isLoading: boolean;
+  isSending: boolean;
+  onSend: (message: string, parentMessageId?: string) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState('');
+  const [replyParentId, setReplyParentId] = useState<string | null>(null);
+  const tree = useMemo(() => {
+    const buckets = new Map<string, Array<{
+      id: string;
+      parentMessageId?: string | null;
+      body: string;
+      createdAt: string;
+      author?: { displayName?: string | null } | null;
+    }>>();
+    for (const message of messages) {
+      const key = message.parentMessageId ?? "root";
+      const list = buckets.get(key) ?? [];
+      list.push(message);
+      buckets.set(key, list);
+    }
+    return buckets;
+  }, [messages]);
+
+  const submitMessage = async () => {
+    if (!draft.trim() || isSending) {
+      return;
+    }
+
+    await onSend(draft, replyParentId ?? undefined);
+    setDraft('');
+    setReplyParentId(null);
+  };
+
+  return (
+    <div className={cardClass}>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-xl text-white">Soru / Cevap Paneli</h2>
+        <span className="text-xs text-[#A0A0A0]">Proje bazlı</span>
+      </div>
+      {isLoading ? <p className="mb-4 text-sm text-[#A0A0A0]">Mesajlar yükleniyor...</p> : null}
+      {!isLoading && messages.length === 0 ? (
+        <p className="mb-4 text-sm text-[#A0A0A0]">Henüz mesaj yok. İlk soruyu buradan iletebilirsiniz.</p>
+      ) : null}
+      <div className="mb-4 max-h-56 space-y-3 overflow-y-auto pr-1">
+        {(tree.get("root") ?? []).map((message) => (
+          <ThreadNode key={message.id} message={message} tree={tree} onReply={setReplyParentId} depth={0} />
+        ))}
+      </div>
+      <div className="space-y-3">
+        {replyParentId ? (
+          <p className="text-xs text-[#d8ff8f]">
+            Yanıt modu aktif: {replyParentId.slice(0, 8)}...
+          </p>
+        ) : null}
+        <textarea
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          rows={3}
+          className="w-full rounded-xl border border-white/[0.12] bg-[#202020] p-3 text-sm text-white outline-none focus:border-[#AAFF01]/50"
+          placeholder="Ekibe iletmek istediğiniz soruyu yazın..."
+        />
+        <Button
+          variant="primary"
+          icon={Send}
+          className={`w-full justify-center text-sm ${isSending ? 'pointer-events-none opacity-60' : ''}`}
+          onClick={() => void submitMessage()}
+        >
+          {isSending ? 'Gönderiliyor...' : 'Mesaj Gönder'}
+        </Button>
+        {replyParentId ? (
+          <Button variant="ghost" className="w-full justify-center text-sm" onClick={() => setReplyParentId(null)}>
+            Yanıtı İptal Et
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function ThreadNode({
+  message,
+  tree,
+  onReply,
+  depth,
+}: {
+  message: {
+    id: string;
+    parentMessageId?: string | null;
+    body: string;
+    createdAt: string;
+    author?: { displayName?: string | null } | null;
+  };
+  tree: Map<string, Array<{
+    id: string;
+    parentMessageId?: string | null;
+    body: string;
+    createdAt: string;
+    author?: { displayName?: string | null } | null;
+  }>>;
+  onReply: (id: string) => void;
+  depth: number;
+}) {
+  const replies = tree.get(message.id) ?? [];
+  return (
+    <div className="space-y-2">
+      <div className="rounded-xl border border-white/[0.08] bg-[#202020] p-3" style={{ marginLeft: `${depth * 14}px` }}>
+        <p className="text-sm text-white">{message.body}</p>
+        <p className="mt-1 text-xs text-[#A0A0A0]">
+          {(message.author?.displayName || 'Social Tech')} • {new Date(message.createdAt).toLocaleString('tr-TR')}
+        </p>
+        <Button variant="ghost" className="mt-1 h-7 px-2 text-xs" onClick={() => onReply(message.id)}>
+          Yanıtla
+        </Button>
+      </div>
+      {replies.map((reply) => (
+        <ThreadNode key={reply.id} message={reply} tree={tree} onReply={onReply} depth={depth + 1} />
+      ))}
     </div>
   );
 }

@@ -1,18 +1,120 @@
+import { useEffect, useRef } from 'react';
 import { Video, Calendar, Clock, CheckCircle } from 'lucide-react';
 import { Button } from '../components/button';
+import { webAppWorkspaceApi, useCreateWebAppWorkspaceMeetingRequestMutation, useGetWebAppWorkspaceMeetingRequestsQuery } from "../features/webAppWorkspace/webAppWorkspaceApi";
+import type { WorkspaceMeetingRequest } from '../features/webAppWorkspace/webAppWorkspaceTypes';
+import { createWorkspaceSocket, type WorkspaceUpdateEvent } from '../features/webAppWorkspace/workspaceSocket';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { selectAccessToken } from '../features/auth/authSelectors';
 
-const upcomingMeetings = [
-  { title: 'Aylık Strateji Toplantısı', date: '2 Mayıs 2026', time: '14:00', duration: '60 dk', type: 'Strateji Görüşmesi' },
-  { title: 'Mayıs Kampanya Planlama', date: '8 Mayıs 2026', time: '10:00', duration: '45 dk', type: 'Planlama' },
-];
+export function MeetingsPage({ projectId }: { projectId?: string | null }) {
+  const dispatch = useAppDispatch();
+  const accessToken = useAppSelector(selectAccessToken);
+  const lastWorkspaceSequenceRef = useRef(0);
+  const { data: requests = [], isLoading } = useGetWebAppWorkspaceMeetingRequestsQuery(
+    { projectId: projectId ?? "" },
+    { skip: !projectId },
+  );
+  const [createRequest, { isLoading: isCreating }] = useCreateWebAppWorkspaceMeetingRequestMutation();
 
-const pastMeetings = [
-  { title: 'Nisan Performans İncelemesi', date: '25 Nisan 2026', summary: 'UGC içerik başarısı konuşuldu. Mayıs planı onaylandı.', action: 'Yeni UGC brief seti Social Tech tarafından hazırlanacak.' },
-  { title: 'Yaz Kampanya Briefing', date: '18 Nisan 2026', summary: 'Hedef kitle ve yaratıcı konsept üzerinde anlaşıldı.', action: 'Müşteri ürün fotoğraflarını paylaşacak.' },
-  { title: 'Q2 Hedef Belirleme', date: '4 Nisan 2026', summary: 'Çeyreklik KPI\'lar ve bütçe dağılımı netleştirildi.', action: 'Yeni bütçe dağılımı raporda takip edilecek.' },
-];
+  const dynamicUpcoming = requests
+    .filter((item) => item.status === "REQUESTED" || item.status === "CONFIRMED")
+    .map((item) => {
+      const startRaw = item.scheduledStartAt ?? item.preferredStartAt;
+      const endRaw = item.scheduledEndAt ?? item.preferredEndAt;
+      const start = new Date(startRaw);
+      const end = new Date(endRaw);
+      const durationMinutes = Math.max(Math.round((end.getTime() - start.getTime()) / 60000), 1);
+      return {
+        title: item.title,
+        date: start.toLocaleDateString("tr-TR"),
+        time: start.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
+        duration: `${durationMinutes} dk`,
+        type: item.status === "CONFIRMED" ? "Onaylandı" : "Talep Bekliyor",
+      };
+    });
+  const dynamicPast = requests
+    .filter((item) => item.status === "COMPLETED" || item.status === "DECLINED")
+    .map((item) => ({
+      title: item.title,
+      date: new Date(item.createdAt).toLocaleDateString("tr-TR"),
+      summary: item.agenda ?? "Toplantı talebi",
+      action: item.responseNote ?? "Yanıt bekleniyor.",
+    }));
 
-export function MeetingsPage() {
+  const mergedUpcoming = dynamicUpcoming;
+  const mergedPast = dynamicPast;
+
+  useEffect(() => {
+    if (!projectId || !accessToken) {
+      return;
+    }
+
+    const socket = createWorkspaceSocket(accessToken);
+    const joinPayload = { projectId, tabKey: "MEETINGS" };
+    socket.emit("project:join", joinPayload);
+
+    const onWorkspaceUpdate = (event: WorkspaceUpdateEvent) => {
+      if (event.projectId !== projectId) {
+        return;
+      }
+      if (event.tabKey !== "MEETINGS") {
+        return;
+      }
+      if (event.sequence <= lastWorkspaceSequenceRef.current) {
+        return;
+      }
+      lastWorkspaceSequenceRef.current = event.sequence;
+      const payload = event.payload ?? {};
+      const meetingRequest = (payload.meetingRequest ?? null) as WorkspaceMeetingRequest | null;
+      if (event.event === "meeting-request.created" && meetingRequest) {
+        dispatch(
+          webAppWorkspaceApi.util.updateQueryData("getWebAppWorkspaceMeetingRequests", { projectId }, (draft) => {
+            const exists = draft.some((item) => item.id === meetingRequest.id);
+            if (!exists) {
+              draft.unshift(meetingRequest);
+            }
+          }),
+        );
+        return;
+      }
+      if (event.event === "meeting-request.updated" && meetingRequest) {
+        dispatch(
+          webAppWorkspaceApi.util.updateQueryData("getWebAppWorkspaceMeetingRequests", { projectId }, (draft) => {
+            const target = draft.find((item) => item.id === meetingRequest.id);
+            if (target) {
+              Object.assign(target, meetingRequest);
+            }
+          }),
+        );
+      }
+    };
+
+    socket.on("workspace:update", onWorkspaceUpdate);
+
+    return () => {
+      socket.emit("project:leave", joinPayload);
+      socket.off("workspace:update", onWorkspaceUpdate);
+      socket.disconnect();
+    };
+  }, [accessToken, dispatch, projectId]);
+
+  const quickMeetingRequest = async () => {
+    if (!projectId) {
+      return;
+    }
+    const startAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const endAt = new Date(startAt.getTime() + 45 * 60 * 1000);
+    await createRequest({
+      projectId,
+      title: "Müşteri toplantı talebi",
+      agenda: "İlerleme ve açık sorular",
+      preferredStartAt: startAt.toISOString(),
+      preferredEndAt: endAt.toISOString(),
+      timezone: "Europe/Istanbul",
+    }).unwrap();
+  };
+
   return (
     <div className="p-8 space-y-6">
       <div>
@@ -23,8 +125,10 @@ export function MeetingsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
           <h2 className="text-xl text-white mb-4">Yaklaşan Toplantılar</h2>
+          {isLoading && projectId ? <p className="text-sm text-[#A0A0A0] mb-3">Toplantı talepleri yükleniyor...</p> : null}
+          {!projectId ? <p className="text-sm text-[#A0A0A0] mb-3">Bu alanı görüntülemek için bir proje seçin.</p> : null}
           <div className="space-y-3">
-            {upcomingMeetings.map((meeting, i) => (
+            {mergedUpcoming.map((meeting, i) => (
               <div key={i} className="bg-[#202020] rounded-xl p-4 border border-white/[0.08]">
                 <div className="flex items-start justify-between mb-3">
                   <div>
@@ -44,18 +148,32 @@ export function MeetingsPage() {
                     <span>{meeting.time} ({meeting.duration})</span>
                   </div>
                 </div>
-                <Button variant="primary" icon={Video} className="w-full justify-center text-sm">
-                  Toplantıya Katıl
-                </Button>
               </div>
             ))}
+            {projectId && !isLoading && mergedUpcoming.length === 0 ? (
+              <p className="text-sm text-[#A0A0A0]">Yaklaşan toplantı bulunmuyor.</p>
+            ) : null}
+            <Button
+              variant="primary"
+              icon={Video}
+              className={`w-full justify-center text-sm ${projectId && isCreating ? "opacity-60 pointer-events-none" : ""}`}
+              onClick={() => {
+                if (projectId && isCreating) {
+                  return;
+                }
+                void quickMeetingRequest();
+              }}
+            >
+              {projectId ? "Toplantı Talep Et" : "Toplantıya Katıl"}
+            </Button>
           </div>
         </div>
 
         <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
           <h2 className="text-xl text-white mb-4">Geçmiş Toplantılar</h2>
+          {!projectId ? <p className="text-sm text-[#A0A0A0] mb-3">Bu alanı görüntülemek için bir proje seçin.</p> : null}
           <div className="space-y-3">
-            {pastMeetings.map((meeting, i) => (
+            {mergedPast.map((meeting, i) => (
               <div key={i} className="bg-[#202020] rounded-xl p-4 border border-white/[0.08]">
                 <div className="flex items-start gap-3">
                   <CheckCircle className="w-5 h-5 text-[#AAFF01] flex-shrink-0 mt-0.5" />
@@ -68,6 +186,9 @@ export function MeetingsPage() {
                 </div>
               </div>
             ))}
+            {projectId && !isLoading && mergedPast.length === 0 ? (
+              <p className="text-sm text-[#A0A0A0]">Geçmiş toplantı bulunmuyor.</p>
+            ) : null}
           </div>
         </div>
       </div>

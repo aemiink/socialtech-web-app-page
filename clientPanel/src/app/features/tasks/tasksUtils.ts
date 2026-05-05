@@ -62,6 +62,7 @@ function normalizeClientTask(value: unknown): ClientTask | null {
 
   return {
     id,
+    projectId: readOptionalString(record.projectId) ?? readOptionalString(projectRecord?.id),
     title,
     description: readOptionalString(record.description),
     status,

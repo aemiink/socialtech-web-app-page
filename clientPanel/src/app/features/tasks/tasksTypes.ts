@@ -16,6 +16,7 @@ export type ClientTaskTodo = {
 
 export type ClientTask = {
   id: string;
+  projectId: string | null;
   title: string;
   description: string | null;
   status: ClientTaskStatus;

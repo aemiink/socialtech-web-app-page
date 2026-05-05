@@ -12,6 +12,10 @@ import type { AuthUserProfile, ClientPurchasedService } from "../features/auth/a
 import { getActivePurchasedServiceIds, parseAuthUserProfile } from "../features/auth/authNormalizers";
 import type { ClientTask } from "../features/tasks/tasksTypes";
 
+vi.mock("../features/projects/projectsApi", () => ({
+  useGetClientProjectsQuery: () => ({ data: [], isLoading: false, isError: false }),
+}));
+
 const SELECTED_SERVICE_STORAGE_KEY = "socialtech-client-selected-service";
 const CURRENT_PAGE_STORAGE_KEY = "socialtech-client-current-page";
 
@@ -191,6 +195,7 @@ describe("client visible tasks", () => {
 function createTaskBase(): ClientTask {
   return {
     id: "task-1",
+    projectId: null,
     title: "Task",
     description: null,
     status: "TODO",
