@@ -52,6 +52,7 @@ type ProjectUpdateState = {
   clientProfileId: string;
   serviceKey: PurchasedServiceKey | null;
   repositoryUrl: string | null;
+  figmaProjectUrl: string | null;
   name: string;
   startDate: Date | null;
   dueDate: Date | null;
@@ -120,6 +121,7 @@ export class ProjectsService {
     await this.assertCanManageProjectScope(currentUser, dto.clientProfileId);
     await this.assertClientAllowsServiceKey(dto.clientProfileId, dto.serviceKey ?? null);
     this.assertRepositoryUrlRequirement(dto.serviceKey ?? null, dto.repositoryUrl ?? null);
+    this.assertFigmaUrlRequirement(dto.serviceKey ?? null, dto.figmaProjectUrl ?? null);
 
     const startDate = this.parseNullableDate(dto.startDate) ?? null;
     const dueDate = this.parseNullableDate(dto.dueDate) ?? null;
@@ -170,6 +172,8 @@ export class ProjectsService {
       dto.serviceKey === undefined ? existingProject.serviceKey : (dto.serviceKey ?? null);
     const nextRepositoryUrl =
       dto.repositoryUrl === undefined ? existingProject.repositoryUrl : (dto.repositoryUrl ?? null);
+    const nextFigmaProjectUrl =
+      dto.figmaProjectUrl === undefined ? existingProject.figmaProjectUrl : (dto.figmaProjectUrl ?? null);
     if (dto.clientProfileId) {
       await this.assertClientProfileExists(dto.clientProfileId);
       await this.assertCanManageProjectScope(currentUser, dto.clientProfileId);
@@ -179,6 +183,7 @@ export class ProjectsService {
     }
     await this.assertClientAllowsServiceKey(nextClientProfileId, nextServiceKey);
     this.assertRepositoryUrlRequirement(nextServiceKey, nextRepositoryUrl);
+    this.assertFigmaUrlRequirement(nextServiceKey, nextFigmaProjectUrl);
 
     const startDateUpdate = this.parseNullableDate(dto.startDate);
     const dueDateUpdate = this.parseNullableDate(dto.dueDate);
@@ -357,6 +362,7 @@ export class ProjectsService {
         clientProfileId: true,
         serviceKey: true,
         repositoryUrl: true,
+        figmaProjectUrl: true,
         name: true,
         startDate: true,
         dueDate: true,
@@ -417,6 +423,21 @@ export class ProjectsService {
     if (!repositoryUrl || repositoryUrl.trim().length === 0) {
       throw new BadRequestException(
         "WEB_APP and MOBILE_APP projects require a GitHub repository link.",
+      );
+    }
+  }
+
+  private assertFigmaUrlRequirement(
+    serviceKey: PurchasedServiceKey | null,
+    figmaProjectUrl: string | null,
+  ): void {
+    if (serviceKey !== PurchasedServiceKey.WEB_MOBILE_DESIGN) {
+      return;
+    }
+
+    if (!figmaProjectUrl || figmaProjectUrl.trim().length === 0) {
+      throw new BadRequestException(
+        "WEB_MOBILE_DESIGN projects require a Figma link.",
       );
     }
   }

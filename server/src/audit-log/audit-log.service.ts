@@ -17,6 +17,7 @@ export const ADMIN_CLIENT_AUDIT_ACTIONS = {
   activated: "ADMIN_CLIENT_ACTIVATED",
   ownerCreated: "ADMIN_CLIENT_OWNER_CREATED",
   ownerLinked: "ADMIN_CLIENT_OWNER_LINKED",
+  ownerPasswordReset: "ADMIN_CLIENT_OWNER_PASSWORD_RESET",
 } as const;
 
 export const CRM_LEAD_AUDIT_ACTIONS = {

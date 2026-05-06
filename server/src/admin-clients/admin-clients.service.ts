@@ -26,6 +26,7 @@ import { PrismaService } from "../database/prisma.service";
 import { AdminClientOwnerDto, AdminClientOwnerMode } from "./dto/admin-client-owner.dto";
 import { AdminClientPurchasedServiceDto } from "./dto/admin-client-purchased-service.dto";
 import { CreateAdminClientDto } from "./dto/create-admin-client.dto";
+import { ResetClientOwnerPasswordDto } from "./dto/reset-client-owner-password.dto";
 import { UpdateAdminClientDto } from "./dto/update-admin-client.dto";
 
 const CLIENTS_MANAGE_PERMISSION = "clients.manage";
@@ -370,6 +371,56 @@ export class AdminClientsService {
       this.throwKnownCreateOrUpdateError(error);
       throw error;
     }
+  }
+
+  async resetClientOwnerPassword(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+    dto: ResetClientOwnerPasswordDto,
+    auditRequestContext?: AuditLogRequestContext,
+  ): Promise<AdminClientResponse> {
+    this.assertCanManageClients(currentUser);
+    const client = await this.getClientProfileOrFail(clientProfileId);
+    const owner = client.users[0] ?? null;
+    if (!owner) {
+      throw new BadRequestException("Client owner user not found.");
+    }
+
+    const passwordHash = await this.authService.hashUserPassword(dto.newPassword);
+
+    const sessionInvalidatedAt = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: owner.id },
+        data: {
+          passwordHash,
+          sessionInvalidatedAt,
+        },
+        select: { id: true },
+      });
+
+      await tx.refreshToken.updateMany({
+        where: { userId: owner.id, revokedAt: null },
+        data: { revokedAt: sessionInvalidatedAt },
+      });
+
+      await this.recordAdminClientAudit(
+        tx,
+        currentUser,
+        ADMIN_CLIENT_AUDIT_ACTIONS.ownerPasswordReset,
+        client.id,
+        this.buildAuditMetadata({
+          actorUserId: currentUser.id,
+          targetClientProfileId: client.id,
+          ownerUserId: owner.id,
+          changedFields: ["ownerCredentials"],
+        }),
+        auditRequestContext,
+      );
+    });
+
+    const updatedClient = await this.getClientProfileOrFail(clientProfileId);
+    return this.toAdminClientResponse(updatedClient);
   }
 
   private async createOwnerForClient(

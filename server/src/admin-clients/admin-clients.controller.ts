@@ -9,6 +9,7 @@ import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { AdminClientsService } from "./admin-clients.service";
 import { AdminClientOwnerDto } from "./dto/admin-client-owner.dto";
 import { CreateAdminClientDto } from "./dto/create-admin-client.dto";
+import { ResetClientOwnerPasswordDto } from "./dto/reset-client-owner-password.dto";
 import { UpdateAdminClientDto } from "./dto/update-admin-client.dto";
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -79,6 +80,21 @@ export class AdminClientsController {
     @Req() request: Request,
   ) {
     return this.adminClientsService.setAdminClientOwner(
+      currentUser,
+      clientProfileId,
+      dto,
+      this.toAuditRequestContext(request),
+    );
+  }
+
+  @Patch(":id/reset-owner-password")
+  resetClientOwnerPassword(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("id", ParseUUIDPipe) clientProfileId: string,
+    @Body() dto: ResetClientOwnerPasswordDto,
+    @Req() request: Request,
+  ) {
+    return this.adminClientsService.resetClientOwnerPassword(
       currentUser,
       clientProfileId,
       dto,
