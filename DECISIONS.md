@@ -1892,3 +1892,107 @@ Affected files:
 - `clientPanel/src/app/features/webAppWorkspace/webAppWorkspaceApi.ts`
 - `clientPanel/src/app/pages/service-tab-page.tsx`
 - `clientPanel/src/app/pages/__tests__/service-tab-page.webapp.test.tsx`
+
+---
+
+## 2026-05-06 - Sprint Progress and Task Detail Update Fixes
+
+Context:
+Sprint progress/status hesapları task/todo güncellemeleri sonrası her yerde tutarlı görünmüyordu; ayrıca task detail ekranında yetkili kullanıcılar için update akışı kısmen engelli kalabiliyordu.
+
+Decision:
+Sprint hesaplaması delivery tarafında merkezi helper’a taşındı ve task/todo mutation’larından sonra sprint state senkronizasyonu zorunlu hale getirildi. Frontend RTK Query invalidation zinciri de task/todo -> delivery sprint/summary yönünde genişletildi.
+
+Reason:
+Sprint metrikleri tek kaynaktan hesaplanıp her mutation sonrası deterministik güncellenince PM/developer/client panellerinde progress drift ve stale-state riski azalır.
+
+Affected files:
+- `server/src/delivery/delivery-sprint-progress.util.ts`
+- `server/src/delivery/delivery.service.ts`
+- `server/src/tasks/tasks.service.ts`
+- `server/test/delivery-github-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/tasks/tasksApi.ts`
+- `adminandemployeePanel/src/app/features/delivery/deliveryApi.ts`
+- `adminandemployeePanel/src/app/services/baseApi.ts`
+- `adminandemployeePanel/src/app/pages/TaskDetail.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/TaskDetail.test.tsx`
+
+---
+
+## 2026-05-06 - Workspace Message Realtime Visibility Hardening
+
+Context:
+Workspace mesaj akışında bazı tab anahtarları ve sequence-gap durumlarında canlı patch kaçırılabildiği için client/admin/employee/PM panellerinde anlık görünürlük zaman zaman bozuluyordu.
+
+Decision:
+Socket event patching tab uyumluluk kontrolüyle genişletildi (`OVERVIEW`/`MESSAGES` uyumu) ve sequence gap algılandığında hedefli refetch fallback devreye alındı. Incremental patch korunurken correctness önceliklendirildi.
+
+Reason:
+Realtime event her zaman ideal sırada gelmeyebilir; kontrollü fallback ile mesaj görünürlüğü kaçırılmaz, aynı anda mevcut incremental performans kazanımı da korunur.
+
+Affected files:
+- `adminandemployeePanel/src/app/pages/ProjectDetail.tsx`
+- `adminandemployeePanel/src/app/employee/pages/ProjectManagerServiceWorkspace.tsx`
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+- `clientPanel/src/app/pages/meetings.tsx`
+- `clientPanel/src/app/pages/reports.tsx`
+
+---
+
+## 2026-05-06 - Client Sprint Detail and UI/UX Design Asset Visibility
+
+Context:
+Client panelde sprint detay görünürlüğü ve UI/UX tasarım görsel akışı eksikti; müşteri sprint içine girip task/progress göremiyor, client-visible tasarım görselleri tutarlı galeri akışında listelenmiyordu.
+
+Decision:
+Service-tab workspace ekranına:
+- sprint kartı -> task/progress detay açılımı,
+- client-visible, image-only UI/UX tasarım galerisi
+eklendi. Design asset query’si kategori filtreli ve image mime/type filtresiyle normalize edildi.
+
+Reason:
+Müşterinin operasyon şeffaflığını artırırken internal/non-image veriyi sızdırmadan doğru içerik yüzeye çıkarılır.
+
+Affected files:
+- `server/src/web-app-workspace/web-app-workspace.service.ts`
+- `server/test/web-app-workspace-revisions-authz.e2e-spec.ts`
+- `clientPanel/src/app/features/projectFiles/projectFilesApi.ts`
+- `clientPanel/src/app/features/webAppWorkspace/webAppWorkspaceTypes.ts`
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+- `clientPanel/src/app/pages/__tests__/service-tab-page.webapp.test.tsx`
+
+---
+
+## 2026-05-06 - Client Approval and Information Popup Workflow
+
+Context:
+Client panelde kritik teslim/karar noktaları için standart onay veya bilgilendirme katmanı yoktu; farklı alanlarda dağınık aksiyonlar vardı ve cevap geçmişi merkezi olarak izlenemiyordu.
+
+Decision:
+Tek bir backend-native domain modeli benimsendi:
+- `ClientApprovalRequest` (request state)
+- `ClientApprovalTransition` (status history/audit timeline)
+
+Aynı model explicit approval ve information akışını birlikte yönetir:
+- Explicit: `PENDING -> APPROVED | REJECTED`
+- Information: `PENDING -> ACKNOWLEDGED`
+- Internal yönetim: `PENDING -> CANCELLED`
+
+Client endpointleri `/api/v1/client/approvals/*` altında toplandı; admin/employee/PM yönetimi `/api/v1/client-approvals/*` altında kaldı. Client response payload’ında `actionPayload` sanitization uygulanarak sadece `clientVisiblePayload` yüzeye çıkarıldı.
+
+Reason:
+Onay geçmişi, durum geçişleri ve rol bazlı görünürlük tek kaynaktan yönetilince hem operasyon hem müşteri paneli tutarlı hale gelir; ayrıca audit kayıtlarıyla denetlenebilir bir süreç elde edilir.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260506110000_add_client_approval_requests/migration.sql`
+- `server/src/client-approvals/*`
+- `server/src/audit-log/audit-log.service.ts`
+- `server/src/web-app-workspace/web-app-workspace.gateway.ts`
+- `server/test/client-approvals-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/clientApprovals/*`
+- `adminandemployeePanel/src/app/employee/pages/ProjectManagerServiceWorkspace.tsx`
+- `adminandemployeePanel/src/app/pages/TaskDetail.tsx`
+- `clientPanel/src/app/components/client-approval-center.tsx`
+- `clientPanel/src/app/features/approvals/*`
+- `clientPanel/src/app/pages/service-tab-page.tsx`

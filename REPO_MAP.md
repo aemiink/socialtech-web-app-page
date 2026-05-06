@@ -871,3 +871,100 @@ The `client/` directory is the public/marketing Social Tech website, not the Cli
   - WEB_APP revision create + approve/reject UI
   - non-WEB revision sekmelerinde task-based revision panel
 - `clientPanel/src/app/pages/__tests__/service-tab-page.webapp.test.tsx`
+
+## 2026-05-06 Update Map (Sprint/Realtime/Client Visibility Hardening)
+
+### Backend
+- `server/src/delivery/delivery-sprint-progress.util.ts` (new)
+  - sprint progress/status hesap helper’ları (task + todo weighted metrics)
+- `server/src/delivery/delivery.service.ts`
+  - sprint response hesapları helper tabanlı
+  - `syncSprintState` ile derived status persist
+- `server/src/tasks/tasks.service.ts`
+  - task/todo mutation sonrası sprint senkronizasyonu
+- `server/src/web-app-workspace/web-app-workspace.service.ts`
+  - source-of-truth task/sprint verisinde progress + client-safe todo alanları
+- `server/test/delivery-github-authz.e2e-spec.ts`
+  - todo toggle / task DONE sonrası sprint progress-status e2e
+- `server/test/web-app-workspace-revisions-authz.e2e-spec.ts`
+  - workspace source-of-truth sprint/task client-visible aggregate assertions
+  - message list ordering coverage (latest 100 -> ascending output)
+
+### Admin + Employee Panel Frontend
+- `adminandemployeePanel/src/app/services/baseApi.ts`
+  - `DeliverySprints`, `DeliverySummary`, `DeliveryReleases` tag tipi genişlemesi
+- `adminandemployeePanel/src/app/features/delivery/deliveryApi.ts`
+  - sprint/release/summary provides+invalidates tag hizalaması
+- `adminandemployeePanel/src/app/features/tasks/tasksApi.ts`
+  - task/todo mutation -> delivery cache invalidation entegrasyonu
+- `adminandemployeePanel/src/app/pages/ProjectDetail.tsx`
+  - workspace sequence-gap refetch fallback
+  - message tab compatibility (`OVERVIEW` <-> `MESSAGES`) patch düzeltmesi
+- `adminandemployeePanel/src/app/employee/pages/ProjectManagerServiceWorkspace.tsx`
+  - realtime sequence-gap fallback + message tab compatibility
+- `adminandemployeePanel/src/app/pages/TaskDetail.tsx`
+  - task update paneli (assignee/sprint/status vb) ve permission-aware edit akışı
+- `adminandemployeePanel/src/app/pages/__tests__/TaskDetail.test.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/ProjectDetail.test.tsx`
+
+### Client Panel Frontend
+- `clientPanel/src/app/features/projectFiles/projectFilesApi.ts`
+  - client file query’ye `category` filtresi
+- `clientPanel/src/app/features/webAppWorkspace/webAppWorkspaceTypes.ts`
+  - source-of-truth task/sprint/file tiplerine progress ve mime alanları
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+  - sequence-gap realtime fallback
+  - mutation-success message cache patch fallback
+  - sprint kartı -> task/progress açılımı
+  - UI/UX client-visible image-only design gallery
+- `clientPanel/src/app/pages/meetings.tsx`
+- `clientPanel/src/app/pages/reports.tsx`
+  - workspace sequence-gap refetch fallback
+- `clientPanel/src/app/pages/__tests__/service-tab-page.webapp.test.tsx`
+  - sprint detail expansion + design gallery visibility testleri
+
+## 2026-05-06 Update Map (Client Approval / Information Workflow)
+
+### Backend
+- `server/prisma/schema.prisma`
+  - `ClientApprovalType`, `ClientApprovalStatus`, `ClientApprovalEntityType` enumları
+  - `ClientApprovalRequest` ve `ClientApprovalTransition` modelleri + ilişkiler/indexler
+- `server/prisma/migrations/20260506110000_add_client_approval_requests/migration.sql`
+- `server/src/client-approvals/client-approvals.module.ts`
+- `server/src/client-approvals/client-approvals.controller.ts`
+- `server/src/client-approvals/client-portal-approvals.controller.ts`
+- `server/src/client-approvals/client-approvals.service.ts`
+- `server/src/client-approvals/dto/*`
+- `server/src/audit-log/audit-log.service.ts`
+  - `CLIENT_APPROVAL_*` audit action seti
+- `server/src/web-app-workspace/web-app-workspace.gateway.ts`
+  - socket server guard (`emitWorkspaceUpdate`) ile e2e/test runtime güvenliği
+- `server/src/app.module.ts`
+  - `ClientApprovalsModule` import
+- `server/test/client-approvals-authz.e2e-spec.ts`
+  - create/read/respond/acknowledge/cancel/scope/sanitization coverage
+
+### Admin + Employee Panel Frontend
+- `adminandemployeePanel/src/app/features/clientApprovals/clientApprovalsApi.ts`
+- `adminandemployeePanel/src/app/features/clientApprovals/clientApprovalsTypes.ts`
+- `adminandemployeePanel/src/app/features/clientApprovals/clientApprovalsUtils.ts`
+- `adminandemployeePanel/src/app/services/baseApi.ts`
+  - `ClientApprovals` tag tipi
+- `adminandemployeePanel/src/app/employee/pages/ProjectManagerServiceWorkspace.tsx`
+  - `Onaylar` sekmesi + create/cancel/history + socket refetch fallback
+- `adminandemployeePanel/src/app/pages/TaskDetail.tsx`
+  - task seviyesinde “müşteri onayı iste / bilgilendirme gönder” aksiyonları
+- `adminandemployeePanel/src/app/features/clientApprovals/__tests__/clientApprovalsApi.test.ts`
+
+### Client Panel Frontend
+- `clientPanel/src/app/features/approvals/approvalsApi.ts`
+- `clientPanel/src/app/features/approvals/approvalsTypes.ts`
+- `clientPanel/src/app/features/approvals/approvalsUtils.ts`
+- `clientPanel/src/app/components/client-approval-center.tsx`
+  - pending approval modal queue + approve/reject/acknowledge
+- `clientPanel/src/app/App.tsx`
+  - global approval center mount
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+  - `approval.*` workspace eventlerinde `ClientApprovals` cache invalidation
+- `clientPanel/src/app/components/button.tsx`
+  - disabled/type desteği (approval modal CTA güvenliği)

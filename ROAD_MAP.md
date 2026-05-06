@@ -34,6 +34,14 @@
 - CRM outbound email/WhatsApp sending integrations
 - Cloudinary asset malware scanning/quarantine flow
 - Advanced revision inbox/routing and reminder notifications
+- Advanced notification system for workspace messages
+- More granular design approval workflow
+- Full realtime audit/monitoring for workspace events
+- React/socket performance tuning for high-frequency workspace updates
+- Advanced approval templates
+- Approval SLA/reminder automation
+- Granular approval routing by service/team
+- Approval analytics dashboard
 
 ## In Progress
 
@@ -138,6 +146,18 @@
 - Revizyonlar sekmesi hibrit model (WEB_APP workspace + non-WEB task) üretim akışı
 - Client revision create + approve/reject lifecycle (WEB_APP) ve PM transition matrix uyumu
 - Workspace revision authz e2e coverage (`server/test/web-app-workspace-revisions-authz.e2e-spec.ts`)
+- Sprint progress/status cache and backend consistency fix
+- Task detail update enablement for assigned operations
+- Workspace message realtime/cache visibility hardening
+- Client Panel sprint detail visibility (expandable sprint -> task progress)
+- Client Panel UI/UX design image gallery (client-visible image-only)
+- Related backend/frontend regression tests (delivery/task/workspace/client portal)
+- Client approval request backend model/API (`ClientApprovalRequest` + transition history)
+- Client approval/information popup system (explicit approval vs acknowledge)
+- Project Manager approval management UI (create/update/cancel + history)
+- Client Panel approval center modal (pending queue + approve/reject/acknowledge)
+- Approval response history/status badges and audit logging
+- Related backend/frontend tests (`client-approvals` authz + panel unit tests)
 
 ## Blocked
 
@@ -145,9 +165,9 @@ None identified.
 
 ## Notes
 
-- Latest backend validation checkpoint: `10/10` authz suites, `209/209` tests.
-- Latest admin/employee frontend validation checkpoint: `19` test files, `134/134` tests.
-- Latest client portal frontend validation checkpoint: `1` test file, `6/6` tests.
+- Latest backend validation checkpoint: `11/11` authz suites, `223/223` tests.
+- Latest admin/employee frontend validation checkpoint: `26` test files, `158/158` tests.
+- Latest client portal frontend validation checkpoint: `3` test files, `14/14` tests.
 - Summary query optimization and summary-side cache/TTL remain relevant follow-ups as data volume grows.
 ## 2026-04-29 Checkpoint
 

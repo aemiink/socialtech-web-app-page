@@ -1041,3 +1041,111 @@ Latest reported checks: `adminandemployeePanel npm run check`, `clientPanel npm 
 
 ### Known Risks / Notes
 - Bazı eski frontend testlerinde timeout kaynaklı kırılganlık devam edebilir; hedefli test stabilizasyonu follow-up gerektirir.
+
+## 2026-05-06 Update - Sprint/Realtime/Client Visibility Hardening
+
+### Delivery Module
+- Sprint progress hesapları artık task + todo durumlarından backend’de merkezi helper ile türetilir.
+- Task create/update ve todo create/update/toggle/delete işlemlerinden sonra ilgili sprint state senkronizasyonu zorunlu çalışır.
+- Sprint `taskCounts` ve `progressPercent` alanları query tarafında güncel, mutation sonrası stale kalmayan davranışa çekildi.
+
+### Task/Todo Progress Behavior
+- `TaskDetail` güncelleme paneli PM/admin assigned scope için aktif hale getirildi.
+- Task/todo mutation’ları artık delivery cache zincirini de invalid eder:
+  - task list/detail
+  - delivery sprints
+  - delivery summary
+
+### Web APP Workspace
+- Realtime mesaj patch’lerinde tab uyumu (`OVERVIEW` <-> `MESSAGES`) normalize edildi.
+- Socket sequence gap algılandığında hedefli refetch fallback eklendi; incremental patch korunurken görünürlük güvenceye alındı.
+
+### Client Portal Architecture
+- Client panelde sprint kartları detay açılımıyla task başlıkları + task/todo progress gösterir.
+- UI/UX sekmesinde client-visible design image gallery eklendi (image-only render, non-image filtreli).
+- Internal/private todo ve dosya verileri client akışında gizli kalmaya devam eder.
+
+### Project Files / Design Assets
+- Client panel design asset sorguları category filtreli çalışır.
+- Design gallery yalnız image-like dosyaları render eder (`mimeType` / extension tabanlı).
+
+### RTK Query/API Integration
+- Admin/employee `baseApi` tag seti delivery invalidation ihtiyacına göre genişletildi.
+- Delivery/tasks API katmanında sprint/summary correctness için provides/invalidates eşleşmeleri güncellendi.
+
+### Testing Checkpoints
+- Backend: `npm run check` + `ALLOW_E2E_DB_RESET=true npm run test:e2e:authz` (`213/213` test passed).
+- Admin/Employee: `npm run check` + `npm run test:run` (`153/153` test passed).
+- Client Panel: `npm run check` + `npm test` (`12/12` test passed).
+
+### Known Risks / Notes
+- Workspace realtime şu an incremental patch + refetch fallback hibrit modelde; yüksek trafik altında ek performans tuning follow-up gerektirebilir.
+
+## 2026-05-06 Update - Client Approval Workflow Standardization
+
+### Product Summary
+- Müşteri onay ve bilgilendirme akışı artık tek bir backend-native approval domain’i üzerinden yönetiliyor.
+- Explicit onay (`APPROVED/REJECTED`) ve bilgi popup’ı (`ACKNOWLEDGED`) ayrımı standartlaştırıldı.
+
+### Auth & RBAC Summary
+- Internal yönetim (admin/employee/PM): `approvals.read`, `approvals.manage`
+- Client response: `approvals.respond.own`
+- Scope kuralları:
+  - Admin: global
+  - Employee/PM: assignment scope
+  - Client: own `clientProfile` scope only
+
+### Backend Architecture
+- Yeni modül: `server/src/client-approvals/*`
+- Veri modeli:
+  - `ClientApprovalRequest`
+  - `ClientApprovalTransition`
+- Audit aksiyonları:
+  - `CLIENT_APPROVAL_CREATED`
+  - `CLIENT_APPROVAL_UPDATED`
+  - `CLIENT_APPROVAL_CANCELLED`
+  - `CLIENT_APPROVAL_APPROVED`
+  - `CLIENT_APPROVAL_REJECTED`
+  - `CLIENT_APPROVAL_ACKNOWLEDGED`
+
+### Project Manager Module
+- PM service workspace’e `Onaylar` sekmesi eklendi.
+- PM assigned scope içinde approval oluşturabilir/iptal edebilir, müşteri cevap geçmişini görebilir.
+
+### Client Portal Architecture
+- Login sonrası pending approval popup merkezi (`ClientApprovalCenter`) aktif.
+- Müşteri:
+  - explicit approval için onay/red
+  - information için okudum/anladım
+  aksiyonlarını verir.
+- Finalize edilmiş approval tekrar cevaplanamaz.
+
+### Web APP Workspace
+- Approval lifecycle güncellemeleri workspace socket eventleriyle (`approval.created|updated|cancelled|responded`) senkronize edilir.
+- Realtime kaçırılırsa RTK Query invalidation/refetch fallback davranışı korunur.
+
+### Project Files / Design Assets
+- Design/file paylaşımında client-visible bilgilendirme/onay isteği workflow’u task/project operasyonundan tetiklenebilir.
+- Client tarafında `actionPayload` sanitize edilerek yalnız client-visible alt payload gösterilir.
+
+### RTK Query/API Integration
+- Admin/employee: `features/clientApprovals/*`
+- Client: `features/approvals/*`
+- `ClientApprovals` tag invalidation ile modal/list durumları mutation sonrası taze tutulur.
+
+### Testing Checkpoints
+- Backend:
+  - `npm run check`
+  - `DATABASE_URL=<...socialtech_test...> ALLOW_E2E_DB_RESET=true npm run test:e2e:authz`
+  - Sonuç: `11/11` suite, `223/223` test geçti.
+- Admin/Employee:
+  - `npm run check`
+  - `npm run test:run`
+  - Sonuç: `26` dosya, `158/158` test geçti.
+- Client Panel:
+  - `npm run check`
+  - `npm test`
+  - Sonuç: `3` dosya, `14/14` test geçti.
+
+### Known Risks / Notes
+- Client panelde `features/approvals` ve legacy `features/clientApprovals` birlikte bulunuyor; fonksiyonel çakışma yok ancak follow-up’ta tek feature altında birleştirilmesi önerilir.
