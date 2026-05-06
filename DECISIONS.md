@@ -1863,3 +1863,32 @@ Affected files:
 - `clientPanel/src/app/pages/service-tab-page.tsx`
 - `clientPanel/src/app/pages/meetings.tsx`
 - `clientPanel/src/app/pages/reports.tsx`
+
+---
+
+## 2026-05-06 - Revisions Tab Hybrid Lifecycle (WEB_APP Workspace + Non-WEB Task)
+
+Context:
+`Revizyonlar` akışı panellerde kısmi ve tutarsızdı. WEB_APP tarafında workspace revision lifecycle vardı, diğer servislerde ise `Task(type=REVISION)` modeli kullanılıyordu; client approve/reject ve PM transition UI tarafında üretim davranışı tam değildi.
+
+Decision:
+Hibrit model kesinleştirildi:
+- WEB_APP revizyonları `WebAppWorkspaceRevision` lifecycle üzerinden yönetilir.
+- Non-WEB servis revizyonları `Task(type=REVISION)` ile listelenir.
+- Client yetkisi: create + `READY_FOR_REVIEW -> APPROVED|REJECTED` ve `REQUESTED -> CANCELLED`.
+- PM/employee transition matrix backend tarafından actor-aware doğrulanır; geçersiz geçişler tutarlı `400` döner.
+- Realtime contract korunur (`workspace:update`, `revision.created`, `revision.updated`) ve frontend cache patch akışı incremental devam eder.
+
+Reason:
+Tek bir “revizyon” UX’i sunarken, mevcut domain modelini bozmadan WEB_APP workspace lifecycle ile diğer servis task lifecycle’ını aynı sekmede güvenli şekilde birleştirmek.
+
+Affected files:
+- `server/src/web-app-workspace/web-app-workspace.service.ts`
+- `server/test/web-app-workspace-revisions-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/employee/pages/Revizyonlar.tsx`
+- `adminandemployeePanel/src/app/employee/pages/ProjectManagerServiceWorkspace.tsx`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/DeveloperTaskPages.test.tsx`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/ProjectManagerServiceWorkspace.test.tsx`
+- `clientPanel/src/app/features/webAppWorkspace/webAppWorkspaceApi.ts`
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+- `clientPanel/src/app/pages/__tests__/service-tab-page.webapp.test.tsx`

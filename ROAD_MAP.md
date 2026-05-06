@@ -33,6 +33,7 @@
 - CRM pipeline analytics
 - CRM outbound email/WhatsApp sending integrations
 - Cloudinary asset malware scanning/quarantine flow
+- Advanced revision inbox/routing and reminder notifications
 
 ## In Progress
 
@@ -132,6 +133,11 @@
 - Project Manager sprint/release management
 - Project Manager workspace message reply/visibility
 - Project Manager service workspace action center
+- Project Manager roadmap sprint planning (goal + date-range) in service workspace
+- Project Manager task creation target-tab routing (type/workstream) for employee panel visibility
+- Revizyonlar sekmesi hibrit model (WEB_APP workspace + non-WEB task) üretim akışı
+- Client revision create + approve/reject lifecycle (WEB_APP) ve PM transition matrix uyumu
+- Workspace revision authz e2e coverage (`server/test/web-app-workspace-revisions-authz.e2e-spec.ts`)
 
 ## Blocked
 
@@ -139,7 +145,7 @@ None identified.
 
 ## Notes
 
-- Latest backend validation checkpoint: `8/8` authz suites, `187/187` tests.
+- Latest backend validation checkpoint: `10/10` authz suites, `209/209` tests.
 - Latest admin/employee frontend validation checkpoint: `19` test files, `134/134` tests.
 - Latest client portal frontend validation checkpoint: `1` test file, `6/6` tests.
 - Summary query optimization and summary-side cache/TTL remain relevant follow-ups as data volume grows.

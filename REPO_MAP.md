@@ -105,6 +105,7 @@ Location: `adminandemployeePanel/`
   - `adminandemployeePanel/src/app/employee/pages/__tests__/Musterilerim.test.tsx`
   - `adminandemployeePanel/src/app/employee/pages/__tests__/CrmLeadDetail.test.tsx`
   - `adminandemployeePanel/src/app/employee/pages/__tests__/DeveloperTaskPages.test.tsx`
+  - `adminandemployeePanel/src/app/employee/pages/__tests__/ProjectManagerServiceWorkspace.test.tsx`
   - `adminandemployeePanel/src/app/employee/pages/__tests__/Sprintler.test.tsx`
   - `adminandemployeePanel/src/app/employee/pages/__tests__/TestYayin.test.tsx`
   - `adminandemployeePanel/src/app/employee/__tests__/EmployeeLayout.crm.test.tsx`
@@ -844,3 +845,29 @@ The `client/` directory is the public/marketing Social Tech website, not the Cli
   - API-first weekly report list + empty state
 - `clientPanel/src/app/pages/meetings.tsx`
   - API-first meeting list + scheduled time önceliği + empty state
+
+## 2026-05-06 Update Map (Revisions Hybrid Lifecycle)
+
+### Backend
+- `server/src/web-app-workspace/web-app-workspace.service.ts`
+  - actor-aware revision transition matrix (`client` / `employee|pm` / `admin`)
+  - invalid transitions unified to `400`
+  - assignee scope validation widened to `PROJECT|DEVELOPMENT|DESIGN`
+- `server/test/web-app-workspace-revisions-authz.e2e-spec.ts`
+  - client approve/reject, PM forbidden transition, admin override, out-of-scope safe `404`
+
+### Admin + Employee Panel Frontend
+- `adminandemployeePanel/src/app/employee/pages/Revizyonlar.tsx`
+  - hibrit görünüm: WEB_APP workspace revisions + non-WEB `Task(type=REVISION)`
+- `adminandemployeePanel/src/app/employee/pages/ProjectManagerServiceWorkspace.tsx`
+  - PM revision create + valid transition + assignee update action flow
+- `adminandemployeePanel/src/app/employee/pages/__tests__/DeveloperTaskPages.test.tsx`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/ProjectManagerServiceWorkspace.test.tsx`
+
+### Client Panel Frontend
+- `clientPanel/src/app/features/webAppWorkspace/webAppWorkspaceApi.ts`
+  - revision mutation sonrası incremental cache patch (`updateQueryData`)
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+  - WEB_APP revision create + approve/reject UI
+  - non-WEB revision sekmelerinde task-based revision panel
+- `clientPanel/src/app/pages/__tests__/service-tab-page.webapp.test.tsx`

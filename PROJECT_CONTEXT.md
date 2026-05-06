@@ -346,6 +346,19 @@ Current backend baseline includes:
 - Event payloads now include entity snapshots for create/update flows (`message`, `revision`, `meeting-request`, `section`, `content-item`, `weekly-report`).
 - Event contract includes `sequence` + `emittedAt`; frontend listeners use per-view `lastSequence` guards to ignore stale/out-of-order events.
 - Admin/Employee and Client panels now use `updateQueryData` incremental RTK Query cache patching for workspace live sync instead of broad refetch.
+
+## 2026-05-06 Revisions Hybrid Lifecycle Status
+
+- Revision domain is hybrid:
+  - WEB_APP service uses `WebAppWorkspaceRevision` lifecycle.
+  - Non-WEB services use `Task(type=REVISION)` lifecycle.
+- Client flow on WEB_APP is now production-aligned:
+  - create revision request
+  - `REQUESTED -> CANCELLED`
+  - `READY_FOR_REVIEW -> APPROVED | REJECTED`
+- PM/employee revision transitions are backend-enforced with actor-aware matrix and invalid moves return `400`.
+- Employee `/employee/revizyonlar` now composes both sources (workspace revisions + non-web revision tasks) with shared filters.
+- Client non-WEB revision tabs no longer depend on local-only action history; they read revision tasks from API.
     - `ADMIN_USER_DEACTIVATED`
     - `ADMIN_USER_ACTIVATED`
     - `ADMIN_USER_PASSWORD_RESET`
