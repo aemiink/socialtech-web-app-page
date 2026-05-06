@@ -256,12 +256,25 @@ const taskSummarySelect = {
   id: true,
   title: true,
   code: true,
+  sprintId: true,
   status: true,
   priority: true,
   type: true,
   workstream: true,
+  severity: true,
+  environment: true,
   assigneeUserId: true,
   dueDate: true,
+  sprint: {
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      goal: true,
+      startDate: true,
+      endDate: true,
+    },
+  },
   assignee: {
     select: {
       id: true,
@@ -274,6 +287,7 @@ const taskSummarySelect = {
 const sprintSummarySelect = {
   id: true,
   name: true,
+  goal: true,
   status: true,
   startDate: true,
   endDate: true,
@@ -718,12 +732,17 @@ export class WebAppWorkspaceService {
     revisionId: string,
     dto: UpdateWorkspaceRevisionStatusDto,
   ) {
-    const project = await this.assertWorkspaceProjectAccess(currentUser, projectId, "manage");
+    const project = await this.assertWorkspaceProjectAccess(
+      currentUser,
+      projectId,
+      currentUser.accountType === AccountType.CLIENT ? "interact" : "manage",
+    );
     const existing = await this.prisma.webAppWorkspaceRevision.findFirst({
       where: { id: revisionId, projectId: project.id },
       select: {
         id: true,
         status: true,
+        requestedByUserId: true,
         assignedToUserId: true,
       },
     });
@@ -731,10 +750,21 @@ export class WebAppWorkspaceService {
       throw new NotFoundException("Workspace revision not found.");
     }
 
-    this.assertRevisionTransitionAllowed(existing.status, dto.status);
+    if (currentUser.accountType !== AccountType.ADMIN) {
+      this.assertRevisionTransitionAllowed(existing.status, dto.status);
+    }
+    this.assertRevisionTransitionAllowedForActor(
+      currentUser,
+      existing.status,
+      dto.status,
+      existing.requestedByUserId,
+    );
 
     let assignedToUserId = existing.assignedToUserId;
     if (dto.assignedToUserId !== undefined) {
+      if (currentUser.accountType === AccountType.CLIENT) {
+        throw new ForbiddenException("Clients cannot re-assign workspace revisions.");
+      }
       assignedToUserId = dto.assignedToUserId
         ? await this.assertAssignableEmployee(project.clientProfileId, dto.assignedToUserId)
         : null;
@@ -1110,6 +1140,13 @@ export class WebAppWorkspaceService {
           some: {
             clientProfileId,
             isActive: true,
+            scope: {
+              in: [
+                EmployeeClientAssignmentScope.PROJECT,
+                EmployeeClientAssignmentScope.DEVELOPMENT,
+                EmployeeClientAssignmentScope.DESIGN,
+              ],
+            },
           },
         },
       },
@@ -1140,8 +1177,87 @@ export class WebAppWorkspaceService {
     };
 
     if (!transitions[fromStatus].includes(toStatus)) {
-      throw new BadRequestException(`Invalid revision status transition from ${fromStatus} to ${toStatus}.`);
+      this.throwInvalidRevisionTransition(fromStatus, toStatus);
     }
+  }
+
+  private assertRevisionTransitionAllowedForActor(
+    currentUser: AuthenticatedUser,
+    fromStatus: WebAppWorkspaceRevisionStatus,
+    toStatus: WebAppWorkspaceRevisionStatus,
+    requestedByUserId: string,
+  ) {
+    if (fromStatus === toStatus) {
+      return;
+    }
+
+    if (currentUser.accountType === AccountType.ADMIN) {
+      return;
+    }
+
+    if (currentUser.accountType === AccountType.CLIENT) {
+      if (requestedByUserId !== currentUser.id) {
+        throw new ForbiddenException("Clients can only manage revisions they requested.");
+      }
+
+      const clientTransitions: Record<
+        WebAppWorkspaceRevisionStatus,
+        readonly WebAppWorkspaceRevisionStatus[]
+      > = {
+        REQUESTED: [WebAppWorkspaceRevisionStatus.CANCELLED],
+        ACKNOWLEDGED: [],
+        IN_PROGRESS: [],
+        READY_FOR_REVIEW: [
+          WebAppWorkspaceRevisionStatus.APPROVED,
+          WebAppWorkspaceRevisionStatus.REJECTED,
+        ],
+        APPROVED: [],
+        REJECTED: [],
+        CANCELLED: [],
+      };
+
+      if (!clientTransitions[fromStatus].includes(toStatus)) {
+        this.throwInvalidRevisionTransition(fromStatus, toStatus);
+      }
+      return;
+    }
+
+    const employeeTransitions: Record<
+      WebAppWorkspaceRevisionStatus,
+      readonly WebAppWorkspaceRevisionStatus[]
+    > = {
+      REQUESTED: [
+        WebAppWorkspaceRevisionStatus.ACKNOWLEDGED,
+        WebAppWorkspaceRevisionStatus.CANCELLED,
+        WebAppWorkspaceRevisionStatus.REJECTED,
+      ],
+      ACKNOWLEDGED: [
+        WebAppWorkspaceRevisionStatus.IN_PROGRESS,
+        WebAppWorkspaceRevisionStatus.CANCELLED,
+        WebAppWorkspaceRevisionStatus.REJECTED,
+      ],
+      IN_PROGRESS: [
+        WebAppWorkspaceRevisionStatus.READY_FOR_REVIEW,
+        WebAppWorkspaceRevisionStatus.CANCELLED,
+      ],
+      READY_FOR_REVIEW: [WebAppWorkspaceRevisionStatus.IN_PROGRESS],
+      APPROVED: [],
+      REJECTED: [WebAppWorkspaceRevisionStatus.IN_PROGRESS, WebAppWorkspaceRevisionStatus.CANCELLED],
+      CANCELLED: [],
+    };
+
+    if (!employeeTransitions[fromStatus].includes(toStatus)) {
+      this.throwInvalidRevisionTransition(fromStatus, toStatus);
+    }
+  }
+
+  private throwInvalidRevisionTransition(
+    fromStatus: WebAppWorkspaceRevisionStatus,
+    toStatus: WebAppWorkspaceRevisionStatus,
+  ) {
+    throw new BadRequestException(
+      `Invalid revision status transition from ${fromStatus} to ${toStatus}.`,
+    );
   }
 
   private isResolvedRevisionStatus(status: WebAppWorkspaceRevisionStatus) {
