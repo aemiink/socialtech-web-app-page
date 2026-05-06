@@ -8,5 +8,6 @@ import { WebAppWorkspaceService } from "./web-app-workspace.service";
   imports: [AuthModule],
   controllers: [WebAppWorkspaceController],
   providers: [WebAppWorkspaceService, WebAppWorkspaceGateway],
+  exports: [WebAppWorkspaceGateway],
 })
 export class WebAppWorkspaceModule {}

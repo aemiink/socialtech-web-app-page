@@ -18,6 +18,8 @@ import { normalizeTaskResponse, normalizeTasksListResponse } from "./tasksUtils"
 const TASKS_LIST_ID = "LIST";
 const PROJECTS_LIST_ID = "LIST";
 const TASK_TODOS_ID_PREFIX = "TASK";
+const DELIVERY_SPRINTS_LIST_ID = "LIST";
+const DELIVERY_SUMMARY_ID = "SUMMARY";
 
 export const tasksApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -60,6 +62,9 @@ export const tasksApi = baseApi.injectEndpoints({
         { type: "Tasks", id: TASKS_LIST_ID },
         { type: "Projects", id: PROJECTS_LIST_ID },
         { type: "Projects", id: body.projectId },
+        { type: "DeliverySprints", id: DELIVERY_SPRINTS_LIST_ID },
+        { type: "DeliverySummary", id: DELIVERY_SUMMARY_ID },
+        ...(body.sprintId ? [{ type: "DeliverySprints" as const, id: body.sprintId }] : []),
       ],
     }),
     updateTask: builder.mutation<Task, { id: string; body: UpdateTaskRequest }>({
@@ -72,8 +77,12 @@ export const tasksApi = baseApi.injectEndpoints({
         { type: "Tasks", id: TASKS_LIST_ID },
         { type: "Tasks", id },
         { type: "Projects", id: PROJECTS_LIST_ID },
+        { type: "DeliverySprints", id: DELIVERY_SPRINTS_LIST_ID },
+        { type: "DeliverySummary", id: DELIVERY_SUMMARY_ID },
         ...(result ? [{ type: "Projects" as const, id: result.projectId }] : []),
         ...(body.projectId ? [{ type: "Projects" as const, id: body.projectId }] : []),
+        ...getDeliverySprintTagsFromTaskResponse(result),
+        ...(body.sprintId ? [{ type: "DeliverySprints" as const, id: body.sprintId }] : []),
       ],
     }),
     getTaskWorkNotes: builder.query<Task["workNotes"], string>({
@@ -121,7 +130,7 @@ export const tasksApi = baseApi.injectEndpoints({
         method: "POST",
         body,
       }),
-      invalidatesTags: (_result, _error, { taskId }) => getTaskTodoInvalidations(taskId),
+      invalidatesTags: (result, _error, { taskId }) => getTaskTodoInvalidations(taskId, result),
     }),
     updateTaskTodo: builder.mutation<
       TaskTodoMutationResponse,
@@ -132,7 +141,7 @@ export const tasksApi = baseApi.injectEndpoints({
         method: "PATCH",
         body,
       }),
-      invalidatesTags: (_result, _error, { taskId }) => getTaskTodoInvalidations(taskId),
+      invalidatesTags: (result, _error, { taskId }) => getTaskTodoInvalidations(taskId, result),
     }),
     toggleTaskTodo: builder.mutation<
       TaskTodoMutationResponse,
@@ -143,7 +152,7 @@ export const tasksApi = baseApi.injectEndpoints({
         method: "PATCH",
         body,
       }),
-      invalidatesTags: (_result, _error, { taskId }) => getTaskTodoInvalidations(taskId),
+      invalidatesTags: (result, _error, { taskId }) => getTaskTodoInvalidations(taskId, result),
     }),
     deleteTaskTodo: builder.mutation<
       TaskTodoMutationResponse,
@@ -153,7 +162,7 @@ export const tasksApi = baseApi.injectEndpoints({
         url: `/tasks/${taskId}/todos/${todoId}`,
         method: "DELETE",
       }),
-      invalidatesTags: (_result, _error, { taskId }) => getTaskTodoInvalidations(taskId),
+      invalidatesTags: (result, _error, { taskId }) => getTaskTodoInvalidations(taskId, result),
     }),
   }),
 });
@@ -178,12 +187,34 @@ function getTaskTodosTagId(taskId: string): string {
   return `${TASK_TODOS_ID_PREFIX}:${taskId}`;
 }
 
-function getTaskTodoInvalidations(taskId: string) {
+function getTaskTodoInvalidations(taskId: string, result?: TaskTodoMutationResponse) {
   return [
     { type: "Tasks" as const, id: TASKS_LIST_ID },
     { type: "Tasks" as const, id: taskId },
     { type: "TaskTodos" as const, id: getTaskTodosTagId(taskId) },
+    { type: "DeliverySprints" as const, id: DELIVERY_SPRINTS_LIST_ID },
+    { type: "DeliverySummary" as const, id: DELIVERY_SUMMARY_ID },
+    ...getDeliverySprintTagsFromTaskResponse(result),
   ];
+}
+
+function getDeliverySprintTagsFromTaskResponse(result: unknown) {
+  if (!isTaskLikeMutationResponse(result) || !result.sprintId) {
+    return [];
+  }
+
+  return [{ type: "DeliverySprints" as const, id: result.sprintId }];
+}
+
+function isTaskLikeMutationResponse(
+  value: unknown,
+): value is Pick<Task, "projectId" | "sprintId" | "status" | "priority"> {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const record = value as Partial<Task>;
+  return typeof record.projectId === "string" && typeof record.status === "string";
 }
 
 function serializeTasksListQuery(

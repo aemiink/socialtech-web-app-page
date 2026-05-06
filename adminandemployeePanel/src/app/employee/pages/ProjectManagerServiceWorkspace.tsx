@@ -27,6 +27,7 @@ import { Progress } from "../../components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { Textarea } from "../../components/ui/textarea";
 import { selectAccessToken, selectCurrentEmployeeRole } from "../../features/auth/authSelectors";
+import { ClientApprovalRequestDialog } from "../../features/clientApprovals/ClientApprovalRequestDialog";
 import {
   useCreateDeliveryReleaseMutation,
   useCreateDeliverySprintMutation,
@@ -89,10 +90,42 @@ import {
   getTaskWorkstreamLabel,
 } from "../../features/tasks/tasksUtils";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
+import {
+  useCancelClientApprovalMutation,
+  useGetClientApprovalsQuery,
+} from "../../features/clientApprovals/clientApprovalsApi";
+import type {
+  ClientApprovalComposerPreset,
+  ClientApprovalContextOption,
+  ClientApprovalType,
+} from "../../features/clientApprovals/clientApprovalsTypes";
+import {
+  getClientApprovalContextSummary,
+  getClientApprovalStatusBadgeClass,
+  getClientApprovalStatusLabel,
+  getClientApprovalTypeLabel,
+} from "../../features/clientApprovals/clientApprovalsUtils";
 
-type WorkspaceViewTab = "OVERVIEW" | "TASKS" | "FILES" | "MESSAGES" | "REVISIONS" | "REPORTS" | "MEETINGS";
+type WorkspaceViewTab =
+  | "OVERVIEW"
+  | "TASKS"
+  | "FILES"
+  | "MESSAGES"
+  | "REVISIONS"
+  | "REPORTS"
+  | "MEETINGS"
+  | "APPROVALS";
 const DEFAULT_VIEW_TAB: WorkspaceViewTab = "OVERVIEW";
-const WORKSPACE_TABS: WorkspaceViewTab[] = ["OVERVIEW", "TASKS", "FILES", "MESSAGES", "REVISIONS", "REPORTS", "MEETINGS"];
+const WORKSPACE_TABS: WorkspaceViewTab[] = [
+  "OVERVIEW",
+  "TASKS",
+  "FILES",
+  "MESSAGES",
+  "REVISIONS",
+  "REPORTS",
+  "MEETINGS",
+  "APPROVALS",
+];
 type EmployeePanelTargetTab =
   | "GOREVLERIM"
   | "FRONTEND"
@@ -188,6 +221,10 @@ export function ProjectManagerServiceWorkspace() {
   const [revisionNotes, setRevisionNotes] = useState<Record<string, string>>({});
   const [revisionAssigneeDrafts, setRevisionAssigneeDrafts] = useState<Record<string, string>>({});
   const [revisionStatusDrafts, setRevisionStatusDrafts] = useState<Record<string, WorkspaceRevisionStatus>>({});
+  const [isApprovalDialogOpen, setIsApprovalDialogOpen] = useState(false);
+  const [approvalDialogPreset, setApprovalDialogPreset] = useState<ClientApprovalComposerPreset | undefined>(
+    undefined,
+  );
   const lastSequenceRef = useRef(0);
   const lastAssigneeRoleRef = useRef<string | null>(null);
   const taskCreatePanelRef = useRef<HTMLDivElement | null>(null);
@@ -204,11 +241,11 @@ export function ProjectManagerServiceWorkspace() {
   );
 
   const workspaceTabKey = useMemo(() => mapServiceViewTabToWorkspaceTab(viewTab), [viewTab]);
-  const { data: workspaceMessages = [] } = useGetProjectWorkspaceMessagesQuery(
+  const { data: workspaceMessages = [], refetch: refetchWorkspaceMessages } = useGetProjectWorkspaceMessagesQuery(
     { projectId: project?.id ?? "", tabKey: workspaceTabKey },
     { skip: !project || !isWebAppLikeService(serviceKey) },
   );
-  const { data: revisions = [] } = useGetProjectWorkspaceRevisionsQuery(
+  const { data: revisions = [], refetch: refetchWorkspaceRevisions } = useGetProjectWorkspaceRevisionsQuery(
     { projectId: project?.id ?? "" },
     { skip: !project },
   );
@@ -239,10 +276,27 @@ export function ProjectManagerServiceWorkspace() {
     { projectId: project?.id ?? "", limit: 20 },
     { skip: !project },
   );
+  const {
+    data: approvalsResponse,
+    error: approvalsError,
+    isError: isApprovalsError,
+    isFetching: isFetchingApprovals,
+    refetch: refetchApprovals,
+  } = useGetClientApprovalsQuery(
+    project
+      ? {
+          projectId: project.id,
+          clientProfileId: project.clientProfileId,
+          limit: 50,
+        }
+      : undefined,
+    { skip: !project },
+  );
   const sprints = sprintResponse?.data ?? [];
   const tasks = tasksResponse?.data ?? [];
   const files = filesResponse?.data ?? [];
   const releases = releaseResponse?.data ?? [];
+  const approvals = approvalsResponse?.data ?? [];
   const tasksBySprint = useMemo(() => {
     const map = new Map<string, Task[]>();
     for (const task of tasks) {
@@ -267,6 +321,7 @@ export function ProjectManagerServiceWorkspace() {
   const [createSprint, { isLoading: isCreatingSprint }] = useCreateDeliverySprintMutation();
   const [updateSprint, { isLoading: isUpdatingSprint }] = useUpdateDeliverySprintMutation();
   const [createRelease, { isLoading: isCreatingRelease }] = useCreateDeliveryReleaseMutation();
+  const [cancelClientApproval, { isLoading: isCancellingApproval }] = useCancelClientApprovalMutation();
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [bulkMoveSprintId, setBulkMoveSprintId] = useState("");
   const [isBulkMoving, setIsBulkMoving] = useState(false);
@@ -291,6 +346,101 @@ export function ProjectManagerServiceWorkspace() {
         : TASK_WORKSTREAM_OPTIONS,
     [selectedAssigneeRole],
   );
+  const approvalContextOptions = useMemo<ClientApprovalContextOption[]>(() => {
+    if (!project) {
+      return [];
+    }
+
+    return [
+      {
+        key: `project:${project.id}`,
+        label: `Proje · ${project.name}`,
+        description: "Genel hizmet veya proje kapsamı için kullanın.",
+        entityType: "PROJECT",
+        entityId: project.id,
+        actionPayload: {
+          contextType: "Proje",
+          contextLabel: project.name,
+          projectId: project.id,
+          serviceKey: project.serviceKey ?? null,
+        },
+      },
+      ...tasks.slice(0, 20).map((task) => ({
+        key: `task:${task.id}`,
+        label: `Görev · ${task.title}`,
+        description: task.sprint?.name
+          ? `${task.sprint.name} · ${getTaskStatusLabel(task.status)}`
+          : getTaskStatusLabel(task.status),
+        entityType: "TASK" as const,
+        entityId: task.id,
+        actionPayload: {
+          contextType: "Görev",
+          contextLabel: task.title,
+          taskId: task.id,
+          taskStatus: task.status,
+          sprintName: task.sprint?.name ?? null,
+        },
+      })),
+      ...releases.slice(0, 20).map((release) => ({
+        key: `release:${release.id}`,
+        label: `Release · ${release.title}`,
+        description: `${release.environment} · ${release.status}`,
+        entityType: "RELEASE" as const,
+        entityId: release.id,
+        actionPayload: {
+          contextType: "Release",
+          contextLabel: release.title,
+          releaseId: release.id,
+          releaseStatus: release.status,
+          environment: release.environment,
+        },
+      })),
+      ...files.slice(0, 20).map((file) => ({
+        key: `file:${file.id}`,
+        label: `Dosya · ${file.title}`,
+        description: file.folder?.name
+          ? `${file.originalFileName} · ${file.folder.name}`
+          : file.originalFileName,
+        entityType:
+          file.category === "WEB_SOURCE" || file.category === "MOBILE_SOURCE"
+            ? ("DESIGN_ASSET" as const)
+            : ("PROJECT_FILE" as const),
+        entityId: file.id,
+        actionPayload: {
+          contextType:
+            file.category === "WEB_SOURCE" || file.category === "MOBILE_SOURCE"
+              ? "Tasarım Dosyası"
+              : "Proje Dosyası",
+          contextLabel: file.title,
+          projectFileId: file.id,
+          fileName: file.originalFileName,
+          folderName: file.folder?.name ?? null,
+          secureUrl: file.secureUrl,
+        },
+      })),
+      ...revisions.slice(0, 20).map((revision) => ({
+        key: `revision:${revision.id}`,
+        label: `Revizyon · ${revision.title}`,
+        description: revision.status,
+        entityType: "REVISION" as const,
+        entityId: revision.id,
+        actionPayload: {
+          contextType: "Revizyon",
+          contextLabel: revision.title,
+          revisionId: revision.id,
+          revisionStatus: revision.status,
+        },
+      })),
+    ];
+  }, [files, project, releases, revisions, tasks]);
+  const pendingApprovals = useMemo(
+    () => approvals.filter((approval) => approval.status === "PENDING"),
+    [approvals],
+  );
+  const approvalHistory = useMemo(
+    () => approvals.filter((approval) => approval.status !== "PENDING"),
+    [approvals],
+  );
 
   useEffect(() => {
     if (!project?.id || !accessToken) {
@@ -300,16 +450,26 @@ export function ProjectManagerServiceWorkspace() {
     const joinPayload = { projectId: project.id, tabKey: workspaceTabKey };
     socket.emit("project:join", joinPayload);
     const onWorkspaceUpdate = (event: WorkspaceUpdateEvent) => {
-      if (event.projectId !== project.id || event.tabKey !== workspaceTabKey) {
+      if (event.projectId !== project.id) {
         return;
       }
       if (event.sequence <= lastSequenceRef.current) {
+        return;
+      }
+      if (event.sequence > lastSequenceRef.current + 1) {
+        lastSequenceRef.current = event.sequence;
+        void refetchWorkspaceMessages();
+        void refetchWorkspaceRevisions();
+        void refetchApprovals();
         return;
       }
       lastSequenceRef.current = event.sequence;
       const message = (event.payload?.message ?? null) as WorkspaceMessage | null;
       const revisionPayload = (event.payload?.revision ?? null) as WorkspaceRevision | null;
       if (event.event === "message.created" && message) {
+        if (!isCompatibleWorkspaceMessageTab(event.tabKey, workspaceTabKey)) {
+          return;
+        }
         dispatch(
           projectsApi.util.updateQueryData(
             "getProjectWorkspaceMessages",
@@ -351,6 +511,14 @@ export function ProjectManagerServiceWorkspace() {
           ),
         );
       }
+      if (
+        event.event === "approval.created" ||
+        event.event === "approval.updated" ||
+        event.event === "approval.cancelled" ||
+        event.event === "approval.responded"
+      ) {
+        void refetchApprovals();
+      }
     };
     socket.on("workspace:update", onWorkspaceUpdate);
     return () => {
@@ -358,7 +526,15 @@ export function ProjectManagerServiceWorkspace() {
       socket.off("workspace:update", onWorkspaceUpdate);
       socket.disconnect();
     };
-  }, [accessToken, dispatch, project?.id, workspaceTabKey]);
+  }, [
+    accessToken,
+    dispatch,
+    project?.id,
+    refetchWorkspaceMessages,
+    refetchApprovals,
+    refetchWorkspaceRevisions,
+    workspaceTabKey,
+  ]);
 
   useEffect(() => {
     if (sprints.length === 0) {
@@ -712,6 +888,28 @@ export function ProjectManagerServiceWorkspace() {
       setReleaseVersion("");
     } catch (mutationError) {
       setActionError(extractApiErrorMessage(mutationError, "Release oluşturulamadı."));
+    }
+  };
+
+  const openApprovalDialog = (type: ClientApprovalType, requiresExplicitApproval: boolean) => {
+    setApprovalDialogPreset({
+      type,
+      requiresExplicitApproval,
+      title:
+        type === "INFORMATION"
+          ? `${project?.name ?? "Proje"} hakkında bilgilendirme`
+          : `${project?.name ?? "Proje"} için müşteri onayı`,
+      contextKey: approvalContextOptions[0]?.key,
+    });
+    setIsApprovalDialogOpen(true);
+  };
+
+  const handleCancelApproval = async (approvalId: string) => {
+    try {
+      setActionError(null);
+      await cancelClientApproval({ id: approvalId }).unwrap();
+    } catch (mutationError) {
+      setActionError(extractApiErrorMessage(mutationError, "Onay talebi iptal edilemedi."));
     }
   };
 
@@ -1710,7 +1908,157 @@ export function ProjectManagerServiceWorkspace() {
             emptyText="Toplantı kaydı bulunmuyor."
           />
         </TabsContent>
+
+        <TabsContent value="APPROVALS">
+          <div className="grid gap-4 lg:grid-cols-[minmax(340px,0.9fr)_minmax(0,1.1fr)]">
+            <Card className="border-white/[0.06] bg-[#1A1A1A]">
+              <CardHeader>
+                <CardTitle className="text-white">Onay Merkezi</CardTitle>
+                <CardDescription>
+                  Bekleyen onayları yönetin, release veya görev bazlı yeni kayıt açın.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <button
+                    type="button"
+                    className="rounded-2xl border border-[#AAFF01]/20 bg-[#AAFF01]/10 p-4 text-left transition hover:bg-[#AAFF01]/15"
+                    onClick={() => openApprovalDialog("GENERAL_CONFIRMATION", true)}
+                  >
+                    <p className="text-sm font-semibold text-[#E8FFC2]">Müşteri Onayı İste</p>
+                    <p className="mt-2 text-xs leading-5 text-[#D7E8B1]">
+                      Proje, görev, release veya dosya bağlamında açık onay kaydı açın.
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-2xl border border-white/10 bg-black/20 p-4 text-left transition hover:border-white/15 hover:bg-black/25"
+                    onClick={() => openApprovalDialog("INFORMATION", false)}
+                  >
+                    <p className="text-sm font-semibold text-white">Bilgilendirme Gönder</p>
+                    <p className="mt-2 text-xs leading-5 text-[#A0A0A0]">
+                      Sadece okundu takibi gereken durumları bilgilendirme olarak iletin.
+                    </p>
+                  </button>
+                </div>
+
+                <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium text-white">Bekleyen Talepler</p>
+                    <Badge variant="outline" className="border-white/10 bg-white/5 text-[#D8D8D8]">
+                      {pendingApprovals.length}
+                    </Badge>
+                  </div>
+                  <div className="space-y-3">
+                    {pendingApprovals.map((approval) => (
+                      <div key={approval.id} className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-3">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-white">{approval.title}</p>
+                            <p className="mt-1 text-xs text-[#A0A0A0]">
+                              {getClientApprovalTypeLabel(approval.type)} · {getClientApprovalContextSummary(approval)}
+                            </p>
+                          </div>
+                          <Badge className={getClientApprovalStatusBadgeClass(approval.status)}>
+                            {getClientApprovalStatusLabel(approval.status)}
+                          </Badge>
+                        </div>
+                        <p className="mt-3 text-sm leading-6 text-[#D8D8D8]">{approval.message}</p>
+                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[#A0A0A0]">
+                          <span>Oluşturulma: {new Date(approval.createdAt).toLocaleString("tr-TR")}</span>
+                          <span>
+                            {approval.dueAt
+                              ? `Son yanıt: ${new Date(approval.dueAt).toLocaleString("tr-TR")}`
+                              : "Son tarih yok"}
+                          </span>
+                        </div>
+                        <div className="mt-3">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={isCancellingApproval}
+                            onClick={() => void handleCancelApproval(approval.id)}
+                          >
+                            {isCancellingApproval ? "İptal Ediliyor..." : "Talebi İptal Et"}
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                    {pendingApprovals.length === 0 ? <EmptyHint text="Bekleyen onay talebi bulunmuyor." /> : null}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-white/[0.06] bg-[#1A1A1A]">
+              <CardHeader>
+                <CardTitle className="text-white">Geçmiş</CardTitle>
+                <CardDescription>Sonuçlanan, okunan veya iptal edilen kayıtlar.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {isFetchingApprovals ? (
+                  <EmptyHint text="Onay kayıtları güncelleniyor..." />
+                ) : null}
+                {approvalHistory.map((approval) => (
+                  <div key={approval.id} className="rounded-xl border border-white/[0.08] bg-black/20 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-white">{approval.title}</p>
+                      <Badge className={getClientApprovalStatusBadgeClass(approval.status)}>
+                        {getClientApprovalStatusLabel(approval.status)}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-xs text-[#A0A0A0]">{approval.message}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#A0A0A0]">
+                      <span>{getClientApprovalTypeLabel(approval.type)}</span>
+                      <span>•</span>
+                      <span>{getClientApprovalContextSummary(approval)}</span>
+                      <span>•</span>
+                      <span>{new Date(approval.createdAt).toLocaleString("tr-TR")}</span>
+                      {approval.respondedAt ? (
+                        <>
+                          <span>•</span>
+                          <span>Yanıt: {new Date(approval.respondedAt).toLocaleString("tr-TR")}</span>
+                        </>
+                      ) : null}
+                    </div>
+                    {approval.clientResponseNote ? (
+                      <p className="mt-2 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-[#D8D8D8]">
+                        Müşteri Notu: {approval.clientResponseNote}
+                      </p>
+                    ) : null}
+                  </div>
+                ))}
+                {!isFetchingApprovals && isApprovalsError ? (
+                  <EmptyHint text={extractApiErrorMessage(approvalsError, "Onay kayıtları alınamadı.")} />
+                ) : null}
+                {!isFetchingApprovals && !isApprovalsError && approvalHistory.length === 0 ? (
+                  <EmptyHint text="Geçmiş onay kaydı bulunmuyor." />
+                ) : null}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
       </Tabs>
+
+      {project ? (
+        <ClientApprovalRequestDialog
+          open={isApprovalDialogOpen}
+          onOpenChange={setIsApprovalDialogOpen}
+          clientProfileId={project.clientProfileId}
+          projectId={project.id}
+          serviceKey={project.serviceKey ?? undefined}
+          assigneeOptions={assigneeCandidates}
+          contextOptions={approvalContextOptions}
+          dialogTitle="Müşteri Onayı / Bilgilendirme"
+          dialogDescription="Bağlı kayıt seçip müşteriye onay veya bilgilendirme iletin."
+          submitLabel="Müşteriye Gönder"
+          preset={approvalDialogPreset}
+          onCreated={() => {
+            setActionError(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -2385,6 +2733,7 @@ function getViewTabLabel(tab: WorkspaceViewTab): string {
   if (tab === "MESSAGES") return "Mesajlar";
   if (tab === "REVISIONS") return "Revizyonlar";
   if (tab === "REPORTS") return "Raporlar";
+  if (tab === "APPROVALS") return "Onaylar";
   return "Toplantılar";
 }
 
@@ -2404,6 +2753,16 @@ function mapServiceViewTabToWorkspaceTab(tab: WorkspaceViewTab): WorkspaceTabKey
   if (tab === "REPORTS") return "REPORTS";
   if (tab === "MEETINGS") return "MEETINGS";
   return "OVERVIEW";
+}
+
+function isCompatibleWorkspaceMessageTab(eventTabKey: string, currentTabKey: WorkspaceTabKey): boolean {
+  if (eventTabKey === currentTabKey) {
+    return true;
+  }
+  return (
+    (eventTabKey === "OVERVIEW" && currentTabKey === "MESSAGES") ||
+    (eventTabKey === "MESSAGES" && currentTabKey === "OVERVIEW")
+  );
 }
 
 function isWebAppLikeService(serviceKey?: string): boolean {

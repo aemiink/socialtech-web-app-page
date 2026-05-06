@@ -36,6 +36,7 @@ import {
 import { Button } from '../components/button';
 import { getServiceTabContent, ServiceTabContent } from '../data/service-pages';
 import { useGetClientProjectFilesQuery } from '../features/projectFiles/projectFilesApi';
+import type { ProjectFile } from '../features/projectFiles/projectFilesTypes';
 import { useGetClientTasksQuery } from '../features/tasks/tasksApi';
 import type {
   ClientTask,
@@ -68,6 +69,7 @@ import { createWorkspaceSocket, type WorkspaceUpdateEvent } from '../features/we
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { selectAccessToken, selectCurrentUser } from '../features/auth/authSelectors';
 import { runClientAction } from '../lib/client-actions';
+import { approvalsApi } from '../features/approvals/approvalsApi';
 
 interface ServiceTabPageProps {
   serviceId: string;
@@ -111,10 +113,23 @@ export function ServiceTabPage({ serviceId, tabId, projectId }: ServiceTabPagePr
   const workspaceTabKey = mapTabIdToWorkspaceTabKey(tabId);
   const viewKind = getViewKind(serviceId, tabId);
   const shouldUseWorkspace = isWebAppService && Boolean(projectId);
+  const shouldLoadDesignAssets = shouldUseWorkspace && (tabId === "ui-ux" || tabId.includes("design"));
   const shouldUseTaskBasedRevisions = !isWebAppService && tabId === "revisions";
-  const { data: workspaceData, isLoading: workspaceLoading } = useGetWebAppWorkspaceQuery(
+  const {
+    data: workspaceData,
+    isLoading: workspaceLoading,
+    refetch: refetchWorkspace,
+  } = useGetWebAppWorkspaceQuery(
     { projectId: projectId ?? '', tabKey: workspaceTabKey },
     { skip: !shouldUseWorkspace },
+  );
+  const {
+    data: designAssetsResponse,
+    isLoading: isLoadingDesignAssets,
+    isError: isDesignAssetsError,
+  } = useGetClientProjectFilesQuery(
+    { projectId: projectId ?? "", category: "BRAND_ASSET" },
+    { skip: !shouldLoadDesignAssets || !projectId },
   );
   const { data: taskBasedRevisions = [], isLoading: taskBasedRevisionsLoading } = useGetClientTasksQuery(
     projectId ? { projectId, type: "REVISION" } : { type: "REVISION" },
@@ -139,18 +154,38 @@ export function ServiceTabPage({ serviceId, tabId, projectId }: ServiceTabPagePr
       }),
     [projectId, serviceId, taskBasedRevisions],
   );
+  const designAssetFiles = useMemo(
+    () =>
+      (designAssetsResponse?.data ?? []).filter((file) =>
+        isImageLikeFile(file.mimeType, file.originalFileName),
+      ),
+    [designAssetsResponse?.data],
+  );
 
   const handleWorkspaceMessageSend = async (message: string, parentMessageId?: string) => {
     if (!projectId || !message.trim()) {
       return;
     }
 
-    await createWorkspaceMessage({
+    const createdMessage = await createWorkspaceMessage({
       projectId,
       tabKey: workspaceTabKey,
       body: message.trim(),
       parentMessageId,
     }).unwrap();
+
+    dispatch(
+      webAppWorkspaceApi.util.updateQueryData(
+        "getWebAppWorkspace",
+        { projectId, tabKey: workspaceTabKey },
+        (draft) => {
+          const exists = draft.messages?.some((item) => item.id === createdMessage.id);
+          if (!exists) {
+            draft.messages = [...(draft.messages ?? []), createdMessage];
+          }
+        },
+      ),
+    );
   };
 
   const handleWorkspaceRevisionCreate = async () => {
@@ -221,17 +256,25 @@ export function ServiceTabPage({ serviceId, tabId, projectId }: ServiceTabPagePr
       if (event.sequence <= lastWorkspaceSequenceRef.current) {
         return;
       }
+      if (event.sequence > lastWorkspaceSequenceRef.current + 1) {
+        lastWorkspaceSequenceRef.current = event.sequence;
+        void refetchWorkspace();
+        return;
+      }
       lastWorkspaceSequenceRef.current = event.sequence;
       const payload = event.payload ?? {};
       const revision = (payload.revision ?? null) as WorkspaceRevision | null;
       const message = (payload.message ?? null) as WorkspaceMessage | null;
 
       if (event.event === 'message.created' && message) {
+        if (event.tabKey !== workspaceTabKey) {
+          return;
+        }
         dispatch(
           webAppWorkspaceApi.util.updateQueryData('getWebAppWorkspace', { projectId, tabKey: workspaceTabKey }, (draft) => {
             const exists = draft.messages?.some((item) => item.id === message.id);
             if (!exists) {
-              draft.messages = [message, ...(draft.messages ?? [])];
+              draft.messages = [...(draft.messages ?? []), message];
             }
           }),
         );
@@ -259,6 +302,17 @@ export function ServiceTabPage({ serviceId, tabId, projectId }: ServiceTabPagePr
             }
           }),
         );
+        return;
+      }
+
+      if (
+        event.event === 'approval.created' ||
+        event.event === 'approval.updated' ||
+        event.event === 'approval.cancelled' ||
+        event.event === 'approval.responded'
+      ) {
+        dispatch(approvalsApi.util.invalidateTags([{ type: 'ClientApprovals', id: 'LIST' }]));
+        return;
       }
     };
 
@@ -269,7 +323,7 @@ export function ServiceTabPage({ serviceId, tabId, projectId }: ServiceTabPagePr
       socket.off('workspace:update', onWorkspaceUpdate);
       socket.disconnect();
     };
-  }, [accessToken, dispatch, projectId, shouldUseWorkspace, workspaceTabKey]);
+  }, [accessToken, dispatch, projectId, refetchWorkspace, shouldUseWorkspace, workspaceTabKey]);
 
   if (isWebAppService) {
     return (
@@ -280,6 +334,9 @@ export function ServiceTabPage({ serviceId, tabId, projectId }: ServiceTabPagePr
         sections={workspaceData?.sections ?? []}
         projectSummary={workspaceData?.project}
         sourceOfTruth={workspaceData?.sourceOfTruth}
+        designAssetFiles={designAssetFiles}
+        isLoadingDesignAssets={isLoadingDesignAssets}
+        isDesignAssetsError={isDesignAssetsError}
         messages={workspaceData?.messages ?? []}
         revisions={workspaceData?.revisions ?? []}
         isSendingWorkspaceMessage={isSendingWorkspaceMessage}
@@ -364,6 +421,9 @@ function WebAppWorkspaceTab({
   sections,
   projectSummary,
   sourceOfTruth,
+  designAssetFiles,
+  isLoadingDesignAssets,
+  isDesignAssetsError,
   messages,
   revisions,
   isSendingWorkspaceMessage,
@@ -387,6 +447,9 @@ function WebAppWorkspaceTab({
   sections: WorkspaceSection[];
   projectSummary?: WorkspaceProjectSummary;
   sourceOfTruth?: WorkspaceSourceOfTruth;
+  designAssetFiles: ProjectFile[];
+  isLoadingDesignAssets: boolean;
+  isDesignAssetsError: boolean;
   messages: WorkspaceMessage[];
   revisions: WorkspaceRevision[];
   isSendingWorkspaceMessage: boolean;
@@ -433,12 +496,15 @@ function WebAppWorkspaceTab({
       {projectId && !workspaceLoading ? (
         <WebAppSourceOfTruthPanel
           tabId={tabId}
-          tasks={tabTasks}
-          allTasks={tasks}
-          sprints={sprints}
-          releases={releases}
-          files={files}
-        />
+        tasks={tabTasks}
+        allTasks={tasks}
+        sprints={sprints}
+        releases={releases}
+        files={files}
+        designAssetFiles={designAssetFiles}
+        isLoadingDesignAssets={isLoadingDesignAssets}
+        isDesignAssetsError={isDesignAssetsError}
+      />
       ) : null}
       <div className="space-y-4">
         {sections.map((section) => (
@@ -563,6 +629,9 @@ function WebAppSourceOfTruthPanel({
   sprints,
   releases,
   files,
+  designAssetFiles,
+  isLoadingDesignAssets,
+  isDesignAssetsError,
 }: {
   tabId: string;
   tasks: WorkspaceSourceTask[];
@@ -570,6 +639,9 @@ function WebAppSourceOfTruthPanel({
   sprints: WorkspaceSourceSprint[];
   releases: WorkspaceSourceRelease[];
   files: WorkspaceSourceFile[];
+  designAssetFiles: ProjectFile[];
+  isLoadingDesignAssets: boolean;
+  isDesignAssetsError: boolean;
 }) {
   if (tabId === "project-roadmap") {
     return <RoadmapSourcePanel sprints={sprints} releases={releases} />;
@@ -592,7 +664,20 @@ function WebAppSourceOfTruthPanel({
     return <WorkspaceSourceFilesPanel files={files} />;
   }
 
-  if (["frontend", "backend-api", "admin-panel", "ui-ux", "revisions"].includes(tabId)) {
+  if (tabId === "ui-ux") {
+    return (
+      <div className="space-y-4">
+        <WorkspaceDesignGalleryPanel
+          files={designAssetFiles}
+          isLoading={isLoadingDesignAssets}
+          isError={isDesignAssetsError}
+        />
+        <TaskSourcePanel title="UI/UX Operasyon Görevleri" tasks={tasks} emptyText="Bu sekme için görev bulunmuyor." />
+      </div>
+    );
+  }
+
+  if (["frontend", "backend-api", "admin-panel", "revisions"].includes(tabId)) {
     return <TaskSourcePanel title="Operasyon Görevleri" tasks={tasks} emptyText="Bu sekme için görev bulunmuyor." />;
   }
 
@@ -700,6 +785,7 @@ function SprintStatusSourcePanel({
   tasks: WorkspaceSourceTask[];
   sprints: WorkspaceSourceSprint[];
 }) {
+  const [expandedSprintId, setExpandedSprintId] = useState<string | null>(null);
   const counts = useMemo(
     () => ({
       total: tasks.length,
@@ -721,6 +807,7 @@ function SprintStatusSourcePanel({
     }
     return bucket;
   }, [tasks]);
+  const selectedSprintTasks = expandedSprintId ? tasksBySprint.get(expandedSprintId) ?? [] : [];
 
   return (
     <div className={cardClass}>
@@ -739,19 +826,53 @@ function SprintStatusSourcePanel({
         <div className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-2">
           {sprints.map((sprint) => (
             <div key={sprint.id} className="rounded-xl border border-white/[0.08] bg-[#202020] p-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="text-sm text-white">{sprint.name}</p>
-                <span className={`rounded border px-2 py-1 text-[11px] ${getSprintStatusTone(sprint.status)}`}>
-                  {sprint.status}
-                </span>
-              </div>
-              {sprint.goal ? <p className="text-xs text-[#d7d7d7]">Hedef: {sprint.goal}</p> : null}
-              <p className="mt-1 text-xs text-[#A0A0A0]">
-                {new Date(sprint.startDate).toLocaleDateString("tr-TR")} - {new Date(sprint.endDate).toLocaleDateString("tr-TR")}
-              </p>
-              <p className="mt-1 text-xs text-[#A0A0A0]">
-                Görev: {(tasksBySprint.get(sprint.id) ?? []).length}
-              </p>
+              <button
+                type="button"
+                onClick={() => setExpandedSprintId((current) => (current === sprint.id ? null : sprint.id))}
+                className="w-full text-left"
+              >
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-sm text-white">{sprint.name}</p>
+                  <span className={`rounded border px-2 py-1 text-[11px] ${getSprintStatusTone(sprint.status)}`}>
+                    {sprint.status}
+                  </span>
+                </div>
+                {sprint.goal ? <p className="text-xs text-[#d7d7d7]">Hedef: {sprint.goal}</p> : null}
+                <p className="mt-1 text-xs text-[#A0A0A0]">
+                  {new Date(sprint.startDate).toLocaleDateString("tr-TR")} - {new Date(sprint.endDate).toLocaleDateString("tr-TR")}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-3 text-xs text-[#A0A0A0]">
+                  <span>İlerleme: %{sprint.progressPercent ?? calculateTaskListProgress(tasksBySprint.get(sprint.id) ?? [])}</span>
+                  <span>
+                    Görev: {sprint.taskCounts?.completed ?? 0}/{sprint.taskCounts?.total ?? (tasksBySprint.get(sprint.id) ?? []).length}
+                  </span>
+                </div>
+              </button>
+              {expandedSprintId === sprint.id ? (
+                <div className="mt-3 space-y-2 rounded-lg border border-white/[0.08] bg-[#181818] p-3">
+                  {(tasksBySprint.get(sprint.id) ?? []).length === 0 ? (
+                    <p className="text-xs text-[#A0A0A0]">Bu sprintte görev bulunmuyor.</p>
+                  ) : null}
+                  {(tasksBySprint.get(sprint.id) ?? []).map((task) => (
+                    <div key={task.id} className="rounded-md border border-white/[0.08] bg-[#1F1F1F] px-3 py-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm text-white">{task.title}</p>
+                        <span className={`rounded border px-2 py-0.5 text-[11px] ${getTaskStatusTone(task.status)}`}>
+                          {task.status}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-3 text-xs text-[#A0A0A0]">
+                        <span>İlerleme: %{resolveTaskProgressPercent(task)}</span>
+                        {task.completion ? (
+                          <span>
+                            Todo: {task.completion.completedTodos}/{task.completion.totalTodos}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ))}
         </div>
@@ -829,6 +950,56 @@ function WorkspaceSourceFilesPanel({ files }: { files: WorkspaceSourceFile[] }) 
               <ArrowRight className="h-3.5 w-3.5" />
             </a>
           </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function WorkspaceDesignGalleryPanel({
+  files,
+  isLoading,
+  isError,
+}: {
+  files: ProjectFile[];
+  isLoading: boolean;
+  isError: boolean;
+}) {
+  return (
+    <div className={cardClass}>
+      <h2 className="mb-4 text-xl text-white">UI/UX Tasarım Görselleri</h2>
+      {isLoading ? <p className="text-sm text-[#A0A0A0]">Tasarım görselleri yükleniyor...</p> : null}
+      {isError ? (
+        <p className="text-sm text-red-300">Tasarım görselleri şu anda yüklenemedi. Lütfen sayfayı yenileyin.</p>
+      ) : null}
+      {!isLoading && !isError && files.length === 0 ? (
+        <p className="text-sm text-[#A0A0A0]">Henüz müşteriyle paylaşılan tasarım görseli yok.</p>
+      ) : null}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {files.map((file) => (
+          <a
+            key={file.id}
+            href={file.secureUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group overflow-hidden rounded-xl border border-white/[0.08] bg-[#202020] transition-colors hover:border-[#AAFF01]/40"
+          >
+            <div className="aspect-[16/10] overflow-hidden bg-[#161616]">
+              <img
+                src={file.secureUrl}
+                alt={file.title}
+                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                loading="lazy"
+              />
+            </div>
+            <div className="space-y-1 p-3">
+              <p className="truncate text-sm text-white">{file.title}</p>
+              <p className="truncate text-xs text-[#A0A0A0]">{file.originalFileName}</p>
+              <p className="text-xs text-[#8F8F8F]">
+                {new Date(file.createdAt).toLocaleDateString("tr-TR")}
+              </p>
+            </div>
+          </a>
         ))}
       </div>
     </div>
@@ -1179,6 +1350,48 @@ function getReleaseStatusTone(status: string): string {
   if (status === "READY" || status === "TESTING") return statusTone.info;
   if (status === "FAILED" || status === "ROLLED_BACK") return statusTone.danger;
   return statusTone.violet;
+}
+
+function resolveTaskProgressPercent(task: WorkspaceSourceTask): number {
+  if (typeof task.progressPercent === "number" && Number.isFinite(task.progressPercent)) {
+    return clampPercent(task.progressPercent);
+  }
+  if (task.completion && Number.isFinite(task.completion.completionPercentage)) {
+    return clampPercent(task.completion.completionPercentage);
+  }
+  if (task.status === "DONE") {
+    return 100;
+  }
+  if (task.status === "REVIEW") {
+    return 80;
+  }
+  if (task.status === "IN_PROGRESS") {
+    return 50;
+  }
+  if (task.status === "BLOCKED") {
+    return 20;
+  }
+  return 0;
+}
+
+function calculateTaskListProgress(tasks: WorkspaceSourceTask[]): number {
+  if (tasks.length === 0) {
+    return 0;
+  }
+  const total = tasks.reduce((sum, task) => sum + resolveTaskProgressPercent(task), 0);
+  return Math.round(total / tasks.length);
+}
+
+function clampPercent(value: number): number {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function isImageLikeFile(mimeType: string | null | undefined, fileName: string | null | undefined): boolean {
+  if (mimeType?.startsWith("image/")) {
+    return true;
+  }
+  const normalized = (fileName ?? "").toLowerCase();
+  return /\.(png|jpe?g|webp|gif|bmp|svg|avif)$/.test(normalized);
 }
 
 function detectFigmaLinkKind(url: string | null | undefined): "prototype" | "ui" | null {

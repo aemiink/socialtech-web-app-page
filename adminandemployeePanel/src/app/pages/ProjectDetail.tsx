@@ -6,6 +6,11 @@ import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
+import { ClientApprovalRequestDialog } from "../features/clientApprovals/ClientApprovalRequestDialog";
+import type {
+  ClientApprovalComposerPreset,
+  ClientApprovalContextOption,
+} from "../features/clientApprovals/clientApprovalsTypes";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import {
   hasAdminPermission,
@@ -109,6 +114,7 @@ export function ProjectDetail() {
     "integrations.github.manage.any",
     "integrations.github.read.assigned",
   ]);
+  const canManageApprovals = hasUserPermission(currentUser, ["approvals.manage"]);
   const canReadWorkspace = hasUserPermission(currentUser, [
     "webapp.workspace.read.any",
     "webapp.workspace.manage.any",
@@ -165,6 +171,10 @@ export function ProjectDetail() {
   });
   const [meetingResponseNote, setMeetingResponseNote] = useState<Record<string, string>>({});
   const [messageDraft, setMessageDraft] = useState("");
+  const [isApprovalDialogOpen, setIsApprovalDialogOpen] = useState(false);
+  const [approvalDialogPreset, setApprovalDialogPreset] = useState<ClientApprovalComposerPreset | undefined>(
+    undefined,
+  );
   const lastWorkspaceSequenceRef = useRef(0);
 
   const isValidId = typeof id === "string" && isUuid(id);
@@ -219,18 +229,22 @@ export function ProjectDetail() {
   );
   const { data: workspaceAssigneeCandidates = [] } = useGetProjectAssigneeCandidatesQuery(
     id ?? "",
-    { skip: !isValidId || !canManageWorkspace },
+    { skip: !isValidId || (!canManageWorkspace && !canManageApprovals) },
   );
   const repositoryRequired = useMemo(
     () => (project ? projectRequiresRepository(project) : false),
     [project],
   );
   const workspaceEnabled = project?.serviceKey === "web-app";
-  const { data: workspaceSnapshot, isFetching: isFetchingWorkspace } = useGetProjectWorkspaceSnapshotQuery(
+  const {
+    data: workspaceSnapshot,
+    isFetching: isFetchingWorkspace,
+    refetch: refetchWorkspaceSnapshot,
+  } = useGetProjectWorkspaceSnapshotQuery(
     { projectId: id ?? "", tabKey: selectedWorkspaceTab },
     { skip: !isValidId || !canReadWorkspace || !workspaceEnabled },
   );
-  const { data: workspaceRevisions = [] } = useGetProjectWorkspaceRevisionsQuery(
+  const { data: workspaceRevisions = [], refetch: refetchWorkspaceRevisions } = useGetProjectWorkspaceRevisionsQuery(
     { projectId: id ?? "" },
     { skip: !isValidId || !canReadWorkspace || !workspaceEnabled },
   );
@@ -242,7 +256,7 @@ export function ProjectDetail() {
     { projectId: id ?? "" },
     { skip: !isValidId || !canReadWorkspace || !workspaceEnabled },
   );
-  const { data: workspaceMessages = [] } = useGetProjectWorkspaceMessagesQuery(
+  const { data: workspaceMessages = [], refetch: refetchWorkspaceMessages } = useGetProjectWorkspaceMessagesQuery(
     { projectId: id ?? "", tabKey: selectedWorkspaceTab },
     { skip: !isValidId || !canReadWorkspace || !workspaceEnabled },
   );
@@ -278,6 +292,13 @@ export function ProjectDetail() {
       if (event.sequence <= lastWorkspaceSequenceRef.current) {
         return;
       }
+      if (event.sequence > lastWorkspaceSequenceRef.current + 1) {
+        lastWorkspaceSequenceRef.current = event.sequence;
+        void refetchWorkspaceSnapshot();
+        void refetchWorkspaceMessages();
+        void refetchWorkspaceRevisions();
+        return;
+      }
       lastWorkspaceSequenceRef.current = event.sequence;
       const payload = event.payload ?? {};
       const revision = (payload.revision ?? null) as WorkspaceRevision | null;
@@ -289,6 +310,9 @@ export function ProjectDetail() {
       const weeklyReport = (payload.weeklyReport ?? null) as WorkspaceWeeklyReport | null;
 
       if (event.event === "message.created" && message) {
+        if (!isCompatibleWorkspaceMessageTab(event.tabKey, selectedWorkspaceTab)) {
+          return;
+        }
         dispatch(
           projectsApi.util.updateQueryData(
             "getProjectWorkspaceMessages",
@@ -515,7 +539,17 @@ export function ProjectDetail() {
       socket.off("workspace:update", onWorkspaceUpdate);
       socket.disconnect();
     };
-  }, [accessToken, canReadWorkspace, dispatch, id, selectedWorkspaceTab, workspaceEnabled]);
+  }, [
+    accessToken,
+    canReadWorkspace,
+    dispatch,
+    id,
+    refetchWorkspaceMessages,
+    refetchWorkspaceRevisions,
+    refetchWorkspaceSnapshot,
+    selectedWorkspaceTab,
+    workspaceEnabled,
+  ]);
 
   if (!canReadProjects) {
     return (
@@ -803,8 +837,55 @@ export function ProjectDetail() {
 
   const files = projectFilesResponse?.data ?? [];
   const folders = projectFolders ?? [];
+  const approvalContextOptions = useMemo<ClientApprovalContextOption[]>(() => {
+    return [
+      {
+        key: `project:${project.id}`,
+        label: `Proje · ${project.name}`,
+        description: "Genel proje kapsamı ve hizmet ilerleyişi için kullanın.",
+        entityType: "PROJECT",
+        entityId: project.id,
+        actionPayload: {
+          contextType: "Proje",
+          contextLabel: project.name,
+          projectId: project.id,
+          serviceKey: project.serviceKey ?? null,
+        },
+      },
+      ...files.slice(0, 20).map((file) => ({
+        key: `file:${file.id}`,
+        label: `Dosya · ${file.title}`,
+        description: file.folder?.name
+          ? `${file.originalFileName} · ${file.folder.name}`
+          : file.originalFileName,
+        entityType: "PROJECT_FILE" as const,
+        entityId: file.id,
+        actionPayload: {
+          contextType: "Proje Dosyası",
+          contextLabel: file.title,
+          projectFileId: file.id,
+          fileName: file.originalFileName,
+          fileUrl: file.secureUrl,
+          folderName: file.folder?.name ?? null,
+        },
+      })),
+    ];
+  }, [files, project.id, project.name, project.serviceKey]);
   const figmaLinkKind = detectFigmaLinkKind(project.figmaProjectUrl);
   const figmaEmbedUrl = buildFigmaEmbedUrl(project.figmaProjectUrl);
+
+  const openProjectApprovalDialog = (mode: "APPROVAL" | "INFORMATION") => {
+    setApprovalDialogPreset({
+      type: mode === "APPROVAL" ? "GENERAL_CONFIRMATION" : "INFORMATION",
+      requiresExplicitApproval: mode === "APPROVAL",
+      title:
+        mode === "APPROVAL"
+          ? `${project.name} için müşteri onayı`
+          : `${project.name} hakkında bilgilendirme`,
+      contextKey: approvalContextOptions[0]?.key,
+    });
+    setIsApprovalDialogOpen(true);
+  };
 
   return (
     <div className="space-y-6">
@@ -853,6 +934,44 @@ export function ProjectDetail() {
         <InfoCard label="Oluşturulma" value={formatDateTime(project.createdAt)} />
         <InfoCard label="Güncellenme" value={formatDateTime(project.updatedAt)} />
       </div>
+
+      {canManageApprovals ? (
+        <Card className="border-white/[0.08] bg-[#1A1A1A] p-6">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-white">Müşteri Onay / Bilgilendirme</h2>
+              <p className="mt-1 text-sm text-[#A0A0A0]">
+                Proje veya bağlı dosya bağlamında müşteriye onay isteği ya da bilgilendirme iletin.
+              </p>
+            </div>
+            <Badge variant="outline" className="border-white/[0.12] text-[#A0A0A0]">
+              {approvalContextOptions.length} bağlam
+            </Badge>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <button
+              type="button"
+              className="rounded-2xl border border-[#AAFF01]/20 bg-[#AAFF01]/10 p-4 text-left transition hover:bg-[#AAFF01]/15"
+              onClick={() => openProjectApprovalDialog("APPROVAL")}
+            >
+              <p className="text-sm font-semibold text-[#E8FFC2]">Müşteri Onayı İste</p>
+              <p className="mt-2 text-xs leading-5 text-[#D7E8B1]">
+                Genel proje kararı, paylaşılan dosya veya teslim öncesi onay akışı başlatın.
+              </p>
+            </button>
+            <button
+              type="button"
+              className="rounded-2xl border border-white/10 bg-black/20 p-4 text-left transition hover:border-white/15 hover:bg-black/25"
+              onClick={() => openProjectApprovalDialog("INFORMATION")}
+            >
+              <p className="text-sm font-semibold text-white">Bilgilendirme Gönder</p>
+              <p className="mt-2 text-xs leading-5 text-[#A0A0A0]">
+                Onay gerektirmeyen ama kayıt altına alınması gereken müşteri bilgilendirmeleri gönderin.
+              </p>
+            </button>
+          </div>
+        </Card>
+      ) : null}
 
       {project.figmaProjectUrl && (
         <Card className="border-white/[0.08] bg-[#1A1A1A] p-5">
@@ -1604,6 +1723,22 @@ export function ProjectDetail() {
           </Card>
         </div>
       </Card>
+
+      {canManageApprovals ? (
+        <ClientApprovalRequestDialog
+          open={isApprovalDialogOpen}
+          onOpenChange={setIsApprovalDialogOpen}
+          clientProfileId={project.clientProfileId}
+          projectId={project.id}
+          serviceKey={project.serviceKey ?? undefined}
+          assigneeOptions={workspaceAssigneeCandidates}
+          contextOptions={approvalContextOptions}
+          dialogTitle="Müşteri Onayı / Bilgilendirme"
+          dialogDescription="Proje veya dosya bağlamında müşteriye kayıt oluşturun."
+          submitLabel="Müşteriye Gönder"
+          preset={approvalDialogPreset}
+        />
+      ) : null}
     </div>
   );
 }
@@ -1673,6 +1808,16 @@ function getAllowedRevisionTransitions(
     CANCELLED: [],
   };
   return employeeTransitions[currentStatus] ?? [];
+}
+
+function isCompatibleWorkspaceMessageTab(eventTabKey: string, currentTabKey: WorkspaceTabKey): boolean {
+  if (eventTabKey === currentTabKey) {
+    return true;
+  }
+  return (
+    (eventTabKey === "OVERVIEW" && currentTabKey === "MESSAGES") ||
+    (eventTabKey === "MESSAGES" && currentTabKey === "OVERVIEW")
+  );
 }
 
 function InfoCard({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {

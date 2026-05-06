@@ -32,6 +32,7 @@ const mockUseGetProjectQuery = vi.fn<
   (id: string, options: QueryOptions) => ProjectQueryResult
 >();
 const mockUseGetProjectRepositoryQuery = vi.fn();
+const mockUseGetProjectAssigneeCandidatesQuery = vi.fn();
 const mockUseGetProjectRepositoryBranchesQuery = vi.fn();
 const mockUseGetProjectRepositoryCommitsQuery = vi.fn();
 const mockUseGetProjectRepositoryPullsQuery = vi.fn();
@@ -48,6 +49,7 @@ const mockUseGetProjectWorkspaceSnapshotQuery = vi.fn();
 const mockUseCreateProjectWorkspaceSectionMutation = vi.fn();
 const mockUseCreateProjectWorkspaceItemMutation = vi.fn();
 const mockUseGetProjectWorkspaceRevisionsQuery = vi.fn();
+const mockUseCreateProjectWorkspaceRevisionMutation = vi.fn();
 const mockUseUpdateProjectWorkspaceRevisionStatusMutation = vi.fn();
 const mockUseGetProjectWorkspaceReportsQuery = vi.fn();
 const mockUseCreateProjectWorkspaceReportMutation = vi.fn();
@@ -55,6 +57,7 @@ const mockUseGetProjectWorkspaceMeetingRequestsQuery = vi.fn();
 const mockUseUpdateProjectWorkspaceMeetingRequestMutation = vi.fn();
 const mockUseGetProjectWorkspaceMessagesQuery = vi.fn();
 const mockUseCreateProjectWorkspaceMessageMutation = vi.fn();
+const mockUseCreateClientApprovalMutation = vi.fn();
 const mockDispatch = vi.fn();
 
 let currentUser: AuthUserProfile | null = null;
@@ -80,6 +83,8 @@ vi.mock("../../features/projects/projectsApi", () => ({
     mockUseGetProjectQuery(id, options),
   useGetProjectRepositoryQuery: (id: string, options: QueryOptions) =>
     mockUseGetProjectRepositoryQuery(id, options),
+  useGetProjectAssigneeCandidatesQuery: (id: string, options?: QueryOptions) =>
+    mockUseGetProjectAssigneeCandidatesQuery(id, options),
   useGetProjectRepositoryBranchesQuery: (query: unknown, options?: unknown) =>
     mockUseGetProjectRepositoryBranchesQuery(query, options),
   useGetProjectRepositoryCommitsQuery: (query: unknown, options?: unknown) =>
@@ -106,6 +111,7 @@ vi.mock("../../features/projects/projectsApi", () => ({
   useCreateProjectWorkspaceItemMutation: () => mockUseCreateProjectWorkspaceItemMutation(),
   useGetProjectWorkspaceRevisionsQuery: (query: unknown, options?: unknown) =>
     mockUseGetProjectWorkspaceRevisionsQuery(query, options),
+  useCreateProjectWorkspaceRevisionMutation: () => mockUseCreateProjectWorkspaceRevisionMutation(),
   useUpdateProjectWorkspaceRevisionStatusMutation: () =>
     mockUseUpdateProjectWorkspaceRevisionStatusMutation(),
   useGetProjectWorkspaceReportsQuery: (query: unknown, options?: unknown) =>
@@ -118,6 +124,10 @@ vi.mock("../../features/projects/projectsApi", () => ({
   useGetProjectWorkspaceMessagesQuery: (query: unknown, options?: unknown) =>
     mockUseGetProjectWorkspaceMessagesQuery(query, options),
   useCreateProjectWorkspaceMessageMutation: () => mockUseCreateProjectWorkspaceMessageMutation(),
+}));
+
+vi.mock("../../features/clientApprovals/clientApprovalsApi", () => ({
+  useCreateClientApprovalMutation: () => mockUseCreateClientApprovalMutation(),
 }));
 
 const projectId = "11111111-1111-4111-8111-111111111111";
@@ -148,6 +158,11 @@ const developerUser: AuthUserProfile = {
   status: "ACTIVE",
   permissions: ["projects.read.assigned", "integrations.github.read.assigned"],
   clientProfile: null,
+};
+
+const approvalManagerUser: AuthUserProfile = {
+  ...adminUser,
+  permissions: ["projects.read.any", "approvals.manage"],
 };
 
 const projectDetail: ProjectWithSensitiveFields = {
@@ -188,6 +203,7 @@ function setupQueryState(overrides: Partial<ProjectQueryResult> = {}) {
     data: undefined,
     refetch: vi.fn(),
   });
+  mockUseGetProjectAssigneeCandidatesQuery.mockReturnValue({ data: [] });
   mockUseGetProjectRepositoryBranchesQuery.mockReturnValue({ data: [] });
   mockUseGetProjectRepositoryCommitsQuery.mockReturnValue({ data: [] });
   mockUseGetProjectRepositoryPullsQuery.mockReturnValue({ data: [] });
@@ -204,6 +220,7 @@ function setupQueryState(overrides: Partial<ProjectQueryResult> = {}) {
   mockUseCreateProjectWorkspaceSectionMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
   mockUseCreateProjectWorkspaceItemMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
   mockUseGetProjectWorkspaceRevisionsQuery.mockReturnValue({ data: [] });
+  mockUseCreateProjectWorkspaceRevisionMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
   mockUseUpdateProjectWorkspaceRevisionStatusMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
   mockUseGetProjectWorkspaceReportsQuery.mockReturnValue({ data: [] });
   mockUseCreateProjectWorkspaceReportMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
@@ -211,6 +228,7 @@ function setupQueryState(overrides: Partial<ProjectQueryResult> = {}) {
   mockUseUpdateProjectWorkspaceMeetingRequestMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
   mockUseGetProjectWorkspaceMessagesQuery.mockReturnValue({ data: [] });
   mockUseCreateProjectWorkspaceMessageMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
+  mockUseCreateClientApprovalMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
 }
 
 function renderProjectDetail(id: string = projectId) {
@@ -360,5 +378,16 @@ describe("ProjectDetail", () => {
     renderProjectDetail();
 
     expect(screen.getByText("GitHub bağlantısı zorunlu")).toBeInTheDocument();
+  });
+
+  it("shows project approval actions for approval managers", () => {
+    currentUser = approvalManagerUser;
+    setupQueryState({ data: projectDetail });
+
+    renderProjectDetail();
+
+    expect(screen.getByText("Müşteri Onay / Bilgilendirme")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Müşteri Onayı İste/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Bilgilendirme Gönder/ })).toBeInTheDocument();
   });
 });

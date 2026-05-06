@@ -1,7 +1,7 @@
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Test, TestingModule } from "@nestjs/testing";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Priority, ProjectStatus, PurchasedServiceKey, TaskStatus } from "@prisma/client";
 import cookieParser from "cookie-parser";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
@@ -26,6 +26,7 @@ describe("Delivery + GitHub Authorization (e2e)", () => {
   let acmeClientProfileId = "";
   let webAppProjectId = "";
   let webAppTaskId = "";
+  let deliveryPolicyProjectId = "";
   let clientVisibleFileId = "";
   let internalFileId = "";
 
@@ -189,6 +190,9 @@ describe("Delivery + GitHub Authorization (e2e)", () => {
       await prisma.projectRepository.deleteMany({ where: { projectId: webAppProjectId } });
       await prisma.project.deleteMany({ where: { id: webAppProjectId } });
     }
+    if (deliveryPolicyProjectId) {
+      await prisma.project.deleteMany({ where: { id: deliveryPolicyProjectId } });
+    }
     if (clientVisibleFileId || internalFileId) {
       await prisma.projectFileShareLink.deleteMany({
         where: {
@@ -296,6 +300,113 @@ describe("Delivery + GitHub Authorization (e2e)", () => {
       expect.objectContaining({
         id: expect.any(String),
         projectId: acmeProjectId,
+      }),
+    );
+  });
+
+  it("todo toggle recalculates sprint progress and auto-completes the sprint when all task todos are done", async () => {
+    const projectId = await ensureDeliveryPolicyProject();
+    const sprintId = await createSprintFixture(projectId, {
+      name: `Todo Policy Sprint ${Date.now()}`,
+      status: "PLANNED",
+    });
+    const taskId = await createTaskFixture(projectId, {
+      sprintId,
+      title: "Client-visible delivery checklist",
+      status: TaskStatus.TODO,
+    });
+    const todoId = await createTaskTodoFixture(taskId, "Final QA checklist item");
+
+    const sprintBeforeToggle = await request(app.getHttpServer())
+      .get(`${DELIVERY_SPRINTS_PATH}/${sprintId}`)
+      .set("Authorization", `Bearer ${developerToken}`)
+      .expect(200);
+
+    expect(sprintBeforeToggle.body).toEqual(
+      expect.objectContaining({
+        id: sprintId,
+        status: "PLANNED",
+        progressPercent: 0,
+        taskCounts: {
+          total: 1,
+          completed: 0,
+          open: 1,
+        },
+      }),
+    );
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/tasks/${taskId}/todos/${todoId}/toggle`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ isCompleted: true })
+      .expect(200);
+
+    const sprintAfterToggle = await request(app.getHttpServer())
+      .get(`${DELIVERY_SPRINTS_PATH}/${sprintId}`)
+      .set("Authorization", `Bearer ${developerToken}`)
+      .expect(200);
+
+    expect(sprintAfterToggle.body).toEqual(
+      expect.objectContaining({
+        id: sprintId,
+        status: "COMPLETED",
+        progressPercent: 100,
+        taskCounts: {
+          total: 1,
+          completed: 1,
+          open: 0,
+        },
+      }),
+    );
+  });
+
+  it("task DONE status recalculates sprint progress and completed task counts", async () => {
+    const projectId = await ensureDeliveryPolicyProject();
+    const sprintId = await createSprintFixture(projectId, {
+      name: `Task Status Policy Sprint ${Date.now()}`,
+      status: "PLANNED",
+    });
+    const taskId = await createTaskFixture(projectId, {
+      sprintId,
+      title: "Backend payload stabilization",
+      status: TaskStatus.IN_PROGRESS,
+    });
+
+    const sprintBeforeDone = await request(app.getHttpServer())
+      .get(`${DELIVERY_SPRINTS_PATH}/${sprintId}`)
+      .set("Authorization", `Bearer ${developerToken}`)
+      .expect(200);
+
+    expect(sprintBeforeDone.body.taskCounts).toEqual({
+      total: 1,
+      completed: 0,
+      open: 1,
+    });
+    expect(sprintBeforeDone.body.status).toBe("ACTIVE");
+    expect(sprintBeforeDone.body.progressPercent).toBeGreaterThan(0);
+    expect(sprintBeforeDone.body.progressPercent).toBeLessThan(100);
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/tasks/${taskId}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ status: TaskStatus.DONE })
+      .expect(200);
+
+    const sprintAfterDone = await request(app.getHttpServer())
+      .get(`${DELIVERY_SPRINTS_PATH}/${sprintId}`)
+      .set("Authorization", `Bearer ${developerToken}`)
+      .expect(200);
+
+    expect(sprintAfterDone.body).toEqual(
+      expect.objectContaining({
+        id: sprintId,
+        status: "COMPLETED",
+        progressPercent: 100,
+        taskCounts: {
+          total: 1,
+          completed: 1,
+          open: 0,
+        },
       }),
     );
   });
@@ -568,5 +679,81 @@ describe("Delivery + GitHub Authorization (e2e)", () => {
     );
 
     return response.body.accessToken as string;
+  }
+
+  async function ensureDeliveryPolicyProject(): Promise<string> {
+    if (deliveryPolicyProjectId) {
+      return deliveryPolicyProjectId;
+    }
+
+    const project = await prisma.project.create({
+      data: {
+        clientProfileId: acmeClientProfileId,
+        serviceKey: PurchasedServiceKey.GROWTH_HUB,
+        name: `Delivery Policy Fixture ${Date.now()}`,
+        slug: `delivery-policy-fixture-${Date.now()}`,
+        description: "Fixture for delivery sprint progress/status recalculation coverage.",
+        status: ProjectStatus.IN_PROGRESS,
+        priority: Priority.HIGH,
+      },
+      select: { id: true },
+    });
+
+    deliveryPolicyProjectId = project.id;
+    return deliveryPolicyProjectId;
+  }
+
+  async function createSprintFixture(
+    projectId: string,
+    options: { name: string; status: "PLANNED" | "ACTIVE" | "COMPLETED" | "CANCELLED" },
+  ): Promise<string> {
+    const response = await request(app.getHttpServer())
+      .post(DELIVERY_SPRINTS_PATH)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        projectId,
+        name: options.name,
+        status: options.status,
+        startDate: "2026-05-20",
+        endDate: "2026-05-28",
+      })
+      .expect(201);
+
+    return response.body.id as string;
+  }
+
+  async function createTaskFixture(
+    projectId: string,
+    options: { sprintId: string; title: string; status: TaskStatus },
+  ): Promise<string> {
+    const response = await request(app.getHttpServer())
+      .post("/api/v1/tasks")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        projectId,
+        sprintId: options.sprintId,
+        title: options.title,
+        status: options.status,
+        priority: Priority.HIGH,
+        type: "FEATURE",
+        workstream: "FULLSTACK",
+      })
+      .expect(201);
+
+    return response.body.id as string;
+  }
+
+  async function createTaskTodoFixture(taskId: string, title: string): Promise<string> {
+    const response = await request(app.getHttpServer())
+      .post(`/api/v1/tasks/${taskId}/todos`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        title,
+      })
+      .expect(201);
+
+    const createdTodo = response.body.todos.find((todo: { title: string }) => todo.title === title);
+    expect(createdTodo).toBeDefined();
+    return createdTodo.id as string;
   }
 });

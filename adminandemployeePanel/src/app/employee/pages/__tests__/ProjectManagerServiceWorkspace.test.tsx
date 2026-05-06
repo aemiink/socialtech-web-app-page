@@ -11,6 +11,8 @@ const mockCreateTask = vi.fn();
 const mockCreateTaskTodo = vi.fn();
 const mockCreateRevision = vi.fn();
 const mockUpdateRevisionStatus = vi.fn();
+const mockCreateClientApproval = vi.fn();
+const mockCancelClientApproval = vi.fn();
 
 let currentUser: AuthUserProfile | null = null;
 let currentAccessToken = "test-token";
@@ -129,6 +131,52 @@ vi.mock("../../../features/tasks/tasksApi", () => ({
   useToggleTaskTodoMutation: () => [vi.fn(), { isLoading: false }],
 }));
 
+vi.mock("../../../features/clientApprovals/clientApprovalsApi", () => ({
+  useGetClientApprovalsQuery: () => ({
+    data: {
+      data: [
+        {
+          id: "approval-pending",
+          clientProfileId: "11111111-1111-4111-8111-111111111111",
+          projectId: "22222222-2222-4222-8222-222222222222",
+          type: "TASK_APPROVAL",
+          status: "PENDING",
+          title: "Sprint çıktısı onayı",
+          message: "Yeni sprint çıktısını müşteri onayına açalım.",
+          entityType: "TASK",
+          entityId: "task-1",
+          actionPayload: { contextType: "Görev", contextLabel: "Sprint çıktısı" },
+          requiresExplicitApproval: true,
+          createdAt: "2026-05-05T12:00:00.000Z",
+          updatedAt: "2026-05-05T12:00:00.000Z",
+        },
+        {
+          id: "approval-approved",
+          clientProfileId: "11111111-1111-4111-8111-111111111111",
+          projectId: "22222222-2222-4222-8222-222222222222",
+          type: "INFORMATION",
+          status: "ACKNOWLEDGED",
+          title: "Bilgilendirme kaydı",
+          message: "Deploy tamamlandı.",
+          entityType: "PROJECT",
+          entityId: "22222222-2222-4222-8222-222222222222",
+          actionPayload: { contextType: "Proje", contextLabel: "Web Uygulama Projesi" },
+          requiresExplicitApproval: false,
+          createdAt: "2026-05-04T12:00:00.000Z",
+          updatedAt: "2026-05-04T12:00:00.000Z",
+        },
+      ],
+      meta: { page: 1, limit: 50, total: 2, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
+    },
+    isFetching: false,
+    isError: false,
+    error: undefined,
+    refetch: vi.fn(),
+  }),
+  useCreateClientApprovalMutation: () => [mockCreateClientApproval, { isLoading: false }],
+  useCancelClientApprovalMutation: () => [mockCancelClientApproval, { isLoading: false }],
+}));
+
 describe("ProjectManagerServiceWorkspace task routing", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -139,7 +187,12 @@ describe("ProjectManagerServiceWorkspace task routing", () => {
       accountType: "EMPLOYEE",
       role: "PROJECT_MANAGER",
       status: "ACTIVE",
-      permissions: ["tasks.read.assigned", "tasks.manage.assigned", "delivery.sprints.manage.assigned"],
+      permissions: [
+        "tasks.read.assigned",
+        "tasks.manage.assigned",
+        "delivery.sprints.manage.assigned",
+        "approvals.manage",
+      ],
       clientProfile: null,
     };
     currentAccessToken = "token";
@@ -160,6 +213,14 @@ describe("ProjectManagerServiceWorkspace task routing", () => {
     mockUpdateRevisionStatus.mockReset();
     mockUpdateRevisionStatus.mockReturnValue({
       unwrap: () => Promise.resolve({ id: "revision-id" }),
+    });
+    mockCreateClientApproval.mockReset();
+    mockCreateClientApproval.mockReturnValue({
+      unwrap: () => Promise.resolve({ id: "approval-created" }),
+    });
+    mockCancelClientApproval.mockReset();
+    mockCancelClientApproval.mockReturnValue({
+      unwrap: () => Promise.resolve({ id: "approval-pending", status: "CANCELLED" }),
     });
   });
 
@@ -246,6 +307,33 @@ describe("ProjectManagerServiceWorkspace task routing", () => {
       status: "ACKNOWLEDGED",
       assignedToUserId: "33333333-3333-4333-8333-333333333333",
       note: undefined,
+    });
+  });
+
+  it("renders approvals tab with pending/history split and cancels pending approval", async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          "/employee/project-manager/clients/11111111-1111-4111-8111-111111111111/services/web-app?tab=APPROVALS",
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/employee/project-manager/clients/:clientId/services/:serviceKey"
+            element={<ProjectManagerServiceWorkspace />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Onay Merkezi")).toBeInTheDocument();
+    expect(screen.getByText("Sprint çıktısı onayı")).toBeInTheDocument();
+    expect(screen.getByText("Bilgilendirme kaydı")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Talebi İptal Et" }));
+
+    await waitFor(() => {
+      expect(mockCancelClientApproval).toHaveBeenCalledWith({ id: "approval-pending" });
     });
   });
 });

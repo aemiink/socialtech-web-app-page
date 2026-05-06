@@ -637,6 +637,7 @@ function normalizeClientSummaryClient(value: unknown): ClientSummaryResponse["cl
     status: value.status as ClientStatus,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
+    purchasedServices: normalizePurchasedServices(value.purchasedServices),
   };
 }
 

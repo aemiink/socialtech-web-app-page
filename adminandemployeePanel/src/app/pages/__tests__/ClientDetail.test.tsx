@@ -54,6 +54,7 @@ const clientSummary: ClientSummaryResponse = {
     status: "ACTIVE",
     createdAt: "2026-04-01T09:00:00.000Z",
     updatedAt: "2026-04-29T10:00:00.000Z",
+    purchasedServices: [],
   },
   projects: {
     total: 9,

@@ -11,6 +11,8 @@ import {
   Prisma,
   ProjectFileVisibility,
   PurchasedServiceKey,
+  TaskStatus,
+  TaskTodoVisibility,
   UserRole,
   UserStatus,
   WebAppWorkspaceContentItemType,
@@ -19,6 +21,7 @@ import {
 } from "@prisma/client";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { PrismaService } from "../database/prisma.service";
+import { calculateSprintProgressMetrics, resolveAutoSprintStatus } from "../delivery/delivery-sprint-progress.util";
 import { CreateMeetingRequestDto } from "./dto/create-meeting-request.dto";
 import { CreateWeeklyReportDto } from "./dto/create-weekly-report.dto";
 import { CreateWorkspaceContentItemDto } from "./dto/create-workspace-content-item.dto";
@@ -265,6 +268,13 @@ const taskSummarySelect = {
   environment: true,
   assigneeUserId: true,
   dueDate: true,
+  todos: {
+    select: {
+      id: true,
+      isCompleted: true,
+      visibility: true,
+    },
+  },
   sprint: {
     select: {
       id: true,
@@ -291,6 +301,17 @@ const sprintSummarySelect = {
   status: true,
   startDate: true,
   endDate: true,
+  tasks: {
+    select: {
+      status: true,
+      todos: {
+        select: {
+          isCompleted: true,
+          visibility: true,
+        },
+      },
+    },
+  },
 } satisfies Prisma.DeliverySprintSelect;
 
 const releaseSummarySelect = {
@@ -310,6 +331,7 @@ const fileSummarySelect = {
   title: true,
   visibility: true,
   category: true,
+  mimeType: true,
   originalFileName: true,
   secureUrl: true,
   createdAt: true,
@@ -332,6 +354,7 @@ export class WebAppWorkspaceService {
 
   async getWorkspace(currentUser: AuthenticatedUser, projectId: string, query: WorkspaceQueryDto) {
     const project = await this.assertWorkspaceProjectAccess(currentUser, projectId, "read");
+    const hideInternalRecords = this.shouldHideInternalRecords(currentUser);
     const [sections, messages, revisions, weeklyReports, meetingRequests, tasks, sprints, releases, files] =
       await this.prisma.$transaction([
         this.prisma.webAppWorkspaceSection.findMany({
@@ -342,16 +365,7 @@ export class WebAppWorkspaceService {
           orderBy: [{ tabKey: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
           select: workspaceSectionSelect,
         }),
-        this.prisma.webAppWorkspaceMessage.findMany({
-          where: {
-            projectId: project.id,
-            ...(query.tabKey ? { tabKey: query.tabKey } : {}),
-            ...(this.shouldHideInternalRecords(currentUser) ? { isInternal: false } : {}),
-          },
-          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-          take: 100,
-          select: workspaceMessageSelect,
-        }),
+        this.buildWorkspaceMessagesQuery(project.id, query.tabKey, hideInternalRecords),
         this.prisma.webAppWorkspaceRevision.findMany({
           where: { projectId: project.id },
           orderBy: [{ requestedAt: "desc" }, { id: "desc" }],
@@ -385,9 +399,7 @@ export class WebAppWorkspaceService {
         this.prisma.projectFile.findMany({
           where: {
             projectId: project.id,
-            ...(this.shouldHideInternalRecords(currentUser)
-              ? { visibility: ProjectFileVisibility.CLIENT_VISIBLE }
-              : {}),
+            ...(hideInternalRecords ? { visibility: ProjectFileVisibility.CLIENT_VISIBLE } : {}),
           },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take: 100,
@@ -399,13 +411,13 @@ export class WebAppWorkspaceService {
       project,
       tabKey: query.tabKey ?? null,
       sourceOfTruth: {
-        tasks,
-        sprints,
+        tasks: tasks.map((task) => this.toWorkspaceSourceTask(task, hideInternalRecords)),
+        sprints: sprints.map((sprint) => this.toWorkspaceSprintSummary(sprint, hideInternalRecords)),
         releases,
         files,
       },
       sections,
-      messages,
+      messages: this.normalizeWorkspaceMessages(messages),
       revisions,
       weeklyReports,
       meetingRequests,
@@ -601,15 +613,12 @@ export class WebAppWorkspaceService {
 
   async getMessages(currentUser: AuthenticatedUser, projectId: string, query: WorkspaceQueryDto) {
     const project = await this.assertWorkspaceProjectAccess(currentUser, projectId, "read");
-    return this.prisma.webAppWorkspaceMessage.findMany({
-      where: {
-        projectId: project.id,
-        ...(query.tabKey ? { tabKey: query.tabKey } : {}),
-        ...(this.shouldHideInternalRecords(currentUser) ? { isInternal: false } : {}),
-      },
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      select: workspaceMessageSelect,
-    });
+    const messages = await this.buildWorkspaceMessagesQuery(
+      project.id,
+      query.tabKey,
+      this.shouldHideInternalRecords(currentUser),
+    );
+    return this.normalizeWorkspaceMessages(messages);
   }
 
   async createMessage(
@@ -1067,6 +1076,73 @@ export class WebAppWorkspaceService {
 
   private shouldHideInternalRecords(currentUser: AuthenticatedUser) {
     return currentUser.accountType === AccountType.CLIENT;
+  }
+
+  private buildWorkspaceMessagesQuery(
+    projectId: string,
+    tabKey: WebAppWorkspaceTabKey | undefined,
+    hideInternalRecords: boolean,
+  ) {
+    return this.prisma.webAppWorkspaceMessage.findMany({
+      where: {
+        projectId,
+        ...(tabKey ? { tabKey } : {}),
+        ...(hideInternalRecords ? { isInternal: false } : {}),
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: 100,
+      select: workspaceMessageSelect,
+    });
+  }
+
+  private normalizeWorkspaceMessages(
+    messages: Prisma.WebAppWorkspaceMessageGetPayload<{ select: typeof workspaceMessageSelect }>[],
+  ) {
+    return [...messages].reverse();
+  }
+
+  private toWorkspaceSprintSummary(
+    sprint: Prisma.DeliverySprintGetPayload<{ select: typeof sprintSummarySelect }>,
+    hideInternalRecords: boolean,
+  ) {
+    const metrics = calculateSprintProgressMetrics(sprint.tasks, {
+      hideInternalTodos: hideInternalRecords,
+    });
+
+    return {
+      id: sprint.id,
+      name: sprint.name,
+      goal: sprint.goal,
+      status: resolveAutoSprintStatus(sprint.status, metrics),
+      startDate: sprint.startDate,
+      endDate: sprint.endDate,
+      taskCounts: metrics.taskCounts,
+      progressPercent: metrics.progressPercent,
+    };
+  }
+
+  private toWorkspaceSourceTask(
+    task: Prisma.TaskGetPayload<{ select: typeof taskSummarySelect }>,
+    hideInternalRecords: boolean,
+  ) {
+    const visibleTodos = hideInternalRecords
+      ? task.todos.filter((todo) => todo.visibility === TaskTodoVisibility.CLIENT_VISIBLE)
+      : task.todos;
+    const completedTodos = visibleTodos.filter((todo) => todo.isCompleted).length;
+    const totalTodos = visibleTodos.length;
+    const completionPercentage =
+      totalTodos === 0 ? (task.status === TaskStatus.DONE ? 100 : 0) : Math.round((completedTodos / totalTodos) * 100);
+
+    return {
+      ...task,
+      completion: {
+        totalTodos,
+        completedTodos,
+        remainingTodos: totalTodos - completedTodos,
+        completionPercentage,
+      },
+      progressPercent: completionPercentage,
+    };
   }
 
   private assertContentItemShape(

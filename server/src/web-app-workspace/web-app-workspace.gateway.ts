@@ -115,6 +115,9 @@ export class WebAppWorkspaceGateway implements OnGatewayConnection {
     event: string,
     payload: Record<string, unknown>,
   ) {
+    if (!this.server) {
+      return;
+    }
     const sequence = ++this.workspaceEventSequence;
     this.server.to(this.toProjectRoom(projectId)).emit("workspace:update", {
       projectId,

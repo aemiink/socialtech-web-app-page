@@ -15,6 +15,10 @@ import {
 } from "@prisma/client";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { PrismaService } from "../database/prisma.service";
+import {
+  calculateSprintProgressMetrics,
+  resolveAutoSprintStatus,
+} from "../delivery/delivery-sprint-progress.util";
 import { GithubService } from "../integrations/github/github.service";
 import { CreateTaskDto } from "./dto/create-task.dto";
 import { CreateTaskTodoDto } from "./dto/create-task-todo.dto";
@@ -156,6 +160,7 @@ type ProjectAssignmentContext = {
 type TaskUpdateState = {
   id: string;
   projectId: string;
+  sprintId: string | null;
   assigneeUserId: string | null;
   project: ProjectAssignmentContext;
   title: string;
@@ -265,6 +270,7 @@ export class TasksService {
       select: taskReadSelect,
     });
 
+    await this.syncAffectedSprints([task.sprintId]);
     return this.toTaskResponse(task, currentUser);
   }
 
@@ -309,6 +315,7 @@ export class TasksService {
       },
     });
 
+    await this.syncAffectedSprints([await this.getTaskSprintId(taskId)]);
     return this.getTaskById(currentUser, taskId);
   }
 
@@ -333,6 +340,7 @@ export class TasksService {
       },
     });
 
+    await this.syncAffectedSprints([await this.getTaskSprintId(taskId)]);
     return this.getTaskById(currentUser, taskId);
   }
 
@@ -370,6 +378,7 @@ export class TasksService {
       },
     });
 
+    await this.syncAffectedSprints([await this.getTaskSprintId(taskId)]);
     return this.getTaskById(currentUser, taskId);
   }
 
@@ -390,6 +399,7 @@ export class TasksService {
       throw new NotFoundException("Task todo not found.");
     }
 
+    await this.syncAffectedSprints([await this.getTaskSprintId(taskId)]);
     return this.getTaskById(currentUser, taskId);
   }
 
@@ -524,6 +534,7 @@ export class TasksService {
       select: taskReadSelect,
     });
 
+    await this.syncAffectedSprints([existingTask.sprintId, task.sprintId]);
     return this.toTaskResponse(task, currentUser);
   }
 
@@ -597,6 +608,7 @@ export class TasksService {
       select: taskReadSelect,
     });
 
+    await this.syncAffectedSprints([existingTask.sprintId, task.sprintId]);
     return this.toTaskResponse(task, currentUser);
   }
 
@@ -623,7 +635,7 @@ export class TasksService {
           },
         },
       },
-      select: { id: true },
+      select: { id: true, sprintId: true },
     });
 
     if (!task) {
@@ -636,6 +648,7 @@ export class TasksService {
       select: taskReadSelect,
     });
 
+    await this.syncAffectedSprints([task.sprintId, updatedTask.sprintId]);
     return this.toTaskResponse(updatedTask, currentUser);
   }
 
@@ -647,6 +660,62 @@ export class TasksService {
 
     if (!task) {
       throw new NotFoundException("Task not found.");
+    }
+  }
+
+  private async getTaskSprintId(taskId: string): Promise<string | null> {
+    const task = await this.prisma.task.findUnique({
+      where: { id: taskId },
+      select: { sprintId: true },
+    });
+
+    if (!task) {
+      throw new NotFoundException("Task not found.");
+    }
+
+    return task.sprintId;
+  }
+
+  private async syncAffectedSprints(sprintIds: Array<string | null | undefined>): Promise<void> {
+    const uniqueSprintIds = [...new Set(sprintIds.filter((sprintId): sprintId is string => Boolean(sprintId)))];
+    if (uniqueSprintIds.length === 0) {
+      return;
+    }
+
+    const sprints = await this.prisma.deliverySprint.findMany({
+      where: {
+        id: {
+          in: uniqueSprintIds,
+        },
+      },
+      select: {
+        id: true,
+        status: true,
+        tasks: {
+          select: {
+            status: true,
+            todos: {
+              select: {
+                isCompleted: true,
+                visibility: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    for (const sprint of sprints) {
+      const metrics = calculateSprintProgressMetrics(sprint.tasks);
+      const nextStatus = resolveAutoSprintStatus(sprint.status, metrics);
+      if (nextStatus === sprint.status) {
+        continue;
+      }
+
+      await this.prisma.deliverySprint.update({
+        where: { id: sprint.id },
+        data: { status: nextStatus },
+      });
     }
   }
 

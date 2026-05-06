@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Sidebar } from "./components/sidebar";
 import { Topbar } from "./components/topbar";
 import { ClientActionCenter } from "./components/client-action-center";
+import { ClientApprovalCenter } from "./components/client-approval-center";
 import { ClientVisibleTasksSection } from "./components/client-visible-tasks-section";
 import { ClientLogin, DemoClient } from "./components/client-login";
 import { ServiceSelectionPage } from "./pages/service-selection";
@@ -333,6 +334,7 @@ export function ClientPortalApp() {
           {renderContent()}
           {shouldShowClientTasksSection ? <ClientVisibleTasksSection selectedService={selectedService} /> : null}
         </main>
+        <ClientApprovalCenter />
         <ClientActionCenter />
       </div>
     </div>

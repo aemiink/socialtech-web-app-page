@@ -253,6 +253,40 @@ enum CrmLeadWebsiteStatus {
   ANALYZED
 }
 
+enum ClientApprovalType {
+  DESIGN_APPROVAL
+  FILE_APPROVAL
+  TASK_APPROVAL
+  SPRINT_APPROVAL
+  RELEASE_APPROVAL
+  REVISION_APPROVAL
+  MEETING_CONFIRMATION
+  INFORMATION
+  GENERAL_CONFIRMATION
+}
+
+enum ClientApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ACKNOWLEDGED
+  CANCELLED
+  EXPIRED
+}
+
+enum ClientApprovalEntityType {
+  PROJECT
+  TASK
+  TASK_TODO
+  SPRINT
+  RELEASE
+  PROJECT_FILE
+  WORKSPACE_MESSAGE
+  DESIGN_ASSET
+  REVISION
+  MEETING_REQUEST
+}
+
 model Permission {
   id          String   @id @default(uuid()) @db.Uuid
   slug        String   @unique
@@ -312,6 +346,10 @@ model User {
   crmLeadActivities         CrmLeadActivity[]          @relation("CrmLeadActivityActor")
   releaseApprovalActions    DeliveryRelease[]          @relation("DeliveryReleaseApprovalActor")
   triggeredCrmLeadScans     CrmLeadScanLog[]           @relation("CrmLeadScanTriggeredBy")
+  requestedClientApprovals  ClientApprovalRequest[]    @relation("ClientApprovalRequestedBy")
+  assignedClientApprovals   ClientApprovalRequest[]    @relation("ClientApprovalAssignedTo")
+  respondedClientApprovals  ClientApprovalRequest[]    @relation("ClientApprovalRespondedBy")
+  clientApprovalTransitions ClientApprovalTransition[] @relation("ClientApprovalTransitionActor")
   auditLogs                 AuditLog[]                 @relation("AuditActor")
 
   @@index([accountType, role])
@@ -349,6 +387,7 @@ model ClientProfile {
   purchasedServices   ClientPurchasedService[]
   projects            Project[]
   files               ProjectFile[]
+  approvalRequests    ClientApprovalRequest[]
   convertedCrmLeads   CrmLead[]                  @relation("CrmLeadConvertedClient")
 
   @@index([status])
@@ -394,6 +433,7 @@ model Project {
   repository       ProjectRepository?
   files            ProjectFile[]
   fileFolders      ProjectFileFolder[]
+  approvalRequests ClientApprovalRequest[]
   workspaceSections WebAppWorkspaceSection[]
   workspaceMessages WebAppWorkspaceMessage[]
   workspaceRevisions WebAppWorkspaceRevision[]
@@ -908,6 +948,64 @@ model CrmLeadScanLog {
   @@index([triggeredByUserId])
   @@index([startedAt])
   @@index([createdAt])
+}
+
+model ClientApprovalRequest {
+  id                      String                @id @default(uuid()) @db.Uuid
+  clientProfileId         String                @db.Uuid
+  projectId               String?               @db.Uuid
+  serviceKey              PurchasedServiceKey?
+  requestedByUserId       String?               @db.Uuid
+  assignedToUserId        String?               @db.Uuid
+  respondedByUserId       String?               @db.Uuid
+  type                    ClientApprovalType
+  status                  ClientApprovalStatus  @default(PENDING)
+  title                   String
+  message                 String
+  entityType              ClientApprovalEntityType?
+  entityId                String?
+  actionPayload           Json?
+  requiresExplicitApproval Boolean              @default(true)
+  clientResponseNote      String?
+  respondedAt             DateTime?
+  dueAt                   DateTime?
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+
+  clientProfile ClientProfile               @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  project       Project?                    @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  requestedBy   User?                       @relation("ClientApprovalRequestedBy", fields: [requestedByUserId], references: [id], onDelete: SetNull)
+  assignedTo    User?                       @relation("ClientApprovalAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  respondedBy   User?                       @relation("ClientApprovalRespondedBy", fields: [respondedByUserId], references: [id], onDelete: SetNull)
+  transitions   ClientApprovalTransition[]
+
+  @@index([clientProfileId])
+  @@index([projectId])
+  @@index([serviceKey])
+  @@index([status])
+  @@index([type])
+  @@index([entityType, entityId])
+  @@index([requestedByUserId])
+  @@index([assignedToUserId])
+  @@index([respondedByUserId])
+  @@index([createdAt])
+  @@index([dueAt])
+}
+
+model ClientApprovalTransition {
+  id          String               @id @default(uuid()) @db.Uuid
+  approvalId  String               @db.Uuid
+  actorUserId String               @db.Uuid
+  fromStatus  ClientApprovalStatus?
+  toStatus    ClientApprovalStatus
+  note        String?
+  createdAt   DateTime             @default(now())
+
+  approval ClientApprovalRequest @relation(fields: [approvalId], references: [id], onDelete: Cascade)
+  actor    User                  @relation("ClientApprovalTransitionActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([approvalId, createdAt])
+  @@index([actorUserId, createdAt])
 }
 
 model AuditLog {

@@ -20,6 +20,10 @@ import {
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { PrismaService } from "../database/prisma.service";
 import { GithubService } from "../integrations/github/github.service";
+import {
+  calculateSprintProgressMetrics,
+  resolveAutoSprintStatus,
+} from "./delivery-sprint-progress.util";
 import { CreateDeliveryReleaseDto } from "./dto/create-delivery-release.dto";
 import { CreateDeliverySprintDto } from "./dto/create-delivery-sprint.dto";
 import { DeliveryReleaseQueryDto } from "./dto/delivery-release-query.dto";
@@ -56,15 +60,15 @@ const sprintReadSelect = {
   project: {
     select: projectSummarySelect,
   },
-  _count: {
-    select: {
-      tasks: true,
-    },
-  },
   tasks: {
     select: {
-      id: true,
       status: true,
+      todos: {
+        select: {
+          isCompleted: true,
+          visibility: true,
+        },
+      },
     },
   },
 } satisfies Prisma.DeliverySprintSelect;
@@ -157,7 +161,7 @@ export class DeliveryService {
     await this.assertCanManageSprints(currentUser, project.id);
     this.assertDateOrder(dto.startDate, dto.endDate, "Sprint endDate cannot be earlier than startDate.");
 
-    const sprint = await this.prisma.deliverySprint.create({
+    const createdSprint = await this.prisma.deliverySprint.create({
       data: {
         projectId: project.id,
         name: dto.name,
@@ -166,9 +170,10 @@ export class DeliveryService {
         startDate: new Date(dto.startDate),
         endDate: new Date(dto.endDate),
       },
-      select: sprintReadSelect,
+      select: { id: true },
     });
 
+    const sprint = await this.syncSprintState(createdSprint.id);
     return this.toSprintResponse(sprint);
   }
 
@@ -199,7 +204,7 @@ export class DeliveryService {
     const nextEndDate = dto.endDate ? new Date(dto.endDate) : existing.endDate;
     this.assertDateObjects(nextStartDate, nextEndDate, "Sprint endDate cannot be earlier than startDate.");
 
-    const sprint = await this.prisma.deliverySprint.update({
+    const updatedSprint = await this.prisma.deliverySprint.update({
       where: { id: sprintId },
       data: {
         ...(dto.projectId ? { projectId: nextProjectId } : {}),
@@ -209,9 +214,10 @@ export class DeliveryService {
         ...(dto.startDate !== undefined ? { startDate: new Date(dto.startDate) } : {}),
         ...(dto.endDate !== undefined ? { endDate: new Date(dto.endDate) } : {}),
       },
-      select: sprintReadSelect,
+      select: { id: true },
     });
 
+    const sprint = await this.syncSprintState(updatedSprint.id);
     return this.toSprintResponse(sprint);
   }
 
@@ -523,29 +529,44 @@ export class DeliveryService {
   private toSprintResponse(
     sprint: Prisma.DeliverySprintGetPayload<{ select: typeof sprintReadSelect }>,
   ) {
-    const total = sprint._count.tasks;
-    const completed = sprint.tasks.filter((task) => task.status === TaskStatus.DONE).length;
-    const open = total - completed;
-    const progressPercent = total === 0 ? 0 : Math.round((completed / total) * 100);
+    const metrics = calculateSprintProgressMetrics(sprint.tasks);
 
     return {
       id: sprint.id,
       projectId: sprint.projectId,
       name: sprint.name,
       goal: sprint.goal,
-      status: sprint.status,
+      status: resolveAutoSprintStatus(sprint.status, metrics),
       startDate: sprint.startDate,
       endDate: sprint.endDate,
       createdAt: sprint.createdAt,
       updatedAt: sprint.updatedAt,
       project: sprint.project,
-      taskCounts: {
-        total,
-        completed,
-        open,
-      },
-      progressPercent,
+      taskCounts: metrics.taskCounts,
+      progressPercent: metrics.progressPercent,
     };
+  }
+
+  private async syncSprintState(sprintId: string) {
+    const sprint = await this.prisma.deliverySprint.findUnique({
+      where: { id: sprintId },
+      select: sprintReadSelect,
+    });
+    if (!sprint) {
+      throw new NotFoundException("Sprint not found.");
+    }
+
+    const metrics = calculateSprintProgressMetrics(sprint.tasks);
+    const nextStatus = resolveAutoSprintStatus(sprint.status, metrics);
+    if (nextStatus === sprint.status) {
+      return sprint;
+    }
+
+    return this.prisma.deliverySprint.update({
+      where: { id: sprint.id },
+      data: { status: nextStatus },
+      select: sprintReadSelect,
+    });
   }
 
   private toPaginationMeta(page: number, limit: number, total: number): DeliveryPaginationMeta {

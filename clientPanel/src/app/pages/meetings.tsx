@@ -11,7 +11,7 @@ export function MeetingsPage({ projectId }: { projectId?: string | null }) {
   const dispatch = useAppDispatch();
   const accessToken = useAppSelector(selectAccessToken);
   const lastWorkspaceSequenceRef = useRef(0);
-  const { data: requests = [], isLoading } = useGetWebAppWorkspaceMeetingRequestsQuery(
+  const { data: requests = [], isLoading, refetch: refetchMeetingRequests } = useGetWebAppWorkspaceMeetingRequestsQuery(
     { projectId: projectId ?? "" },
     { skip: !projectId },
   );
@@ -58,13 +58,18 @@ export function MeetingsPage({ projectId }: { projectId?: string | null }) {
       if (event.projectId !== projectId) {
         return;
       }
-      if (event.tabKey !== "MEETINGS") {
-        return;
-      }
       if (event.sequence <= lastWorkspaceSequenceRef.current) {
         return;
       }
+      if (event.sequence > lastWorkspaceSequenceRef.current + 1) {
+        lastWorkspaceSequenceRef.current = event.sequence;
+        void refetchMeetingRequests();
+        return;
+      }
       lastWorkspaceSequenceRef.current = event.sequence;
+      if (event.tabKey !== "MEETINGS") {
+        return;
+      }
       const payload = event.payload ?? {};
       const meetingRequest = (payload.meetingRequest ?? null) as WorkspaceMeetingRequest | null;
       if (event.event === "meeting-request.created" && meetingRequest) {
@@ -97,7 +102,7 @@ export function MeetingsPage({ projectId }: { projectId?: string | null }) {
       socket.off("workspace:update", onWorkspaceUpdate);
       socket.disconnect();
     };
-  }, [accessToken, dispatch, projectId]);
+  }, [accessToken, dispatch, projectId, refetchMeetingRequests]);
 
   const quickMeetingRequest = async () => {
     if (!projectId) {

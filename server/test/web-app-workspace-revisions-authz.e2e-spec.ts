@@ -2,11 +2,15 @@ import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Test, TestingModule } from "@nestjs/testing";
 import {
+  DeliverySprintStatus,
   PrismaClient,
   Priority,
   ProjectStatus,
   PurchasedServiceKey,
+  TaskStatus,
+  TaskTodoVisibility,
   WebAppWorkspaceRevisionStatus,
+  WebAppWorkspaceTabKey,
 } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 import cookieParser from "cookie-parser";
@@ -195,6 +199,116 @@ describe("Web App Workspace Revision Lifecycle (e2e)", () => {
         note: "Client cannot mutate another client's revision.",
       })
       .expect(404);
+  });
+
+  it("workspace source-of-truth sprints include progress fields without leaking internal todo completion to clients", async () => {
+    const sprint = await prisma.deliverySprint.create({
+      data: {
+        projectId: acmeWorkspaceProjectId,
+        name: `Workspace Sprint Visibility ${Date.now()}`,
+        goal: "Verify client-safe sprint aggregates.",
+        status: DeliverySprintStatus.PLANNED,
+        startDate: new Date("2026-05-01T00:00:00.000Z"),
+        endDate: new Date("2026-05-10T00:00:00.000Z"),
+      },
+      select: { id: true },
+    });
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: acmeWorkspaceProjectId,
+        sprintId: sprint.id,
+        title: "Internal-only sprint completion source",
+        status: TaskStatus.TODO,
+        priority: Priority.HIGH,
+      },
+      select: { id: true },
+    });
+
+    await prisma.taskTodo.create({
+      data: {
+        taskId: task.id,
+        title: "Internal delivery checklist",
+        visibility: TaskTodoVisibility.INTERNAL,
+        isCompleted: true,
+        completedAt: new Date("2026-05-02T08:00:00.000Z"),
+        completedByUserId: adminUserId,
+      },
+    });
+
+    const adminWorkspaceResponse = await request(app.getHttpServer())
+      .get(workspaceBasePath(acmeWorkspaceProjectId))
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    const adminSprint = adminWorkspaceResponse.body.sourceOfTruth.sprints.find(
+      (item: { id: string }) => item.id === sprint.id,
+    );
+    expect(adminSprint).toEqual(
+      expect.objectContaining({
+        id: sprint.id,
+        status: "COMPLETED",
+        progressPercent: 100,
+        taskCounts: {
+          total: 1,
+          completed: 1,
+          open: 0,
+        },
+      }),
+    );
+
+    const clientWorkspaceResponse = await request(app.getHttpServer())
+      .get(workspaceBasePath(acmeWorkspaceProjectId))
+      .set("Authorization", `Bearer ${clientToken}`)
+      .expect(200);
+
+    const clientSprint = clientWorkspaceResponse.body.sourceOfTruth.sprints.find(
+      (item: { id: string }) => item.id === sprint.id,
+    );
+    expect(clientSprint).toEqual(
+      expect.objectContaining({
+        id: sprint.id,
+        status: "PLANNED",
+        progressPercent: 0,
+        taskCounts: {
+          total: 1,
+          completed: 0,
+          open: 1,
+        },
+      }),
+    );
+  });
+
+  it("workspace message endpoints return the most recent 100 non-internal messages in ascending order", async () => {
+    const baseCreatedAt = new Date("2026-05-03T09:00:00.000Z").getTime();
+    await prisma.webAppWorkspaceMessage.createMany({
+      data: Array.from({ length: 105 }, (_, index) => ({
+        projectId: acmeWorkspaceProjectId,
+        tabKey: WebAppWorkspaceTabKey.MESSAGES,
+        authorUserId: adminUserId,
+        body: `Recent message fallback ${index + 1}`,
+        isInternal: false,
+        createdAt: new Date(baseCreatedAt + index * 60_000),
+      })),
+    });
+
+    const response = await request(app.getHttpServer())
+      .get(`${workspaceBasePath(acmeWorkspaceProjectId)}/messages`)
+      .query({ tabKey: WebAppWorkspaceTabKey.MESSAGES })
+      .set("Authorization", `Bearer ${clientToken}`)
+      .expect(200);
+
+    expect(response.body).toHaveLength(100);
+    expect(response.body[0]).toEqual(
+      expect.objectContaining({
+        body: "Recent message fallback 6",
+      }),
+    );
+    expect(response.body[99]).toEqual(
+      expect.objectContaining({
+        body: "Recent message fallback 105",
+      }),
+    );
   });
 
   async function setDeterministicDemoPasswords(): Promise<void> {

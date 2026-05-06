@@ -148,6 +148,13 @@ export type WorkspaceSourceTask = {
   environment?: string | null;
   assigneeUserId?: string | null;
   dueDate?: string | null;
+  progressPercent?: number | null;
+  completion?: {
+    totalTodos: number;
+    completedTodos: number;
+    remainingTodos: number;
+    completionPercentage: number;
+  } | null;
   sprint?: {
     id: string;
     name: string;
@@ -170,6 +177,12 @@ export type WorkspaceSourceSprint = {
   status: string;
   startDate: string;
   endDate: string;
+  progressPercent?: number | null;
+  taskCounts?: {
+    total: number;
+    completed: number;
+    open: number;
+  } | null;
 };
 
 export type WorkspaceSourceRelease = {
@@ -189,6 +202,7 @@ export type WorkspaceSourceFile = {
   title: string;
   visibility: "INTERNAL" | "CLIENT_VISIBLE" | string;
   category?: string | null;
+  mimeType?: string | null;
   originalFileName: string;
   secureUrl: string;
   createdAt: string;

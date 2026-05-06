@@ -4,6 +4,7 @@ import { ServiceTabPage } from "../service-tab-page";
 
 const mockUseGetWebAppWorkspaceQuery = vi.fn();
 const mockUseGetClientTasksQuery = vi.fn();
+const mockUseGetClientProjectFilesQuery = vi.fn();
 const mockCreateWorkspaceRevision = vi.fn();
 const mockUpdateWorkspaceRevisionStatus = vi.fn();
 
@@ -60,7 +61,7 @@ vi.mock("../../features/tasks/tasksApi", () => ({
 }));
 
 vi.mock("../../features/projectFiles/projectFilesApi", () => ({
-  useGetClientProjectFilesQuery: () => ({ data: { data: [] }, isLoading: false }),
+  useGetClientProjectFilesQuery: (...args: unknown[]) => mockUseGetClientProjectFilesQuery(...args),
 }));
 
 describe("ServiceTabPage workspace and revision flows", () => {
@@ -69,6 +70,7 @@ describe("ServiceTabPage workspace and revision flows", () => {
     currentUser = { id: "client-1" };
     mockUseGetWebAppWorkspaceQuery.mockReset();
     mockUseGetClientTasksQuery.mockReset();
+    mockUseGetClientProjectFilesQuery.mockReset();
     mockCreateWorkspaceRevision.mockReset();
     mockUpdateWorkspaceRevisionStatus.mockReset();
     mockUseGetWebAppWorkspaceQuery.mockReturnValue({
@@ -76,6 +78,7 @@ describe("ServiceTabPage workspace and revision flows", () => {
       isLoading: false,
     });
     mockUseGetClientTasksQuery.mockReturnValue({ data: [], isLoading: false });
+    mockUseGetClientProjectFilesQuery.mockReturnValue({ data: { data: [] }, isLoading: false, isError: false });
     mockCreateWorkspaceRevision.mockReturnValue({
       unwrap: () => Promise.resolve({ id: "revision-created" }),
     });
@@ -279,5 +282,103 @@ describe("ServiceTabPage workspace and revision flows", () => {
     expect(screen.getByText("Splash screen revizyonu")).toBeInTheDocument();
     expect(screen.queryByText("SEO rapor revizyonu")).not.toBeInTheDocument();
     expect(screen.queryByText("Onay Masası")).not.toBeInTheDocument();
+  });
+
+  it("shows expandable sprint detail with task progress on sprint-status tab", async () => {
+    mockUseGetWebAppWorkspaceQuery.mockReturnValue({
+      data: {
+        project: { id: "p1", clientProfileId: "c1", serviceKey: "WEB_APP", name: "Acme Web App" },
+        sourceOfTruth: {
+          tasks: [
+            {
+              id: "t-1",
+              title: "Landing hero revizyonu",
+              status: "IN_PROGRESS",
+              priority: "HIGH",
+              type: "FEATURE",
+              workstream: "FRONTEND",
+              sprint: { id: "s1", name: "Sprint 1", status: "ACTIVE" },
+              completion: { totalTodos: 2, completedTodos: 1, percent: 50 },
+              progressPercent: 50,
+            },
+          ],
+          sprints: [
+            {
+              id: "s1",
+              name: "Sprint 1",
+              status: "ACTIVE",
+              startDate: "2026-05-01T00:00:00.000Z",
+              endDate: "2026-05-15T00:00:00.000Z",
+              progressPercent: 50,
+              taskCounts: { total: 1, completed: 0, open: 1 },
+            },
+          ],
+          releases: [],
+          files: [],
+        },
+        sections: [],
+        messages: [],
+        revisions: [],
+      },
+      isLoading: false,
+    });
+
+    render(<ServiceTabPage serviceId="web-app" tabId="sprint-status" projectId="p1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Sprint 1/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Todo: 1/2")).toBeInTheDocument();
+    });
+    expect(screen.getAllByText("Landing hero revizyonu").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Todo: 1/2")).toBeInTheDocument();
+    expect(screen.getAllByText("İlerleme: %50").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("renders only image-like client-visible design assets on ui-ux tab", () => {
+    mockUseGetClientProjectFilesQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "f-1",
+            title: "Homepage mockup",
+            secureUrl: "https://cdn.example.com/mockup.png",
+            mimeType: "image/png",
+            originalFileName: "mockup.png",
+            createdAt: "2026-05-05T09:00:00.000Z",
+          },
+          {
+            id: "f-2",
+            title: "Sprint dokumanı",
+            secureUrl: "https://cdn.example.com/sprint.pdf",
+            mimeType: "application/pdf",
+            originalFileName: "sprint.pdf",
+            createdAt: "2026-05-05T09:00:00.000Z",
+          },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    });
+    mockUseGetWebAppWorkspaceQuery.mockReturnValue({
+      data: {
+        project: { id: "p1", clientProfileId: "c1", serviceKey: "WEB_APP", name: "Acme Web App" },
+        sourceOfTruth: {
+          tasks: [],
+          sprints: [],
+          releases: [],
+          files: [],
+        },
+        sections: [],
+        messages: [],
+        revisions: [],
+      },
+      isLoading: false,
+    });
+
+    render(<ServiceTabPage serviceId="web-app" tabId="ui-ux" projectId="p1" />);
+
+    expect(screen.getByText("Homepage mockup")).toBeInTheDocument();
+    expect(screen.queryByText("Sprint dokumanı")).not.toBeInTheDocument();
   });
 });

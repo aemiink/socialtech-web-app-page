@@ -9,9 +9,19 @@ interface ButtonProps {
   icon?: LucideIcon;
   onClick?: () => void;
   className?: string;
+  disabled?: boolean;
+  type?: 'button' | 'submit' | 'reset';
 }
 
-export function Button({ variant = 'primary', children, icon: Icon, onClick, className }: ButtonProps) {
+export function Button({
+  variant = 'primary',
+  children,
+  icon: Icon,
+  onClick,
+  className,
+  disabled = false,
+  type = 'button',
+}: ButtonProps) {
   const [completedLabel, setCompletedLabel] = useState<string | null>(null);
 
   const variants = {
@@ -26,6 +36,11 @@ export function Button({ variant = 'primary', children, icon: Icon, onClick, cla
   const DisplayIcon = completedLabel ? CheckCircle : Icon;
 
   const handleClick = (event: MouseEvent<HTMLButtonElement>) => {
+    if (disabled) {
+      event.preventDefault();
+      return;
+    }
+
     if (onClick) {
       onClick();
       return;
@@ -39,9 +54,11 @@ export function Button({ variant = 'primary', children, icon: Icon, onClick, cla
 
   return (
     <button
+      type={type}
       onClick={handleClick}
+      disabled={disabled}
       className={cn(
-        'px-4 py-2.5 rounded-xl transition-all flex items-center gap-2',
+        'px-4 py-2.5 rounded-xl transition-all flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60',
         completedLabel && 'ring-1 ring-[#AAFF01]/30',
         variants[variant],
         className

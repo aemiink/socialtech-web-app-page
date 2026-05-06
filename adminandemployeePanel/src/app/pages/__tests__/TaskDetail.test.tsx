@@ -47,6 +47,7 @@ const mockUseGetTaskQuery = vi.fn<
   (id: string, options: QueryOptions) => TaskQueryResult
 >();
 const mockUseGetProjectRepositoryQuery = vi.fn();
+const mockUseGetProjectAssigneeCandidatesQuery = vi.fn();
 const mockUseGetProjectFileFoldersQuery = vi.fn();
 const mockUseGetProjectFileFolderAssigneesQuery = vi.fn();
 const mockUseGetProjectFilesQuery = vi.fn();
@@ -59,9 +60,12 @@ const mockUseGetRelatedTaskCommitsQuery = vi.fn();
 const mockUseCreateTaskTodoMutation = vi.fn<() => [TodoMutationTrigger, { isLoading: boolean }]>();
 const mockUseCreateTaskWorkNoteMutation = vi.fn();
 const mockUsePrepareTaskCodeMutation = vi.fn();
+const mockUseUpdateTaskMutation = vi.fn();
 const mockUseUpdateTaskTodoMutation = vi.fn<() => [TodoMutationTrigger, { isLoading: boolean }]>();
 const mockUseToggleTaskTodoMutation = vi.fn<() => [TodoMutationTrigger, { isLoading: boolean }]>();
 const mockUseDeleteTaskTodoMutation = vi.fn<() => [DeleteTodoTrigger, { isLoading: boolean }]>();
+const mockUseGetDeliverySprintsQuery = vi.fn();
+const mockUseCreateClientApprovalMutation = vi.fn();
 
 let currentUser: AuthUserProfile | null = null;
 
@@ -77,14 +81,22 @@ vi.mock("../../features/tasks/tasksApi", () => ({
   usePrepareTaskCodeMutation: () => mockUsePrepareTaskCodeMutation(),
   useGetRelatedTaskCommitsQuery: (query: unknown, options?: unknown) =>
     mockUseGetRelatedTaskCommitsQuery(query, options),
+  useUpdateTaskMutation: () => mockUseUpdateTaskMutation(),
   useUpdateTaskTodoMutation: () => mockUseUpdateTaskTodoMutation(),
   useToggleTaskTodoMutation: () => mockUseToggleTaskTodoMutation(),
   useDeleteTaskTodoMutation: () => mockUseDeleteTaskTodoMutation(),
 }));
 
+vi.mock("../../features/delivery/deliveryApi", () => ({
+  useGetDeliverySprintsQuery: (query: unknown, options?: QueryOptions) =>
+    mockUseGetDeliverySprintsQuery(query, options),
+}));
+
 vi.mock("../../features/projects/projectsApi", () => ({
   useGetProjectRepositoryQuery: (id: string, options?: QueryOptions) =>
     mockUseGetProjectRepositoryQuery(id, options),
+  useGetProjectAssigneeCandidatesQuery: (projectId: string, options?: QueryOptions) =>
+    mockUseGetProjectAssigneeCandidatesQuery(projectId, options),
   useGetProjectFileFoldersQuery: (query: unknown, options?: QueryOptions) =>
     mockUseGetProjectFileFoldersQuery(query, options),
   useGetProjectFileFolderAssigneesQuery: (query: unknown, options?: QueryOptions) =>
@@ -98,6 +110,10 @@ vi.mock("../../features/projects/projectsApi", () => ({
     mockUseCreateProjectFileUploadSignatureMutation(),
   useCompleteProjectFileUploadMutation: () => mockUseCompleteProjectFileUploadMutation(),
   useDeleteProjectFileMutation: () => mockUseDeleteProjectFileMutation(),
+}));
+
+vi.mock("../../features/clientApprovals/clientApprovalsApi", () => ({
+  useCreateClientApprovalMutation: () => mockUseCreateClientApprovalMutation(),
 }));
 
 const taskId = "11111111-1111-4111-8111-111111111111";
@@ -124,6 +140,11 @@ const adminWithoutTaskReadPermission: AuthUserProfile = {
 const taskManagerUser: AuthUserProfile = {
   ...adminUser,
   permissions: ["tasks.read.any", "tasks.manage.any"],
+};
+
+const approvalManagerUser: AuthUserProfile = {
+  ...adminUser,
+  permissions: ["tasks.read.any", "approvals.manage"],
 };
 
 const developerUser: AuthUserProfile = {
@@ -224,6 +245,8 @@ function setupQueryState(overrides: Partial<TaskQueryResult> = {}) {
     isFetching: false,
   });
   mockUseGetRelatedTaskCommitsQuery.mockReturnValue({ data: [] });
+  mockUseGetProjectAssigneeCandidatesQuery.mockReturnValue({ data: [] });
+  mockUseGetDeliverySprintsQuery.mockReturnValue({ data: { data: [] } });
 }
 
 function setupTodoMutations() {
@@ -233,15 +256,18 @@ function setupTodoMutations() {
   const deleteTodo = vi.fn<DeleteTodoTrigger>(() => ({ unwrap: async () => ({}) }));
   const createWorkNote = vi.fn(() => ({ unwrap: async () => ({}) }));
   const prepareTaskCode = vi.fn(() => ({ unwrap: async () => ({}) }));
+  const updateTask = vi.fn(() => ({ unwrap: async () => ({}) }));
   const createFolder = vi.fn(() => ({ unwrap: async () => ({ id: "folder-id" }) }));
   const updateFolderAssignees = vi.fn(() => ({ unwrap: async () => ({}) }));
   const createUploadSignature = vi.fn(() => ({ unwrap: async () => ({}) }));
   const completeUpload = vi.fn(() => ({ unwrap: async () => ({}) }));
   const deleteProjectFile = vi.fn(() => ({ unwrap: async () => ({}) }));
+  const createClientApproval = vi.fn(() => ({ unwrap: async () => ({ id: "approval-id" }) }));
 
   mockUseCreateTaskTodoMutation.mockReturnValue([createTodo, { isLoading: false }]);
   mockUseCreateTaskWorkNoteMutation.mockReturnValue([createWorkNote, { isLoading: false }]);
   mockUsePrepareTaskCodeMutation.mockReturnValue([prepareTaskCode, { isLoading: false }]);
+  mockUseUpdateTaskMutation.mockReturnValue([updateTask, { isLoading: false }]);
   mockUseUpdateTaskTodoMutation.mockReturnValue([updateTodo, { isLoading: false }]);
   mockUseToggleTaskTodoMutation.mockReturnValue([toggleTodo, { isLoading: false }]);
   mockUseDeleteTaskTodoMutation.mockReturnValue([deleteTodo, { isLoading: false }]);
@@ -256,14 +282,17 @@ function setupTodoMutations() {
   ]);
   mockUseCompleteProjectFileUploadMutation.mockReturnValue([completeUpload, { isLoading: false }]);
   mockUseDeleteProjectFileMutation.mockReturnValue([deleteProjectFile, { isLoading: false }]);
+  mockUseCreateClientApprovalMutation.mockReturnValue([createClientApproval, { isLoading: false }]);
 
   return {
     createTodo,
     createWorkNote,
     prepareTaskCode,
+    updateTask,
     updateTodo,
     toggleTodo,
     deleteTodo,
+    createClientApproval,
     createFolder,
     updateFolderAssignees,
   };
@@ -510,5 +539,41 @@ describe("TaskDetail", () => {
     });
     expect(screen.queryByText("İlgili Commitler")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Tasarım Dosyası Yükle" })).toBeInTheDocument();
+  });
+
+  it("submits approval dialog with task context for approval managers", async () => {
+    currentUser = approvalManagerUser;
+    const { createClientApproval } = setupTodoMutations();
+    setupQueryState({ data: taskDetail });
+    mockUseGetProjectAssigneeCandidatesQuery.mockReturnValue({
+      data: [
+        {
+          id: assigneeUserId,
+          displayName: "Deniz Developer",
+          role: "DEVELOPER",
+        },
+      ],
+    });
+
+    renderTaskDetail();
+
+    fireEvent.click(screen.getByRole("button", { name: /Müşteri Onayı İste/ }));
+    fireEvent.change(screen.getByLabelText("Mesaj"), {
+      target: { value: "Görev çıktısını müşteri onayına açıyoruz." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Müşteriye Gönder" }));
+
+    await waitFor(() => {
+      expect(createClientApproval).toHaveBeenCalledWith(
+        expect.objectContaining({
+          clientProfileId,
+          projectId,
+          type: "TASK_APPROVAL",
+          entityType: "TASK",
+          entityId: taskId,
+          requiresExplicitApproval: true,
+        }),
+      );
+    });
   });
 });

@@ -11,7 +11,7 @@ export function ReportsPage({ projectId }: { projectId?: string | null }) {
   const dispatch = useAppDispatch();
   const accessToken = useAppSelector(selectAccessToken);
   const lastWorkspaceSequenceRef = useRef(0);
-  const { data: reports = [], isLoading } = useGetWebAppWorkspaceReportsQuery(
+  const { data: reports = [], isLoading, refetch: refetchReports } = useGetWebAppWorkspaceReportsQuery(
     { projectId: projectId ?? "" },
     { skip: !projectId },
   );
@@ -26,13 +26,21 @@ export function ReportsPage({ projectId }: { projectId?: string | null }) {
     socket.emit("project:join", joinPayload);
 
     const onWorkspaceUpdate = (event: WorkspaceUpdateEvent) => {
-      if (event.projectId !== projectId || event.tabKey !== "REPORTS") {
+      if (event.projectId !== projectId) {
         return;
       }
       if (event.sequence <= lastWorkspaceSequenceRef.current) {
         return;
       }
+      if (event.sequence > lastWorkspaceSequenceRef.current + 1) {
+        lastWorkspaceSequenceRef.current = event.sequence;
+        void refetchReports();
+        return;
+      }
       lastWorkspaceSequenceRef.current = event.sequence;
+      if (event.tabKey !== "REPORTS") {
+        return;
+      }
       const weeklyReport = (event.payload?.weeklyReport ?? null) as WorkspaceWeeklyReport | null;
       if (event.event === "weekly-report.created" && weeklyReport) {
         dispatch(
@@ -53,7 +61,7 @@ export function ReportsPage({ projectId }: { projectId?: string | null }) {
       socket.off("workspace:update", onWorkspaceUpdate);
       socket.disconnect();
     };
-  }, [accessToken, dispatch, projectId]);
+  }, [accessToken, dispatch, projectId, refetchReports]);
 
   return (
     <div className="space-y-6 p-8">

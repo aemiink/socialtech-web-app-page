@@ -5,7 +5,7 @@ import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
-import { useGetClientQuery, useGetClientSummaryQuery } from "../../features/clients/clientsApi";
+import { useGetClientSummaryQuery } from "../../features/clients/clientsApi";
 import { SERVICE_CATALOG, extractApiErrorMessage, isUuid } from "../../features/clients/clientsUtils";
 import type { ServiceKey } from "../../features/clients/clientsTypes";
 import { useCreateProjectMutation, useGetProjectsQuery } from "../../features/projects/projectsApi";
@@ -26,9 +26,6 @@ export function ProjectManagerClientDetail() {
   const { data: summary, isLoading, isError, error } = useGetClientSummaryQuery(normalizedClientId ?? "", {
     skip: !normalizedClientId,
   });
-  const { data: clientProfile } = useGetClientQuery(normalizedClientId ?? "", {
-    skip: !normalizedClientId,
-  });
   const { data: projectsResponse } = useGetProjectsQuery(
     { clientProfileId: normalizedClientId ?? "" },
     { skip: !normalizedClientId },
@@ -36,7 +33,7 @@ export function ProjectManagerClientDetail() {
   const projects = projectsResponse?.data ?? [];
   const recentTasks = summary?.tasks?.recent ?? [];
   const serviceCards = useMemo(() => {
-    const purchased = clientProfile?.purchasedServices ?? [];
+    const purchased = summary?.client.purchasedServices ?? [];
     return purchased
       .filter((service) => service.status === "ACTIVE")
       .map((service) => {
@@ -54,7 +51,7 @@ export function ProjectManagerClientDetail() {
           openTaskCount,
         };
       });
-  }, [clientProfile?.purchasedServices, projects, recentTasks]);
+  }, [summary?.client.purchasedServices, projects, recentTasks]);
 
   const handleCreateProject = async (
     event: FormEvent<HTMLFormElement>,

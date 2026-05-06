@@ -29,6 +29,15 @@ export const CRM_LEAD_AUDIT_ACTIONS = {
   scanRunCompleted: "CRM_LEAD_SCAN_RUN_COMPLETED",
 } as const;
 
+export const CLIENT_APPROVAL_AUDIT_ACTIONS = {
+  created: "CLIENT_APPROVAL_CREATED",
+  updated: "CLIENT_APPROVAL_UPDATED",
+  cancelled: "CLIENT_APPROVAL_CANCELLED",
+  approved: "CLIENT_APPROVAL_APPROVED",
+  rejected: "CLIENT_APPROVAL_REJECTED",
+  acknowledged: "CLIENT_APPROVAL_ACKNOWLEDGED",
+} as const;
+
 export type AdminUserAuditAction =
   (typeof ADMIN_USER_AUDIT_ACTIONS)[keyof typeof ADMIN_USER_AUDIT_ACTIONS];
 
@@ -36,8 +45,14 @@ export type AdminClientAuditAction =
   (typeof ADMIN_CLIENT_AUDIT_ACTIONS)[keyof typeof ADMIN_CLIENT_AUDIT_ACTIONS];
 export type CrmLeadAuditAction =
   (typeof CRM_LEAD_AUDIT_ACTIONS)[keyof typeof CRM_LEAD_AUDIT_ACTIONS];
+export type ClientApprovalAuditAction =
+  (typeof CLIENT_APPROVAL_AUDIT_ACTIONS)[keyof typeof CLIENT_APPROVAL_AUDIT_ACTIONS];
 
-export type AuditLogAction = AdminUserAuditAction | AdminClientAuditAction | CrmLeadAuditAction;
+export type AuditLogAction =
+  | AdminUserAuditAction
+  | AdminClientAuditAction
+  | CrmLeadAuditAction
+  | ClientApprovalAuditAction;
 
 export type AuditLogRequestContext = {
   ipAddress: string | null;

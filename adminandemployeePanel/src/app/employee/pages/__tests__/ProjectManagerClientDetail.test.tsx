@@ -15,17 +15,30 @@ vi.mock("../../../store/hooks", () => ({
 vi.mock("../../../features/clients/clientsApi", () => ({
   useGetClientSummaryQuery: () => ({
     data: {
-      client: { id: "c1", name: "Acme", slug: "acme", status: "ACTIVE" },
+      client: {
+        id: "c1",
+        name: "Acme",
+        slug: "acme",
+        status: "ACTIVE",
+        createdAt: "2026-05-06T00:00:00.000Z",
+        updatedAt: "2026-05-06T00:00:00.000Z",
+        purchasedServices: [{ serviceKey: "web-app", status: "ACTIVE" }],
+      },
       tasks: { recent: [] },
+      projects: {
+        total: 0,
+        planned: 0,
+        inProgress: 0,
+        review: 0,
+        completed: 0,
+        onHold: 0,
+        recent: [],
+      },
+      meta: { generatedAt: "2026-05-06T00:00:00.000Z" },
     },
     isLoading: false,
     isError: false,
     error: undefined,
-  }),
-  useGetClientQuery: () => ({
-    data: {
-      purchasedServices: [{ serviceKey: "web-app", status: "ACTIVE" }],
-    },
   }),
 }));
 
@@ -75,4 +88,3 @@ describe("ProjectManagerClientDetail", () => {
     });
   });
 });
-

@@ -6,6 +6,7 @@ import { AdminClientsModule } from "./admin-clients/admin-clients.module";
 import { AdminSummaryModule } from "./admin-summary/admin-summary.module";
 import { AdminUsersModule } from "./admin-users/admin-users.module";
 import { AuthModule } from "./auth/auth.module";
+import { ClientApprovalsModule } from "./client-approvals/client-approvals.module";
 import { ClientsModule } from "./clients/clients.module";
 import { envValidationSchema } from "./config/env.validation";
 import { DatabaseModule } from "./database/database.module";
@@ -33,6 +34,7 @@ import { WebAppWorkspaceModule } from "./web-app-workspace/web-app-workspace.mod
     DatabaseModule,
     HealthModule,
     AuthModule,
+    ClientApprovalsModule,
     UsersModule,
     ClientsModule,
     CrmModule,

@@ -8,6 +8,11 @@ import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
 import { Progress } from "../components/ui/progress";
 import { Textarea } from "../components/ui/textarea";
+import { ClientApprovalRequestDialog } from "../features/clientApprovals/ClientApprovalRequestDialog";
+import type {
+  ClientApprovalComposerPreset,
+  ClientApprovalContextOption,
+} from "../features/clientApprovals/clientApprovalsTypes";
 import { useAppSelector } from "../store/hooks";
 import {
   hasAdminPermission,
@@ -19,6 +24,7 @@ import {
   useCreateProjectFileFolderMutation,
   useCreateProjectFileUploadSignatureMutation,
   useDeleteProjectFileMutation,
+  useGetProjectAssigneeCandidatesQuery,
   useGetProjectFileFolderAssigneesQuery,
   useGetProjectFileFoldersQuery,
   useGetProjectFilesQuery,
@@ -26,6 +32,7 @@ import {
   useUpdateProjectFileFolderAssigneesMutation,
 } from "../features/projects/projectsApi";
 import type { ProjectFileVisibility } from "../features/projects/projectsTypes";
+import { useGetDeliverySprintsQuery } from "../features/delivery/deliveryApi";
 import {
   useCreateTaskWorkNoteMutation,
   useCreateTaskTodoMutation,
@@ -34,9 +41,10 @@ import {
   useGetTaskQuery,
   usePrepareTaskCodeMutation,
   useToggleTaskTodoMutation,
+  useUpdateTaskMutation,
   useUpdateTaskTodoMutation,
 } from "../features/tasks/tasksApi";
-import type { Task } from "../features/tasks/tasksTypes";
+import type { Task, TaskStatus, UpdateTaskRequest } from "../features/tasks/tasksTypes";
 import {
   extractApiErrorMessage,
   formatDate,
@@ -56,6 +64,7 @@ import {
   isUuid,
   shortId,
 } from "../features/tasks/tasksUtils";
+import { useCreateClientApprovalMutation } from "../features/clientApprovals/clientApprovalsApi";
 
 export function TaskDetail() {
   const { id } = useParams();
@@ -73,6 +82,13 @@ export function TaskDetail() {
     "tasks.manage.any",
     "tasks.manage",
   ]);
+  const canManageAssignedTasks = hasUserPermission(currentUser, ["tasks.manage.assigned"]);
+  const canManageTaskDetails = canManageTasks || canManageAssignedTasks;
+  const canManageTaskTodos = canManageTasks || hasUserPermission(currentUser, ["tasks.todos.manage.assigned"]);
+  const canUpdateOwnTask =
+    currentUser?.accountType === "EMPLOYEE" &&
+    hasUserPermission(currentUser, ["tasks.update.assigned", "tasks.update.own"]);
+  const canManageApprovals = hasUserPermission(currentUser, ["approvals.manage"]);
   const canReadRepository = hasUserPermission(currentUser, [
     "integrations.github.read.any",
     "integrations.github.manage.any",
@@ -89,6 +105,9 @@ export function TaskDetail() {
   const [editingTodoId, setEditingTodoId] = useState<string | null>(null);
   const [editingTodoTitle, setEditingTodoTitle] = useState("");
   const [todoActionError, setTodoActionError] = useState<string | null>(null);
+  const [taskEditForm, setTaskEditForm] = useState<TaskEditFormState | null>(null);
+  const [taskEditFeedback, setTaskEditFeedback] = useState<string | null>(null);
+  const [taskEditError, setTaskEditError] = useState<string | null>(null);
   const [workNoteDraft, setWorkNoteDraft] = useState("");
   const [workNoteFeedback, setWorkNoteFeedback] = useState<string | null>(null);
   const [prepareCodeFeedback, setPrepareCodeFeedback] = useState<string | null>(null);
@@ -98,7 +117,13 @@ export function TaskDetail() {
   const [designFileTitle, setDesignFileTitle] = useState("");
   const [designFileDescription, setDesignFileDescription] = useState("");
   const [designFileVisibility, setDesignFileVisibility] = useState<ProjectFileVisibility>("INTERNAL");
+  const [designShareMode, setDesignShareMode] = useState<"NONE" | "APPROVAL" | "INFORMATION">("NONE");
+  const [designShareMessage, setDesignShareMessage] = useState("");
   const [designUploadFeedback, setDesignUploadFeedback] = useState<string | null>(null);
+  const [isApprovalDialogOpen, setIsApprovalDialogOpen] = useState(false);
+  const [approvalDialogPreset, setApprovalDialogPreset] = useState<ClientApprovalComposerPreset | undefined>(
+    undefined,
+  );
   const [isDragActive, setIsDragActive] = useState(false);
   const designFileInputRef = useRef<HTMLInputElement | null>(null);
   const ensuredDesignFolderKeyRef = useRef<string | null>(null);
@@ -123,6 +148,19 @@ export function TaskDetail() {
     { taskId: task?.id ?? "" },
     { skip: !canReadRepository || !repository || !task?.id },
   );
+  const { data: assigneeCandidates = [] } = useGetProjectAssigneeCandidatesQuery(
+    task?.projectId ?? "",
+    {
+      skip: !task?.projectId || (!canManageTaskDetails && !canManageApprovals),
+    },
+  );
+  const { data: deliverySprintsResponse } = useGetDeliverySprintsQuery(
+    { projectId: task?.projectId ?? "", limit: 100 },
+    {
+      skip: !task?.projectId || !canManageTaskDetails,
+    },
+  );
+  const deliverySprints = deliverySprintsResponse?.data ?? [];
   const isDesignTask = useMemo(() => isDesignTaskType(task), [task]);
   const designTaskFolderName = useMemo(
     () => (task ? buildDesignTaskFolderName(task) : ""),
@@ -153,6 +191,48 @@ export function TaskDetail() {
     },
   );
   const designFiles = designFilesResponse?.data ?? [];
+  const approvalContextOptions = useMemo<ClientApprovalContextOption[]>(() => {
+    if (!task) {
+      return [];
+    }
+
+    return [
+      {
+        key: `task:${task.id}`,
+        label: `Görev · ${task.title}`,
+        description: task.sprint?.name
+          ? `${task.sprint.name} · ${getTaskStatusLabel(task.status)}`
+          : getTaskStatusLabel(task.status),
+        entityType: "TASK",
+        entityId: task.id,
+        actionPayload: {
+          contextType: "Görev",
+          contextLabel: task.title,
+          taskId: task.id,
+          taskStatus: task.status,
+          taskCode: task.code ?? null,
+          completionPercent: task.completion?.percent ?? 0,
+        },
+      },
+      ...designFiles.map((file) => ({
+        key: `design:${file.id}`,
+        label: `Tasarım Dosyası · ${file.title}`,
+        description: file.folder?.name
+          ? `${file.originalFileName} · ${file.folder.name}`
+          : file.originalFileName,
+        entityType: "DESIGN_ASSET" as const,
+        entityId: file.id,
+        actionPayload: {
+          contextType: "Tasarım Dosyası",
+          contextLabel: file.title,
+          projectFileId: file.id,
+          fileName: file.originalFileName,
+          fileUrl: file.secureUrl,
+          folderName: file.folder?.name ?? null,
+        },
+      })),
+    ];
+  }, [designFiles, task]);
 
   const [createProjectFileFolder, { isLoading: isCreatingDesignFolder }] = useCreateProjectFileFolderMutation();
   const [updateProjectFileFolderAssignees, { isLoading: isAssigningDesignFolder }] =
@@ -163,7 +243,9 @@ export function TaskDetail() {
     useCompleteProjectFileUploadMutation();
   const [deleteProjectFile, { isLoading: isDeletingDesignFile }] = useDeleteProjectFileMutation();
   const [createTaskTodo, { isLoading: isCreatingTodo }] = useCreateTaskTodoMutation();
+  const [updateTask, { isLoading: isUpdatingTask }] = useUpdateTaskMutation();
   const [createTaskWorkNote, { isLoading: isCreatingWorkNote }] = useCreateTaskWorkNoteMutation();
+  const [createClientApproval, { isLoading: isCreatingClientApproval }] = useCreateClientApprovalMutation();
   const [prepareTaskCode, { isLoading: isPreparingCode }] = usePrepareTaskCodeMutation();
   const [updateTaskTodo, { isLoading: isUpdatingTodo }] = useUpdateTaskTodoMutation();
   const [toggleTaskTodo, { isLoading: isTogglingTodo }] = useToggleTaskTodoMutation();
@@ -288,6 +370,17 @@ export function TaskDetail() {
     updateProjectFileFolderAssignees,
   ]);
 
+  useEffect(() => {
+    if (!task) {
+      setTaskEditForm(null);
+      return;
+    }
+
+    setTaskEditForm(createTaskEditForm(task));
+    setTaskEditError(null);
+    setTaskEditFeedback(null);
+  }, [task]);
+
   if (!canReadTasks) {
     return (
       <Card className="border-red-500/30 bg-red-500/10 p-6 text-red-200">
@@ -361,8 +454,45 @@ export function TaskDetail() {
   const todos = getTaskTodos(taskDetail);
   const completion = getTaskCompletion(taskDetail);
   const completionPercent = getTaskCompletionPercent(taskDetail);
+  const canEditOwnTaskStatus = canUpdateOwnTask && taskDetail.assigneeUserId === currentUser?.id;
+  const canEditTaskDetails = canManageTaskDetails || canEditOwnTaskStatus;
+  const canToggleTodos = canManageTaskTodos || canEditOwnTaskStatus;
   const isTodoMutating = isCreatingTodo || isUpdatingTodo || isTogglingTodo || isDeletingTodo;
+  const isTaskEditBusy = isUpdatingTask || isFetching;
   const savedWorkNotes = getTaskWorkNotes(taskDetail);
+
+  async function handleTaskEditSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!taskEditForm) {
+      return;
+    }
+
+    if (canManageTaskDetails && taskEditForm.title.trim().length < 2) {
+      setTaskEditError("Görev başlığı en az 2 karakter olmalıdır.");
+      return;
+    }
+
+    const payload = buildTaskDetailUpdatePayload(taskDetail, taskEditForm, canManageTaskDetails);
+    if (!payload) {
+      setTaskEditError(null);
+      setTaskEditFeedback("Kaydedilecek bir değişiklik bulunmuyor.");
+      return;
+    }
+
+    try {
+      setTaskEditError(null);
+      setTaskEditFeedback(null);
+      await updateTask({ id: taskDetail.id, body: payload }).unwrap();
+      setTaskEditFeedback(
+        canManageTaskDetails
+          ? "Görev alanları güncellendi."
+          : "Görev durumu güncellendi.",
+      );
+    } catch (error) {
+      setTaskEditError(extractApiErrorMessage(error, "Görev alanları güncellenemedi."));
+    }
+  }
 
   async function handleCreateTodoSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -557,7 +687,7 @@ export function TaskDetail() {
         bytes: number;
       };
 
-      await completeProjectFileUpload({
+      const uploadedFile = await completeProjectFileUpload({
         projectId: taskDetail.projectId,
         originalFileName: designFile.name,
         title,
@@ -573,9 +703,41 @@ export function TaskDetail() {
         folderId: designFolderId,
       }).unwrap();
 
+      if (
+        designFileVisibility === "CLIENT_VISIBLE" &&
+        designShareMode !== "NONE" &&
+        taskDetail.project?.clientProfileId
+      ) {
+        const fallbackMessage =
+          designShareMode === "APPROVAL"
+            ? `${title} tasarım dosyası paylaşıldı. Onayınızı bekliyoruz.`
+            : `${title} tasarım dosyası bilgilendirme amaçlı paylaşıldı.`;
+
+        await createClientApproval({
+          clientProfileId: taskDetail.project.clientProfileId,
+          projectId: taskDetail.projectId,
+          type: designShareMode === "APPROVAL" ? "DESIGN_APPROVAL" : "INFORMATION",
+          title,
+          message: designShareMessage.trim() || fallbackMessage,
+          entityType: "PROJECT_FILE",
+          entityId: uploadedFile.id,
+          requiresExplicitApproval: designShareMode === "APPROVAL",
+          actionPayload: {
+            clientVisiblePayload: {
+              fileId: uploadedFile.id,
+              fileTitle: uploadedFile.title,
+              fileUrl: uploadedFile.secureUrl,
+              category: uploadedFile.category,
+            },
+          },
+        }).unwrap();
+      }
+
       setDesignFile(null);
       setDesignFileTitle("");
       setDesignFileDescription("");
+      setDesignShareMessage("");
+      setDesignShareMode("NONE");
       setDesignUploadFeedback("Tasarım dosyası yüklendi.");
       await refetchDesignFiles();
     } catch (error) {
@@ -601,6 +763,19 @@ export function TaskDetail() {
         extractApiErrorMessage(error, "Dosya silinemedi."),
       );
     }
+  }
+
+  function openTaskApprovalDialog(mode: "APPROVAL" | "INFORMATION") {
+    setApprovalDialogPreset({
+      type: mode === "APPROVAL" ? "TASK_APPROVAL" : "INFORMATION",
+      requiresExplicitApproval: mode === "APPROVAL",
+      title:
+        mode === "APPROVAL"
+          ? `${taskDetail.title} için müşteri onayı`
+          : `${taskDetail.title} hakkında bilgilendirme`,
+      contextKey: approvalContextOptions[0]?.key,
+    });
+    setIsApprovalDialogOpen(true);
   }
 
   return (
@@ -637,6 +812,285 @@ export function TaskDetail() {
         )}
       </Card>
 
+      {canManageApprovals ? (
+        <Card className="border-white/[0.08] bg-[#1A1A1A] p-6">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-white">Müşteri Onay / Bilgilendirme</h2>
+              <p className="mt-1 text-sm text-[#A0A0A0]">
+                Görev çıktısı veya tasarım dosyası bağlamında müşteriye onay ya da bilgilendirme iletin.
+              </p>
+            </div>
+            <Badge variant="outline" className="border-white/[0.12] text-[#A0A0A0]">
+              {approvalContextOptions.length} bağlam
+            </Badge>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <button
+              type="button"
+              className="rounded-2xl border border-[#AAFF01]/20 bg-[#AAFF01]/10 p-4 text-left transition hover:bg-[#AAFF01]/15"
+              onClick={() => openTaskApprovalDialog("APPROVAL")}
+            >
+              <p className="text-sm font-semibold text-[#E8FFC2]">Müşteri Onayı İste</p>
+              <p className="mt-2 text-xs leading-5 text-[#D7E8B1]">
+                Task sonucu veya bağlı tasarım dosyası için açık onay talebi oluşturun.
+              </p>
+            </button>
+            <button
+              type="button"
+              className="rounded-2xl border border-white/10 bg-[#202020] p-4 text-left transition hover:border-white/15 hover:bg-[#242424]"
+              onClick={() => openTaskApprovalDialog("INFORMATION")}
+            >
+              <p className="text-sm font-semibold text-white">Bilgilendirme Gönder</p>
+              <p className="mt-2 text-xs leading-5 text-[#A0A0A0]">
+                Müşteriye sadece görünür bir bilgilendirme kaydı bırakın, onay zorunlu olmasın.
+              </p>
+            </button>
+          </div>
+        </Card>
+      ) : null}
+
+      {canEditTaskDetails && taskEditForm ? (
+        <Card className="border-white/[0.08] bg-[#1A1A1A] p-6">
+          <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-white">Görev Düzenleme</h2>
+              <p className="mt-1 text-sm text-[#A0A0A0]">
+                {canManageTaskDetails
+                  ? "Durum, öncelik, sprint, atama ve temel görev alanlarını güncelleyebilirsiniz."
+                  : "Bu görev size atalıysa durumunu ve checklist ilerlemesini güncelleyebilirsiniz."}
+              </p>
+            </div>
+            <Badge variant="outline" className="border-white/[0.12] text-[#A0A0A0]">
+              {canManageTaskDetails ? "PM / Admin" : "Own Task"}
+            </Badge>
+          </div>
+
+          <form onSubmit={handleTaskEditSubmit} className="space-y-4">
+            {canManageTaskDetails ? (
+              <>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-white" htmlFor="task-edit-title">
+                    Görev Başlığı
+                  </label>
+                  <Input
+                    id="task-edit-title"
+                    value={taskEditForm.title}
+                    onChange={(event) => {
+                      setTaskEditForm((prev) =>
+                        prev ? { ...prev, title: event.target.value } : prev,
+                      );
+                      setTaskEditFeedback(null);
+                      setTaskEditError(null);
+                    }}
+                    className="border-white/[0.08] bg-[#202020]"
+                    maxLength={180}
+                    disabled={isTaskEditBusy}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label
+                    className="text-sm font-medium text-white"
+                    htmlFor="task-edit-description"
+                  >
+                    Açıklama
+                  </label>
+                  <Textarea
+                    id="task-edit-description"
+                    value={taskEditForm.description}
+                    onChange={(event) => {
+                      setTaskEditForm((prev) =>
+                        prev ? { ...prev, description: event.target.value } : prev,
+                      );
+                      setTaskEditFeedback(null);
+                      setTaskEditError(null);
+                    }}
+                    className="min-h-24 border-white/[0.08] bg-[#202020]"
+                    maxLength={2000}
+                    disabled={isTaskEditBusy}
+                  />
+                </div>
+              </>
+            ) : null}
+
+            <div className={`grid gap-4 ${canManageTaskDetails ? "md:grid-cols-2 xl:grid-cols-4" : "md:grid-cols-1"}`}>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-white" htmlFor="task-edit-status">
+                  Durum
+                </label>
+                <select
+                  id="task-edit-status"
+                  value={taskEditForm.status}
+                  onChange={(event) => {
+                    setTaskEditForm((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            status: event.target.value as TaskStatus,
+                          }
+                        : prev,
+                    );
+                    setTaskEditFeedback(null);
+                    setTaskEditError(null);
+                  }}
+                  className="h-10 w-full rounded-md border border-white/[0.08] bg-[#202020] px-3 text-sm text-white outline-none transition-colors hover:border-white/[0.12] focus:border-[#AAFF01]/50"
+                  disabled={isTaskEditBusy}
+                >
+                  {["TODO", "IN_PROGRESS", "REVIEW", "DONE", "BLOCKED"].map((status) => (
+                    <option key={status} value={status}>
+                      {getTaskStatusLabel(status as TaskStatus)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {canManageTaskDetails ? (
+                <>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-white" htmlFor="task-edit-priority">
+                      Öncelik
+                    </label>
+                    <select
+                      id="task-edit-priority"
+                      value={taskEditForm.priority}
+                      onChange={(event) => {
+                        setTaskEditForm((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                priority: event.target.value as Task["priority"],
+                              }
+                            : prev,
+                        );
+                        setTaskEditFeedback(null);
+                        setTaskEditError(null);
+                      }}
+                      className="h-10 w-full rounded-md border border-white/[0.08] bg-[#202020] px-3 text-sm text-white outline-none transition-colors hover:border-white/[0.12] focus:border-[#AAFF01]/50"
+                      disabled={isTaskEditBusy}
+                    >
+                      {["LOW", "MEDIUM", "HIGH", "URGENT"].map((priority) => (
+                        <option key={priority} value={priority}>
+                          {getPriorityLabel(priority as Task["priority"])}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-white" htmlFor="task-edit-sprint">
+                      Sprint
+                    </label>
+                    <select
+                      id="task-edit-sprint"
+                      value={taskEditForm.sprintId}
+                      onChange={(event) => {
+                        setTaskEditForm((prev) =>
+                          prev ? { ...prev, sprintId: event.target.value } : prev,
+                        );
+                        setTaskEditFeedback(null);
+                        setTaskEditError(null);
+                      }}
+                      className="h-10 w-full rounded-md border border-white/[0.08] bg-[#202020] px-3 text-sm text-white outline-none transition-colors hover:border-white/[0.12] focus:border-[#AAFF01]/50"
+                      disabled={isTaskEditBusy}
+                    >
+                      <option value="">Sprint atanmamış</option>
+                      {deliverySprints.map((sprint) => (
+                        <option key={sprint.id} value={sprint.id}>
+                          {sprint.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-white" htmlFor="task-edit-due-date">
+                      Deadline
+                    </label>
+                    <Input
+                      id="task-edit-due-date"
+                      type="date"
+                      value={taskEditForm.dueDate}
+                      onChange={(event) => {
+                        setTaskEditForm((prev) =>
+                          prev ? { ...prev, dueDate: event.target.value } : prev,
+                        );
+                        setTaskEditFeedback(null);
+                        setTaskEditError(null);
+                      }}
+                      className="border-white/[0.08] bg-[#202020]"
+                      disabled={isTaskEditBusy}
+                    />
+                  </div>
+                </>
+              ) : null}
+            </div>
+
+            {canManageTaskDetails ? (
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-white" htmlFor="task-edit-assignee">
+                  Atanan Çalışan
+                </label>
+                <select
+                  id="task-edit-assignee"
+                  value={taskEditForm.assigneeUserId}
+                  onChange={(event) => {
+                    setTaskEditForm((prev) =>
+                      prev ? { ...prev, assigneeUserId: event.target.value } : prev,
+                    );
+                    setTaskEditFeedback(null);
+                    setTaskEditError(null);
+                  }}
+                  className="h-10 w-full rounded-md border border-white/[0.08] bg-[#202020] px-3 text-sm text-white outline-none transition-colors hover:border-white/[0.12] focus:border-[#AAFF01]/50"
+                  disabled={isTaskEditBusy}
+                >
+                  <option value="">Atama yok</option>
+                  {assigneeCandidates.map((candidate) => (
+                    <option key={candidate.id} value={candidate.id}>
+                      {(candidate.displayName?.trim() || shortId(candidate.id))} ({candidate.role})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+
+            {taskEditError ? (
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+                {taskEditError}
+              </div>
+            ) : null}
+            {taskEditFeedback ? (
+              <div className="rounded-lg border border-[#AAFF01]/20 bg-[#AAFF01]/10 px-3 py-2 text-sm text-[#d2ff8a]">
+                {taskEditFeedback}
+              </div>
+            ) : null}
+
+            <div className="flex flex-wrap justify-end gap-2">
+              {canManageTaskDetails ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isTaskEditBusy}
+                  onClick={() => {
+                    setTaskEditForm(createTaskEditForm(taskDetail));
+                    setTaskEditFeedback(null);
+                    setTaskEditError(null);
+                  }}
+                >
+                  Formu Sıfırla
+                </Button>
+              ) : null}
+              <Button
+                type="submit"
+                className="bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
+                disabled={isTaskEditBusy}
+              >
+                {isUpdatingTask ? "Kaydediliyor..." : canManageTaskDetails ? "Değişiklikleri Kaydet" : "Durumu Güncelle"}
+              </Button>
+            </div>
+          </form>
+        </Card>
+      ) : null}
+
       <Card className="border-white/[0.08] bg-[#1A1A1A] p-6">
         <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -658,7 +1112,7 @@ export function TaskDetail() {
           </div>
         )}
 
-        {canManageTasks && (
+        {canManageTaskTodos && (
           <form onSubmit={handleCreateTodoSubmit} className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center">
             <Input
               aria-label="Yeni todo"
@@ -709,7 +1163,7 @@ export function TaskDetail() {
                     <Checkbox
                       checked={todo.isCompleted}
                       onCheckedChange={() => void handleToggleTodo(todo.id, todo.isCompleted)}
-                      disabled={!canManageTasks || isTodoMutating}
+                      disabled={!canToggleTodos || isTodoMutating}
                       className="border-white/[0.18] data-[state=checked]:border-[#AAFF01] data-[state=checked]:bg-[#AAFF01] data-[state=checked]:text-[#131313]"
                       aria-label={`${todo.title} durumunu değiştir`}
                     />
@@ -738,7 +1192,7 @@ export function TaskDetail() {
                     )}
                   </div>
 
-                  {canManageTasks && (
+                  {canManageTaskTodos && (
                     <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                       {isEditing ? (
                         <>
@@ -918,6 +1372,31 @@ export function TaskDetail() {
                     <option value="INTERNAL">Internal</option>
                     <option value="CLIENT_VISIBLE">Client Visible</option>
                   </select>
+                  {designFileVisibility === "CLIENT_VISIBLE" ? (
+                    <>
+                      <select
+                        value={designShareMode}
+                        onChange={(event) =>
+                          setDesignShareMode(
+                            event.target.value as "NONE" | "APPROVAL" | "INFORMATION",
+                          )
+                        }
+                        className="h-10 w-full rounded-md border border-white/[0.08] bg-[#202020] px-3 text-sm text-white outline-none transition-colors hover:border-white/[0.12] focus:border-[#AAFF01]/50"
+                      >
+                        <option value="NONE">Sadece paylaş (popup yok)</option>
+                        <option value="APPROVAL">Müşteri onayı iste</option>
+                        <option value="INFORMATION">Sadece bilgilendirme gönder</option>
+                      </select>
+                      {designShareMode !== "NONE" ? (
+                        <Textarea
+                          value={designShareMessage}
+                          onChange={(event) => setDesignShareMessage(event.target.value)}
+                          placeholder="Müşteriye görünecek popup mesajı (boş bırakılırsa varsayılan metin kullanılır)."
+                          className="min-h-20 border-white/[0.08] bg-[#202020]"
+                        />
+                      ) : null}
+                    </>
+                  ) : null}
 
                   <div
                     className={`rounded-lg border border-dashed p-4 text-sm transition ${
@@ -1090,6 +1569,21 @@ export function TaskDetail() {
         <InfoCard label="Oluşturulma" value={formatDateTime(task.createdAt)} />
         <InfoCard label="Güncellenme" value={formatDateTime(task.updatedAt)} />
       </div>
+
+      {canManageApprovals && task.project?.clientProfileId ? (
+        <ClientApprovalRequestDialog
+          open={isApprovalDialogOpen}
+          onOpenChange={setIsApprovalDialogOpen}
+          clientProfileId={task.project.clientProfileId}
+          projectId={task.projectId}
+          assigneeOptions={assigneeCandidates}
+          contextOptions={approvalContextOptions}
+          dialogTitle="Müşteri Onayı / Bilgilendirme"
+          dialogDescription="Görev veya tasarım dosyası bağlamında müşteriye kayıt oluşturun."
+          submitLabel="Müşteriye Gönder"
+          preset={approvalDialogPreset}
+        />
+      ) : null}
     </div>
   );
 }
@@ -1107,6 +1601,90 @@ function buildDesignTaskFolderName(task: Task): string {
   const normalizedTitle = task.title.trim().replace(/\s+/g, " ");
   const raw = `DESIGN-${codePrefix} - ${normalizedTitle}`;
   return raw.slice(0, 120);
+}
+
+type TaskEditFormState = {
+  title: string;
+  description: string;
+  status: TaskStatus;
+  priority: Task["priority"];
+  assigneeUserId: string;
+  sprintId: string;
+  dueDate: string;
+};
+
+function createTaskEditForm(task: Task): TaskEditFormState {
+  return {
+    title: task.title,
+    description: task.description ?? "",
+    status: task.status,
+    priority: task.priority,
+    assigneeUserId: task.assigneeUserId ?? "",
+    sprintId: task.sprintId ?? "",
+    dueDate: formatDateInput(task.dueDate),
+  };
+}
+
+function buildTaskDetailUpdatePayload(
+  task: Task,
+  form: TaskEditFormState,
+  canManageTaskDetails: boolean,
+): UpdateTaskRequest | null {
+  const nextStatus = form.status;
+  const payload: UpdateTaskRequest = {};
+
+  if (nextStatus !== task.status) {
+    payload.status = nextStatus;
+  }
+
+  if (!canManageTaskDetails) {
+    return Object.keys(payload).length > 0 ? payload : null;
+  }
+
+  const normalizedTitle = form.title.trim();
+  const normalizedDescription = toNullableText(form.description);
+  const normalizedAssigneeUserId = toNullableText(form.assigneeUserId);
+  const normalizedSprintId = toNullableText(form.sprintId);
+  const normalizedDueDate = form.dueDate || null;
+
+  if (normalizedTitle !== task.title) {
+    payload.title = normalizedTitle;
+  }
+  if (normalizedDescription !== task.description) {
+    payload.description = normalizedDescription;
+  }
+  if (form.priority !== task.priority) {
+    payload.priority = form.priority;
+  }
+  if (normalizedAssigneeUserId !== task.assigneeUserId) {
+    payload.assigneeUserId = normalizedAssigneeUserId;
+  }
+  if (normalizedSprintId !== (task.sprintId ?? null)) {
+    payload.sprintId = normalizedSprintId;
+  }
+  if (normalizedDueDate !== (formatDateInput(task.dueDate) || null)) {
+    payload.dueDate = normalizedDueDate;
+  }
+
+  return Object.keys(payload).length > 0 ? payload : null;
+}
+
+function toNullableText(value: string): string | null {
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function formatDateInput(value: string | null | undefined): string {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toISOString().slice(0, 10);
 }
 
 function InfoCard({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
