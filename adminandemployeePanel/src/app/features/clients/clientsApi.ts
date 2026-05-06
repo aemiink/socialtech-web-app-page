@@ -6,6 +6,7 @@ import type {
   ClientSummaryResponse,
   CreateAdminClientRequest,
   CreateOrLinkClientOwnerRequest,
+  ResetClientOwnerPasswordRequest,
   UpdateAdminClientRequest,
 } from "./clientsTypes";
 import {
@@ -111,6 +112,18 @@ export const clientsApi = baseApi.injectEndpoints({
         { type: "AdminUsers", id: ADMIN_USERS_LIST_ID },
       ],
     }),
+    resetClientOwnerPassword: builder.mutation<
+      ClientProfile,
+      { clientId: string; body: ResetClientOwnerPasswordRequest }
+    >({
+      query: ({ clientId, body }) => ({
+        url: `/admin/clients/${clientId}/reset-owner-password`,
+        method: "PATCH",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeClientResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => getAdminClientMutationInvalidations(clientId),
+    }),
   }),
 });
 
@@ -124,6 +137,7 @@ export const {
   useDeactivateAdminClientMutation,
   useActivateAdminClientMutation,
   useCreateOrLinkClientOwnerMutation,
+  useResetClientOwnerPasswordMutation,
 } = clientsApi;
 
 function getClientSummaryTagId(id: string): string {

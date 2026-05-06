@@ -31,10 +31,12 @@ const mockUseGetClientSummaryQuery = vi.fn<
   (id: string, options: QueryOptions) => ClientSummaryQueryResult
 >();
 const mockUseGetAdminAssignmentsQuery = vi.fn();
+const mockUseResetClientOwnerPasswordMutation = vi.fn();
 
 vi.mock("../../features/clients/clientsApi", () => ({
   useGetClientSummaryQuery: (id: string, options: QueryOptions) =>
     mockUseGetClientSummaryQuery(id, options),
+  useResetClientOwnerPasswordMutation: () => mockUseResetClientOwnerPasswordMutation(),
 }));
 vi.mock("../../features/adminAssignments/adminAssignmentsApi", () => ({
   useGetAdminAssignmentsQuery: (...args: unknown[]) => mockUseGetAdminAssignmentsQuery(...args),
@@ -121,6 +123,7 @@ describe("ClientDetail", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setupSummaryState();
+    mockUseResetClientOwnerPasswordMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseGetAdminAssignmentsQuery.mockReturnValue({
       data: [],
       isLoading: false,
@@ -177,6 +180,7 @@ describe("ClientDetail", () => {
     expect(screen.getAllByText("acme-e-ticaret").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Aktif").length).toBeGreaterThan(0);
     expect(screen.getByText(clientProfileId)).toBeInTheDocument();
+    expect(screen.getByText("Müşteri Portal Şifre Sıfırlama")).toBeInTheDocument();
   });
 
   it("renders project and task counts", () => {

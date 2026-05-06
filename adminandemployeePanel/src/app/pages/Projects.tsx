@@ -631,6 +631,8 @@ function ProjectFormFields({
   disabled: boolean;
 }) {
   const serviceOptions = getServiceOptions(selectedClient, form.serviceKey);
+  const requiresRepository = isCodeService(form.serviceKey);
+  const requiresFigma = isDesignService(form.serviceKey);
 
   return (
     <>
@@ -667,9 +669,15 @@ function ProjectFormFields({
         {selectedClient && serviceOptions.length === 0 && (
           <p className="text-xs text-[#A0A0A0]">Seçili müşterinin aktif hizmeti bulunmuyor.</p>
         )}
-        {(form.serviceKey === "web-app" || form.serviceKey === "mobile-app") && (
+        {requiresRepository && (
           <div className="rounded-lg border border-orange-400/30 bg-orange-500/10 px-3 py-2 text-xs text-orange-100">
             WEB_APP ve MOBILE_APP projelerinde GitHub repository linki zorunludur.
+          </div>
+        )}
+        {requiresFigma && (
+          <div className="rounded-lg border border-sky-400/30 bg-sky-500/10 px-3 py-2 text-xs text-sky-100">
+            WEB_MOBILE_DESIGN projelerinde Figma linki zorunludur. Prototip linki girerseniz proje
+            detayında embed olarak gösterilir.
           </div>
         )}
       </div>
@@ -689,15 +697,19 @@ function ProjectFormFields({
         </p>
       </div>
       <div className="space-y-2">
-        <Label htmlFor={`${idPrefix}-figma-url`}>Figma Proje Linki</Label>
+        <Label htmlFor={`${idPrefix}-figma-url`}>Figma Linki</Label>
         <Input
           id={`${idPrefix}-figma-url`}
           value={form.figmaProjectUrl}
           onChange={(event) => onChange("figmaProjectUrl", event.target.value)}
           className="border-white/[0.08] bg-[#202020]"
-          placeholder="https://www.figma.com/file/..."
+          placeholder="https://www.figma.com/file/... veya https://www.figma.com/proto/..."
           disabled={disabled}
         />
+        <p className="text-xs text-[#A0A0A0]">
+          UI tasarım dosyası linki girerseniz “Figma ile aç” butonu, prototip linki girerseniz
+          detay ekranında embedded önizleme gösterilir.
+        </p>
       </div>
       <div className="space-y-2">
         <Label htmlFor={`${idPrefix}-name`}>Proje Adı</Label>
@@ -940,10 +952,14 @@ function validateProjectForm(form: ProjectFormState): string | null {
   }
 
   if (
-    (form.serviceKey === "web-app" || form.serviceKey === "mobile-app") &&
+    isCodeService(form.serviceKey) &&
     form.repositoryUrl.trim().length === 0
   ) {
     return "WEB_APP ve MOBILE_APP projelerinde GitHub repository linki zorunludur.";
+  }
+
+  if (isDesignService(form.serviceKey) && form.figmaProjectUrl.trim().length === 0) {
+    return "WEB_MOBILE_DESIGN projelerinde Figma linki zorunludur.";
   }
 
   if (form.startDate && form.dueDate && form.startDate > form.dueDate) {
@@ -1008,6 +1024,14 @@ function keepValidServiceSelection(client: ClientProfile, selectedServiceKey: Se
   return getServiceOptions(client, selectedServiceKey).includes(selectedServiceKey)
     ? selectedServiceKey
     : "";
+}
+
+function isCodeService(serviceKey: ServiceKey | ""): boolean {
+  return serviceKey === "web-app" || serviceKey === "mobile-app";
+}
+
+function isDesignService(serviceKey: ServiceKey | ""): boolean {
+  return serviceKey === "web-mobile-design";
 }
 
 function getServiceOptions(

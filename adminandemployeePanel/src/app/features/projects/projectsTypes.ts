@@ -122,20 +122,63 @@ export type WorkspaceMessage = {
 export type WorkspaceRevision = {
   id: string;
   projectId: string;
+  taskId?: string | null;
+  releaseId?: string | null;
+  projectFileId?: string | null;
   title: string;
   description: string;
   status: WorkspaceRevisionStatus;
   requestedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
   resolvedAt?: string | null;
+  task?: {
+    id: string;
+    title: string;
+    code?: string | null;
+    status: string;
+  } | null;
+  release?: {
+    id: string;
+    title: string;
+    status: string;
+    environment: string;
+  } | null;
+  projectFile?: {
+    id: string;
+    title: string;
+    originalFileName?: string | null;
+    folder?: {
+      id: string;
+      name: string;
+    } | null;
+  } | null;
   assignedToUserId?: string | null;
+  requestedByUserId?: string | null;
   requestedBy?: {
     id: string;
     displayName?: string | null;
+    role?: string | null;
+    accountType?: string | null;
   } | null;
   assignedTo?: {
     id: string;
     displayName?: string | null;
+    role?: string | null;
+    accountType?: string | null;
   } | null;
+  transitions?: Array<{
+    id: string;
+    fromStatus?: WorkspaceRevisionStatus | null;
+    toStatus: WorkspaceRevisionStatus;
+    note?: string | null;
+    createdAt: string;
+    actor?: {
+      id: string;
+      displayName?: string | null;
+      role?: string | null;
+    } | null;
+  }>;
 };
 
 export type WorkspaceWeeklyReport = {

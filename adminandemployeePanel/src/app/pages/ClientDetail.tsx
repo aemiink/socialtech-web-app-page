@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type FormEvent, type ReactNode, useState } from "react";
 import { Link, useParams } from "react-router";
 import {
   ArrowLeft,
@@ -12,12 +12,14 @@ import {
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import { Input } from "../components/ui/input";
 import { useGetAdminAssignmentsQuery } from "../features/adminAssignments/adminAssignmentsApi";
-import { useGetClientSummaryQuery } from "../features/clients/clientsApi";
+import { useGetClientSummaryQuery, useResetClientOwnerPasswordMutation } from "../features/clients/clientsApi";
 import type {
   ClientSummaryRecentProject,
   ClientSummaryRecentTask,
 } from "../features/clients/clientsTypes";
+import { validatePassword, validatePasswordConfirmation } from "../features/adminUsers/adminUsersUtils";
 import {
   extractApiErrorMessage,
   formatClientDate,
@@ -38,6 +40,11 @@ export function ClientDetail() {
   const { id } = useParams();
   const clientProfileId = typeof id === "string" && isUuid(id) ? id : null;
   const isValidId = clientProfileId !== null;
+  const [ownerPassword, setOwnerPassword] = useState("");
+  const [ownerPasswordConfirm, setOwnerPasswordConfirm] = useState("");
+  const [ownerPasswordFeedback, setOwnerPasswordFeedback] = useState<string | null>(null);
+  const [resetClientOwnerPassword, { isLoading: isResettingOwnerPassword }] =
+    useResetClientOwnerPasswordMutation();
 
   const {
     data: summary,
@@ -117,6 +124,39 @@ export function ClientDetail() {
 
   const { client, projects, tasks } = summary;
 
+  const handleOwnerPasswordReset = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!clientProfileId) {
+      return;
+    }
+
+    setOwnerPasswordFeedback(null);
+    const passwordError = validatePassword(ownerPassword);
+    if (passwordError) {
+      setOwnerPasswordFeedback(passwordError);
+      return;
+    }
+    const confirmationError = validatePasswordConfirmation(ownerPassword, ownerPasswordConfirm);
+    if (confirmationError) {
+      setOwnerPasswordFeedback(confirmationError);
+      return;
+    }
+
+    try {
+      await resetClientOwnerPassword({
+        clientId: clientProfileId,
+        body: { newPassword: ownerPassword },
+      }).unwrap();
+      setOwnerPassword("");
+      setOwnerPasswordConfirm("");
+      setOwnerPasswordFeedback("Müşteri owner parolası başarıyla sıfırlandı.");
+    } catch (mutationError) {
+      setOwnerPasswordFeedback(
+        extractApiErrorMessage(mutationError, "Müşteri owner parolası sıfırlanamadı."),
+      );
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-4">
@@ -163,6 +203,46 @@ export function ClientDetail() {
           <DetailRow label="Oluşturulma tarihi" value={formatClientDateTime(client.createdAt)} />
           <DetailRow label="Son güncelleme" value={formatClientDateTime(client.updatedAt)} />
         </div>
+      </Card>
+
+      <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
+        <h2 className="mb-2 text-lg font-semibold text-white">Müşteri Portal Şifre Sıfırlama</h2>
+        <p className="mb-4 text-sm text-[#A0A0A0]">
+          Bu müşterinin portal owner hesabı için yeni geçici parola belirleyin.
+        </p>
+        <form className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_auto]" onSubmit={handleOwnerPasswordReset}>
+          <Input
+            type="password"
+            value={ownerPassword}
+            onChange={(event) => setOwnerPassword(event.target.value)}
+            className="border-white/[0.12] bg-black/20 text-white placeholder:text-[#7A7A7A]"
+            placeholder="Yeni parola"
+            autoComplete="new-password"
+            minLength={8}
+            maxLength={72}
+            required
+          />
+          <Input
+            type="password"
+            value={ownerPasswordConfirm}
+            onChange={(event) => setOwnerPasswordConfirm(event.target.value)}
+            className="border-white/[0.12] bg-black/20 text-white placeholder:text-[#7A7A7A]"
+            placeholder="Parola tekrarı"
+            autoComplete="new-password"
+            minLength={8}
+            maxLength={72}
+            required
+          />
+          <Button type="submit" disabled={isResettingOwnerPassword}>
+            {isResettingOwnerPassword ? "Sıfırlanıyor..." : "Parolayı Sıfırla"}
+          </Button>
+        </form>
+        <p className="mt-3 text-xs text-[#A0A0A0]">
+          Parola en az 8 karakter olmalı, en az bir harf ve bir rakam içermelidir.
+        </p>
+        {ownerPasswordFeedback ? (
+          <p className="mt-2 text-sm text-[#d8ff8f]">{ownerPasswordFeedback}</p>
+        ) : null}
       </Card>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">

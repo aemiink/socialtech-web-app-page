@@ -116,55 +116,8 @@ const assignedTask: Task = {
   },
 };
 
-const scopedTeamTask: Task = {
-  id: "77777777-7777-4777-8777-777777777777",
-  projectId: "22222222-2222-4222-8222-222222222222",
-  title: "Client workshop follow-up",
-  description: "Takım içi koordinasyon görevleri",
-  status: "TODO",
-  priority: "MEDIUM",
-  type: "FEATURE",
-  workstream: "FULLSTACK",
-  assigneeUserId: "88888888-8888-4888-8888-888888888888",
-  dueDate: "2026-05-03T09:00:00.000Z",
-  createdAt: "2026-04-28T10:00:00.000Z",
-  updatedAt: "2026-04-29T10:00:00.000Z",
-  project: {
-    id: "22222222-2222-4222-8222-222222222222",
-    clientProfileId: "11111111-1111-4111-8111-111111111111",
-    name: "Growth Hub Launch",
-    slug: "growth-hub-launch",
-    status: "IN_PROGRESS",
-    priority: "HIGH",
-    clientProfile: {
-      id: "11111111-1111-4111-8111-111111111111",
-      slug: "acme-e-ticaret",
-      companyName: "Acme E-ticaret",
-      contactEmail: "client@example.com",
-    },
-  },
-  assignee: {
-    id: "88888888-8888-4888-8888-888888888888",
-    displayName: "Team Member",
-    role: "DEVELOPER",
-  },
-  todos: [
-    {
-      id: "99999999-9999-4999-8999-999999999999",
-      taskId: "77777777-7777-4777-8777-777777777777",
-      title: "Workshop notes",
-      isCompleted: false,
-    },
-  ],
-  completion: {
-    totalTodos: 1,
-    completedTodos: 0,
-    percent: 0,
-  },
-};
-
 const assignedTasksResponse: TasksListResponse = {
-  data: [assignedTask, scopedTeamTask],
+  data: [assignedTask],
   meta: {
     page: 1,
     limit: 20,
@@ -285,25 +238,11 @@ describe("Gorevlerim", () => {
     });
   });
 
-  it("toggles a scoped team task todo", async () => {
-    const { toggleTodo } = setupTodoMutation();
-
-    renderGorevlerim();
-
-    fireEvent.click(screen.getByLabelText("Workshop notes durumunu değiştir"));
-
-    expect(toggleTodo).toHaveBeenCalledWith({
-      taskId: scopedTeamTask.id,
-      todoId: "99999999-9999-4999-8999-999999999999",
-      body: { isCompleted: true },
-    });
-  });
-
-  it("queries tasks without assignee filter and does not skip for authorized employees", () => {
+  it("queries tasks with assignee filter and does not skip for authorized employees", () => {
     renderGorevlerim();
 
     expect(mockUseGetTasksQuery).toHaveBeenCalledWith(
-      {},
+      { assigneeUserId: employeeUser.id },
       { skip: false },
     );
   });
@@ -319,7 +258,7 @@ describe("Gorevlerim", () => {
     expect(screen.getByText("Atanmış görevleri görüntüleme yetkiniz bulunmuyor."))
       .toBeInTheDocument();
     expect(mockUseGetTasksQuery).toHaveBeenCalledWith(
-      {},
+      { assigneeUserId: employeeUser.id },
       { skip: true },
     );
   });

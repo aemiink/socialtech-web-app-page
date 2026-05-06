@@ -43,8 +43,12 @@ export function DeveloperTasksPage({
   const canReadAssignedTasks =
     currentUser?.accountType === "EMPLOYEE" &&
     currentUser.permissions.includes("tasks.read.assigned");
+  const scopedQuery: TasksListQuery =
+    currentUser?.id && currentUser.accountType === "EMPLOYEE"
+      ? { ...query, assigneeUserId: currentUser.id }
+      : query;
 
-  const { data, error, isError, isLoading, refetch } = useGetTasksQuery(query, {
+  const { data, error, isError, isLoading, refetch } = useGetTasksQuery(scopedQuery, {
     skip: !canReadAssignedTasks,
   });
 

@@ -10,8 +10,11 @@ import { BackendAPI } from "../BackendAPI";
 import { Buglar } from "../Buglar";
 import { Frontend } from "../Frontend";
 import { Revizyonlar } from "../Revizyonlar";
+import { UITasarimlar } from "../UITasarimlar";
 
 const mockUseGetTasksQuery = vi.fn();
+const mockUseGetProjectsQuery = vi.fn();
+const mockUseGetProjectWorkspaceRevisionsQuery = vi.fn();
 let currentUser: AuthUserProfile | null = null;
 
 vi.mock("../../../store/hooks", () => ({
@@ -21,6 +24,12 @@ vi.mock("../../../store/hooks", () => ({
 vi.mock("../../../features/tasks/tasksApi", () => ({
   useGetTasksQuery: (query: TasksListQuery, options?: unknown) =>
     mockUseGetTasksQuery(query, options),
+}));
+
+vi.mock("../../../features/projects/projectsApi", () => ({
+  useGetProjectsQuery: (...args: unknown[]) => mockUseGetProjectsQuery(...args),
+  useGetProjectWorkspaceRevisionsQuery: (...args: unknown[]) =>
+    mockUseGetProjectWorkspaceRevisionsQuery(...args),
 }));
 
 const employeeUser: AuthUserProfile = {
@@ -54,6 +63,26 @@ function setupTasksState() {
     isLoading: false,
     refetch: vi.fn(),
   });
+  mockUseGetProjectsQuery.mockReturnValue({
+    data: {
+      data: [],
+      meta: {
+        page: 1,
+        limit: 20,
+        total: 0,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
+    },
+  });
+  mockUseGetProjectWorkspaceRevisionsQuery.mockReturnValue({
+    data: [],
+    error: undefined,
+    isError: false,
+    isLoading: false,
+    refetch: vi.fn(),
+  });
 }
 
 function renderPage(element: React.ReactElement) {
@@ -70,7 +99,7 @@ describe("Developer task pages", () => {
   it("Frontend page queries tasks by workstream", () => {
     renderPage(<Frontend />);
     expect(mockUseGetTasksQuery).toHaveBeenCalledWith(
-      { workstream: "FRONTEND" },
+      { assigneeUserId: employeeUser.id, workstream: "FRONTEND" },
       expect.objectContaining({ skip: false }),
     );
     expect(screen.getByText("Bu kategori için görev bulunmuyor.")).toBeInTheDocument();
@@ -80,7 +109,7 @@ describe("Developer task pages", () => {
   it("Backend page queries tasks by workstream", () => {
     renderPage(<BackendAPI />);
     expect(mockUseGetTasksQuery).toHaveBeenCalledWith(
-      { workstream: "BACKEND" },
+      { assigneeUserId: employeeUser.id, workstream: "BACKEND" },
       expect.objectContaining({ skip: false }),
     );
   });
@@ -88,7 +117,7 @@ describe("Developer task pages", () => {
   it("Buglar page queries tasks by type and renders severity column shell", () => {
     renderPage(<Buglar />);
     expect(mockUseGetTasksQuery).toHaveBeenCalledWith(
-      { type: "BUG" },
+      { assigneeUserId: employeeUser.id, type: "BUG" },
       expect.objectContaining({ skip: false }),
     );
     expect(screen.getByText("Bu kategori için görev bulunmuyor.")).toBeInTheDocument();
@@ -97,7 +126,15 @@ describe("Developer task pages", () => {
   it("Revizyonlar page queries tasks by type", () => {
     renderPage(<Revizyonlar />);
     expect(mockUseGetTasksQuery).toHaveBeenCalledWith(
-      { type: "REVISION" },
+      { assigneeUserId: employeeUser.id, type: "REVISION" },
+      expect.objectContaining({ skip: false }),
+    );
+  });
+
+  it("UI Tasarımlar page queries tasks by UI_INTEGRATION workstream", () => {
+    renderPage(<UITasarimlar />);
+    expect(mockUseGetTasksQuery).toHaveBeenCalledWith(
+      { assigneeUserId: employeeUser.id, workstream: "UI_INTEGRATION" },
       expect.objectContaining({ skip: false }),
     );
   });

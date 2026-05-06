@@ -209,7 +209,7 @@ export function EmployeeLayout() {
 
             return (
               <Link
-                key={item.path}
+                key={`${item.path}-${item.label}`}
                 to={item.path}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl mb-1 transition-all ${
                   isActive

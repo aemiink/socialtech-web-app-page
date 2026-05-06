@@ -32,7 +32,9 @@ import {
   useGetProjectWorkspaceSnapshotQuery,
   useCreateProjectWorkspaceSectionMutation,
   useCreateProjectWorkspaceItemMutation,
+  useGetProjectAssigneeCandidatesQuery,
   useGetProjectWorkspaceRevisionsQuery,
+  useCreateProjectWorkspaceRevisionMutation,
   useUpdateProjectWorkspaceRevisionStatusMutation,
   useGetProjectWorkspaceReportsQuery,
   useCreateProjectWorkspaceReportMutation,
@@ -77,16 +79,6 @@ const WORKSPACE_TAB_OPTIONS: WorkspaceTabKey[] = [
   "REVISIONS",
   "REPORTS",
   "MEETINGS",
-];
-
-const REVISION_STATUS_OPTIONS: WorkspaceRevisionStatus[] = [
-  "REQUESTED",
-  "ACKNOWLEDGED",
-  "IN_PROGRESS",
-  "READY_FOR_REVIEW",
-  "APPROVED",
-  "REJECTED",
-  "CANCELLED",
 ];
 
 const MEETING_STATUS_OPTIONS: WorkspaceMeetingRequestStatus[] = [
@@ -157,6 +149,12 @@ export function ProjectDetail() {
     href: "",
   });
   const [revisionNote, setRevisionNote] = useState<Record<string, string>>({});
+  const [revisionAssigneeDraft, setRevisionAssigneeDraft] = useState<Record<string, string>>({});
+  const [revisionForm, setRevisionForm] = useState({
+    title: "",
+    description: "",
+    assignedToUserId: "",
+  });
   const [reportForm, setReportForm] = useState({
     weekStartDate: "",
     weekEndDate: "",
@@ -182,7 +180,7 @@ export function ProjectDetail() {
     skip: !canReadProjects || !isValidId,
   });
   const { data: repository, refetch: refetchRepository } = useGetProjectRepositoryQuery(id ?? "", {
-    skip: !canReadRepository || !isValidId || !project,
+    skip: !canReadRepository || !isValidId || !project?.repositoryUrl,
   });
   const { data: branches } = useGetProjectRepositoryBranchesQuery(
     { projectId: id ?? "" },
@@ -219,6 +217,10 @@ export function ProjectDetail() {
     { projectId: id ?? "", limit: 30 },
     { skip: !isValidId || !canReadProjects },
   );
+  const { data: workspaceAssigneeCandidates = [] } = useGetProjectAssigneeCandidatesQuery(
+    id ?? "",
+    { skip: !isValidId || !canManageWorkspace },
+  );
   const repositoryRequired = useMemo(
     () => (project ? projectRequiresRepository(project) : false),
     [project],
@@ -250,6 +252,8 @@ export function ProjectDetail() {
     useCreateProjectWorkspaceItemMutation();
   const [updateWorkspaceRevisionStatus, { isLoading: isUpdatingRevision }] =
     useUpdateProjectWorkspaceRevisionStatusMutation();
+  const [createWorkspaceRevision, { isLoading: isCreatingRevision }] =
+    useCreateProjectWorkspaceRevisionMutation();
   const [createWorkspaceReport, { isLoading: isCreatingReport }] =
     useCreateProjectWorkspaceReportMutation();
   const [updateWorkspaceMeetingRequest, { isLoading: isUpdatingMeeting }] =
@@ -680,7 +684,11 @@ export function ProjectDetail() {
     }
   };
 
-  const changeRevisionStatus = async (revisionId: string, status: WorkspaceRevisionStatus) => {
+  const changeRevisionStatus = async (
+    revisionId: string,
+    status: WorkspaceRevisionStatus,
+    assignedToUserId?: string | null,
+  ) => {
     if (!id) {
       return;
     }
@@ -691,11 +699,36 @@ export function ProjectDetail() {
         projectId: id,
         revisionId,
         status,
+        assignedToUserId,
         note: revisionNote[revisionId]?.trim() || undefined,
       }).unwrap();
       setWorkspaceFeedback("Revizyon durumu güncellendi.");
     } catch (error) {
       setWorkspaceFeedback(extractApiErrorMessage(error, "Revizyon durumu güncellenemedi."));
+    }
+  };
+
+  const createRevision = async () => {
+    if (!id || revisionForm.title.trim().length < 2 || revisionForm.description.trim().length < 2) {
+      return;
+    }
+
+    try {
+      setWorkspaceFeedback(null);
+      await createWorkspaceRevision({
+        projectId: id,
+        title: revisionForm.title.trim(),
+        description: revisionForm.description.trim(),
+        assignedToUserId: revisionForm.assignedToUserId || null,
+      }).unwrap();
+      setRevisionForm({
+        title: "",
+        description: "",
+        assignedToUserId: "",
+      });
+      setWorkspaceFeedback("Revizyon kaydı oluşturuldu.");
+    } catch (error) {
+      setWorkspaceFeedback(extractApiErrorMessage(error, "Revizyon kaydı oluşturulamadı."));
     }
   };
 
@@ -770,6 +803,8 @@ export function ProjectDetail() {
 
   const files = projectFilesResponse?.data ?? [];
   const folders = projectFolders ?? [];
+  const figmaLinkKind = detectFigmaLinkKind(project.figmaProjectUrl);
+  const figmaEmbedUrl = buildFigmaEmbedUrl(project.figmaProjectUrl);
 
   return (
     <div className="space-y-6">
@@ -824,7 +859,9 @@ export function ProjectDetail() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-white">Figma Projesi</h2>
-              <p className="text-sm text-[#A0A0A0]">Tasarım kaynağı</p>
+              <p className="text-sm text-[#A0A0A0]">
+                {figmaLinkKind === "prototype" ? "Prototip (embedded görünüm)" : "UI tasarım kaynağı"}
+              </p>
             </div>
             <a
               href={project.figmaProjectUrl}
@@ -833,9 +870,19 @@ export function ProjectDetail() {
               className="inline-flex items-center gap-2 text-sm text-[#d8ff8f] underline-offset-2 hover:underline"
             >
               <Link2 className="h-4 w-4" />
-              Figma bağlantısını aç
+              Figma ile aç
             </a>
           </div>
+          {figmaLinkKind === "prototype" && figmaEmbedUrl ? (
+            <div className="mt-4 overflow-hidden rounded-lg border border-white/10">
+              <iframe
+                title="Figma Prototype Preview"
+                src={figmaEmbedUrl}
+                className="h-[520px] w-full bg-black"
+                allowFullScreen
+              />
+            </div>
+          ) : null}
         </Card>
       )}
 
@@ -1147,11 +1194,60 @@ export function ProjectDetail() {
 
             <Card className="border-white/[0.06] bg-white/5 p-4">
               <h3 className="mb-3 text-sm font-semibold">Revizyon Geçişleri</h3>
+              {canManageWorkspace && (
+                <div className="mb-4 space-y-2 rounded-lg border border-white/10 p-3">
+                  <Input
+                    placeholder="Revizyon başlığı"
+                    value={revisionForm.title}
+                    onChange={(event) =>
+                      setRevisionForm((prev) => ({ ...prev, title: event.target.value }))
+                    }
+                  />
+                  <Input
+                    placeholder="Revizyon açıklaması"
+                    value={revisionForm.description}
+                    onChange={(event) =>
+                      setRevisionForm((prev) => ({ ...prev, description: event.target.value }))
+                    }
+                  />
+                  <select
+                    value={revisionForm.assignedToUserId}
+                    onChange={(event) =>
+                      setRevisionForm((prev) => ({
+                        ...prev,
+                        assignedToUserId: event.target.value,
+                      }))
+                    }
+                    className="h-8 w-full rounded-md border border-white/15 bg-[#151515] px-2 text-xs text-white"
+                  >
+                    <option value="">Atama yok</option>
+                    {workspaceAssigneeCandidates.map((candidate) => (
+                      <option key={candidate.id} value={candidate.id}>
+                        {candidate.displayName ?? candidate.id} ({candidate.role})
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    onClick={() => void createRevision()}
+                    disabled={
+                      isCreatingRevision ||
+                      revisionForm.title.trim().length < 2 ||
+                      revisionForm.description.trim().length < 2
+                    }
+                  >
+                    {isCreatingRevision ? "Oluşturuluyor..." : "Revizyon Oluştur"}
+                  </Button>
+                </div>
+              )}
               <div className="space-y-3">
                 {workspaceRevisions.slice(0, 8).map((revision) => (
                   <div key={revision.id} className="rounded-lg border border-white/10 p-3">
                     <p className="text-sm text-white">{revision.title}</p>
                     <p className="mt-1 text-xs text-[#A0A0A0]">{revision.status}</p>
+                    <p className="mt-1 text-xs text-[#A0A0A0]">
+                      Talep Eden: {revision.requestedBy?.displayName ?? "—"} · Atanan:{" "}
+                      {revision.assignedTo?.displayName ?? "Atama yok"}
+                    </p>
                     {canManageWorkspace && (
                       <div className="mt-2 space-y-2">
                         <select
@@ -1161,13 +1257,47 @@ export function ProjectDetail() {
                             void changeRevisionStatus(
                               revision.id,
                               event.target.value as WorkspaceRevisionStatus,
+                              revisionAssigneeDraft[revision.id] ??
+                                revision.assignedToUserId ??
+                                null,
                             )
                           }
                           disabled={isUpdatingRevision}
                         >
-                          {REVISION_STATUS_OPTIONS.map((status) => (
+                          {[
+                            revision.status,
+                            ...getAllowedRevisionTransitions(
+                              revision.status,
+                              currentUser?.accountType ?? null,
+                              currentUser?.id ?? null,
+                              revision.requestedByUserId ?? revision.requestedBy?.id ?? null,
+                            ),
+                          ]
+                            .filter((status, index, array) => array.indexOf(status) === index)
+                            .map((status) => (
                             <option key={status} value={status}>
                               {status}
+                            </option>
+                            ))}
+                        </select>
+                        <select
+                          className="h-8 w-full rounded-md border border-white/15 bg-[#151515] px-2 text-xs text-white"
+                          value={
+                            revisionAssigneeDraft[revision.id] ??
+                            revision.assignedToUserId ??
+                            ""
+                          }
+                          onChange={(event) =>
+                            setRevisionAssigneeDraft((prev) => ({
+                              ...prev,
+                              [revision.id]: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">Atama yok</option>
+                          {workspaceAssigneeCandidates.map((candidate) => (
+                            <option key={`${revision.id}-${candidate.id}`} value={candidate.id}>
+                              {candidate.displayName ?? candidate.id}
                             </option>
                           ))}
                         </select>
@@ -1178,6 +1308,21 @@ export function ProjectDetail() {
                             setRevisionNote((prev) => ({ ...prev, [revision.id]: event.target.value }))
                           }
                         />
+                        <Button
+                          variant="outline"
+                          onClick={() =>
+                            void changeRevisionStatus(
+                              revision.id,
+                              revision.status,
+                              revisionAssigneeDraft[revision.id] ??
+                                revision.assignedToUserId ??
+                                null,
+                            )
+                          }
+                          disabled={isUpdatingRevision}
+                        >
+                          Atamayı Kaydet
+                        </Button>
                       </div>
                     )}
                   </div>
@@ -1461,6 +1606,73 @@ export function ProjectDetail() {
       </Card>
     </div>
   );
+}
+
+function detectFigmaLinkKind(url: string | null | undefined): "prototype" | "ui" | null {
+  if (!url) {
+    return null;
+  }
+  const normalized = url.toLowerCase();
+  if (normalized.includes("figma.com/proto/")) {
+    return "prototype";
+  }
+  return "ui";
+}
+
+function buildFigmaEmbedUrl(url: string | null | undefined): string | null {
+  if (!url) {
+    return null;
+  }
+  if (detectFigmaLinkKind(url) !== "prototype") {
+    return null;
+  }
+  return `https://www.figma.com/embed?embed_host=socialtech&url=${encodeURIComponent(url)}`;
+}
+
+function getAllowedRevisionTransitions(
+  currentStatus: WorkspaceRevisionStatus,
+  accountType: string | null,
+  currentUserId: string | null,
+  requestedByUserId: string | null,
+): WorkspaceRevisionStatus[] {
+  if (accountType === "ADMIN") {
+    return [
+      "REQUESTED",
+      "ACKNOWLEDGED",
+      "IN_PROGRESS",
+      "READY_FOR_REVIEW",
+      "APPROVED",
+      "REJECTED",
+      "CANCELLED",
+    ].filter((status) => status !== currentStatus) as WorkspaceRevisionStatus[];
+  }
+
+  if (accountType === "CLIENT") {
+    if (!currentUserId || requestedByUserId !== currentUserId) {
+      return [];
+    }
+    const clientTransitions: Record<WorkspaceRevisionStatus, WorkspaceRevisionStatus[]> = {
+      REQUESTED: ["CANCELLED"],
+      ACKNOWLEDGED: [],
+      IN_PROGRESS: [],
+      READY_FOR_REVIEW: ["APPROVED", "REJECTED"],
+      APPROVED: [],
+      REJECTED: [],
+      CANCELLED: [],
+    };
+    return clientTransitions[currentStatus] ?? [];
+  }
+
+  const employeeTransitions: Record<WorkspaceRevisionStatus, WorkspaceRevisionStatus[]> = {
+    REQUESTED: ["ACKNOWLEDGED", "CANCELLED", "REJECTED"],
+    ACKNOWLEDGED: ["IN_PROGRESS", "CANCELLED", "REJECTED"],
+    IN_PROGRESS: ["READY_FOR_REVIEW", "CANCELLED"],
+    READY_FOR_REVIEW: ["IN_PROGRESS"],
+    APPROVED: [],
+    REJECTED: ["IN_PROGRESS", "CANCELLED"],
+    CANCELLED: [],
+  };
+  return employeeTransitions[currentStatus] ?? [];
 }
 
 function InfoCard({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {

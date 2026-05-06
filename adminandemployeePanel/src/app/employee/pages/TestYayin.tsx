@@ -59,7 +59,9 @@ function ReleaseCard({
 }: {
   release: DeliveryRelease;
 }) {
-  const { data: repository } = useGetProjectRepositoryQuery(release.projectId);
+  const { data: repository } = useGetProjectRepositoryQuery(release.projectId, {
+    skip: !release.project?.repositoryUrl,
+  });
   const { data: workflowRuns } = useGetProjectRepositoryWorkflowRunsQuery(
     { projectId: release.projectId },
     { skip: !repository },

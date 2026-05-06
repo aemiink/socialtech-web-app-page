@@ -312,6 +312,28 @@ export const projectsApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, arg) => [{ type: "Projects", id: `WORKSPACE_REVISIONS:${arg.projectId}` }],
     }),
+    createProjectWorkspaceRevision: builder.mutation<
+      WorkspaceRevision,
+      {
+        projectId: string;
+        title: string;
+        description: string;
+        taskId?: string;
+        releaseId?: string;
+        projectFileId?: string;
+        assignedToUserId?: string | null;
+      }
+    >({
+      query: ({ projectId, ...body }) => ({
+        url: `/projects/${projectId}/web-app-workspace/revisions`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: (_result, _error, arg) => [
+        { type: "Projects", id: `WORKSPACE:${arg.projectId}` },
+        { type: "Projects", id: `WORKSPACE_REVISIONS:${arg.projectId}` },
+      ],
+    }),
     updateProjectWorkspaceRevisionStatus: builder.mutation<
       WorkspaceRevision,
       { projectId: string; revisionId: string; status: WorkspaceRevisionStatus; note?: string; assignedToUserId?: string | null }
@@ -445,6 +467,7 @@ export const {
   useCreateProjectWorkspaceSectionMutation,
   useCreateProjectWorkspaceItemMutation,
   useGetProjectWorkspaceRevisionsQuery,
+  useCreateProjectWorkspaceRevisionMutation,
   useUpdateProjectWorkspaceRevisionStatusMutation,
   useGetProjectWorkspaceReportsQuery,
   useCreateProjectWorkspaceReportMutation,

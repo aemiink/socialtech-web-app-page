@@ -37,8 +37,10 @@ export function Gorevlerim() {
     currentUser.permissions.includes("tasks.read.assigned");
 
   const tasksQuery = useMemo<TasksListQuery>(
-    () => ({}),
-    [],
+    () => ({
+      assigneeUserId: currentUser?.id ?? "",
+    }),
+    [currentUser?.id],
   );
 
   const {
@@ -81,7 +83,7 @@ export function Gorevlerim() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold mb-1">Görevlerim</h1>
-        <p className="text-[#A0A0A0]">Atama kapsamımdaki görevler</p>
+        <p className="text-[#A0A0A0]">Bana atanan görevler</p>
       </div>
 
       {/* KPI Cards */}

@@ -112,6 +112,10 @@ export type CreateOrLinkClientOwnerRequest =
   | CreateClientOwnerRequest
   | LinkExistingClientOwnerRequest;
 
+export type ResetClientOwnerPasswordRequest = {
+  newPassword: string;
+};
+
 export type ClientSummaryProjectStatus =
   | "PLANNED"
   | "IN_PROGRESS"

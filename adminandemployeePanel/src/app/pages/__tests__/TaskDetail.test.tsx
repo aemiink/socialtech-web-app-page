@@ -47,6 +47,14 @@ const mockUseGetTaskQuery = vi.fn<
   (id: string, options: QueryOptions) => TaskQueryResult
 >();
 const mockUseGetProjectRepositoryQuery = vi.fn();
+const mockUseGetProjectFileFoldersQuery = vi.fn();
+const mockUseGetProjectFileFolderAssigneesQuery = vi.fn();
+const mockUseGetProjectFilesQuery = vi.fn();
+const mockUseCreateProjectFileFolderMutation = vi.fn();
+const mockUseUpdateProjectFileFolderAssigneesMutation = vi.fn();
+const mockUseCreateProjectFileUploadSignatureMutation = vi.fn();
+const mockUseCompleteProjectFileUploadMutation = vi.fn();
+const mockUseDeleteProjectFileMutation = vi.fn();
 const mockUseGetRelatedTaskCommitsQuery = vi.fn();
 const mockUseCreateTaskTodoMutation = vi.fn<() => [TodoMutationTrigger, { isLoading: boolean }]>();
 const mockUseCreateTaskWorkNoteMutation = vi.fn();
@@ -77,6 +85,19 @@ vi.mock("../../features/tasks/tasksApi", () => ({
 vi.mock("../../features/projects/projectsApi", () => ({
   useGetProjectRepositoryQuery: (id: string, options?: QueryOptions) =>
     mockUseGetProjectRepositoryQuery(id, options),
+  useGetProjectFileFoldersQuery: (query: unknown, options?: QueryOptions) =>
+    mockUseGetProjectFileFoldersQuery(query, options),
+  useGetProjectFileFolderAssigneesQuery: (query: unknown, options?: QueryOptions) =>
+    mockUseGetProjectFileFolderAssigneesQuery(query, options),
+  useGetProjectFilesQuery: (query: unknown, options?: QueryOptions) =>
+    mockUseGetProjectFilesQuery(query, options),
+  useCreateProjectFileFolderMutation: () => mockUseCreateProjectFileFolderMutation(),
+  useUpdateProjectFileFolderAssigneesMutation: () =>
+    mockUseUpdateProjectFileFolderAssigneesMutation(),
+  useCreateProjectFileUploadSignatureMutation: () =>
+    mockUseCreateProjectFileUploadSignatureMutation(),
+  useCompleteProjectFileUploadMutation: () => mockUseCompleteProjectFileUploadMutation(),
+  useDeleteProjectFileMutation: () => mockUseDeleteProjectFileMutation(),
 }));
 
 const taskId = "11111111-1111-4111-8111-111111111111";
@@ -113,6 +134,17 @@ const developerUser: AuthUserProfile = {
   role: "DEVELOPER",
   status: "ACTIVE",
   permissions: ["tasks.read.assigned", "integrations.github.read.assigned"],
+  clientProfile: null,
+};
+
+const designerUser: AuthUserProfile = {
+  id: "designer-user-id",
+  email: "designer@socialtech.com",
+  displayName: "Designer User",
+  accountType: "EMPLOYEE",
+  role: "DESIGNER",
+  status: "ACTIVE",
+  permissions: ["tasks.read.assigned", "projects.files.manage.assigned"],
   clientProfile: null,
 };
 
@@ -184,6 +216,13 @@ function setupQueryState(overrides: Partial<TaskQueryResult> = {}) {
     ...overrides,
   });
   mockUseGetProjectRepositoryQuery.mockReturnValue({ data: undefined });
+  mockUseGetProjectFileFoldersQuery.mockReturnValue({ data: [] });
+  mockUseGetProjectFileFolderAssigneesQuery.mockReturnValue({ data: [] });
+  mockUseGetProjectFilesQuery.mockReturnValue({
+    data: { data: [] },
+    refetch: vi.fn(),
+    isFetching: false,
+  });
   mockUseGetRelatedTaskCommitsQuery.mockReturnValue({ data: [] });
 }
 
@@ -194,6 +233,11 @@ function setupTodoMutations() {
   const deleteTodo = vi.fn<DeleteTodoTrigger>(() => ({ unwrap: async () => ({}) }));
   const createWorkNote = vi.fn(() => ({ unwrap: async () => ({}) }));
   const prepareTaskCode = vi.fn(() => ({ unwrap: async () => ({}) }));
+  const createFolder = vi.fn(() => ({ unwrap: async () => ({ id: "folder-id" }) }));
+  const updateFolderAssignees = vi.fn(() => ({ unwrap: async () => ({}) }));
+  const createUploadSignature = vi.fn(() => ({ unwrap: async () => ({}) }));
+  const completeUpload = vi.fn(() => ({ unwrap: async () => ({}) }));
+  const deleteProjectFile = vi.fn(() => ({ unwrap: async () => ({}) }));
 
   mockUseCreateTaskTodoMutation.mockReturnValue([createTodo, { isLoading: false }]);
   mockUseCreateTaskWorkNoteMutation.mockReturnValue([createWorkNote, { isLoading: false }]);
@@ -201,8 +245,28 @@ function setupTodoMutations() {
   mockUseUpdateTaskTodoMutation.mockReturnValue([updateTodo, { isLoading: false }]);
   mockUseToggleTaskTodoMutation.mockReturnValue([toggleTodo, { isLoading: false }]);
   mockUseDeleteTaskTodoMutation.mockReturnValue([deleteTodo, { isLoading: false }]);
+  mockUseCreateProjectFileFolderMutation.mockReturnValue([createFolder, { isLoading: false }]);
+  mockUseUpdateProjectFileFolderAssigneesMutation.mockReturnValue([
+    updateFolderAssignees,
+    { isLoading: false },
+  ]);
+  mockUseCreateProjectFileUploadSignatureMutation.mockReturnValue([
+    createUploadSignature,
+    { isLoading: false },
+  ]);
+  mockUseCompleteProjectFileUploadMutation.mockReturnValue([completeUpload, { isLoading: false }]);
+  mockUseDeleteProjectFileMutation.mockReturnValue([deleteProjectFile, { isLoading: false }]);
 
-  return { createTodo, createWorkNote, prepareTaskCode, updateTodo, toggleTodo, deleteTodo };
+  return {
+    createTodo,
+    createWorkNote,
+    prepareTaskCode,
+    updateTodo,
+    toggleTodo,
+    deleteTodo,
+    createFolder,
+    updateFolderAssignees,
+  };
 }
 
 function renderTaskDetail(id: string = taskId) {
@@ -408,5 +472,43 @@ describe("TaskDetail", () => {
     expect(screen.getByText("Yapılanlar / Çalışma Notu")).toBeInTheDocument();
     expect(screen.getByText("İlgili Commitler")).toBeInTheDocument();
     expect(screen.getByText("WEB-204 landing page QA fixes")).toBeInTheDocument();
+  });
+
+  it("renders design folder panel instead of commits for UI/UX tasks", async () => {
+    currentUser = designerUser;
+    setupQueryState({
+      data: {
+        ...taskDetail,
+        code: "DES-21",
+        type: "FEATURE",
+        workstream: "UI_INTEGRATION",
+      },
+    });
+    mockUseGetProjectFileFoldersQuery.mockReturnValue({
+      data: [
+        {
+          id: "folder-1",
+          projectId,
+          name: "DESIGN-DES-21 - Landing page QA tamamla",
+          createdAt: "2026-05-01T00:00:00.000Z",
+          updatedAt: "2026-05-01T00:00:00.000Z",
+        },
+      ],
+    });
+    mockUseGetProjectFilesQuery.mockReturnValue({
+      data: {
+        data: [],
+      },
+      refetch: vi.fn(),
+      isFetching: false,
+    });
+
+    renderTaskDetail();
+
+    await waitFor(() => {
+      expect(screen.getByText("Tasarım Klasörü")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("İlgili Commitler")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tasarım Dosyası Yükle" })).toBeInTheDocument();
   });
 });

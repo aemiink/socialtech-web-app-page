@@ -83,7 +83,11 @@ export function Projeler() {
               </div>
             </div>
 
-            <ProjectGithubReadCard projectId={project.id} canReadRepository={canReadRepository} />
+            <ProjectGithubReadCard
+              projectId={project.id}
+              repositoryUrl={project.repositoryUrl}
+              canReadRepository={canReadRepository}
+            />
           </Card>
         ))}
       </div>
@@ -93,12 +97,16 @@ export function Projeler() {
 
 function ProjectGithubReadCard({
   projectId,
+  repositoryUrl,
   canReadRepository,
 }: {
   projectId: string;
+  repositoryUrl?: string | null;
   canReadRepository: boolean;
 }) {
-  const { data: repository } = useGetProjectRepositoryQuery(projectId, { skip: !canReadRepository });
+  const { data: repository } = useGetProjectRepositoryQuery(projectId, {
+    skip: !canReadRepository || !repositoryUrl,
+  });
   const { data: commits } = useGetProjectRepositoryCommitsQuery(
     { projectId },
     { skip: !canReadRepository || !repository },

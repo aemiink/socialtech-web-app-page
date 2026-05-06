@@ -1,6 +1,6 @@
-import { FormEvent, useState } from "react";
+import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router";
-import { ArrowLeft, CheckSquare, Github, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, CheckSquare, Download, FolderOpen, Github, Plus, Trash2, UploadCloud } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -15,8 +15,17 @@ import {
   selectCurrentUser,
 } from "../features/auth/authSelectors";
 import {
+  useCompleteProjectFileUploadMutation,
+  useCreateProjectFileFolderMutation,
+  useCreateProjectFileUploadSignatureMutation,
+  useDeleteProjectFileMutation,
+  useGetProjectFileFolderAssigneesQuery,
+  useGetProjectFileFoldersQuery,
+  useGetProjectFilesQuery,
   useGetProjectRepositoryQuery,
+  useUpdateProjectFileFolderAssigneesMutation,
 } from "../features/projects/projectsApi";
+import type { ProjectFileVisibility } from "../features/projects/projectsTypes";
 import {
   useCreateTaskWorkNoteMutation,
   useCreateTaskTodoMutation,
@@ -69,6 +78,10 @@ export function TaskDetail() {
     "integrations.github.manage.any",
     "integrations.github.read.assigned",
   ]);
+  const canManageProjectFiles = hasUserPermission(currentUser, [
+    "projects.files.manage.any",
+    "projects.files.manage.assigned",
+  ]);
   const [newTodoTitle, setNewTodoTitle] = useState("");
   const [newTodoVisibility, setNewTodoVisibility] = useState<"INTERNAL" | "CLIENT_VISIBLE">(
     "INTERNAL",
@@ -79,6 +92,17 @@ export function TaskDetail() {
   const [workNoteDraft, setWorkNoteDraft] = useState("");
   const [workNoteFeedback, setWorkNoteFeedback] = useState<string | null>(null);
   const [prepareCodeFeedback, setPrepareCodeFeedback] = useState<string | null>(null);
+  const [designFolderId, setDesignFolderId] = useState<string>("");
+  const [designFolderFeedback, setDesignFolderFeedback] = useState<string | null>(null);
+  const [designFile, setDesignFile] = useState<File | null>(null);
+  const [designFileTitle, setDesignFileTitle] = useState("");
+  const [designFileDescription, setDesignFileDescription] = useState("");
+  const [designFileVisibility, setDesignFileVisibility] = useState<ProjectFileVisibility>("INTERNAL");
+  const [designUploadFeedback, setDesignUploadFeedback] = useState<string | null>(null);
+  const [isDragActive, setIsDragActive] = useState(false);
+  const designFileInputRef = useRef<HTMLInputElement | null>(null);
+  const ensuredDesignFolderKeyRef = useRef<string | null>(null);
+  const syncedDesignFolderAssigneeRef = useRef<string | null>(null);
 
   const isValidId = typeof id === "string" && isUuid(id);
 
@@ -99,12 +123,170 @@ export function TaskDetail() {
     { taskId: task?.id ?? "" },
     { skip: !canReadRepository || !repository || !task?.id },
   );
+  const isDesignTask = useMemo(() => isDesignTaskType(task), [task]);
+  const designTaskFolderName = useMemo(
+    () => (task ? buildDesignTaskFolderName(task) : ""),
+    [task],
+  );
+  const { data: projectFolders = [] } = useGetProjectFileFoldersQuery(
+    { projectId: task?.projectId ?? "" },
+    { skip: !task?.projectId || !isDesignTask || !canManageProjectFiles },
+  );
+  const { data: designFolderAssignees = [] } = useGetProjectFileFolderAssigneesQuery(
+    { projectId: task?.projectId ?? "", folderId: designFolderId },
+    {
+      skip:
+        !task?.projectId ||
+        !isDesignTask ||
+        !canManageProjectFiles ||
+        designFolderId.length === 0,
+    },
+  );
+  const { data: designFilesResponse, refetch: refetchDesignFiles, isFetching: isFetchingDesignFiles } = useGetProjectFilesQuery(
+    { projectId: task?.projectId ?? "", folderId: designFolderId, limit: 100 },
+    {
+      skip:
+        !task?.projectId ||
+        !isDesignTask ||
+        !canManageProjectFiles ||
+        designFolderId.length === 0,
+    },
+  );
+  const designFiles = designFilesResponse?.data ?? [];
+
+  const [createProjectFileFolder, { isLoading: isCreatingDesignFolder }] = useCreateProjectFileFolderMutation();
+  const [updateProjectFileFolderAssignees, { isLoading: isAssigningDesignFolder }] =
+    useUpdateProjectFileFolderAssigneesMutation();
+  const [createProjectFileUploadSignature, { isLoading: isCreatingDesignUploadSignature }] =
+    useCreateProjectFileUploadSignatureMutation();
+  const [completeProjectFileUpload, { isLoading: isCompletingDesignUpload }] =
+    useCompleteProjectFileUploadMutation();
+  const [deleteProjectFile, { isLoading: isDeletingDesignFile }] = useDeleteProjectFileMutation();
   const [createTaskTodo, { isLoading: isCreatingTodo }] = useCreateTaskTodoMutation();
   const [createTaskWorkNote, { isLoading: isCreatingWorkNote }] = useCreateTaskWorkNoteMutation();
   const [prepareTaskCode, { isLoading: isPreparingCode }] = usePrepareTaskCodeMutation();
   const [updateTaskTodo, { isLoading: isUpdatingTodo }] = useUpdateTaskTodoMutation();
   const [toggleTaskTodo, { isLoading: isTogglingTodo }] = useToggleTaskTodoMutation();
   const [deleteTaskTodo, { isLoading: isDeletingTodo }] = useDeleteTaskTodoMutation();
+
+  useEffect(() => {
+    if (!isDesignTask || !task?.id) {
+      setDesignFolderId("");
+      setDesignFolderFeedback(null);
+      ensuredDesignFolderKeyRef.current = null;
+      syncedDesignFolderAssigneeRef.current = null;
+      return;
+    }
+
+    if (!task.assigneeUserId) {
+      syncedDesignFolderAssigneeRef.current = null;
+    }
+  }, [isDesignTask, task?.id, task?.assigneeUserId]);
+
+  useEffect(() => {
+    if (!isDesignTask || !task?.projectId || !canManageProjectFiles || !designTaskFolderName) {
+      return;
+    }
+    const existing = projectFolders.find(
+      (folder) => folder.name.trim().toLowerCase() === designTaskFolderName.trim().toLowerCase(),
+    );
+    if (existing) {
+      setDesignFolderId((prev) => (prev === existing.id ? prev : existing.id));
+      setDesignFolderFeedback(null);
+      return;
+    }
+
+    const ensureKey = `${task.id}:${designTaskFolderName}`;
+    if (ensuredDesignFolderKeyRef.current === ensureKey) {
+      return;
+    }
+    ensuredDesignFolderKeyRef.current = ensureKey;
+
+    let isCancelled = false;
+    (async () => {
+      try {
+        const createdFolder = await createProjectFileFolder({
+          projectId: task.projectId,
+          name: designTaskFolderName,
+        }).unwrap();
+        if (!isCancelled) {
+          setDesignFolderId(createdFolder.id);
+          setDesignFolderFeedback("Bu tasarım görevi için klasör otomatik oluşturuldu.");
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          setDesignFolderFeedback(
+            extractApiErrorMessage(error, "Tasarım klasörü otomatik oluşturulamadı."),
+          );
+          ensuredDesignFolderKeyRef.current = null;
+        }
+      }
+    })();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    canManageProjectFiles,
+    createProjectFileFolder,
+    designTaskFolderName,
+    isDesignTask,
+    projectFolders,
+    task?.id,
+    task?.projectId,
+  ]);
+
+  useEffect(() => {
+    if (
+      !task?.projectId ||
+      !designFolderId ||
+      !task.assigneeUserId ||
+      !canManageProjectFiles ||
+      !isDesignTask
+    ) {
+      return;
+    }
+
+    if (designFolderAssignees.length === 0) {
+      return;
+    }
+
+    const assignee = designFolderAssignees.find(
+      (item) => item.id === task.assigneeUserId,
+    );
+    if (!assignee || assignee.isAssigned) {
+      return;
+    }
+
+    const syncKey = `${designFolderId}:${task.assigneeUserId}`;
+    if (syncedDesignFolderAssigneeRef.current === syncKey) {
+      return;
+    }
+    syncedDesignFolderAssigneeRef.current = syncKey;
+
+    const assignedUserIds = designFolderAssignees
+      .filter((item) => item.isAssigned)
+      .map((item) => item.id);
+    const nextUserIds = Array.from(new Set([...assignedUserIds, task.assigneeUserId]));
+
+    void updateProjectFileFolderAssignees({
+      projectId: task.projectId,
+      folderId: designFolderId,
+      userIds: nextUserIds,
+    })
+      .unwrap()
+      .catch(() => {
+        syncedDesignFolderAssigneeRef.current = null;
+      });
+  }, [
+    canManageProjectFiles,
+    designFolderAssignees,
+    designFolderId,
+    isDesignTask,
+    task?.assigneeUserId,
+    task?.projectId,
+    updateProjectFileFolderAssignees,
+  ]);
 
   if (!canReadTasks) {
     return (
@@ -283,6 +465,141 @@ export function TaskDetail() {
       );
     } catch (error) {
       setPrepareCodeFeedback(extractApiErrorMessage(error, "Task kod hazırlığı yapılamadı."));
+    }
+  }
+
+  function handleDesignFileDragOver(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setIsDragActive(true);
+  }
+
+  function handleDesignFileDragLeave(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setIsDragActive(false);
+  }
+
+  function handleDesignFileDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setIsDragActive(false);
+    const droppedFile = event.dataTransfer.files?.[0] ?? null;
+    if (!droppedFile) {
+      return;
+    }
+    setDesignFile(droppedFile);
+    if (!designFileTitle.trim()) {
+      setDesignFileTitle(droppedFile.name);
+    }
+  }
+
+  async function handleDesignFileUpload(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!taskDetail.projectId || !isDesignTask) {
+      return;
+    }
+    if (!designFolderId) {
+      setDesignUploadFeedback("Önce görev için klasör oluşturulmalı.");
+      return;
+    }
+    if (!designFile) {
+      setDesignUploadFeedback("Yüklenecek dosyayı seçin.");
+      return;
+    }
+
+    const title = designFileTitle.trim() || designFile.name;
+
+    try {
+      setDesignUploadFeedback(null);
+      const signature = await createProjectFileUploadSignature({
+        projectId: taskDetail.projectId,
+        fileName: designFile.name,
+        title,
+        description: designFileDescription.trim() || null,
+        mimeType: designFile.type || "application/octet-stream",
+        bytes: designFile.size,
+        category: "BRAND_ASSET",
+        visibility: designFileVisibility,
+        folderId: designFolderId,
+      }).unwrap();
+
+      const formData = new FormData();
+      formData.set("file", designFile);
+      formData.set("api_key", signature.apiKey);
+      formData.set("timestamp", String(signature.timestamp));
+      formData.set("signature", signature.signature);
+      formData.set("public_id", signature.publicId);
+      if (signature.overwrite) {
+        formData.set("overwrite", "true");
+      }
+
+      const uploadResponse = await fetch(signature.uploadUrl, {
+        method: "POST",
+        body: formData,
+      });
+      if (!uploadResponse.ok) {
+        let uploadErrorMessage = "Cloudinary upload failed.";
+        try {
+          const uploadErrorJson = (await uploadResponse.json()) as {
+            error?: { message?: string };
+          };
+          if (uploadErrorJson.error?.message) {
+            uploadErrorMessage = `Cloudinary upload failed: ${uploadErrorJson.error.message}`;
+          }
+        } catch {
+          // Keep generic message
+        }
+        throw new Error(uploadErrorMessage);
+      }
+
+      const uploadJson = (await uploadResponse.json()) as {
+        secure_url: string;
+        resource_type: string;
+        format?: string;
+        bytes: number;
+      };
+
+      await completeProjectFileUpload({
+        projectId: taskDetail.projectId,
+        originalFileName: designFile.name,
+        title,
+        description: designFileDescription.trim() || null,
+        publicId: signature.publicId,
+        secureUrl: uploadJson.secure_url,
+        resourceType: uploadJson.resource_type ?? "raw",
+        format: uploadJson.format ?? null,
+        bytes: uploadJson.bytes ?? designFile.size,
+        mimeType: designFile.type || "application/octet-stream",
+        category: "BRAND_ASSET",
+        visibility: designFileVisibility,
+        folderId: designFolderId,
+      }).unwrap();
+
+      setDesignFile(null);
+      setDesignFileTitle("");
+      setDesignFileDescription("");
+      setDesignUploadFeedback("Tasarım dosyası yüklendi.");
+      await refetchDesignFiles();
+    } catch (error) {
+      setDesignUploadFeedback(
+        extractApiErrorMessage(error, "Tasarım dosyası yüklenemedi."),
+      );
+    }
+  }
+
+  async function handleDeleteDesignFile(fileId: string) {
+    if (!taskDetail.projectId) {
+      return;
+    }
+    try {
+      setDesignUploadFeedback(null);
+      await deleteProjectFile({
+        projectId: taskDetail.projectId,
+        fileId,
+      }).unwrap();
+      await refetchDesignFiles();
+    } catch (error) {
+      setDesignUploadFeedback(
+        extractApiErrorMessage(error, "Dosya silinemedi."),
+      );
     }
   }
 
@@ -538,60 +855,226 @@ export function TaskDetail() {
           )}
         </Card>
 
-        <Card className="border-white/[0.08] bg-[#1A1A1A] p-6">
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-white">İlgili Commitler</h2>
-              <p className="mt-1 text-sm text-[#A0A0A0]">
-                Task kodu ve başlığına göre eşleşen commitler
+        {isDesignTask ? (
+          <Card className="border-white/[0.08] bg-[#1A1A1A] p-6">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Tasarım Klasörü</h2>
+                <p className="mt-1 text-sm text-[#A0A0A0]">
+                  Bu tasarım görevi için klasör otomatik açılır ve dosyalar drag&drop ile yüklenir.
+                </p>
+              </div>
+              <FolderOpen className="h-4 w-4 text-[#d2ff8a]" />
+            </div>
+
+            {!canManageProjectFiles ? (
+              <p className="rounded-lg border border-white/[0.06] bg-[#202020] px-3 py-4 text-sm text-[#A0A0A0]">
+                Tasarım dosyası yüklemek için proje dosya yönetim yetkisi gerekiyor.
               </p>
-            </div>
-            <Github className="h-4 w-4 text-[#d2ff8a]" />
-          </div>
-
-          {!canReadRepository && (
-            <p className="rounded-lg border border-white/[0.06] bg-[#202020] px-3 py-4 text-sm text-[#A0A0A0]">
-              GitHub görünürlük yetkisi olmayan kullanıcılar için commit listesi gizlidir.
-            </p>
-          )}
-
-          {canReadRepository && !repository && (
-            <p className="rounded-lg border border-white/[0.06] bg-[#202020] px-3 py-4 text-sm text-[#A0A0A0]">
-              Bu görevin bağlı olduğu projede repository bağlantısı bulunmuyor.
-            </p>
-          )}
-
-          {canReadRepository && repository && (relatedCommits?.length ?? 0) === 0 && (
-            <p className="rounded-lg border border-white/[0.06] bg-[#202020] px-3 py-4 text-sm text-[#A0A0A0]">
-              Bu görevle ilişkili commit bulunamadı. Eşleştirme task kodu ve başlığa göre yapılır.
-            </p>
-          )}
-
-          {canReadRepository && repository && (relatedCommits?.length ?? 0) > 0 && (
-            <div className="space-y-3">
-              {(relatedCommits ?? []).map((commit) => (
-                <a
-                  key={commit.sha}
-                  href={commit.htmlUrl ?? repository.repositoryUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block rounded-lg border border-white/[0.06] bg-[#202020] p-3 transition-colors hover:border-[#AAFF01]/30"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-medium text-white">{commit.message}</p>
-                    <Badge variant="outline" className="font-mono text-xs">
-                      {commit.shortSha}
-                    </Badge>
-                  </div>
-                  <p className="mt-2 text-xs text-[#A0A0A0]">
-                    {commit.githubAuthorLogin ?? commit.authorName ?? "Bilinmeyen geliştirici"} ·{" "}
-                    {formatDateTime(commit.committedAt ?? null)}
+            ) : (
+              <div className="space-y-4">
+                <div className="rounded-lg border border-white/[0.06] bg-[#202020] px-3 py-3">
+                  <p className="text-sm text-white">
+                    Klasör:{" "}
+                    <span className="font-mono text-[#d2ff8a]">
+                      {designTaskFolderName || "—"}
+                    </span>
                   </p>
-                </a>
-              ))}
+                  <p className="mt-1 text-xs text-[#A0A0A0]">
+                    Proje: {task.project?.name ?? shortId(task.projectId)}
+                  </p>
+                  {designFolderFeedback ? (
+                    <p className="mt-2 text-xs text-[#d2ff8a]">{designFolderFeedback}</p>
+                  ) : null}
+                  {task.assigneeUserId ? (
+                    <p className="mt-2 text-xs text-[#A0A0A0]">
+                      Atanan çalışan için klasör erişimi otomatik senkronlanır.
+                    </p>
+                  ) : null}
+                </div>
+
+                <form onSubmit={(event) => void handleDesignFileUpload(event)} className="space-y-3">
+                  <Input
+                    value={designFileTitle}
+                    onChange={(event) => setDesignFileTitle(event.target.value)}
+                    placeholder="Dosya başlığı"
+                    className="border-white/[0.08] bg-[#202020]"
+                  />
+                  <Input
+                    value={designFileDescription}
+                    onChange={(event) => setDesignFileDescription(event.target.value)}
+                    placeholder="Kısa açıklama (opsiyonel)"
+                    className="border-white/[0.08] bg-[#202020]"
+                  />
+                  <select
+                    value={designFileVisibility}
+                    onChange={(event) =>
+                      setDesignFileVisibility(
+                        event.target.value === "CLIENT_VISIBLE" ? "CLIENT_VISIBLE" : "INTERNAL",
+                      )
+                    }
+                    className="h-10 w-full rounded-md border border-white/[0.08] bg-[#202020] px-3 text-sm text-white outline-none transition-colors hover:border-white/[0.12] focus:border-[#AAFF01]/50"
+                  >
+                    <option value="INTERNAL">Internal</option>
+                    <option value="CLIENT_VISIBLE">Client Visible</option>
+                  </select>
+
+                  <div
+                    className={`rounded-lg border border-dashed p-4 text-sm transition ${
+                      isDragActive
+                        ? "border-[#AAFF01] bg-[#AAFF01]/10"
+                        : "border-white/[0.2] bg-white/[0.02]"
+                    }`}
+                    onDragOver={handleDesignFileDragOver}
+                    onDragLeave={handleDesignFileDragLeave}
+                    onDrop={handleDesignFileDrop}
+                  >
+                    <p className="text-[#D8D8D8]">
+                      Tasarım dosyasını buraya sürükleyip bırakın veya
+                      <button
+                        type="button"
+                        className="ml-1 text-[#AAFF01] underline"
+                        onClick={() => designFileInputRef.current?.click()}
+                      >
+                        seçmek için tıklayın
+                      </button>
+                      .
+                    </p>
+                    <input
+                      ref={designFileInputRef}
+                      className="hidden"
+                      type="file"
+                      onChange={(event) => setDesignFile(event.target.files?.[0] ?? null)}
+                    />
+                    {designFile ? (
+                      <p className="mt-2 text-xs text-[#A0A0A0]">
+                        Seçilen: {designFile.name} ({Math.round(designFile.size / 1024)} KB)
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className="gap-2 bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
+                    disabled={
+                      designFolderId.length === 0 ||
+                      !designFile ||
+                      isCreatingDesignUploadSignature ||
+                      isCompletingDesignUpload ||
+                      isCreatingDesignFolder ||
+                      isAssigningDesignFolder
+                    }
+                  >
+                    <UploadCloud className="h-4 w-4" />
+                    Tasarım Dosyası Yükle
+                  </Button>
+                  {designUploadFeedback ? (
+                    <p className="text-sm text-[#d2ff8a]">{designUploadFeedback}</p>
+                  ) : null}
+                </form>
+
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-white">Klasördeki Dosyalar</p>
+                  {isFetchingDesignFiles ? (
+                    <p className="rounded-lg border border-white/[0.06] bg-[#202020] px-3 py-3 text-sm text-[#A0A0A0]">
+                      Dosyalar güncelleniyor...
+                    </p>
+                  ) : null}
+                  {!isFetchingDesignFiles && designFiles.length === 0 ? (
+                    <p className="rounded-lg border border-white/[0.06] bg-[#202020] px-3 py-3 text-sm text-[#A0A0A0]">
+                      Bu görev klasöründe henüz dosya yok.
+                    </p>
+                  ) : null}
+                  {designFiles.map((file) => (
+                    <div
+                      key={file.id}
+                      className="flex items-start justify-between gap-3 rounded-lg border border-white/[0.06] bg-[#202020] px-3 py-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-white">{file.title}</p>
+                        <p className="mt-1 text-xs text-[#A0A0A0]">
+                          {file.originalFileName} · {Math.round(file.bytes / 1024)} KB · {file.visibility}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button type="button" size="sm" variant="ghost" asChild>
+                          <a href={file.secureUrl} target="_blank" rel="noreferrer">
+                            <Download className="h-4 w-4" />
+                          </a>
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="text-red-200"
+                          disabled={isDeletingDesignFile}
+                          onClick={() => void handleDeleteDesignFile(file.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </Card>
+        ) : (
+          <Card className="border-white/[0.08] bg-[#1A1A1A] p-6">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-white">İlgili Commitler</h2>
+                <p className="mt-1 text-sm text-[#A0A0A0]">
+                  Task kodu ve başlığına göre eşleşen commitler
+                </p>
+              </div>
+              <Github className="h-4 w-4 text-[#d2ff8a]" />
             </div>
-          )}
-        </Card>
+
+            {!canReadRepository && (
+              <p className="rounded-lg border border-white/[0.06] bg-[#202020] px-3 py-4 text-sm text-[#A0A0A0]">
+                GitHub görünürlük yetkisi olmayan kullanıcılar için commit listesi gizlidir.
+              </p>
+            )}
+
+            {canReadRepository && !repository && (
+              <p className="rounded-lg border border-white/[0.06] bg-[#202020] px-3 py-4 text-sm text-[#A0A0A0]">
+                Bu görevin bağlı olduğu projede repository bağlantısı bulunmuyor.
+              </p>
+            )}
+
+            {canReadRepository && repository && (relatedCommits?.length ?? 0) === 0 && (
+              <p className="rounded-lg border border-white/[0.06] bg-[#202020] px-3 py-4 text-sm text-[#A0A0A0]">
+                Bu görevle ilişkili commit bulunamadı. Eşleştirme task kodu ve başlığa göre yapılır.
+              </p>
+            )}
+
+            {canReadRepository && repository && (relatedCommits?.length ?? 0) > 0 && (
+              <div className="space-y-3">
+                {(relatedCommits ?? []).map((commit) => (
+                  <a
+                    key={commit.sha}
+                    href={commit.htmlUrl ?? repository.repositoryUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block rounded-lg border border-white/[0.06] bg-[#202020] p-3 transition-colors hover:border-[#AAFF01]/30"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-medium text-white">{commit.message}</p>
+                      <Badge variant="outline" className="font-mono text-xs">
+                        {commit.shortSha}
+                      </Badge>
+                    </div>
+                    <p className="mt-2 text-xs text-[#A0A0A0]">
+                      {commit.githubAuthorLogin ?? commit.authorName ?? "Bilinmeyen geliştirici"} ·{" "}
+                      {formatDateTime(commit.committedAt ?? null)}
+                    </p>
+                  </a>
+                ))}
+              </div>
+            )}
+          </Card>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -609,6 +1092,21 @@ export function TaskDetail() {
       </div>
     </div>
   );
+}
+
+function isDesignTaskType(task: Task | undefined): boolean {
+  if (!task) {
+    return false;
+  }
+  return task.workstream === "UI_INTEGRATION" || task.type === "REVISION";
+}
+
+function buildDesignTaskFolderName(task: Task): string {
+  const code = task.code?.trim();
+  const codePrefix = code && code.length > 0 ? code : shortId(task.id);
+  const normalizedTitle = task.title.trim().replace(/\s+/g, " ");
+  const raw = `DESIGN-${codePrefix} - ${normalizedTitle}`;
+  return raw.slice(0, 120);
 }
 
 function InfoCard({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
