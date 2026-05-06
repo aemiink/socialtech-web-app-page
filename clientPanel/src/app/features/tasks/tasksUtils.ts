@@ -1,9 +1,15 @@
 import type {
+  ClientTaskCompletion,
+  ClientTaskEnvironment,
   ClientTask,
   ClientTaskPriority,
+  ClientTaskSeverity,
+  ClientTaskSprintSummary,
   ClientTaskStatus,
   ClientTaskTodo,
+  ClientTaskType,
   ClientTaskVisibility,
+  ClientTaskWorkstream,
 } from "./tasksTypes";
 import { normalizeServiceId } from "../auth/authNormalizers";
 
@@ -15,6 +21,24 @@ const TASK_STATUSES: readonly ClientTaskStatus[] = [
   "BLOCKED",
 ];
 const TASK_PRIORITIES: readonly ClientTaskPriority[] = ["LOW", "MEDIUM", "HIGH", "URGENT"];
+const TASK_TYPES: readonly ClientTaskType[] = [
+  "FEATURE",
+  "BUG",
+  "REVISION",
+  "QA",
+  "DEPLOYMENT",
+  "MAINTENANCE",
+];
+const TASK_WORKSTREAMS: readonly ClientTaskWorkstream[] = [
+  "FRONTEND",
+  "BACKEND",
+  "FULLSTACK",
+  "QA",
+  "DEVOPS",
+  "UI_INTEGRATION",
+];
+const TASK_SEVERITIES: readonly ClientTaskSeverity[] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
+const TASK_ENVIRONMENTS: readonly ClientTaskEnvironment[] = ["DEVELOPMENT", "STAGING", "PRODUCTION"];
 
 export function normalizeClientTasksResponse(value: unknown): ClientTask[] {
   const taskList = readResponseArray(value);
@@ -59,6 +83,7 @@ function normalizeClientTask(value: unknown): ClientTask | null {
 
   const projectRecord = toRecord(record.project);
   const todos = readTaskTodos(record.todos);
+  const completion = readTaskCompletion(record.completion);
 
   return {
     id,
@@ -68,6 +93,10 @@ function normalizeClientTask(value: unknown): ClientTask | null {
     status,
     visibility: readTaskVisibility(record),
     priority: readEnumValue(record.priority, TASK_PRIORITIES) ?? "MEDIUM",
+    type: readEnumValue(record.type, TASK_TYPES),
+    workstream: readEnumValue(record.workstream, TASK_WORKSTREAMS),
+    severity: readEnumValue(record.severity, TASK_SEVERITIES),
+    environment: readEnumValue(record.environment, TASK_ENVIRONMENTS),
     dueDate: readOptionalString(record.dueDate),
     updatedAt: readOptionalString(record.updatedAt),
     projectName: readOptionalString(projectRecord?.name),
@@ -76,8 +105,10 @@ function normalizeClientTask(value: unknown): ClientTask | null {
       normalizeServiceId(projectRecord?.serviceKey) ??
       normalizeServiceId(record.serviceId) ??
       normalizeServiceId(record.serviceKey),
+    sprint: readTaskSprint(record.sprint),
+    completion,
     todos,
-    progressPercent: readProgressPercent(record.progressPercent, record.completion, todos, status),
+    progressPercent: readProgressPercent(record.progressPercent, completion, todos, status),
   };
 }
 
@@ -138,9 +169,54 @@ function normalizeClientTaskTodo(value: unknown): ClientTaskTodo | null {
   };
 }
 
+function readTaskSprint(value: unknown): ClientTaskSprintSummary | null {
+  const record = toRecord(value);
+  if (!record) {
+    return null;
+  }
+
+  const id = readRequiredString(record.id);
+  const name = readRequiredString(record.name);
+  const status = readRequiredString(record.status);
+
+  if (!id || !name || !status) {
+    return null;
+  }
+
+  return { id, name, status };
+}
+
+function readTaskCompletion(value: unknown): ClientTaskCompletion | null {
+  const record = toRecord(value);
+  if (!record) {
+    return null;
+  }
+
+  const totalTodos = readFiniteNumber(record.totalTodos);
+  const completedTodos = readFiniteNumber(record.completedTodos);
+  const remainingTodos = readFiniteNumber(record.remainingTodos);
+  const completionPercentage = readFiniteNumber(record.completionPercentage);
+
+  if (
+    totalTodos === null ||
+    completedTodos === null ||
+    remainingTodos === null ||
+    completionPercentage === null
+  ) {
+    return null;
+  }
+
+  return {
+    totalTodos,
+    completedTodos,
+    remainingTodos,
+    completionPercentage,
+  };
+}
+
 function readProgressPercent(
   value: unknown,
-  completion: unknown,
+  completion: ClientTaskCompletion | null,
   todos: ClientTaskTodo[],
   status: ClientTaskStatus,
 ): number {
@@ -148,10 +224,8 @@ function readProgressPercent(
     return Math.min(100, Math.max(0, Math.round(value)));
   }
 
-  const completionRecord = toRecord(completion);
-  const completionPercentage = completionRecord?.completionPercentage;
-  if (typeof completionPercentage === "number" && Number.isFinite(completionPercentage)) {
-    return Math.min(100, Math.max(0, Math.round(completionPercentage)));
+  if (completion) {
+    return Math.min(100, Math.max(0, Math.round(completion.completionPercentage)));
   }
 
   if (todos.length > 0) {
@@ -188,6 +262,13 @@ function readEnumValue<TValue extends string>(
 
   const normalized = value.trim().toUpperCase();
   return allowedValues.find((allowedValue) => allowedValue === normalized) ?? null;
+}
+
+function readFiniteNumber(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+  return value;
 }
 
 function toRecord(value: unknown): Record<string, unknown> | null {

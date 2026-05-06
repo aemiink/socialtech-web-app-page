@@ -277,7 +277,10 @@ export function ClientPortalApp() {
 
   const selectedServiceIsAuthorized =
     selectedService !== null && activePurchasedServiceSet.has(selectedService);
-  const shouldShowClientTasksSection = !SHARED_PAGE_IDS.has(currentPage);
+  const isServiceTabDetailPage = !SHARED_PAGE_IDS.has(currentPage) && currentPage !== "service-dashboard";
+  const shouldShowClientTasksSection =
+    !SHARED_PAGE_IDS.has(currentPage) &&
+    !(selectedService === "web-app" && isServiceTabDetailPage);
 
   if (!selectedServiceIsAuthorized) {
     return (

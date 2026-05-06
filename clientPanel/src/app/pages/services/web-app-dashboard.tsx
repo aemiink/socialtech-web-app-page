@@ -3,7 +3,9 @@ import { useGetClientTasksQuery } from "../../features/tasks/tasksApi";
 import { useGetWebAppWorkspaceQuery } from "../../features/webAppWorkspace/webAppWorkspaceApi";
 
 export function WebAppDashboard({ projectId }: { projectId?: string | null }) {
-  const { data: tasks = [], isLoading: isTasksLoading } = useGetClientTasksQuery();
+  const { data: tasks = [], isLoading: isTasksLoading } = useGetClientTasksQuery(
+    projectId ? { projectId } : undefined,
+  );
   const { data: workspace, isLoading: isWorkspaceLoading } = useGetWebAppWorkspaceQuery(
     { projectId: projectId ?? "", tabKey: "OVERVIEW" },
     { skip: !projectId },

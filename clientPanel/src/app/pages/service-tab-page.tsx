@@ -37,15 +37,36 @@ import { Button } from '../components/button';
 import { getServiceTabContent, ServiceTabContent } from '../data/service-pages';
 import { useGetClientProjectFilesQuery } from '../features/projectFiles/projectFilesApi';
 import { useGetClientTasksQuery } from '../features/tasks/tasksApi';
+import type {
+  ClientTask,
+  ClientTaskPriority,
+  ClientTaskStatus,
+  ClientTaskType,
+  ClientTaskWorkstream,
+} from '../features/tasks/tasksTypes';
 import {
   webAppWorkspaceApi,
+  useCreateWebAppWorkspaceRevisionMutation,
   useCreateWebAppWorkspaceMessageMutation,
   useGetWebAppWorkspaceQuery,
+  useUpdateWebAppWorkspaceRevisionStatusMutation,
 } from '../features/webAppWorkspace/webAppWorkspaceApi';
-import type { WorkspaceMessage, WorkspaceRevision, WorkspaceTabKey } from '../features/webAppWorkspace/webAppWorkspaceTypes';
+import type {
+  WorkspaceMessage,
+  WorkspaceProjectSummary,
+  WorkspaceRevision,
+  WorkspaceRevisionStatus,
+  WorkspaceSection,
+  WorkspaceSourceFile,
+  WorkspaceSourceOfTruth,
+  WorkspaceSourceRelease,
+  WorkspaceSourceSprint,
+  WorkspaceSourceTask,
+  WorkspaceTabKey,
+} from '../features/webAppWorkspace/webAppWorkspaceTypes';
 import { createWorkspaceSocket, type WorkspaceUpdateEvent } from '../features/webAppWorkspace/workspaceSocket';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { selectAccessToken } from '../features/auth/authSelectors';
+import { selectAccessToken, selectCurrentUser } from '../features/auth/authSelectors';
 import { runClientAction } from '../lib/client-actions';
 
 interface ServiceTabPageProps {
@@ -85,16 +106,39 @@ const innerClass = 'bg-[#202020] rounded-xl p-4 border border-white/[0.08]';
 export function ServiceTabPage({ serviceId, tabId, projectId }: ServiceTabPageProps) {
   const dispatch = useAppDispatch();
   const accessToken = useAppSelector(selectAccessToken);
+  const currentUser = useAppSelector(selectCurrentUser);
   const isWebAppService = serviceId === "web-app";
   const workspaceTabKey = mapTabIdToWorkspaceTabKey(tabId);
   const viewKind = getViewKind(serviceId, tabId);
   const shouldUseWorkspace = isWebAppService && Boolean(projectId);
+  const shouldUseTaskBasedRevisions = !isWebAppService && tabId === "revisions";
   const { data: workspaceData, isLoading: workspaceLoading } = useGetWebAppWorkspaceQuery(
     { projectId: projectId ?? '', tabKey: workspaceTabKey },
     { skip: !shouldUseWorkspace },
   );
+  const { data: taskBasedRevisions = [], isLoading: taskBasedRevisionsLoading } = useGetClientTasksQuery(
+    projectId ? { projectId, type: "REVISION" } : { type: "REVISION" },
+    { skip: !shouldUseTaskBasedRevisions },
+  );
   const [createWorkspaceMessage, { isLoading: isSendingWorkspaceMessage }] = useCreateWebAppWorkspaceMessageMutation();
+  const [createWorkspaceRevision, { isLoading: isCreatingWorkspaceRevision }] =
+    useCreateWebAppWorkspaceRevisionMutation();
+  const [updateWorkspaceRevisionStatus, { isLoading: isUpdatingWorkspaceRevision }] =
+    useUpdateWebAppWorkspaceRevisionStatusMutation();
+  const [revisionTitle, setRevisionTitle] = useState("");
+  const [revisionDescription, setRevisionDescription] = useState("");
+  const [revisionResponseNote, setRevisionResponseNote] = useState<Record<string, string>>({});
+  const [revisionActionError, setRevisionActionError] = useState<string | null>(null);
   const lastWorkspaceSequenceRef = useRef(0);
+  const scopedTaskBasedRevisions = useMemo(
+    () =>
+      taskBasedRevisions.filter((task) => {
+        const matchesProject = !projectId || task.projectId === projectId;
+        const matchesService = !task.projectServiceId || task.projectServiceId === serviceId;
+        return matchesProject && matchesService;
+      }),
+    [projectId, serviceId, taskBasedRevisions],
+  );
 
   const handleWorkspaceMessageSend = async (message: string, parentMessageId?: string) => {
     if (!projectId || !message.trim()) {
@@ -107,6 +151,58 @@ export function ServiceTabPage({ serviceId, tabId, projectId }: ServiceTabPagePr
       body: message.trim(),
       parentMessageId,
     }).unwrap();
+  };
+
+  const handleWorkspaceRevisionCreate = async () => {
+    if (!projectId || revisionTitle.trim().length < 2 || revisionDescription.trim().length < 2) {
+      return;
+    }
+    try {
+      setRevisionActionError(null);
+      await createWorkspaceRevision({
+        projectId,
+        title: revisionTitle.trim(),
+        description: revisionDescription.trim(),
+        cacheTabKey: workspaceTabKey,
+      }).unwrap();
+      setRevisionTitle("");
+      setRevisionDescription("");
+    } catch {
+      setRevisionActionError("Revizyon talebi gönderilemedi.");
+    }
+  };
+
+  const handleWorkspaceRevisionDecision = async (
+    revisionId: string,
+    status: WorkspaceRevisionStatus,
+  ) => {
+    if (!projectId) {
+      return;
+    }
+    try {
+      setRevisionActionError(null);
+      if (status !== "APPROVED" && status !== "REJECTED") {
+        setRevisionActionError("Bu revizyon için sadece onay veya red aksiyonu destekleniyor.");
+        return;
+      }
+      await updateWorkspaceRevisionStatus({
+        projectId,
+        revisionId,
+        status,
+        note: revisionResponseNote[revisionId]?.trim() || undefined,
+        cacheTabKey: workspaceTabKey,
+      }).unwrap();
+      setRevisionResponseNote((prev) => {
+        if (!(revisionId in prev)) {
+          return prev;
+        }
+        const next = { ...prev };
+        delete next[revisionId];
+        return next;
+      });
+    } catch {
+      setRevisionActionError("Revizyon durumu güncellenemedi.");
+    }
   };
 
   useEffect(() => {
@@ -182,15 +278,47 @@ export function ServiceTabPage({ serviceId, tabId, projectId }: ServiceTabPagePr
         projectId={projectId}
         workspaceLoading={workspaceLoading}
         sections={workspaceData?.sections ?? []}
+        projectSummary={workspaceData?.project}
+        sourceOfTruth={workspaceData?.sourceOfTruth}
         messages={workspaceData?.messages ?? []}
         revisions={workspaceData?.revisions ?? []}
         isSendingWorkspaceMessage={isSendingWorkspaceMessage}
+        isCreatingWorkspaceRevision={isCreatingWorkspaceRevision}
+        isUpdatingWorkspaceRevision={isUpdatingWorkspaceRevision}
+        revisionTitle={revisionTitle}
+        revisionDescription={revisionDescription}
+        revisionResponseNote={revisionResponseNote}
+        revisionActionError={revisionActionError}
+        currentUserId={currentUser?.id ?? null}
         onSendMessage={handleWorkspaceMessageSend}
+        onChangeRevisionTitle={setRevisionTitle}
+        onChangeRevisionDescription={setRevisionDescription}
+        onChangeRevisionResponseNote={(revisionId: string, note: string) =>
+          setRevisionResponseNote((prev) => ({ ...prev, [revisionId]: note }))
+        }
+        onCreateRevision={handleWorkspaceRevisionCreate}
+        onUpdateRevisionStatus={handleWorkspaceRevisionDecision}
       />
     );
   }
 
   const content = getServiceTabContent(serviceId, tabId);
+
+  if (shouldUseTaskBasedRevisions) {
+    return (
+      <div className="p-8 space-y-6">
+        <PageHero content={content} tabId={tabId} />
+        <SmartKpis content={content} tabId={tabId} />
+        <TaskBasedRevisionPanel
+          serviceId={serviceId}
+          projectId={projectId}
+          tasks={scopedTaskBasedRevisions}
+          isLoading={taskBasedRevisionsLoading}
+        />
+        <ActionFooter content={content} />
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 space-y-6">
@@ -206,7 +334,23 @@ export function ServiceTabPage({ serviceId, tabId, projectId }: ServiceTabPagePr
         />
       ) : null}
       {shouldUseWorkspace && tabId.includes('revision') ? (
-        <WorkspaceRevisionPanel revisions={workspaceData?.revisions ?? []} />
+        <WorkspaceRevisionPanel
+          revisions={workspaceData?.revisions ?? []}
+          isCreating={isCreatingWorkspaceRevision}
+          isUpdating={isUpdatingWorkspaceRevision}
+          revisionTitle={revisionTitle}
+          revisionDescription={revisionDescription}
+          revisionResponseNote={revisionResponseNote}
+          revisionActionError={revisionActionError}
+          currentUserId={currentUser?.id ?? null}
+          onChangeRevisionTitle={setRevisionTitle}
+          onChangeRevisionDescription={setRevisionDescription}
+          onChangeRevisionResponseNote={(revisionId, note) =>
+            setRevisionResponseNote((prev) => ({ ...prev, [revisionId]: note }))
+          }
+          onCreateRevision={handleWorkspaceRevisionCreate}
+          onUpdateRevisionStatus={handleWorkspaceRevisionDecision}
+        />
       ) : null}
       <ActionFooter content={content} />
     </div>
@@ -218,40 +362,83 @@ function WebAppWorkspaceTab({
   projectId,
   workspaceLoading,
   sections,
+  projectSummary,
+  sourceOfTruth,
   messages,
   revisions,
   isSendingWorkspaceMessage,
+  isCreatingWorkspaceRevision,
+  isUpdatingWorkspaceRevision,
+  revisionTitle,
+  revisionDescription,
+  revisionResponseNote,
+  revisionActionError,
+  currentUserId,
   onSendMessage,
+  onChangeRevisionTitle,
+  onChangeRevisionDescription,
+  onChangeRevisionResponseNote,
+  onCreateRevision,
+  onUpdateRevisionStatus,
 }: {
   tabId: string;
   projectId?: string | null;
   workspaceLoading: boolean;
-  sections: Array<{ id: string; title: string; description?: string | null; items?: Array<{ id: string; title: string; body?: string | null }> }>;
+  sections: WorkspaceSection[];
+  projectSummary?: WorkspaceProjectSummary;
+  sourceOfTruth?: WorkspaceSourceOfTruth;
   messages: WorkspaceMessage[];
   revisions: WorkspaceRevision[];
   isSendingWorkspaceMessage: boolean;
+  isCreatingWorkspaceRevision: boolean;
+  isUpdatingWorkspaceRevision: boolean;
+  revisionTitle: string;
+  revisionDescription: string;
+  revisionResponseNote: Record<string, string>;
+  revisionActionError: string | null;
+  currentUserId: string | null;
   onSendMessage: (message: string, parentMessageId?: string) => Promise<void>;
+  onChangeRevisionTitle: (value: string) => void;
+  onChangeRevisionDescription: (value: string) => void;
+  onChangeRevisionResponseNote: (revisionId: string, note: string) => void;
+  onCreateRevision: () => Promise<void>;
+  onUpdateRevisionStatus: (revisionId: string, status: WorkspaceRevisionStatus) => Promise<void>;
 }) {
+  const tasks = sourceOfTruth?.tasks ?? [];
+  const sprints = sourceOfTruth?.sprints ?? [];
+  const releases = sourceOfTruth?.releases ?? [];
+  const files = sourceOfTruth?.files ?? [];
+  const tabTasks = useMemo(() => filterWorkspaceTasksByTab(tabId, tasks), [tabId, tasks]);
+
   return (
     <div className="p-8 space-y-6">
       <div className="relative overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br from-[#1A1A1A] via-[#151515] to-[#101010] p-8">
         <h1 className="text-3xl text-white">Web APP Çalışma Alanı</h1>
         <p className="mt-2 text-[#A0A0A0]">Sekme: {tabId}</p>
+        {projectSummary?.name ? (
+          <p className="mt-1 text-sm text-[#d7d7d7]">Proje: {projectSummary.name}</p>
+        ) : null}
       </div>
       {!projectId ? (
         <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-6 text-sm text-[#A0A0A0]">
           Bu sekme için proje seçimi yapılmadı.
         </div>
       ) : null}
+      {projectId && projectSummary ? <WorkspaceProjectLinksPanel project={projectSummary} /> : null}
       {workspaceLoading && projectId ? (
         <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-6 text-sm text-[#A0A0A0]">
           İçerikler yükleniyor...
         </div>
       ) : null}
-      {projectId && !workspaceLoading && sections.length === 0 ? (
-        <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-6 text-sm text-[#A0A0A0]">
-          Bu sekme için henüz içerik bulunmuyor.
-        </div>
+      {projectId && !workspaceLoading ? (
+        <WebAppSourceOfTruthPanel
+          tabId={tabId}
+          tasks={tabTasks}
+          allTasks={tasks}
+          sprints={sprints}
+          releases={releases}
+          files={files}
+        />
       ) : null}
       <div className="space-y-4">
         {sections.map((section) => (
@@ -263,6 +450,17 @@ function WebAppWorkspaceTab({
                 <div key={item.id} className="rounded-xl border border-white/[0.08] bg-[#202020] p-4">
                   <p className="text-white">{item.title}</p>
                   {item.body ? <p className="mt-2 text-sm text-[#CFCFCF]">{item.body}</p> : null}
+                  {item.href ? (
+                    <a
+                      href={item.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-flex items-center gap-1 text-xs text-[#AAFF01] hover:underline"
+                    >
+                      Kaynağı Aç
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </a>
+                  ) : null}
                 </div>
               ))}
               {(section.items ?? []).length === 0 ? (
@@ -280,26 +478,476 @@ function WebAppWorkspaceTab({
           onSend={onSendMessage}
         />
       ) : null}
-      {projectId && tabId.includes("revision") ? <WorkspaceRevisionPanel revisions={revisions} /> : null}
+      {projectId && tabId.includes("revision") ? (
+        <WorkspaceRevisionPanel
+          revisions={revisions}
+          isCreating={isCreatingWorkspaceRevision}
+          isUpdating={isUpdatingWorkspaceRevision}
+          revisionTitle={revisionTitle}
+          revisionDescription={revisionDescription}
+          revisionResponseNote={revisionResponseNote}
+          revisionActionError={revisionActionError}
+          currentUserId={currentUserId}
+          onChangeRevisionTitle={onChangeRevisionTitle}
+          onChangeRevisionDescription={onChangeRevisionDescription}
+          onChangeRevisionResponseNote={onChangeRevisionResponseNote}
+          onCreateRevision={onCreateRevision}
+          onUpdateRevisionStatus={onUpdateRevisionStatus}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function WorkspaceProjectLinksPanel({ project }: { project: WorkspaceProjectSummary }) {
+  const figmaKind = detectFigmaLinkKind(project.figmaProjectUrl);
+  const figmaEmbedUrl = buildFigmaEmbedUrl(project.figmaProjectUrl);
+
+  if (!project.repositoryUrl && !project.figmaProjectUrl) {
+    return null;
+  }
+
+  return (
+    <div className={cardClass}>
+      <h2 className="mb-4 text-xl text-white">Proje Linkleri</h2>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {project.repositoryUrl ? (
+          <div className="rounded-xl border border-white/[0.08] bg-[#202020] p-4">
+            <p className="text-sm text-white">GitHub Repository</p>
+            <p className="mt-1 truncate text-xs text-[#A0A0A0]">{project.repositoryUrl}</p>
+            <a
+              href={project.repositoryUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 inline-flex items-center gap-1 text-xs text-[#AAFF01] hover:underline"
+            >
+              Repo’yu Aç
+              <ArrowRight className="h-3.5 w-3.5" />
+            </a>
+          </div>
+        ) : null}
+        {project.figmaProjectUrl ? (
+          <div className="rounded-xl border border-white/[0.08] bg-[#202020] p-4">
+            <p className="text-sm text-white">Figma</p>
+            <p className="mt-1 truncate text-xs text-[#A0A0A0]">{project.figmaProjectUrl}</p>
+            <a
+              href={project.figmaProjectUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 inline-flex items-center gap-1 text-xs text-[#AAFF01] hover:underline"
+            >
+              Figma ile Aç
+              <ArrowRight className="h-3.5 w-3.5" />
+            </a>
+          </div>
+        ) : null}
+      </div>
+      {figmaKind === "prototype" && figmaEmbedUrl ? (
+        <div className="mt-4 overflow-hidden rounded-xl border border-white/[0.08]">
+          <iframe
+            title="Figma Prototype"
+            src={figmaEmbedUrl}
+            className="h-[420px] w-full border-0 bg-[#101010]"
+            allowFullScreen
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function WebAppSourceOfTruthPanel({
+  tabId,
+  tasks,
+  allTasks,
+  sprints,
+  releases,
+  files,
+}: {
+  tabId: string;
+  tasks: WorkspaceSourceTask[];
+  allTasks: WorkspaceSourceTask[];
+  sprints: WorkspaceSourceSprint[];
+  releases: WorkspaceSourceRelease[];
+  files: WorkspaceSourceFile[];
+}) {
+  if (tabId === "project-roadmap") {
+    return <RoadmapSourcePanel sprints={sprints} releases={releases} />;
+  }
+
+  if (tabId === "sprint-status") {
+    return <SprintStatusSourcePanel tasks={allTasks} sprints={sprints} />;
+  }
+
+  if (tabId === "test-deploy") {
+    return (
+      <div className="space-y-4">
+        <ReleaseSourcePanel releases={releases} />
+        <TaskSourcePanel title="Test & Yayın Görevleri" tasks={tasks} emptyText="Test/Yayın görevi bulunmuyor." />
+      </div>
+    );
+  }
+
+  if (tabId === "files" || tabId === "delivery-files") {
+    return <WorkspaceSourceFilesPanel files={files} />;
+  }
+
+  if (["frontend", "backend-api", "admin-panel", "ui-ux", "revisions"].includes(tabId)) {
+    return <TaskSourcePanel title="Operasyon Görevleri" tasks={tasks} emptyText="Bu sekme için görev bulunmuyor." />;
+  }
+
+  if (tasks.length > 0) {
+    return <TaskSourcePanel title="Güncel Görevler" tasks={tasks} emptyText="Görev bulunmuyor." />;
+  }
+
+  return (
+    <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-6 text-sm text-[#A0A0A0]">
+      Bu sekme için henüz roadmap/task/release verisi bulunmuyor.
+    </div>
+  );
+}
+
+function TaskSourcePanel({
+  title,
+  tasks,
+  emptyText,
+}: {
+  title: string;
+  tasks: WorkspaceSourceTask[];
+  emptyText: string;
+}) {
+  return (
+    <div className={cardClass}>
+      <h2 className="mb-4 text-xl text-white">{title}</h2>
+      {tasks.length === 0 ? <p className="text-sm text-[#A0A0A0]">{emptyText}</p> : null}
+      <div className="space-y-3">
+        {tasks.slice(0, 12).map((task) => (
+          <div key={task.id} className="rounded-xl border border-white/[0.08] bg-[#202020] p-4">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="rounded border border-[#AAFF01]/20 bg-[#AAFF01]/10 px-2 py-1 text-[11px] text-[#AAFF01]">
+                {task.type ?? "TASK"}
+              </span>
+              {task.workstream ? (
+                <span className="rounded border border-[#00D4FF]/20 bg-[#00D4FF]/10 px-2 py-1 text-[11px] text-[#00D4FF]">
+                  {task.workstream}
+                </span>
+              ) : null}
+              {task.severity ? (
+                <span className="rounded border border-[#FFA726]/20 bg-[#FFA726]/10 px-2 py-1 text-[11px] text-[#FFA726]">
+                  {task.severity}
+                </span>
+              ) : null}
+              {task.environment ? (
+                <span className="rounded border border-[#7B61FF]/20 bg-[#7B61FF]/10 px-2 py-1 text-[11px] text-[#7B61FF]">
+                  {task.environment}
+                </span>
+              ) : null}
+              <span className={`rounded border px-2 py-1 text-[11px] ${getTaskStatusTone(task.status)}`}>
+                {task.status}
+              </span>
+            </div>
+            <p className="text-white">{task.title}</p>
+            <div className="mt-2 flex flex-wrap gap-4 text-xs text-[#A0A0A0]">
+              <span>Öncelik: {task.priority}</span>
+              {task.code ? <span>Kod: {task.code}</span> : null}
+              {task.sprint?.name ? <span>Sprint: {task.sprint.name}</span> : null}
+              {task.assignee?.displayName ? <span>Atanan: {task.assignee.displayName}</span> : null}
+              {task.dueDate ? <span>Teslim: {new Date(task.dueDate).toLocaleDateString("tr-TR")}</span> : null}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RoadmapSourcePanel({
+  sprints,
+  releases,
+}: {
+  sprints: WorkspaceSourceSprint[];
+  releases: WorkspaceSourceRelease[];
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className={cardClass}>
+        <h2 className="mb-4 text-xl text-white">Sprint Roadmap</h2>
+        {sprints.length === 0 ? <p className="text-sm text-[#A0A0A0]">Henüz sprint planı bulunmuyor.</p> : null}
+        <div className="space-y-3">
+          {sprints.map((sprint) => (
+            <div key={sprint.id} className="rounded-xl border border-white/[0.08] bg-[#202020] p-4">
+              <p className="text-white">{sprint.name}</p>
+              {sprint.goal ? <p className="mt-1 text-xs text-[#d7d7d7]">Hedef: {sprint.goal}</p> : null}
+              <p className="mt-1 text-xs text-[#A0A0A0]">
+                {new Date(sprint.startDate).toLocaleDateString("tr-TR")} - {new Date(sprint.endDate).toLocaleDateString("tr-TR")}
+              </p>
+              <span className={`mt-2 inline-flex rounded border px-2 py-1 text-[11px] ${getSprintStatusTone(sprint.status)}`}>
+                {sprint.status}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <ReleaseSourcePanel releases={releases} />
+    </div>
+  );
+}
+
+function SprintStatusSourcePanel({
+  tasks,
+  sprints,
+}: {
+  tasks: WorkspaceSourceTask[];
+  sprints: WorkspaceSourceSprint[];
+}) {
+  const counts = useMemo(
+    () => ({
+      total: tasks.length,
+      done: tasks.filter((task) => task.status === "DONE").length,
+      inProgress: tasks.filter((task) => task.status === "IN_PROGRESS").length,
+      blocked: tasks.filter((task) => task.status === "BLOCKED").length,
+    }),
+    [tasks],
+  );
+
+  const progress = counts.total === 0 ? 0 : Math.round((counts.done / counts.total) * 100);
+  const tasksBySprint = useMemo(() => {
+    const bucket = new Map<string, WorkspaceSourceTask[]>();
+    for (const task of tasks) {
+      const key = task.sprint?.id ?? "UNASSIGNED";
+      const list = bucket.get(key) ?? [];
+      list.push(task);
+      bucket.set(key, list);
+    }
+    return bucket;
+  }, [tasks]);
+
+  return (
+    <div className={cardClass}>
+      <h2 className="mb-4 text-xl text-white">Sprint Durumu</h2>
+      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <MetricPill label="Toplam" value={String(counts.total)} />
+        <MetricPill label="Tamamlanan" value={String(counts.done)} />
+        <MetricPill label="Devam Eden" value={String(counts.inProgress)} />
+        <MetricPill label="Blocked" value={String(counts.blocked)} />
+      </div>
+      <div className="mb-5 h-2 overflow-hidden rounded-full bg-[#121212]">
+        <div className="h-full rounded-full bg-[#AAFF01]" style={{ width: `${progress}%` }} />
+      </div>
+      <p className="mb-4 text-xs text-[#A0A0A0]">Sprint tamamlanma oranı: %{progress}</p>
+      {sprints.length > 0 ? (
+        <div className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-2">
+          {sprints.map((sprint) => (
+            <div key={sprint.id} className="rounded-xl border border-white/[0.08] bg-[#202020] p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-sm text-white">{sprint.name}</p>
+                <span className={`rounded border px-2 py-1 text-[11px] ${getSprintStatusTone(sprint.status)}`}>
+                  {sprint.status}
+                </span>
+              </div>
+              {sprint.goal ? <p className="text-xs text-[#d7d7d7]">Hedef: {sprint.goal}</p> : null}
+              <p className="mt-1 text-xs text-[#A0A0A0]">
+                {new Date(sprint.startDate).toLocaleDateString("tr-TR")} - {new Date(sprint.endDate).toLocaleDateString("tr-TR")}
+              </p>
+              <p className="mt-1 text-xs text-[#A0A0A0]">
+                Görev: {(tasksBySprint.get(sprint.id) ?? []).length}
+              </p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {tasksBySprint.get("UNASSIGNED")?.length ? (
+        <div className="mb-5 rounded-xl border border-[#FFA726]/20 bg-[#FFA726]/10 p-3 text-xs text-[#FFA726]">
+          Sprint’e atanmamış görev: {tasksBySprint.get("UNASSIGNED")?.length}
+        </div>
+      ) : null}
+      <TaskSourcePanel title="Sprint Görevleri" tasks={tasks} emptyText="Sprint görevi bulunmuyor." />
+    </div>
+  );
+}
+
+function ReleaseSourcePanel({ releases }: { releases: WorkspaceSourceRelease[] }) {
+  return (
+    <div className={cardClass}>
+      <h2 className="mb-4 text-xl text-white">Release / Yayın Planı</h2>
+      {releases.length === 0 ? <p className="text-sm text-[#A0A0A0]">Henüz release planı bulunmuyor.</p> : null}
+      <div className="space-y-3">
+        {releases.slice(0, 10).map((release) => (
+          <div key={release.id} className="rounded-xl border border-white/[0.08] bg-[#202020] p-4">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="rounded border border-[#7B61FF]/20 bg-[#7B61FF]/10 px-2 py-1 text-[11px] text-[#7B61FF]">
+                {release.environment}
+              </span>
+              <span className={`rounded border px-2 py-1 text-[11px] ${getReleaseStatusTone(release.status)}`}>
+                {release.status}
+              </span>
+              {release.approvalStatus ? (
+                <span className="rounded border border-[#00D4FF]/20 bg-[#00D4FF]/10 px-2 py-1 text-[11px] text-[#00D4FF]">
+                  {release.approvalStatus}
+                </span>
+              ) : null}
+            </div>
+            <p className="text-white">{release.title}</p>
+            <p className="mt-1 text-xs text-[#A0A0A0]">
+              Versiyon: {release.version ?? "—"} • Planlanan: {release.scheduledAt ? new Date(release.scheduledAt).toLocaleString("tr-TR") : "—"} •
+              Yayın: {release.deployedAt ? new Date(release.deployedAt).toLocaleString("tr-TR") : "—"}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function WorkspaceSourceFilesPanel({ files }: { files: WorkspaceSourceFile[] }) {
+  return (
+    <div className={cardClass}>
+      <h2 className="mb-4 text-xl text-white">Müşteriye Açık Dosyalar</h2>
+      {files.length === 0 ? <p className="text-sm text-[#A0A0A0]">Bu projede henüz dosya paylaşılmamış.</p> : null}
+      <div className="space-y-3">
+        {files.slice(0, 12).map((file) => (
+          <div key={file.id} className="rounded-xl border border-white/[0.08] bg-[#202020] p-4">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              {file.folder?.name ? (
+                <span className="rounded border border-[#AAFF01]/20 bg-[#AAFF01]/10 px-2 py-1 text-[11px] text-[#AAFF01]">
+                  {file.folder.name}
+                </span>
+              ) : null}
+              <span className="rounded border border-white/[0.16] px-2 py-1 text-[11px] text-[#CFCFCF]">
+                {file.category ?? "GENEL"}
+              </span>
+            </div>
+            <p className="text-white">{file.title}</p>
+            <p className="mt-1 text-xs text-[#A0A0A0]">{file.originalFileName}</p>
+            <a
+              href={file.secureUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 inline-flex items-center gap-1 text-xs text-[#AAFF01] hover:underline"
+            >
+              Dosyayı Görüntüle
+              <ArrowRight className="h-3.5 w-3.5" />
+            </a>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
 function WorkspaceRevisionPanel({
   revisions,
+  isCreating,
+  isUpdating,
+  revisionTitle,
+  revisionDescription,
+  revisionResponseNote,
+  revisionActionError,
+  currentUserId,
+  onChangeRevisionTitle,
+  onChangeRevisionDescription,
+  onChangeRevisionResponseNote,
+  onCreateRevision,
+  onUpdateRevisionStatus,
 }: {
-  revisions: Array<{ id: string; title: string; status: string; requestedAt: string }>;
+  revisions: WorkspaceRevision[];
+  isCreating: boolean;
+  isUpdating: boolean;
+  revisionTitle: string;
+  revisionDescription: string;
+  revisionResponseNote: Record<string, string>;
+  revisionActionError: string | null;
+  currentUserId: string | null;
+  onChangeRevisionTitle: (value: string) => void;
+  onChangeRevisionDescription: (value: string) => void;
+  onChangeRevisionResponseNote: (revisionId: string, note: string) => void;
+  onCreateRevision: () => Promise<void>;
+  onUpdateRevisionStatus: (revisionId: string, status: WorkspaceRevisionStatus) => Promise<void>;
 }) {
+  const getAllowedTransitions = (revision: WorkspaceRevision): WorkspaceRevisionStatus[] => {
+    const requesterId = revision.requestedByUserId ?? revision.requestedBy?.id ?? null;
+    if (!currentUserId || requesterId !== currentUserId) {
+      return [];
+    }
+    if (revision.status === "READY_FOR_REVIEW") {
+      return ["APPROVED", "REJECTED"];
+    }
+    return [];
+  };
+
   return (
     <div className={cardClass}>
-      <h2 className="mb-4 text-xl text-white">Revizyon Durumları</h2>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-xl text-white">Revizyon Durumları</h2>
+        <span className="text-xs text-[#A0A0A0]">WEB_APP workspace lifecycle</span>
+      </div>
+      <div className="mb-4 space-y-3 rounded-xl border border-white/[0.08] bg-[#202020] p-3">
+        <p className="text-sm text-white">Yeni revizyon talebi oluştur</p>
+        <input
+          className="h-10 w-full rounded-md border border-white/[0.12] bg-[#141414] px-3 text-sm text-white outline-none focus:border-[#AAFF01]/50"
+          value={revisionTitle}
+          onChange={(event) => onChangeRevisionTitle(event.target.value)}
+          placeholder="Revizyon başlığı"
+        />
+        <textarea
+          value={revisionDescription}
+          onChange={(event) => onChangeRevisionDescription(event.target.value)}
+          rows={3}
+          className="w-full rounded-md border border-white/[0.12] bg-[#141414] px-3 py-2 text-sm text-white outline-none focus:border-[#AAFF01]/50"
+          placeholder="Revizyon talebini detaylandırın"
+        />
+        <Button
+          variant="primary"
+          className={`w-full justify-center text-sm ${isCreating ? "pointer-events-none opacity-60" : ""}`}
+          onClick={() => void onCreateRevision()}
+        >
+          {isCreating ? "Gönderiliyor..." : "Revizyon Talebi Oluştur"}
+        </Button>
+        {revisionActionError ? <p className="text-xs text-red-300">{revisionActionError}</p> : null}
+      </div>
       <div className="space-y-3">
         {revisions.slice(0, 8).map((revision) => (
           <div key={revision.id} className="rounded-xl border border-white/[0.08] bg-[#202020] p-3">
-            <p className="text-sm text-white">{revision.title}</p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm text-white">{revision.title}</p>
+              <span className={`rounded border px-2 py-1 text-[11px] ${getRevisionStatusTone(revision.status)}`}>
+                {revision.status}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-[#d7d7d7]">{revision.description}</p>
             <p className="mt-1 text-xs text-[#A0A0A0]">
-              {revision.status} • {new Date(revision.requestedAt).toLocaleString('tr-TR')}
+              {new Date(revision.requestedAt).toLocaleString('tr-TR')}
             </p>
+            {revision.assignedTo?.displayName ? (
+              <p className="mt-1 text-xs text-[#A0A0A0]">Atanan: {revision.assignedTo.displayName}</p>
+            ) : null}
+            {getAllowedTransitions(revision).length > 0 ? (
+              <div className="mt-3 space-y-2">
+                <textarea
+                  value={revisionResponseNote[revision.id] ?? ""}
+                  onChange={(event) => onChangeRevisionResponseNote(revision.id, event.target.value)}
+                  rows={2}
+                  className="w-full rounded-md border border-white/[0.12] bg-[#141414] px-3 py-2 text-xs text-white outline-none focus:border-[#AAFF01]/50"
+                  placeholder="Opsiyonel not"
+                />
+                <div className="flex flex-wrap gap-2">
+                  {getAllowedTransitions(revision).map((status) => (
+                    <Button
+                      key={`${revision.id}-${status}`}
+                      variant={status === "APPROVED" ? "primary" : "secondary"}
+                      className={`text-xs ${isUpdating ? "pointer-events-none opacity-60" : ""}`}
+                      onClick={() => void onUpdateRevisionStatus(revision.id, status)}
+                    >
+                      {status === "APPROVED"
+                        ? "Onayla"
+                        : status === "REJECTED"
+                          ? "Revizyon İste"
+                          : "Talebi İptal Et"}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
         ))}
         {revisions.length === 0 ? (
@@ -310,6 +958,146 @@ function WorkspaceRevisionPanel({
   );
 }
 
+function TaskBasedRevisionPanel({
+  serviceId,
+  projectId,
+  tasks,
+  isLoading,
+}: {
+  serviceId: string;
+  projectId?: string | null;
+  tasks: ClientTask[];
+  isLoading: boolean;
+}) {
+  if (isLoading) {
+    return (
+      <div className={cardClass}>
+        <h2 className="mb-3 text-xl text-white">Revizyon Görevleri</h2>
+        <p className="text-sm text-[#A0A0A0]">Revizyon görevleri yükleniyor...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className={cardClass}>
+      <h2 className="mb-3 text-xl text-white">Revizyon Görevleri</h2>
+      <p className="mb-4 text-xs text-[#A0A0A0]">
+        WEB_APP dışındaki servislerde revizyonlar görev tabanlı gösterilir.
+      </p>
+      {tasks.length === 0 ? (
+        <p className="text-sm text-[#A0A0A0]">
+          {projectId
+            ? "Bu proje için revizyon görevi bulunmuyor."
+            : `${getServiceLabel(serviceId)} için revizyon görevi bulunmuyor.`}
+        </p>
+      ) : null}
+      <div className="space-y-3">
+        {tasks.map((task) => (
+          <div key={task.id} className="rounded-xl border border-white/[0.08] bg-[#202020] p-4">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className={`rounded border px-2 py-1 text-[11px] ${getClientTaskStatusTone(task.status)}`}>
+                {getClientTaskStatusLabel(task.status)}
+              </span>
+              <span className={`rounded border px-2 py-1 text-[11px] ${getClientTaskPriorityTone(task.priority)}`}>
+                {getClientTaskPriorityLabel(task.priority)}
+              </span>
+              {task.type ? (
+                <span className="rounded border border-[#AAFF01]/20 bg-[#AAFF01]/10 px-2 py-1 text-[11px] text-[#AAFF01]">
+                  {getClientTaskTypeLabel(task.type)}
+                </span>
+              ) : null}
+              {task.workstream ? (
+                <span className="rounded border border-[#00D4FF]/20 bg-[#00D4FF]/10 px-2 py-1 text-[11px] text-[#00D4FF]">
+                  {getClientTaskWorkstreamLabel(task.workstream)}
+                </span>
+              ) : null}
+            </div>
+            <p className="text-sm text-white">{task.title}</p>
+            {task.description ? <p className="mt-1 text-xs text-[#d7d7d7]">{task.description}</p> : null}
+            <div className="mt-2 flex flex-wrap gap-3 text-xs text-[#A0A0A0]">
+              <span>Proje: {task.projectName ?? "—"}</span>
+              {task.sprint?.name ? <span>Sprint: {task.sprint.name}</span> : null}
+              {task.dueDate ? <span>Teslim: {new Date(task.dueDate).toLocaleDateString("tr-TR")}</span> : null}
+              <span>İlerleme: %{task.progressPercent}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function getClientTaskStatusLabel(status: ClientTaskStatus): string {
+  const labels: Record<ClientTaskStatus, string> = {
+    TODO: 'Yapilacak',
+    IN_PROGRESS: 'Devam Ediyor',
+    REVIEW: 'Incelemede',
+    DONE: 'Tamamlandi',
+    BLOCKED: 'Bloke',
+  };
+  return labels[status] ?? status;
+}
+
+function getClientTaskStatusTone(status: ClientTaskStatus): string {
+  if (status === 'DONE') return statusTone.good;
+  if (status === 'IN_PROGRESS' || status === 'REVIEW') return statusTone.info;
+  if (status === 'BLOCKED') return statusTone.danger;
+  return statusTone.violet;
+}
+
+function getClientTaskPriorityLabel(priority: ClientTaskPriority): string {
+  const labels: Record<ClientTaskPriority, string> = {
+    LOW: 'Dusuk',
+    MEDIUM: 'Orta',
+    HIGH: 'Yuksek',
+    URGENT: 'Acil',
+  };
+  return labels[priority] ?? priority;
+}
+
+function getClientTaskPriorityTone(priority: ClientTaskPriority): string {
+  if (priority === 'URGENT') return statusTone.danger;
+  if (priority === 'HIGH') return statusTone.warn;
+  if (priority === 'MEDIUM') return statusTone.info;
+  return statusTone.violet;
+}
+
+function getClientTaskTypeLabel(type: ClientTaskType): string {
+  const labels: Record<ClientTaskType, string> = {
+    FEATURE: 'Feature',
+    BUG: 'Bug',
+    REVISION: 'Revizyon',
+    QA: 'QA',
+    DEPLOYMENT: 'Yayin',
+    MAINTENANCE: 'Bakim',
+  };
+  return labels[type] ?? type;
+}
+
+function getClientTaskWorkstreamLabel(workstream: ClientTaskWorkstream): string {
+  const labels: Record<ClientTaskWorkstream, string> = {
+    FRONTEND: 'Frontend',
+    BACKEND: 'Backend / API',
+    FULLSTACK: 'Fullstack',
+    QA: 'QA',
+    DEVOPS: 'DevOps',
+    UI_INTEGRATION: 'UI Integration',
+  };
+  return labels[workstream] ?? workstream;
+}
+
+function getServiceLabel(serviceId: string): string {
+  return serviceId.replace(/-/g, ' ').toUpperCase();
+}
+
+function getRevisionStatusTone(status: WorkspaceRevisionStatus): string {
+  if (status === "APPROVED") return statusTone.good;
+  if (status === "READY_FOR_REVIEW") return statusTone.info;
+  if (status === "REJECTED" || status === "CANCELLED") return statusTone.danger;
+  if (status === "IN_PROGRESS") return statusTone.violet;
+  return statusTone.warn;
+}
+
 function mapTabIdToWorkspaceTabKey(tabId: string): WorkspaceTabKey {
   if (tabId === 'messages' || tabId === 'soru-cevap' || tabId.includes('question') || tabId.includes('message')) {
     return 'MESSAGES';
@@ -317,10 +1105,98 @@ function mapTabIdToWorkspaceTabKey(tabId: string): WorkspaceTabKey {
   if (tabId === 'reports') return 'REPORTS';
   if (tabId === 'meetings') return 'MEETINGS';
   if (tabId === 'delivery-files' || tabId === 'files') return 'FILES';
+  if (tabId === 'test-deploy') return 'DELIVERY';
   if (tabId.includes('revision')) return 'REVISIONS';
+  if (['project-roadmap', 'sprint-status', 'frontend', 'backend-api', 'admin-panel'].includes(tabId)) {
+    return 'TASKS';
+  }
+  if (tabId === 'ui-ux') return 'CONTENT';
   if (tabId.includes('task') || tabId.includes('sprint')) return 'TASKS';
   if (tabId.includes('content') || tabId.includes('copy') || tabId.includes('design')) return 'CONTENT';
   return 'OVERVIEW';
+}
+
+function filterWorkspaceTasksByTab(tabId: string, tasks: WorkspaceSourceTask[]): WorkspaceSourceTask[] {
+  if (tabId === "frontend") {
+    return tasks.filter((task) => task.workstream === "FRONTEND");
+  }
+
+  if (tabId === "backend-api") {
+    return tasks.filter((task) => task.workstream === "BACKEND");
+  }
+
+  if (tabId === "admin-panel") {
+    return tasks.filter(
+      (task) =>
+        task.workstream === "FULLSTACK" ||
+        task.workstream === "BACKEND" ||
+        includesText(task.title, "admin"),
+    );
+  }
+
+  if (tabId === "ui-ux") {
+    return tasks.filter(
+      (task) => task.workstream === "UI_INTEGRATION" || task.type === "REVISION" || task.type === "FEATURE",
+    );
+  }
+
+  if (tabId === "test-deploy") {
+    return tasks.filter(
+      (task) => task.type === "DEPLOYMENT" || task.type === "QA" || task.workstream === "DEVOPS" || task.workstream === "QA",
+    );
+  }
+
+  if (tabId === "revisions") {
+    return tasks.filter((task) => task.type === "REVISION");
+  }
+
+  return tasks;
+}
+
+function includesText(value: string | null | undefined, keyword: string): boolean {
+  if (!value) {
+    return false;
+  }
+  return value.toLowerCase().includes(keyword.toLowerCase());
+}
+
+function getTaskStatusTone(status: string): string {
+  if (status === "DONE") return statusTone.good;
+  if (status === "IN_PROGRESS" || status === "REVIEW") return statusTone.info;
+  if (status === "BLOCKED") return statusTone.danger;
+  return statusTone.violet;
+}
+
+function getSprintStatusTone(status: string): string {
+  if (status === "COMPLETED") return statusTone.good;
+  if (status === "ACTIVE") return statusTone.info;
+  if (status === "CANCELLED") return statusTone.danger;
+  return statusTone.violet;
+}
+
+function getReleaseStatusTone(status: string): string {
+  if (status === "DEPLOYED") return statusTone.good;
+  if (status === "READY" || status === "TESTING") return statusTone.info;
+  if (status === "FAILED" || status === "ROLLED_BACK") return statusTone.danger;
+  return statusTone.violet;
+}
+
+function detectFigmaLinkKind(url: string | null | undefined): "prototype" | "ui" | null {
+  if (!url) {
+    return null;
+  }
+  const normalized = url.toLowerCase();
+  if (!normalized.includes("figma.com/")) {
+    return null;
+  }
+  return normalized.includes("figma.com/proto/") ? "prototype" : "ui";
+}
+
+function buildFigmaEmbedUrl(url: string | null | undefined): string | null {
+  if (!url || detectFigmaLinkKind(url) !== "prototype") {
+    return null;
+  }
+  return `https://www.figma.com/embed?embed_host=socialtech-client&url=${encodeURIComponent(url)}`;
 }
 
 function getViewKind(serviceId: string, tabId: string): ViewKind {

@@ -9,6 +9,21 @@ export type WorkspaceTabKey =
   | "REPORTS"
   | "MEETINGS";
 
+export type WorkspaceProjectSummary = {
+  id: string;
+  clientProfileId: string;
+  serviceKey: string;
+  name: string;
+  slug?: string | null;
+  description?: string | null;
+  status?: string | null;
+  priority?: string | null;
+  repositoryUrl?: string | null;
+  figmaProjectUrl?: string | null;
+  startDate?: string | null;
+  dueDate?: string | null;
+};
+
 export type WorkspaceMessage = {
   id: string;
   projectId: string;
@@ -24,12 +39,75 @@ export type WorkspaceMessage = {
   } | null;
 };
 
+export type WorkspaceRevisionStatus =
+  | "REQUESTED"
+  | "ACKNOWLEDGED"
+  | "IN_PROGRESS"
+  | "READY_FOR_REVIEW"
+  | "APPROVED"
+  | "REJECTED"
+  | "CANCELLED";
+
 export type WorkspaceRevision = {
   id: string;
+  projectId?: string;
+  taskId?: string | null;
+  releaseId?: string | null;
+  projectFileId?: string | null;
   title: string;
   description: string;
-  status: string;
+  status: WorkspaceRevisionStatus;
   requestedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
+  resolvedAt?: string | null;
+  requestedByUserId?: string | null;
+  assignedToUserId?: string | null;
+  task?: {
+    id: string;
+    title: string;
+    code?: string | null;
+    status: string;
+  } | null;
+  release?: {
+    id: string;
+    title: string;
+    status: string;
+    environment: string;
+  } | null;
+  projectFile?: {
+    id: string;
+    title: string;
+    originalFileName?: string | null;
+    folder?: {
+      id: string;
+      name: string;
+    } | null;
+  } | null;
+  requestedBy?: {
+    id: string;
+    displayName?: string | null;
+    role?: string | null;
+    accountType?: string | null;
+  } | null;
+  assignedTo?: {
+    id: string;
+    displayName?: string | null;
+    role?: string | null;
+    accountType?: string | null;
+  } | null;
+  transitions?: Array<{
+    id: string;
+    fromStatus?: WorkspaceRevisionStatus | null;
+    toStatus: WorkspaceRevisionStatus;
+    note?: string | null;
+    createdAt: string;
+    actor?: {
+      id: string;
+      displayName?: string | null;
+      role?: string | null;
+    } | null;
+  }>;
 };
 
 export type WorkspaceWeeklyReport = {
@@ -55,4 +133,101 @@ export type WorkspaceMeetingRequest = {
   scheduledStartAt?: string | null;
   scheduledEndAt?: string | null;
   createdAt: string;
+};
+
+export type WorkspaceSourceTask = {
+  id: string;
+  title: string;
+  code?: string | null;
+  sprintId?: string | null;
+  status: string;
+  priority: string;
+  type?: string | null;
+  workstream?: string | null;
+  severity?: string | null;
+  environment?: string | null;
+  assigneeUserId?: string | null;
+  dueDate?: string | null;
+  sprint?: {
+    id: string;
+    name: string;
+    status: string;
+    goal?: string | null;
+    startDate: string;
+    endDate: string;
+  } | null;
+  assignee?: {
+    id: string;
+    displayName?: string | null;
+    role?: string | null;
+  } | null;
+};
+
+export type WorkspaceSourceSprint = {
+  id: string;
+  name: string;
+  goal?: string | null;
+  status: string;
+  startDate: string;
+  endDate: string;
+};
+
+export type WorkspaceSourceRelease = {
+  id: string;
+  title: string;
+  environment: string;
+  status: string;
+  approvalStatus?: string | null;
+  version?: string | null;
+  scheduledAt?: string | null;
+  deployedAt?: string | null;
+};
+
+export type WorkspaceSourceFile = {
+  id: string;
+  folderId?: string | null;
+  title: string;
+  visibility: "INTERNAL" | "CLIENT_VISIBLE" | string;
+  category?: string | null;
+  originalFileName: string;
+  secureUrl: string;
+  createdAt: string;
+  folder?: {
+    id: string;
+    name: string;
+  } | null;
+};
+
+export type WorkspaceSourceOfTruth = {
+  tasks: WorkspaceSourceTask[];
+  sprints: WorkspaceSourceSprint[];
+  releases: WorkspaceSourceRelease[];
+  files: WorkspaceSourceFile[];
+};
+
+export type WorkspaceSectionItem = {
+  id: string;
+  title: string;
+  body?: string | null;
+  itemType?: string | null;
+  href?: string | null;
+  sortOrder?: number | null;
+};
+
+export type WorkspaceSection = {
+  id: string;
+  title: string;
+  description?: string | null;
+  items?: WorkspaceSectionItem[];
+};
+
+export type WebAppWorkspaceResponse = {
+  project?: WorkspaceProjectSummary;
+  tabKey?: WorkspaceTabKey | null;
+  sourceOfTruth?: WorkspaceSourceOfTruth;
+  sections?: WorkspaceSection[];
+  messages?: WorkspaceMessage[];
+  revisions?: WorkspaceRevision[];
+  weeklyReports?: WorkspaceWeeklyReport[];
+  meetingRequests?: WorkspaceMeetingRequest[];
 };
