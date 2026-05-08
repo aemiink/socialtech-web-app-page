@@ -142,4 +142,4 @@ npm run test:run
 - Görsel tasarım mock’a sadık kalır.
 - Token safety doğrulanır.
 - Production env dokümanı veya shared memory notu hazır.
-- Kalan riskler açıkça listelenir.
+- Kalan riskler açıkça listelenir.  vgbh
