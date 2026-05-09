@@ -12,6 +12,21 @@ export type MetaAdsSyncStatus =
   | "PARTIAL"
   | "SKIPPED";
 
+export type MetaAdsReportType =
+  | "WEEKLY"
+  | "MONTHLY"
+  | "CAMPAIGN_PERFORMANCE"
+  | "CREATIVE_PERFORMANCE"
+  | "BUDGET_RECOMMENDATION";
+
+export type MetaAdsReportStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
+
+export type MetaAdsReportAcknowledgementStatus =
+  | "NOT_REQUESTED"
+  | "PENDING"
+  | "ACKNOWLEDGED"
+  | "CHANGES_REQUESTED";
+
 export type OwnMetaAdsConfigResponse = {
   connectionStatus: MetaAdsConnectionStatus;
   lastSyncAt: string | null;
@@ -120,4 +135,36 @@ export type MetaAdsSyncResponse = {
   lastSyncAt: string | null;
   syncStatus: MetaAdsSyncStatus;
   skippedReason: string | null;
+};
+
+export type MetaAdsReportItem = {
+  id: string;
+  clientProfileId: string;
+  projectId: string | null;
+  projectName: string | null;
+  periodStart: string;
+  periodEnd: string;
+  type: MetaAdsReportType;
+  status: MetaAdsReportStatus;
+  summary: string | null;
+  metricsSnapshot: Record<string, unknown> | null;
+  clientVisible: boolean;
+  publishedAt: string | null;
+  acknowledgementRequestedAt: string | null;
+  acknowledgedAt: string | null;
+  acknowledgementStatus: MetaAdsReportAcknowledgementStatus;
+  acknowledgementTaskId: string | null;
+  acknowledgementTaskUpdatedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MetaAdsReportsResponse = {
+  data: MetaAdsReportItem[];
+  meta: {
+    total: number;
+    draft: number;
+    published: number;
+    clientVisible: number;
+  };
 };

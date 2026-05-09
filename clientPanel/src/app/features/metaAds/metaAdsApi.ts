@@ -6,6 +6,10 @@ import type {
   MetaAdsInsightLevel,
   MetaAdsInsightsResponse,
   MetaAdsPixelStatusResponse,
+  MetaAdsReportItem,
+  MetaAdsReportsResponse,
+  MetaAdsReportStatus,
+  MetaAdsReportType,
   MetaAdsSyncResponse,
   MetaAdsSummaryResponse,
   OwnMetaAdsConfigResponse,
@@ -22,6 +26,12 @@ export type MetaAdsCampaignsQuery = MetaAdsDateRangeQuery & {
 
 export type MetaAdsInsightsQuery = MetaAdsDateRangeQuery & {
   level?: MetaAdsInsightLevel;
+  limit?: number;
+};
+
+export type MetaAdsReportsQuery = {
+  status?: MetaAdsReportStatus;
+  type?: MetaAdsReportType;
   limit?: number;
 };
 
@@ -89,6 +99,14 @@ export const metaAdsApi = baseApi.injectEndpoints({
       }),
       transformResponse: (response: unknown) => normalizeOwnMetaAdsSyncResponse(response),
     }),
+    getOwnMetaAdsReports: builder.query<MetaAdsReportsResponse, MetaAdsReportsQuery | void>({
+      query: (query) => ({
+        url: "/clients/me/meta-ads/reports",
+        method: "GET",
+        params: serializeReportsQuery(query),
+      }),
+      transformResponse: (response: unknown) => normalizeOwnMetaAdsReportsResponse(response),
+    }),
   }),
 });
 
@@ -101,6 +119,7 @@ export const {
   useGetOwnMetaAdsInsightsQuery,
   useGetOwnMetaAdsPixelStatusQuery,
   useSyncOwnMetaAdsMutation,
+  useGetOwnMetaAdsReportsQuery,
 } = metaAdsApi;
 
 function normalizeOwnMetaAdsConfigResponse(response: unknown): OwnMetaAdsConfigResponse {
@@ -235,6 +254,22 @@ function normalizeOwnMetaAdsSyncResponse(response: unknown): MetaAdsSyncResponse
   };
 }
 
+function normalizeOwnMetaAdsReportsResponse(response: unknown): MetaAdsReportsResponse {
+  const candidate = isRecord(response) && isRecord(response.data) ? response.data : response;
+  const rows = isRecord(candidate) && Array.isArray(candidate.data) ? candidate.data : [];
+  const meta = isRecord(candidate) && isRecord(candidate.meta) ? candidate.meta : {};
+
+  return {
+    data: rows.map(normalizeReportRow).filter((item): item is MetaAdsReportItem => item !== null),
+    meta: {
+      total: readNumber(meta, "total", 0, true),
+      draft: readNumber(meta, "draft", 0, true),
+      published: readNumber(meta, "published", 0, true),
+      clientVisible: readNumber(meta, "clientVisible", 0, true),
+    },
+  };
+}
+
 function normalizeCampaignRow(value: unknown): MetaAdsCampaign | null {
   if (!isRecord(value)) {
     return null;
@@ -336,6 +371,60 @@ function serializeInsightsQuery(
   return params;
 }
 
+function serializeReportsQuery(
+  query: MetaAdsReportsQuery | void,
+): Record<string, string | number> {
+  if (!query) {
+    return {};
+  }
+
+  const params: Record<string, string | number> = {};
+  if (typeof query.status === "string" && query.status.trim().length > 0) {
+    params.status = query.status.trim().toUpperCase();
+  }
+  if (typeof query.type === "string" && query.type.trim().length > 0) {
+    params.type = query.type.trim().toUpperCase();
+  }
+  if (typeof query.limit === "number" && Number.isFinite(query.limit)) {
+    params.limit = Math.trunc(query.limit);
+  }
+  return params;
+}
+
+function normalizeReportRow(value: unknown): MetaAdsReportItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (typeof value.id !== "string") {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    clientProfileId: typeof value.clientProfileId === "string" ? value.clientProfileId : "",
+    projectId: typeof value.projectId === "string" ? value.projectId : null,
+    projectName: typeof value.projectName === "string" ? value.projectName : null,
+    periodStart: typeof value.periodStart === "string" ? value.periodStart : "",
+    periodEnd: typeof value.periodEnd === "string" ? value.periodEnd : "",
+    type: normalizeReportType(value.type),
+    status: normalizeReportStatus(value.status),
+    summary: typeof value.summary === "string" ? value.summary : null,
+    metricsSnapshot: isRecord(value.metricsSnapshot) ? value.metricsSnapshot : null,
+    clientVisible: value.clientVisible === true,
+    publishedAt: typeof value.publishedAt === "string" ? value.publishedAt : null,
+    acknowledgementRequestedAt:
+      typeof value.acknowledgementRequestedAt === "string" ? value.acknowledgementRequestedAt : null,
+    acknowledgedAt: typeof value.acknowledgedAt === "string" ? value.acknowledgedAt : null,
+    acknowledgementStatus: normalizeReportAcknowledgementStatus(value.acknowledgementStatus),
+    acknowledgementTaskId: typeof value.acknowledgementTaskId === "string" ? value.acknowledgementTaskId : null,
+    acknowledgementTaskUpdatedAt:
+      typeof value.acknowledgementTaskUpdatedAt === "string" ? value.acknowledgementTaskUpdatedAt : null,
+    createdAt: typeof value.createdAt === "string" ? value.createdAt : "",
+    updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : "",
+  };
+}
+
 function normalizeInsightLevel(value: unknown): MetaAdsInsightLevel {
   if (value === "ACCOUNT" || value === "CAMPAIGN" || value === "ADSET" || value === "AD") {
     return value;
@@ -371,6 +460,41 @@ function normalizeSyncStatus(value: unknown): MetaAdsSyncResponse["syncStatus"] 
   }
 
   return "SUCCESS";
+}
+
+function normalizeReportType(value: unknown): MetaAdsReportType {
+  if (
+    value === "WEEKLY" ||
+    value === "MONTHLY" ||
+    value === "CAMPAIGN_PERFORMANCE" ||
+    value === "CREATIVE_PERFORMANCE" ||
+    value === "BUDGET_RECOMMENDATION"
+  ) {
+    return value;
+  }
+
+  return "WEEKLY";
+}
+
+function normalizeReportStatus(value: unknown): MetaAdsReportStatus {
+  if (value === "DRAFT" || value === "PUBLISHED" || value === "ARCHIVED") {
+    return value;
+  }
+
+  return "DRAFT";
+}
+
+function normalizeReportAcknowledgementStatus(value: unknown): MetaAdsReportItem["acknowledgementStatus"] {
+  if (
+    value === "NOT_REQUESTED" ||
+    value === "PENDING" ||
+    value === "ACKNOWLEDGED" ||
+    value === "CHANGES_REQUESTED"
+  ) {
+    return value;
+  }
+
+  return "NOT_REQUESTED";
 }
 
 function readNumber(

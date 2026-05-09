@@ -1,28 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { Sidebar } from "./components/sidebar";
 import { Topbar } from "./components/topbar";
 import { ClientActionCenter } from "./components/client-action-center";
 import { ClientVisibleTasksSection } from "./components/client-visible-tasks-section";
 import { ClientLogin, DemoClient } from "./components/client-login";
 import { ServiceSelectionPage } from "./pages/service-selection";
-import { ReportsPage } from "./pages/reports";
-import { MeetingsPage } from "./pages/meetings";
-import { BillingPage } from "./pages/billing";
-import { SettingsPage } from "./pages/settings";
-import { GrowthHubDashboard } from "./pages/services/growth-hub-dashboard";
-import { SocialMediaDashboard } from "./pages/services/social-media-dashboard";
-import { MediaHubDashboard } from "./pages/services/medya-hub-dashboard";
-import { MetaAdsDashboard } from "./pages/services/meta-ads-dashboard";
-import { TikTokAdsDashboard } from "./pages/services/tiktok-ads-dashboard";
-import { GoogleAdsDashboard } from "./pages/services/google-ads-dashboard";
-import { AmazonAdsDashboard } from "./pages/services/amazon-ads-dashboard";
-import { WebAppDashboard } from "./pages/services/web-app-dashboard";
-import { SeoAuditDashboard } from "./pages/services/seo-dashboard";
-import { TechnicalSupportDashboard } from "./pages/services/technical-support-dashboard";
-import { MobileAppDashboard } from "./pages/services/mobile-app-dashboard";
-import { LandingPagesDashboard } from "./pages/services/landing-pages-dashboard";
-import { WebMobileDesignDashboard } from "./pages/services/web-mobile-design-dashboard";
-import { ServiceTabPage } from "./pages/service-tab-page";
 import type { ServiceId } from "./data/service-pages";
 import { useAppDispatch, useAppSelector } from "./store/hooks";
 import { AuthBootstrap } from "./features/auth/AuthBootstrap";
@@ -50,6 +32,89 @@ const DEMO_CLIENT: DemoClient = {
   company: "Acme E-ticaret",
   initials: "AY",
 };
+
+const ReportsPage = lazy(() =>
+  import("./pages/reports").then((module) => ({ default: module.ReportsPage })),
+);
+const MeetingsPage = lazy(() =>
+  import("./pages/meetings").then((module) => ({ default: module.MeetingsPage })),
+);
+const BillingPage = lazy(() =>
+  import("./pages/billing").then((module) => ({ default: module.BillingPage })),
+);
+const SettingsPage = lazy(() =>
+  import("./pages/settings").then((module) => ({ default: module.SettingsPage })),
+);
+const GrowthHubDashboard = lazy(() =>
+  import("./pages/services/growth-hub-dashboard").then((module) => ({
+    default: module.GrowthHubDashboard,
+  })),
+);
+const SocialMediaDashboard = lazy(() =>
+  import("./pages/services/social-media-dashboard").then((module) => ({
+    default: module.SocialMediaDashboard,
+  })),
+);
+const MediaHubDashboard = lazy(() =>
+  import("./pages/services/medya-hub-dashboard").then((module) => ({
+    default: module.MediaHubDashboard,
+  })),
+);
+const MetaAdsDashboard = lazy(() =>
+  import("./pages/services/meta-ads-dashboard").then((module) => ({
+    default: module.MetaAdsDashboard,
+  })),
+);
+const TikTokAdsDashboard = lazy(() =>
+  import("./pages/services/tiktok-ads-dashboard").then((module) => ({
+    default: module.TikTokAdsDashboard,
+  })),
+);
+const GoogleAdsDashboard = lazy(() =>
+  import("./pages/services/google-ads-dashboard").then((module) => ({
+    default: module.GoogleAdsDashboard,
+  })),
+);
+const AmazonAdsDashboard = lazy(() =>
+  import("./pages/services/amazon-ads-dashboard").then((module) => ({
+    default: module.AmazonAdsDashboard,
+  })),
+);
+const WebAppDashboard = lazy(() =>
+  import("./pages/services/web-app-dashboard").then((module) => ({
+    default: module.WebAppDashboard,
+  })),
+);
+const SeoAuditDashboard = lazy(() =>
+  import("./pages/services/seo-dashboard").then((module) => ({
+    default: module.SeoAuditDashboard,
+  })),
+);
+const TechnicalSupportDashboard = lazy(() =>
+  import("./pages/services/technical-support-dashboard").then((module) => ({
+    default: module.TechnicalSupportDashboard,
+  })),
+);
+const MobileAppDashboard = lazy(() =>
+  import("./pages/services/mobile-app-dashboard").then((module) => ({
+    default: module.MobileAppDashboard,
+  })),
+);
+const LandingPagesDashboard = lazy(() =>
+  import("./pages/services/landing-pages-dashboard").then((module) => ({
+    default: module.LandingPagesDashboard,
+  })),
+);
+const WebMobileDesignDashboard = lazy(() =>
+  import("./pages/services/web-mobile-design-dashboard").then((module) => ({
+    default: module.WebMobileDesignDashboard,
+  })),
+);
+const ServiceTabPage = lazy(() =>
+  import("./pages/service-tab-page").then((module) => ({
+    default: module.ServiceTabPage,
+  })),
+);
 
 export default function App() {
   return (
@@ -330,10 +395,20 @@ export function ClientPortalApp() {
               </div>
             </div>
           ) : null}
-          {renderContent()}
+          <Suspense fallback={<PortalContentFallback />}>{renderContent()}</Suspense>
           {shouldShowClientTasksSection ? <ClientVisibleTasksSection selectedService={selectedService} /> : null}
         </main>
         <ClientActionCenter />
+      </div>
+    </div>
+  );
+}
+
+function PortalContentFallback() {
+  return (
+    <div className="p-8">
+      <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-4 text-sm text-[#A0A0A0]">
+        Sayfa yükleniyor...
       </div>
     </div>
   );

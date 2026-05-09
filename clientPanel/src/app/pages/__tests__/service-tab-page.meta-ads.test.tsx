@@ -9,6 +9,7 @@ const mockUseGetOwnMetaAdsAdSetsQuery = vi.fn();
 const mockUseGetOwnMetaAdsAdsQuery = vi.fn();
 const mockUseGetOwnMetaAdsInsightsQuery = vi.fn();
 const mockUseGetOwnMetaAdsPixelStatusQuery = vi.fn();
+const mockUseGetOwnMetaAdsReportsQuery = vi.fn();
 const mockUseGetClientTasksQuery = vi.fn();
 const mockUseUpdateClientTaskApprovalMutation = vi.fn();
 
@@ -20,6 +21,7 @@ vi.mock("../../features/metaAds/metaAdsApi", () => ({
   useGetOwnMetaAdsAdsQuery: (...args: unknown[]) => mockUseGetOwnMetaAdsAdsQuery(...args),
   useGetOwnMetaAdsInsightsQuery: (...args: unknown[]) => mockUseGetOwnMetaAdsInsightsQuery(...args),
   useGetOwnMetaAdsPixelStatusQuery: (...args: unknown[]) => mockUseGetOwnMetaAdsPixelStatusQuery(...args),
+  useGetOwnMetaAdsReportsQuery: (...args: unknown[]) => mockUseGetOwnMetaAdsReportsQuery(...args),
 }));
 
 vi.mock("../../features/webAppWorkspace/webAppWorkspaceApi", () => ({
@@ -78,6 +80,7 @@ describe("ServiceTabPage Meta Ads tabs", () => {
     mockUseGetOwnMetaAdsAdsQuery.mockReset();
     mockUseGetOwnMetaAdsInsightsQuery.mockReset();
     mockUseGetOwnMetaAdsPixelStatusQuery.mockReset();
+    mockUseGetOwnMetaAdsReportsQuery.mockReset();
     mockUseGetClientTasksQuery.mockReset();
     mockUseUpdateClientTaskApprovalMutation.mockReset();
 
@@ -173,6 +176,41 @@ describe("ServiceTabPage Meta Ads tabs", () => {
       isLoading: false,
       isError: false,
     });
+    mockUseGetOwnMetaAdsReportsQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "report-1",
+            clientProfileId: "client-1",
+            projectId: "project-1",
+            projectName: "Meta Ads Ops",
+            periodStart: "2026-05-01T00:00:00.000Z",
+            periodEnd: "2026-05-07T23:59:59.000Z",
+            type: "WEEKLY",
+            status: "PUBLISHED",
+            summary: "Haftalık performans raporu yayınlandı.",
+            metricsSnapshot: { spend: 1200 },
+            clientVisible: true,
+            publishedAt: "2026-05-08T09:00:00.000Z",
+            acknowledgementRequestedAt: "2026-05-08T09:00:00.000Z",
+            acknowledgedAt: null,
+            acknowledgementStatus: "PENDING",
+            acknowledgementTaskId: "task-1",
+            acknowledgementTaskUpdatedAt: "2026-05-08T09:00:00.000Z",
+            createdAt: "2026-05-08T09:00:00.000Z",
+            updatedAt: "2026-05-08T09:00:00.000Z",
+          },
+        ],
+        meta: {
+          total: 1,
+          draft: 0,
+          published: 1,
+          clientVisible: 1,
+        },
+      },
+      isLoading: false,
+      isError: false,
+    });
     mockUseGetClientTasksQuery.mockReturnValue({
       data: [],
       isLoading: false,
@@ -252,6 +290,13 @@ describe("ServiceTabPage Meta Ads tabs", () => {
 
     expect(screen.getByText("Kreatif set onayı")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Onayla" })).toBeInTheDocument();
+  });
+
+  it("renders meta reports tab from report API data", () => {
+    render(<ServiceTabPage serviceId="meta-ads" tabId="meta-reports" />);
+
+    expect(screen.getByText("Haftalık performans raporu yayınlandı.")).toBeInTheDocument();
+    expect(screen.getByText(/Onay: Müşteri Onayı Bekliyor/i)).toBeInTheDocument();
   });
 
   it("shows error state on pixel tab when pixel query fails", () => {

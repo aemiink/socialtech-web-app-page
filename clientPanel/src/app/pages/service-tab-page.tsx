@@ -42,9 +42,10 @@ import {
   useGetOwnMetaAdsConfigQuery,
   useGetOwnMetaAdsInsightsQuery,
   useGetOwnMetaAdsPixelStatusQuery,
+  useGetOwnMetaAdsReportsQuery,
   useGetOwnMetaAdsSummaryQuery,
 } from '../features/metaAds/metaAdsApi';
-import type { MetaAdsCampaign, MetaAdsInsightItem } from '../features/metaAds/metaAdsTypes';
+import type { MetaAdsCampaign, MetaAdsInsightItem, MetaAdsReportItem } from '../features/metaAds/metaAdsTypes';
 import type { ProjectFile } from '../features/projectFiles/projectFilesTypes';
 import { useGetClientProjectFilesQuery } from '../features/projectFiles/projectFilesApi';
 import { useGetClientTasksQuery, useUpdateClientTaskApprovalMutation } from '../features/tasks/tasksApi';
@@ -1092,6 +1093,14 @@ function MetaAdsServiceTab({
     isError: isPixelError,
   } = useGetOwnMetaAdsPixelStatusQuery(undefined, { skip: shouldSkipReportingQueries });
   const {
+    data: reportsResponse,
+    isLoading: isReportsLoading,
+    isError: isReportsError,
+  } = useGetOwnMetaAdsReportsQuery(
+    { limit: 20 },
+    { skip: !isConnected || tabId !== "meta-reports" },
+  );
+  const {
     data: approvalTasks = [],
     isLoading: isApprovalsLoading,
     isError: isApprovalsError,
@@ -1106,7 +1115,7 @@ function MetaAdsServiceTab({
   const campaigns = campaignsResponse?.data ?? [];
   const adSets = adSetsResponse?.data ?? [];
   const ads = adsResponse?.data ?? [];
-  const reportRows = insightsResponse?.data ?? [];
+  const reports = reportsResponse?.data ?? [];
   const metaAdsApprovalTasks = useMemo(
     () =>
       approvalTasks
@@ -1278,7 +1287,7 @@ function MetaAdsServiceTab({
       ) : null}
 
       {tabId === "meta-reports" ? (
-        <MetaAdsReportPanel rows={reportRows} loading={isInsightsLoading} isError={isInsightsError} />
+        <MetaAdsReportPanel rows={reports} loading={isReportsLoading} isError={isReportsError} />
       ) : null}
 
       {tabId === "agency-notes" ? (
@@ -1510,43 +1519,110 @@ function MetaAdsReportPanel({
   loading,
   isError,
 }: {
-  rows: MetaAdsInsightItem[];
+  rows: MetaAdsReportItem[];
   loading: boolean;
   isError: boolean;
 }) {
   if (loading) {
-    return <MetaAdsStatePanel title="Rapor verisi yükleniyor..." />;
+    return <MetaAdsStatePanel title="Rapor listesi yükleniyor..." />;
   }
 
   if (isError) {
     return (
       <MetaAdsStatePanel
-        title="Rapor verisi alınamadı"
-        description="Meta raporu şu anda ulaşılamıyor."
+        title="Raporlar alınamadı"
+        description="Meta Ads rapor listesi şu anda ulaşılamıyor."
         tone="error"
       />
     );
   }
 
   if (rows.length === 0) {
-    return <MetaAdsStatePanel title="Rapor verisi bulunamadı." tone="muted" />;
+    return <MetaAdsStatePanel title="Yayınlanmış rapor bulunamadı." tone="muted" />;
   }
 
   return (
-    <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-5">
-      <h3 className="mb-4 text-white">Günlük Performans Özeti</h3>
-      <div className="space-y-2">
-        {rows.slice(0, 20).map((row) => (
-          <div key={row.id} className="grid grid-cols-4 gap-2 rounded-xl bg-[#202020] p-3 text-sm">
-            <span className="text-white">{new Date(row.date).toLocaleDateString("tr-TR")}</span>
-            <span className="text-[#A0A0A0]">{formatMetaCurrency(row.spend)}</span>
-            <span className="text-[#A0A0A0]">CTR {formatMetaPercent(row.ctr)}</span>
-            <span className="text-[#A0A0A0]">ROAS {row.roas !== null ? `${row.roas.toFixed(2)}x` : "—"}</span>
+    <div className="space-y-3">
+      {rows.map((row) => {
+        const hasMetricsSnapshot = row.metricsSnapshot !== null;
+
+        return (
+          <div key={row.id} className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded border border-[#00D4FF]/20 bg-[#00D4FF]/10 px-2 py-1 text-[11px] text-[#00D4FF]">
+                  {getMetaAdsReportTypeLabel(row.type)}
+                </span>
+                <span className="rounded border border-[#AAFF01]/20 bg-[#AAFF01]/10 px-2 py-1 text-[11px] text-[#AAFF01]">
+                  {getMetaAdsReportStatusLabel(row.status)}
+                </span>
+              </div>
+              <span className="text-xs text-[#A0A0A0]">
+                {new Date(row.periodStart).toLocaleDateString("tr-TR")} -{" "}
+                {new Date(row.periodEnd).toLocaleDateString("tr-TR")}
+              </span>
+            </div>
+            <p className="text-sm text-white">{row.summary ?? "Rapor özeti girilmedi."}</p>
+            <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-[#A0A0A0] md:grid-cols-3">
+              <p>Yayın: {row.publishedAt ? new Date(row.publishedAt).toLocaleString("tr-TR") : "Taslak"}</p>
+              <p>Onay: {getMetaAdsReportAcknowledgementLabel(row.acknowledgementStatus)}</p>
+              <p>Snapshot: {hasMetricsSnapshot ? "Var" : "Yok"}</p>
+            </div>
           </div>
-        ))}
-      </div>
+        );
+      })}
     </div>
   );
+}
+
+function getMetaAdsReportTypeLabel(type: MetaAdsReportItem["type"]): string {
+  if (type === "WEEKLY") {
+    return "Haftalık";
+  }
+  if (type === "MONTHLY") {
+    return "Aylık";
+  }
+  if (type === "CAMPAIGN_PERFORMANCE") {
+    return "Kampanya Performansı";
+  }
+  if (type === "CREATIVE_PERFORMANCE") {
+    return "Kreatif Performansı";
+  }
+  if (type === "BUDGET_RECOMMENDATION") {
+    return "Bütçe Önerisi";
+  }
+  return type;
+}
+
+function getMetaAdsReportStatusLabel(status: MetaAdsReportItem["status"]): string {
+  if (status === "DRAFT") {
+    return "Taslak";
+  }
+  if (status === "PUBLISHED") {
+    return "Yayında";
+  }
+  if (status === "ARCHIVED") {
+    return "Arşiv";
+  }
+  return status;
+}
+
+function getMetaAdsReportAcknowledgementLabel(
+  status: MetaAdsReportItem["acknowledgementStatus"],
+): string {
+  if (status === "NOT_REQUESTED") {
+    return "Talep Yok";
+  }
+  if (status === "PENDING") {
+    return "Müşteri Onayı Bekliyor";
+  }
+  if (status === "ACKNOWLEDGED") {
+    return "Onaylandı";
+  }
+  if (status === "CHANGES_REQUESTED") {
+    return "Revizyon İstendi";
+  }
+  return status;
 }
 
 function MetaAdsAgencyNotesPanel({
