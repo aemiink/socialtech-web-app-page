@@ -1007,7 +1007,11 @@ export function MetaAdsWorkspace({ initialView = "overview" }: MetaAdsWorkspaceP
                   className="bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
                   disabled={!canManageFiles || !canManageMetaAdsCreatives}
                 >
-                  <Link to="/employee/dosyalar">
+                  <Link
+                    to={metaAdsProjectId
+                      ? `/employee/dosyalar?projectId=${metaAdsProjectId}&serviceKey=META_ADS`
+                      : "/employee/dosyalar"}
+                  >
                     <Upload className="h-4 w-4" />
                     Kreatif Asset Yükle
                   </Link>
@@ -1230,7 +1234,13 @@ function CreativeSection({
           className="bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
           disabled={!canManageFiles}
         >
-          <Link to="/employee/dosyalar">Kreatif Dosyası Yükle</Link>
+          <Link
+            to={metaAdsProjectId
+              ? `/employee/dosyalar?projectId=${metaAdsProjectId}&serviceKey=META_ADS`
+              : "/employee/dosyalar"}
+          >
+            Kreatif Dosyası Yükle
+          </Link>
         </Button>
         <Button
           asChild

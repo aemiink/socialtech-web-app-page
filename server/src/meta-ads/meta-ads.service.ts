@@ -3440,4 +3440,29 @@ export class MetaAdsService {
       ),
     );
   }
+
+  async syncAllConnectedClientsForScheduler(): Promise<{ attempted: number; succeeded: number; failed: number }> {
+    const connectedConfigs = await this.prisma.clientMetaAdsConfig.findMany({
+      where: { connectionStatus: MetaAdsConnectionStatus.CONNECTED },
+      select: { clientProfileId: true },
+    });
+
+    let succeeded = 0;
+    let failed = 0;
+
+    for (const config of connectedConfigs) {
+      try {
+        await this.syncInsightsByClientProfileId(config.clientProfileId, {}, {
+          trigger: "MANUAL_SYNC",
+          applySyncTtl: true,
+          revealDetailedError: false,
+        });
+        succeeded++;
+      } catch {
+        failed++;
+      }
+    }
+
+    return { attempted: connectedConfigs.length, succeeded, failed };
+  }
 }
