@@ -13,6 +13,9 @@ const mockUseGetAssignedClientMetaAdsSummaryQuery = vi.fn();
 const mockUseGetAssignedClientMetaAdsCampaignsQuery = vi.fn();
 const mockUseGetAssignedClientMetaAdsAdSetsQuery = vi.fn();
 const mockUseGetAssignedClientMetaAdsPixelStatusQuery = vi.fn();
+const mockUseGetAssignedClientMetaAdsReportsQuery = vi.fn();
+const mockUseCreateAssignedClientMetaAdsReportMutation = vi.fn();
+const mockUseUpdateAssignedMetaAdsReportMutation = vi.fn();
 const mockUseGetProjectsQuery = vi.fn();
 const mockUseGetProjectWorkspaceMessagesQuery = vi.fn();
 const mockUseCreateProjectWorkspaceMessageMutation = vi.fn();
@@ -48,6 +51,12 @@ vi.mock("../../../features/metaAds/metaAdsApi", () => ({
     mockUseGetAssignedClientMetaAdsAdSetsQuery(...args),
   useGetAssignedClientMetaAdsPixelStatusQuery: (...args: unknown[]) =>
     mockUseGetAssignedClientMetaAdsPixelStatusQuery(...args),
+  useGetAssignedClientMetaAdsReportsQuery: (...args: unknown[]) =>
+    mockUseGetAssignedClientMetaAdsReportsQuery(...args),
+  useCreateAssignedClientMetaAdsReportMutation: (...args: unknown[]) =>
+    mockUseCreateAssignedClientMetaAdsReportMutation(...args),
+  useUpdateAssignedMetaAdsReportMutation: (...args: unknown[]) =>
+    mockUseUpdateAssignedMetaAdsReportMutation(...args),
 }));
 
 vi.mock("../../../features/projects/projectsApi", () => ({
@@ -79,6 +88,10 @@ const baseEmployeeUser: AuthUserProfile = {
   permissions: [
     "clients.read.assigned",
     "metaAds.config.read.assigned",
+    "metaAds.reporting.read.assigned",
+    "metaAds.notes.manage.assigned",
+    "metaAds.approvals.create.assigned",
+    "metaAds.creatives.manage.assigned",
     "tasks.read.assigned",
     "tasks.manage.assigned",
     "tasks.update.assigned",
@@ -196,6 +209,42 @@ function setupBaseMocks() {
     isError: false,
   });
 
+  mockUseGetAssignedClientMetaAdsReportsQuery.mockReturnValue({
+    data: {
+      data: [
+        {
+          id: "report-1",
+          clientProfileId: "client-meta",
+          projectId: "project-meta-1",
+          projectName: "Meta Ads Project",
+          periodStart: "2026-05-01T00:00:00.000Z",
+          periodEnd: "2026-05-07T23:59:59.000Z",
+          type: "WEEKLY",
+          status: "DRAFT",
+          summary: "Haftalık özet",
+          metricsSnapshot: null,
+          clientVisible: false,
+          publishedAt: null,
+          acknowledgementRequestedAt: null,
+          acknowledgedAt: null,
+          acknowledgementStatus: "NOT_REQUESTED",
+          acknowledgementTaskId: null,
+          acknowledgementTaskUpdatedAt: null,
+          createdAt: "2026-05-09T08:00:00.000Z",
+          updatedAt: "2026-05-09T08:00:00.000Z",
+        },
+      ],
+      meta: {
+        total: 1,
+        draft: 1,
+        published: 0,
+        clientVisible: 0,
+      },
+    },
+    isLoading: false,
+    isError: false,
+  });
+
   mockUseGetProjectsQuery.mockReturnValue({
     data: {
       data: [
@@ -250,6 +299,14 @@ function setupBaseMocks() {
     vi.fn(() => ({ unwrap: () => Promise.resolve({ id: "task-new" }) })),
     { isLoading: false },
   ]);
+  mockUseCreateAssignedClientMetaAdsReportMutation.mockReturnValue([
+    vi.fn(() => ({ unwrap: () => Promise.resolve({ id: "report-new" }) })),
+    { isLoading: false },
+  ]);
+  mockUseUpdateAssignedMetaAdsReportMutation.mockReturnValue([
+    vi.fn(() => ({ unwrap: () => Promise.resolve({ id: "report-1" }) })),
+    { isLoading: false },
+  ]);
   mockUseUpdateTaskMutation.mockReturnValue([
     vi.fn(() => ({ unwrap: () => Promise.resolve({ id: "task-1" }) })),
     { isLoading: false },
@@ -299,6 +356,24 @@ describe("MetaAdsWorkspace", () => {
     renderWorkspace("creatives");
 
     expect(screen.getByRole("link", { name: "Kreatif Asset Yükle" })).toBeInTheDocument();
+  });
+
+  it("hides performance-specific tabs for social media specialist", () => {
+    currentUser = { ...baseEmployeeUser, role: "SOCIAL_MEDIA_SPECIALIST" };
+    renderWorkspace("overview");
+
+    expect(screen.getByRole("button", { name: "Kampanyalar" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Raporlar" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Performans" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Pixel" })).not.toBeInTheDocument();
+  });
+
+  it("shows pixel tab for performance specialist", () => {
+    currentUser = { ...baseEmployeeUser, role: "PERFORMANCE_SPECIALIST" };
+    renderWorkspace("overview");
+
+    expect(screen.getByRole("button", { name: "Performans" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pixel" })).toBeInTheDocument();
   });
 
   it("shows permission warning when Meta Ads reporting permission is missing", () => {

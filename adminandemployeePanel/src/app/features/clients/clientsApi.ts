@@ -2,6 +2,7 @@ import { baseApi } from "../../services/baseApi";
 import type {
   AdminMetaAdsSyncLogsQuery,
   AdminMetaAdsSyncLogsResponse,
+  CreateMetaAdsReportRequest,
   AdminMetaAdsClientListResponse,
   AdminClientMetaAdsConnection,
   ConnectManualMetaAdsRequest,
@@ -10,6 +11,9 @@ import type {
   ClientsListResponse,
   ClientSummaryResponse,
   MetaAdsDateRangeQuery,
+  MetaAdsReportsQuery,
+  MetaAdsReportItem,
+  MetaAdsReportsResponse,
   MetaAdsSyncResponse,
   CreateAdminClientRequest,
   CreateOrLinkClientOwnerRequest,
@@ -17,6 +21,7 @@ import type {
   ResetClientOwnerPasswordRequest,
   TestMetaAdsConnectionRequest,
   TestMetaAdsConnectionResponse,
+  UpdateMetaAdsReportRequest,
   UpdateAdminClientMetaAdsConfigRequest,
   UpdateAdminClientRequest,
 } from "./clientsTypes";
@@ -28,6 +33,8 @@ import {
   normalizeClientsListResponse,
   normalizeAdminMetaAdsConnectionResponse,
   normalizeMetaAdsSyncResponse,
+  normalizeMetaAdsReportsResponse,
+  normalizeMetaAdsReportItemResponse,
   normalizeMetaAdsSummaryResponse,
   normalizeTestMetaAdsConnectionResponse,
   toBackendServiceKey,
@@ -223,6 +230,50 @@ export const clientsApi = baseApi.injectEndpoints({
         { type: "Clients", id: CLIENT_META_ADS_SYNC_LOGS_LIST_ID },
       ],
     }),
+    getAdminClientMetaAdsReports: builder.query<
+      MetaAdsReportsResponse,
+      { clientId: string; query?: MetaAdsReportsQuery }
+    >({
+      query: ({ clientId, query }) => ({
+        url: `/admin/clients/${clientId}/meta-ads/reports`,
+        method: "GET",
+        params: serializeMetaAdsReportsQuery(query),
+      }),
+      transformResponse: (response: unknown) => normalizeMetaAdsReportsResponse(response),
+      providesTags: (_result, _error, { clientId }) => [
+        { type: "Clients", id: `${CLIENT_META_ADS_GLOBAL_LIST_ID}:REPORTS:${clientId}` },
+      ],
+    }),
+    createAdminClientMetaAdsReport: builder.mutation<
+      MetaAdsReportItem,
+      { clientId: string; body: CreateMetaAdsReportRequest }
+    >({
+      query: ({ clientId, body }) => ({
+        url: `/admin/clients/${clientId}/meta-ads/reports`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeMetaAdsReportItemResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "Clients", id: `${CLIENT_META_ADS_GLOBAL_LIST_ID}:REPORTS:${clientId}` },
+        { type: "Clients", id: CLIENT_META_ADS_GLOBAL_LIST_ID },
+      ],
+    }),
+    updateAdminMetaAdsReport: builder.mutation<
+      MetaAdsReportItem,
+      { reportId: string; body: UpdateMetaAdsReportRequest; clientId: string }
+    >({
+      query: ({ reportId, body }) => ({
+        url: `/admin/meta-ads/reports/${reportId}`,
+        method: "PATCH",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeMetaAdsReportItemResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "Clients", id: `${CLIENT_META_ADS_GLOBAL_LIST_ID}:REPORTS:${clientId}` },
+        { type: "Clients", id: CLIENT_META_ADS_GLOBAL_LIST_ID },
+      ],
+    }),
     createAdminClient: builder.mutation<ClientProfile, CreateAdminClientRequest>({
       query: (body) => ({
         url: "/admin/clients",
@@ -305,6 +356,9 @@ export const {
   useTestAdminClientMetaAdsConnectionMutation,
   useSyncAdminClientMetaAdsMutation,
   useRetryAdminClientMetaAdsSyncMutation,
+  useGetAdminClientMetaAdsReportsQuery,
+  useCreateAdminClientMetaAdsReportMutation,
+  useUpdateAdminMetaAdsReportMutation,
   useCreateAdminClientMutation,
   useUpdateAdminClientMutation,
   useDeactivateAdminClientMutation,
@@ -422,6 +476,34 @@ function serializeMetaAdsSyncLogsQuery(
 
   if (query.failedOnly !== undefined) {
     params.failedOnly = query.failedOnly;
+  }
+
+  if (typeof query.limit === "number" && Number.isFinite(query.limit)) {
+    params.limit = Math.trunc(query.limit);
+  }
+
+  return params;
+}
+
+function serializeMetaAdsReportsQuery(
+  query: MetaAdsReportsQuery | void,
+): Record<string, string | number | boolean> {
+  if (!query) {
+    return {};
+  }
+
+  const params: Record<string, string | number | boolean> = {};
+
+  if (query.status !== undefined) {
+    params.status = query.status;
+  }
+
+  if (query.type !== undefined) {
+    params.type = query.type;
+  }
+
+  if (query.clientVisible !== undefined) {
+    params.clientVisible = query.clientVisible;
   }
 
   if (typeof query.limit === "number" && Number.isFinite(query.limit)) {

@@ -12,11 +12,19 @@ import { hasUserPermission, selectCurrentUser } from "../../features/auth/authSe
 import { useGetClientsQuery } from "../../features/clients/clientsApi";
 import type { ClientProfile, ClientsListQuery } from "../../features/clients/clientsTypes";
 import {
+  useCreateAssignedClientMetaAdsReportMutation,
   useGetAssignedClientMetaAdsAdSetsQuery,
   useGetAssignedClientMetaAdsCampaignsQuery,
   useGetAssignedClientMetaAdsPixelStatusQuery,
+  useGetAssignedClientMetaAdsReportsQuery,
   useGetAssignedClientMetaAdsSummaryQuery,
+  useUpdateAssignedMetaAdsReportMutation,
 } from "../../features/metaAds/metaAdsApi";
+import type {
+  MetaAdsReportItem,
+  MetaAdsReportStatus,
+  MetaAdsReportType,
+} from "../../features/metaAds/metaAdsTypes";
 import { useGetProjectsQuery, useGetProjectWorkspaceMessagesQuery } from "../../features/projects/projectsApi";
 import { extractApiErrorMessage } from "../../features/projects/projectsUtils";
 import { useCreateTaskMutation, useGetTasksQuery, useToggleTaskTodoMutation, useUpdateTaskMutation } from "../../features/tasks/tasksApi";
@@ -37,6 +45,15 @@ export type MetaAdsWorkspaceView =
 
 type MetaAdsWorkspaceProps = {
   initialView?: MetaAdsWorkspaceView;
+};
+
+type ReportDraftFormState = {
+  periodStart: string;
+  periodEnd: string;
+  type: MetaAdsReportType;
+  summary: string;
+  publishNow: boolean;
+  requestAcknowledgement: boolean;
 };
 
 const ASSIGNED_CLIENTS_QUERY: ClientsListQuery = {
@@ -80,11 +97,35 @@ const ROLE_APPROVAL_TYPE: Record<WorkspaceMode, CreateTaskRequest["approvalType"
   designer: "META_ADS_CREATIVE_APPROVAL",
 };
 
+const REPORT_TYPE_OPTIONS: Array<{ value: MetaAdsReportType; label: string }> = [
+  { value: "WEEKLY", label: "Weekly" },
+  { value: "MONTHLY", label: "Monthly" },
+  { value: "CAMPAIGN_PERFORMANCE", label: "Campaign" },
+  { value: "CREATIVE_PERFORMANCE", label: "Creative" },
+  { value: "BUDGET_RECOMMENDATION", label: "Budget" },
+];
+
+const INITIAL_REPORT_FORM: ReportDraftFormState = {
+  periodStart: "",
+  periodEnd: "",
+  type: "WEEKLY",
+  summary: "",
+  publishNow: false,
+  requestAcknowledgement: false,
+};
+
 export function MetaAdsWorkspace({ initialView = "overview" }: MetaAdsWorkspaceProps) {
   const currentUser = useAppSelector(selectCurrentUser);
   const workspaceMode = resolveWorkspaceMode(currentUser?.role);
   const canReadAssignedClients = hasUserPermission(currentUser, ["clients.read.assigned"]);
   const canReadMetaAds = hasUserPermission(currentUser, ["metaAds.config.read.assigned"]);
+  const canReadMetaAdsReports = hasUserPermission(currentUser, [
+    "metaAds.reporting.read.assigned",
+    "reports.read",
+  ]);
+  const canManageMetaAdsNotes = hasUserPermission(currentUser, ["metaAds.notes.manage.assigned"]);
+  const canCreateMetaAdsApprovals = hasUserPermission(currentUser, ["metaAds.approvals.create.assigned"]);
+  const canManageMetaAdsCreatives = hasUserPermission(currentUser, ["metaAds.creatives.manage.assigned"]);
   const canReadTasks = hasUserPermission(currentUser, ["tasks.read.assigned"]);
   const canCreateTask = hasUserPermission(currentUser, ["tasks.manage.assigned"]);
   const canUpdateTask = hasUserPermission(currentUser, ["tasks.update.assigned", "tasks.update.own"]);
@@ -104,6 +145,10 @@ export function MetaAdsWorkspace({ initialView = "overview" }: MetaAdsWorkspaceP
   const [taskDescription, setTaskDescription] = useState("");
   const [noteBody, setNoteBody] = useState("");
   const [replyBody, setReplyBody] = useState("");
+  const [reportForm, setReportForm] = useState<ReportDraftFormState>(INITIAL_REPORT_FORM);
+  const [reportStatusFilter, setReportStatusFilter] = useState<MetaAdsReportStatus | "ALL">("ALL");
+  const [reportTypeFilter, setReportTypeFilter] = useState<MetaAdsReportType | "ALL">("ALL");
+  const [reportPublishAckToggle, setReportPublishAckToggle] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [activeAction, setActiveAction] = useState<string | null>(null);
 
@@ -165,6 +210,19 @@ export function MetaAdsWorkspace({ initialView = "overview" }: MetaAdsWorkspaceP
       { clientId: selectedClientId },
       { skip: shouldSkipMetaAdsQueries },
     );
+  const reportQuery = useMemo(
+    () => ({
+      ...(reportStatusFilter !== "ALL" ? { status: reportStatusFilter } : {}),
+      ...(reportTypeFilter !== "ALL" ? { type: reportTypeFilter } : {}),
+      limit: 40,
+    }),
+    [reportStatusFilter, reportTypeFilter],
+  );
+  const { data: reportsResponse, isLoading: isReportsLoading, isError: isReportsError } =
+    useGetAssignedClientMetaAdsReportsQuery(
+      { clientId: selectedClientId, query: reportQuery },
+      { skip: shouldSkipMetaAdsQueries || !canReadMetaAdsReports },
+    );
 
   const { data: projectsResponse } = useGetProjectsQuery(
     selectedClientId.length > 0 ? { clientProfileId: selectedClientId } : undefined,
@@ -209,6 +267,8 @@ export function MetaAdsWorkspace({ initialView = "overview" }: MetaAdsWorkspaceP
   const [createTask, { isLoading: isCreatingTask }] = useCreateTaskMutation();
   const [updateTask, { isLoading: isUpdatingTask }] = useUpdateTaskMutation();
   const [toggleTaskTodo, { isLoading: isTogglingTodo }] = useToggleTaskTodoMutation();
+  const [createMetaAdsReport, { isLoading: isCreatingReport }] = useCreateAssignedClientMetaAdsReportMutation();
+  const [updateMetaAdsReport, { isLoading: isUpdatingReport }] = useUpdateAssignedMetaAdsReportMutation();
   const [createWorkspaceMessage, { isLoading: isCreatingMessage }] =
     useCreateProjectWorkspaceMessageMutation();
 
@@ -242,8 +302,15 @@ export function MetaAdsWorkspace({ initialView = "overview" }: MetaAdsWorkspaceP
     : ROLE_DEFAULT_VIEW[workspaceMode];
 
   const hasMetaAdsProject = Boolean(metaAdsProjectId);
+  const reportRows = reportsResponse?.data ?? [];
+  const reportMeta = reportsResponse?.meta;
   const isActionBusy =
-    isCreatingTask || isUpdatingTask || isTogglingTodo || isCreatingMessage;
+    isCreatingTask ||
+    isUpdatingTask ||
+    isTogglingTodo ||
+    isCreatingMessage ||
+    isCreatingReport ||
+    isUpdatingReport;
 
   async function handleCreateRoleTask(action: "creative" | "optimization" | "report" | "approval") {
     if (!metaAdsProjectId) {
@@ -258,6 +325,14 @@ export function MetaAdsWorkspace({ initialView = "overview" }: MetaAdsWorkspaceP
       setFeedback({
         type: "error",
         text: "Görev oluşturma yetkiniz yok. `tasks.manage.assigned` izni gereklidir.",
+      });
+      return;
+    }
+
+    if (action === "approval" && !canCreateMetaAdsApprovals) {
+      setFeedback({
+        type: "error",
+        text: "Approval talebi oluşturmak için `metaAds.approvals.create.assigned` izni gereklidir.",
       });
       return;
     }
@@ -402,6 +477,127 @@ export function MetaAdsWorkspace({ initialView = "overview" }: MetaAdsWorkspaceP
       setFeedback({
         type: "error",
         text: extractApiErrorMessage(error, "Müşteri mesajı gönderilemedi."),
+      });
+    } finally {
+      setActiveAction(null);
+    }
+  }
+
+  function toReportPeriodStartIso(value: string): string {
+    return new Date(`${value}T00:00:00.000Z`).toISOString();
+  }
+
+  function toReportPeriodEndIso(value: string): string {
+    return new Date(`${value}T23:59:59.999Z`).toISOString();
+  }
+
+  async function handleCreateReportDraft() {
+    if (!canManageMetaAdsNotes) {
+      setFeedback({
+        type: "error",
+        text: "Rapor taslağı için `metaAds.notes.manage.assigned` izni gereklidir.",
+      });
+      return;
+    }
+
+    if (!metaAdsProjectId) {
+      setFeedback({
+        type: "error",
+        text: "Rapor taslağı için META_ADS proje bulunamadı.",
+      });
+      return;
+    }
+
+    if (!reportForm.periodStart || !reportForm.periodEnd) {
+      setFeedback({
+        type: "error",
+        text: "Rapor başlangıç/bitiş tarihleri zorunludur.",
+      });
+      return;
+    }
+
+    if (reportForm.periodStart > reportForm.periodEnd) {
+      setFeedback({
+        type: "error",
+        text: "Başlangıç tarihi bitiş tarihinden büyük olamaz.",
+      });
+      return;
+    }
+
+    if (reportForm.requestAcknowledgement && !canCreateMetaAdsApprovals) {
+      setFeedback({
+        type: "error",
+        text: "Ack request için `metaAds.approvals.create.assigned` izni gereklidir.",
+      });
+      return;
+    }
+
+    setFeedback(null);
+    setActiveAction("create-report");
+    try {
+      await createMetaAdsReport({
+        clientId: selectedClientId,
+        body: {
+          projectId: metaAdsProjectId,
+          periodStart: toReportPeriodStartIso(reportForm.periodStart),
+          periodEnd: toReportPeriodEndIso(reportForm.periodEnd),
+          type: reportForm.type,
+          summary: reportForm.summary.trim().length > 0 ? reportForm.summary.trim() : undefined,
+          clientVisible: reportForm.publishNow || undefined,
+          requestAcknowledgement: reportForm.requestAcknowledgement || undefined,
+        },
+      }).unwrap();
+      setReportForm(INITIAL_REPORT_FORM);
+      setFeedback({
+        type: "success",
+        text: "Meta Ads rapor taslağı kaydedildi.",
+      });
+    } catch (error) {
+      setFeedback({
+        type: "error",
+        text: extractApiErrorMessage(error, "Meta Ads raporu kaydedilemedi."),
+      });
+    } finally {
+      setActiveAction(null);
+    }
+  }
+
+  async function handlePublishReport(reportId: string) {
+    if (!canManageMetaAdsNotes) {
+      setFeedback({
+        type: "error",
+        text: "Rapor yayınlamak için `metaAds.notes.manage.assigned` izni gereklidir.",
+      });
+      return;
+    }
+
+    if (reportPublishAckToggle && !canCreateMetaAdsApprovals) {
+      setFeedback({
+        type: "error",
+        text: "Ack request için `metaAds.approvals.create.assigned` izni gereklidir.",
+      });
+      return;
+    }
+
+    setFeedback(null);
+    setActiveAction(`publish-${reportId}`);
+    try {
+      await updateMetaAdsReport({
+        reportId,
+        body: {
+          status: "PUBLISHED",
+          clientVisible: true,
+          requestAcknowledgement: reportPublishAckToggle || undefined,
+        },
+      }).unwrap();
+      setFeedback({
+        type: "success",
+        text: "Rapor client görünürlüğüne açıldı.",
+      });
+    } catch (error) {
+      setFeedback({
+        type: "error",
+        text: extractApiErrorMessage(error, "Rapor yayınlanamadı."),
       });
     } finally {
       setActiveAction(null);
@@ -617,7 +813,7 @@ export function MetaAdsWorkspace({ initialView = "overview" }: MetaAdsWorkspaceP
 
             {currentView === "creatives" ? (
               <CreativeSection
-                canManageFiles={canManageFiles}
+                canManageFiles={canManageFiles && canManageMetaAdsCreatives}
                 canCreateTask={canCreateTask}
                 hasMetaAdsProject={hasMetaAdsProject}
                 tasks={metaAdsTasks}
@@ -635,16 +831,33 @@ export function MetaAdsWorkspace({ initialView = "overview" }: MetaAdsWorkspaceP
                 noteBody={noteBody}
                 setNoteBody={setNoteBody}
                 canInteractWorkspace={canInteractWorkspace}
+                canReadMetaAdsReports={canReadMetaAdsReports}
+                canManageMetaAdsNotes={canManageMetaAdsNotes}
+                canCreateMetaAdsApprovals={canCreateMetaAdsApprovals}
+                reportRows={reportRows}
+                reportMeta={reportMeta}
+                reportForm={reportForm}
+                setReportForm={setReportForm}
+                reportStatusFilter={reportStatusFilter}
+                setReportStatusFilter={setReportStatusFilter}
+                reportTypeFilter={reportTypeFilter}
+                setReportTypeFilter={setReportTypeFilter}
+                reportPublishAckToggle={reportPublishAckToggle}
+                setReportPublishAckToggle={setReportPublishAckToggle}
+                isReportsLoading={isReportsLoading}
+                isReportsError={isReportsError}
                 isActionBusy={isActionBusy}
                 activeAction={activeAction}
                 onCreateInternalNote={() => void handleCreateInternalNote()}
+                onCreateReportDraft={() => void handleCreateReportDraft()}
+                onPublishReport={(reportId) => void handlePublishReport(reportId)}
               />
             ) : null}
 
             {currentView === "approvals" ? (
               <ApprovalsSection
                 approvalTasks={approvalTasks}
-                canCreateTask={canCreateTask}
+                canCreateTask={canCreateTask && canCreateMetaAdsApprovals}
                 canUpdateTask={canUpdateTask}
                 isActionBusy={isActionBusy}
                 activeAction={activeAction}
@@ -770,7 +983,7 @@ export function MetaAdsWorkspace({ initialView = "overview" }: MetaAdsWorkspaceP
                     variant="outline"
                     className="gap-2"
                     onClick={() => void handleCreateRoleTask("approval")}
-                    disabled={!canCreateTask || !hasMetaAdsProject || isActionBusy}
+                    disabled={!canCreateTask || !canCreateMetaAdsApprovals || !hasMetaAdsProject || isActionBusy}
                   >
                     <AlertCircle className="h-4 w-4" />
                     Onay Talebi Oluştur
@@ -792,7 +1005,7 @@ export function MetaAdsWorkspace({ initialView = "overview" }: MetaAdsWorkspaceP
                   type="button"
                   size="sm"
                   className="bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
-                  disabled={!canManageFiles}
+                  disabled={!canManageFiles || !canManageMetaAdsCreatives}
                 >
                   <Link to="/employee/dosyalar">
                     <Upload className="h-4 w-4" />
@@ -804,7 +1017,7 @@ export function MetaAdsWorkspace({ initialView = "overview" }: MetaAdsWorkspaceP
                   type="button"
                   size="sm"
                   variant="outline"
-                  disabled={!canManageFiles}
+                  disabled={!canManageFiles || !canManageMetaAdsCreatives}
                 >
                   <Link to="/employee/teslim-dosyalari">Client Visible Paylaş</Link>
                 </Button>
@@ -813,7 +1026,7 @@ export function MetaAdsWorkspace({ initialView = "overview" }: MetaAdsWorkspaceP
                   size="sm"
                   variant="outline"
                   onClick={() => void handleCreateRoleTask("approval")}
-                  disabled={!canCreateTask || !hasMetaAdsProject || isActionBusy}
+                  disabled={!canCreateTask || !canCreateMetaAdsApprovals || !hasMetaAdsProject || isActionBusy}
                 >
                   Design Approval Task
                 </Button>
@@ -1048,22 +1261,263 @@ function ReportsSection({
   noteBody,
   setNoteBody,
   canInteractWorkspace,
+  canReadMetaAdsReports,
+  canManageMetaAdsNotes,
+  canCreateMetaAdsApprovals,
+  reportRows,
+  reportMeta,
+  reportForm,
+  setReportForm,
+  reportStatusFilter,
+  setReportStatusFilter,
+  reportTypeFilter,
+  setReportTypeFilter,
+  reportPublishAckToggle,
+  setReportPublishAckToggle,
+  isReportsLoading,
+  isReportsError,
   isActionBusy,
   activeAction,
   onCreateInternalNote,
+  onCreateReportDraft,
+  onPublishReport,
 }: {
   summaryDateLabel: string;
   noteBody: string;
   setNoteBody: (value: string) => void;
   canInteractWorkspace: boolean;
+  canReadMetaAdsReports: boolean;
+  canManageMetaAdsNotes: boolean;
+  canCreateMetaAdsApprovals: boolean;
+  reportRows: MetaAdsReportItem[];
+  reportMeta: {
+    total: number;
+    draft: number;
+    published: number;
+    clientVisible: number;
+  } | undefined;
+  reportForm: ReportDraftFormState;
+  setReportForm: (updater: (prev: ReportDraftFormState) => ReportDraftFormState) => void;
+  reportStatusFilter: MetaAdsReportStatus | "ALL";
+  setReportStatusFilter: (value: MetaAdsReportStatus | "ALL") => void;
+  reportTypeFilter: MetaAdsReportType | "ALL";
+  setReportTypeFilter: (value: MetaAdsReportType | "ALL") => void;
+  reportPublishAckToggle: boolean;
+  setReportPublishAckToggle: (value: boolean) => void;
+  isReportsLoading: boolean;
+  isReportsError: boolean;
   isActionBusy: boolean;
   activeAction: string | null;
   onCreateInternalNote: () => void;
+  onCreateReportDraft: () => void;
+  onPublishReport: (reportId: string) => void;
 }) {
+  const canDraftReport = canManageMetaAdsNotes;
   return (
     <div className="space-y-4">
       <h3 className="text-sm font-semibold text-white">Raporlar & Ajans Notları</h3>
       <p className="text-xs text-[#A0A0A0]">Rapor aralığı: {summaryDateLabel}</p>
+
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+        <div className="space-y-1">
+          <Label htmlFor="meta-ads-employee-report-status">Status</Label>
+          <select
+            id="meta-ads-employee-report-status"
+            className="h-10 rounded-md border border-white/[0.12] bg-black/20 px-3 text-sm text-white"
+            value={reportStatusFilter}
+            onChange={(event) => setReportStatusFilter(event.target.value as MetaAdsReportStatus | "ALL")}
+          >
+            <option value="ALL">All</option>
+            <option value="DRAFT">Draft</option>
+            <option value="PUBLISHED">Published</option>
+            <option value="ARCHIVED">Archived</option>
+          </select>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="meta-ads-employee-report-type">Tip</Label>
+          <select
+            id="meta-ads-employee-report-type"
+            className="h-10 rounded-md border border-white/[0.12] bg-black/20 px-3 text-sm text-white"
+            value={reportTypeFilter}
+            onChange={(event) => setReportTypeFilter(event.target.value as MetaAdsReportType | "ALL")}
+          >
+            <option value="ALL">All</option>
+            {REPORT_TYPE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <label className="flex items-end gap-2 text-sm text-[#DADADA]">
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-[#AAFF01]"
+            checked={reportPublishAckToggle}
+            onChange={(event) => setReportPublishAckToggle(event.target.checked)}
+          />
+          Yayında ack iste
+        </label>
+        <div className="flex items-end text-xs text-[#A0A0A0]">
+          {reportMeta
+            ? `Toplam: ${reportMeta.total} · Draft: ${reportMeta.draft} · Published: ${reportMeta.published}`
+            : "Rapor istatistiği yok"}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 rounded-xl border border-white/[0.08] p-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+          <div className="space-y-1">
+            <Label htmlFor="meta-ads-employee-period-start">Dönem Başlangıç</Label>
+            <Input
+              id="meta-ads-employee-period-start"
+              type="date"
+              value={reportForm.periodStart}
+              onChange={(event) =>
+                setReportForm((prev) => ({
+                  ...prev,
+                  periodStart: event.target.value,
+                }))
+              }
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="meta-ads-employee-period-end">Dönem Bitiş</Label>
+            <Input
+              id="meta-ads-employee-period-end"
+              type="date"
+              value={reportForm.periodEnd}
+              onChange={(event) =>
+                setReportForm((prev) => ({
+                  ...prev,
+                  periodEnd: event.target.value,
+                }))
+              }
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="meta-ads-employee-report-draft-type">Rapor Tipi</Label>
+            <select
+              id="meta-ads-employee-report-draft-type"
+              className="h-10 rounded-md border border-white/[0.12] bg-black/20 px-3 text-sm text-white"
+              value={reportForm.type}
+              onChange={(event) =>
+                setReportForm((prev) => ({
+                  ...prev,
+                  type: event.target.value as MetaAdsReportType,
+                }))
+              }
+            >
+              {REPORT_TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-end gap-3 text-sm text-[#DADADA]">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-[#AAFF01]"
+                checked={reportForm.publishNow}
+                onChange={(event) =>
+                  setReportForm((prev) => ({
+                    ...prev,
+                    publishNow: event.target.checked,
+                  }))
+                }
+              />
+              Hemen yayınla
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-[#AAFF01]"
+                checked={reportForm.requestAcknowledgement}
+                onChange={(event) =>
+                  setReportForm((prev) => ({
+                    ...prev,
+                    requestAcknowledgement: event.target.checked,
+                  }))
+                }
+              />
+              Ack iste
+            </label>
+          </div>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="meta-ads-employee-report-summary">Rapor Özeti</Label>
+          <Input
+            id="meta-ads-employee-report-summary"
+            value={reportForm.summary}
+            onChange={(event) =>
+              setReportForm((prev) => ({
+                ...prev,
+                summary: event.target.value,
+              }))
+            }
+            placeholder="Örn: Haftalık performans özeti"
+          />
+        </div>
+        <div>
+          <Button
+            type="button"
+            size="sm"
+            className="bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
+            onClick={onCreateReportDraft}
+            disabled={!canDraftReport || isActionBusy}
+          >
+            {activeAction === "create-report" ? "Kaydediliyor..." : "Rapor Draft Kaydet"}
+          </Button>
+        </div>
+      </div>
+
+      {!canReadMetaAdsReports ? (
+        <p className="text-xs text-orange-300">
+          Report listesi için `metaAds.reporting.read.assigned` izni gereklidir.
+        </p>
+      ) : null}
+      {isReportsLoading ? <p className="text-xs text-[#A0A0A0]">Rapor listesi yükleniyor...</p> : null}
+      {isReportsError ? <p className="text-xs text-red-300">Rapor listesi alınamadı.</p> : null}
+      {!isReportsLoading && !isReportsError && reportRows.length === 0 ? (
+        <p className="text-xs text-[#A0A0A0]">Seçili filtre için rapor bulunamadı.</p>
+      ) : null}
+
+      {!isReportsLoading && !isReportsError && reportRows.length > 0 ? (
+        <div className="space-y-2">
+          {reportRows.map((report) => (
+            <div key={report.id} className="rounded border border-white/[0.08] p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm text-white">
+                    {report.type} · {report.periodStart.slice(0, 10)} - {report.periodEnd.slice(0, 10)}
+                  </p>
+                  <p className="text-xs text-[#A0A0A0]">
+                    Status: {report.status} · Ack: {report.acknowledgementStatus}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onPublishReport(report.id)}
+                  disabled={
+                    report.status === "PUBLISHED" ||
+                    !canManageMetaAdsNotes ||
+                    (reportPublishAckToggle && !canCreateMetaAdsApprovals) ||
+                    isActionBusy
+                  }
+                >
+                  {activeAction === `publish-${report.id}` ? "Yayınlanıyor..." : "Publish"}
+                </Button>
+              </div>
+              <p className="mt-2 text-xs text-[#DADADA]">{report.summary ?? "Özet yok."}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       <Textarea
         placeholder="Kampanya değerlendirme notu..."
         value={noteBody}

@@ -397,3 +397,76 @@ export type AdminMetaAdsSyncLogsQuery = {
   failedOnly?: boolean;
   limit?: number;
 };
+
+export type MetaAdsReportType =
+  | "WEEKLY"
+  | "MONTHLY"
+  | "CAMPAIGN_PERFORMANCE"
+  | "CREATIVE_PERFORMANCE"
+  | "BUDGET_RECOMMENDATION";
+
+export type MetaAdsReportStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
+
+export type MetaAdsReportAcknowledgementStatus =
+  | "NOT_REQUESTED"
+  | "PENDING"
+  | "ACKNOWLEDGED"
+  | "CHANGES_REQUESTED";
+
+export type MetaAdsReportItem = {
+  id: string;
+  clientProfileId: string;
+  projectId: string | null;
+  projectName: string | null;
+  periodStart: string;
+  periodEnd: string;
+  type: MetaAdsReportType;
+  status: MetaAdsReportStatus;
+  summary: string | null;
+  metricsSnapshot: Record<string, unknown> | null;
+  clientVisible: boolean;
+  publishedAt: string | null;
+  acknowledgementRequestedAt: string | null;
+  acknowledgedAt: string | null;
+  acknowledgementStatus: MetaAdsReportAcknowledgementStatus;
+  acknowledgementTaskId: string | null;
+  acknowledgementTaskUpdatedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MetaAdsReportsResponse = {
+  data: MetaAdsReportItem[];
+  meta: {
+    total: number;
+    draft: number;
+    published: number;
+    clientVisible: number;
+  };
+};
+
+export type MetaAdsReportsQuery = {
+  status?: MetaAdsReportStatus;
+  type?: MetaAdsReportType;
+  clientVisible?: boolean;
+  limit?: number;
+};
+
+export type CreateMetaAdsReportRequest = {
+  projectId?: string;
+  periodStart: string;
+  periodEnd: string;
+  type: MetaAdsReportType;
+  summary?: string;
+  metricsSnapshot?: Record<string, unknown>;
+  clientVisible?: boolean;
+  requestAcknowledgement?: boolean;
+};
+
+export type UpdateMetaAdsReportRequest = {
+  status?: MetaAdsReportStatus;
+  summary?: string;
+  metricsSnapshot?: Record<string, unknown>;
+  clientVisible?: boolean;
+  requestAcknowledgement?: boolean;
+};

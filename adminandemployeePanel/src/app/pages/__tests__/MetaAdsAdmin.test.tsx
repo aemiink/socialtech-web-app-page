@@ -33,6 +33,9 @@ const mockUseGetAdminMetaAdsClientsQuery = vi.fn<
   (query?: unknown, options?: QueryOptions) => MetaAdsListQueryResult
 >();
 const mockUseGetAdminMetaAdsSyncLogsQuery = vi.fn();
+const mockUseGetAdminClientMetaAdsReportsQuery = vi.fn();
+const mockUseCreateAdminClientMetaAdsReportMutation = vi.fn();
+const mockUseUpdateAdminMetaAdsReportMutation = vi.fn();
 const mockUseUpdateAdminClientMetaAdsConfigMutation = vi.fn();
 const mockUseTestAdminClientMetaAdsConnectionMutation = vi.fn();
 const mockUseSyncAdminClientMetaAdsMutation = vi.fn();
@@ -51,6 +54,12 @@ vi.mock("../../features/clients/clientsApi", () => ({
     mockUseGetAdminMetaAdsClientsQuery(query, options),
   useGetAdminMetaAdsSyncLogsQuery: (query?: unknown, options?: QueryOptions) =>
     mockUseGetAdminMetaAdsSyncLogsQuery(query, options),
+  useGetAdminClientMetaAdsReportsQuery: (query?: unknown, options?: QueryOptions) =>
+    mockUseGetAdminClientMetaAdsReportsQuery(query, options),
+  useCreateAdminClientMetaAdsReportMutation: () =>
+    mockUseCreateAdminClientMetaAdsReportMutation(),
+  useUpdateAdminMetaAdsReportMutation: () =>
+    mockUseUpdateAdminMetaAdsReportMutation(),
   useUpdateAdminClientMetaAdsConfigMutation: () =>
     mockUseUpdateAdminClientMetaAdsConfigMutation(),
   useTestAdminClientMetaAdsConnectionMutation: () =>
@@ -71,7 +80,13 @@ const adminUser: AuthUserProfile = {
   accountType: "ADMIN",
   role: "ADMIN",
   status: "ACTIVE",
-  permissions: ["metaAds.config.read.any", "metaAds.config.manage.any", "tasks.manage.any"],
+  permissions: [
+    "metaAds.config.read.any",
+    "metaAds.config.manage.any",
+    "reports.read",
+    "reports.manage",
+    "tasks.manage.any",
+  ],
   clientProfile: null,
 };
 
@@ -185,6 +200,29 @@ describe("MetaAdsAdmin", () => {
       isError: false,
       isLoading: false,
     });
+    mockUseGetAdminClientMetaAdsReportsQuery.mockReturnValue({
+      data: {
+        data: [],
+        meta: {
+          total: 0,
+          draft: 0,
+          published: 0,
+          clientVisible: 0,
+        },
+      },
+      error: undefined,
+      isError: false,
+      isLoading: false,
+      isFetching: false,
+    });
+    mockUseCreateAdminClientMetaAdsReportMutation.mockReturnValue([
+      createResolvedMutation({ id: "report-1" }),
+      { isLoading: false },
+    ]);
+    mockUseUpdateAdminMetaAdsReportMutation.mockReturnValue([
+      createResolvedMutation({ id: "report-1" }),
+      { isLoading: false },
+    ]);
     mockUseUpdateAdminClientMetaAdsConfigMutation.mockReturnValue([
       createResolvedMutation({}),
       { isLoading: false },
@@ -334,6 +372,90 @@ describe("MetaAdsAdmin", () => {
     await waitFor(() => {
       expect(retryMutation).toHaveBeenCalledWith({
         clientId: "11111111-1111-4111-8111-111111111111",
+      });
+    });
+  });
+
+  it("creates report draft and publishes draft report", async () => {
+    const createReportMutation = createResolvedMutation({ id: "report-new" });
+    const publishReportMutation = createResolvedMutation({ id: "report-draft-1" });
+    mockUseCreateAdminClientMetaAdsReportMutation.mockReturnValue([
+      createReportMutation,
+      { isLoading: false },
+    ]);
+    mockUseUpdateAdminMetaAdsReportMutation.mockReturnValue([
+      publishReportMutation,
+      { isLoading: false },
+    ]);
+    mockUseGetAdminClientMetaAdsReportsQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "report-draft-1",
+            clientProfileId: "11111111-1111-4111-8111-111111111111",
+            projectId: "22222222-2222-4222-8222-222222222222",
+            projectName: "Meta Ads Project",
+            periodStart: "2026-05-01T00:00:00.000Z",
+            periodEnd: "2026-05-07T23:59:59.000Z",
+            type: "WEEKLY",
+            status: "DRAFT",
+            summary: "Taslak",
+            metricsSnapshot: null,
+            clientVisible: false,
+            publishedAt: null,
+            acknowledgementRequestedAt: null,
+            acknowledgedAt: null,
+            acknowledgementStatus: "NOT_REQUESTED",
+            acknowledgementTaskId: null,
+            acknowledgementTaskUpdatedAt: null,
+            createdAt: "2026-05-09T08:00:00.000Z",
+            updatedAt: "2026-05-09T08:00:00.000Z",
+          },
+        ],
+        meta: {
+          total: 1,
+          draft: 1,
+          published: 0,
+          clientVisible: 0,
+        },
+      },
+      error: undefined,
+      isError: false,
+      isLoading: false,
+      isFetching: false,
+    });
+
+    render(<MetaAdsAdmin />, { wrapper: MemoryRouter });
+
+    fireEvent.change(screen.getByLabelText("Dönem Başlangıç"), {
+      target: { value: "2026-05-01" },
+    });
+    fireEvent.change(screen.getByLabelText("Dönem Bitiş"), {
+      target: { value: "2026-05-07" },
+    });
+    fireEvent.change(screen.getByLabelText("Özet"), {
+      target: { value: "Haftalık performans taslağı" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Taslak Kaydet" }));
+
+    await waitFor(() => {
+      expect(createReportMutation).toHaveBeenCalledWith({
+        clientId: "11111111-1111-4111-8111-111111111111",
+        body: expect.objectContaining({
+          type: "WEEKLY",
+        }),
+      });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    await waitFor(() => {
+      expect(publishReportMutation).toHaveBeenCalledWith({
+        reportId: "report-draft-1",
+        clientId: "11111111-1111-4111-8111-111111111111",
+        body: expect.objectContaining({
+          status: "PUBLISHED",
+          clientVisible: true,
+        }),
       });
     });
   });

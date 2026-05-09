@@ -17,6 +17,11 @@ import type {
   ClientSummaryRecentTask,
   ClientSummaryResponse,
   MetaAdsConnectionStatus,
+  MetaAdsReportAcknowledgementStatus,
+  MetaAdsReportItem,
+  MetaAdsReportsResponse,
+  MetaAdsReportStatus,
+  MetaAdsReportType,
   MetaAdsSyncStatus,
   MetaAdsSyncResponse,
   MetaAdsSummaryResponse,
@@ -572,6 +577,36 @@ export function normalizeAdminMetaAdsSyncLogsResponse(
   };
 }
 
+export function normalizeMetaAdsReportsResponse(response: unknown): MetaAdsReportsResponse {
+  const candidate = isRecord(response) && "data" in response && isRecord(response.data)
+    ? response.data
+    : response;
+  const rowsSource = isRecord(candidate) ? candidate.data : undefined;
+  const metaSource = isRecord(candidate) && isRecord(candidate.meta) ? candidate.meta : {};
+
+  return {
+    data: Array.isArray(rowsSource)
+      ? rowsSource.map((row) => normalizeMetaAdsReportItem(row)).filter(isDefined)
+      : [],
+    meta: {
+      total: readNumber(metaSource.total, 0),
+      draft: readNumber(metaSource.draft, 0),
+      published: readNumber(metaSource.published, 0),
+      clientVisible: readNumber(metaSource.clientVisible, 0),
+    },
+  };
+}
+
+export function normalizeMetaAdsReportItemResponse(response: unknown): MetaAdsReportItem {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  const parsed = normalizeMetaAdsReportItem(candidate);
+  if (!parsed) {
+    throw new Error("Meta Ads report response could not be parsed.");
+  }
+
+  return parsed;
+}
+
 export function getActivePurchasedServices(client: ClientProfile): ClientPurchasedService[] {
   return getClientPurchasedServices(client).filter((service) => service.status === "ACTIVE");
 }
@@ -1018,6 +1053,51 @@ function normalizeAdminMetaAdsSyncLogItem(value: unknown): AdminMetaAdsSyncLogIt
   };
 }
 
+function normalizeMetaAdsReportItem(value: unknown): MetaAdsReportItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (
+    typeof value.id !== "string" ||
+    typeof value.clientProfileId !== "string" ||
+    typeof value.periodStart !== "string" ||
+    typeof value.periodEnd !== "string" ||
+    typeof value.createdAt !== "string" ||
+    typeof value.updatedAt !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    clientProfileId: value.clientProfileId,
+    projectId: isStringOrNull(value.projectId) ? value.projectId : null,
+    projectName: isStringOrNull(value.projectName) ? value.projectName : null,
+    periodStart: value.periodStart,
+    periodEnd: value.periodEnd,
+    type: normalizeMetaAdsReportType(value.type),
+    status: normalizeMetaAdsReportStatus(value.status),
+    summary: isStringOrNull(value.summary) ? value.summary : null,
+    metricsSnapshot: isRecord(value.metricsSnapshot)
+      ? value.metricsSnapshot
+      : value.metricsSnapshot === null
+        ? null
+        : null,
+    clientVisible: typeof value.clientVisible === "boolean" ? value.clientVisible : false,
+    publishedAt: isStringOrNull(value.publishedAt) ? value.publishedAt : null,
+    acknowledgementRequestedAt:
+      isStringOrNull(value.acknowledgementRequestedAt) ? value.acknowledgementRequestedAt : null,
+    acknowledgedAt: isStringOrNull(value.acknowledgedAt) ? value.acknowledgedAt : null,
+    acknowledgementStatus: normalizeMetaAdsReportAcknowledgementStatus(value.acknowledgementStatus),
+    acknowledgementTaskId: isStringOrNull(value.acknowledgementTaskId) ? value.acknowledgementTaskId : null,
+    acknowledgementTaskUpdatedAt:
+      isStringOrNull(value.acknowledgementTaskUpdatedAt) ? value.acknowledgementTaskUpdatedAt : null,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+  };
+}
+
 function isDefined<T>(value: T | null | undefined): value is T {
   return value !== null && value !== undefined;
 }
@@ -1215,6 +1295,43 @@ function normalizeMetaAdsSyncStatus(value: unknown): MetaAdsSyncStatus {
   }
 
   return "SUCCESS";
+}
+
+function normalizeMetaAdsReportType(value: unknown): MetaAdsReportType {
+  if (
+    value === "WEEKLY" ||
+    value === "MONTHLY" ||
+    value === "CAMPAIGN_PERFORMANCE" ||
+    value === "CREATIVE_PERFORMANCE" ||
+    value === "BUDGET_RECOMMENDATION"
+  ) {
+    return value;
+  }
+
+  return "WEEKLY";
+}
+
+function normalizeMetaAdsReportStatus(value: unknown): MetaAdsReportStatus {
+  if (value === "DRAFT" || value === "PUBLISHED" || value === "ARCHIVED") {
+    return value;
+  }
+
+  return "DRAFT";
+}
+
+function normalizeMetaAdsReportAcknowledgementStatus(
+  value: unknown,
+): MetaAdsReportAcknowledgementStatus {
+  if (
+    value === "NOT_REQUESTED" ||
+    value === "PENDING" ||
+    value === "ACKNOWLEDGED" ||
+    value === "CHANGES_REQUESTED"
+  ) {
+    return value;
+  }
+
+  return "NOT_REQUESTED";
 }
 
 function readString(value: unknown, key: string): string {

@@ -1,13 +1,20 @@
 import { baseApi } from "../../services/baseApi";
 import type {
   AssignedMetaAdsConfigResponse,
+  CreateMetaAdsReportRequest,
   MetaAdsCampaign,
   MetaAdsCampaignsResponse,
   MetaAdsInsightItem,
   MetaAdsInsightLevel,
   MetaAdsInsightsResponse,
   MetaAdsPixelStatusResponse,
+  MetaAdsReportItem,
+  MetaAdsReportsQuery,
+  MetaAdsReportsResponse,
+  MetaAdsReportStatus,
+  MetaAdsReportType,
   MetaAdsSummaryResponse,
+  UpdateMetaAdsReportRequest,
 } from "./metaAdsTypes";
 
 export type MetaAdsDateRangeQuery = {
@@ -106,6 +113,39 @@ export const metaAdsApi = baseApi.injectEndpoints({
       }),
       transformResponse: (response: unknown) => normalizeMetaAdsPixelStatusResponse(response),
     }),
+    getAssignedClientMetaAdsReports: builder.query<
+      MetaAdsReportsResponse,
+      AssignedClientQueryArg<MetaAdsReportsQuery>
+    >({
+      query: ({ clientId, query }) => ({
+        url: `/meta-ads/clients/${clientId}/reports`,
+        method: "GET",
+        params: serializeReportsQuery(query),
+      }),
+      transformResponse: (response: unknown) => normalizeMetaAdsReportsResponse(response),
+    }),
+    createAssignedClientMetaAdsReport: builder.mutation<
+      MetaAdsReportItem,
+      { clientId: string; body: CreateMetaAdsReportRequest }
+    >({
+      query: ({ clientId, body }) => ({
+        url: `/meta-ads/clients/${clientId}/reports`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeMetaAdsReportItemResponse(response),
+    }),
+    updateAssignedMetaAdsReport: builder.mutation<
+      MetaAdsReportItem,
+      { reportId: string; body: UpdateMetaAdsReportRequest }
+    >({
+      query: ({ reportId, body }) => ({
+        url: `/meta-ads/reports/${reportId}`,
+        method: "PATCH",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeMetaAdsReportItemResponse(response),
+    }),
   }),
 });
 
@@ -117,6 +157,9 @@ export const {
   useGetAssignedClientMetaAdsAdsQuery,
   useGetAssignedClientMetaAdsInsightsQuery,
   useGetAssignedClientMetaAdsPixelStatusQuery,
+  useGetAssignedClientMetaAdsReportsQuery,
+  useCreateAssignedClientMetaAdsReportMutation,
+  useUpdateAssignedMetaAdsReportMutation,
 } = metaAdsApi;
 
 function normalizeAssignedMetaAdsConfigResponse(response: unknown): AssignedMetaAdsConfigResponse {
@@ -227,6 +270,77 @@ function normalizeMetaAdsPixelStatusResponse(response: unknown): MetaAdsPixelSta
   };
 }
 
+function normalizeMetaAdsReportsResponse(response: unknown): MetaAdsReportsResponse {
+  const candidate = isRecord(response) && isRecord(response.data) ? response.data : response;
+  const rows = isRecord(candidate) && Array.isArray(candidate.data) ? candidate.data : [];
+  const meta = isRecord(candidate) && isRecord(candidate.meta) ? candidate.meta : {};
+
+  return {
+    data: rows.map(normalizeMetaAdsReportItem).filter((item): item is MetaAdsReportItem => item !== null),
+    meta: {
+      total: readNumber(meta, "total", 0, true),
+      draft: readNumber(meta, "draft", 0, true),
+      published: readNumber(meta, "published", 0, true),
+      clientVisible: readNumber(meta, "clientVisible", 0, true),
+    },
+  };
+}
+
+function normalizeMetaAdsReportItemResponse(response: unknown): MetaAdsReportItem {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  const report = normalizeMetaAdsReportItem(candidate);
+  if (!report) {
+    throw new Error("Meta Ads report response could not be parsed.");
+  }
+
+  return report;
+}
+
+function normalizeMetaAdsReportItem(value: unknown): MetaAdsReportItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (
+    typeof value.id !== "string" ||
+    typeof value.clientProfileId !== "string" ||
+    typeof value.periodStart !== "string" ||
+    typeof value.periodEnd !== "string" ||
+    typeof value.createdAt !== "string" ||
+    typeof value.updatedAt !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    clientProfileId: value.clientProfileId,
+    projectId: typeof value.projectId === "string" ? value.projectId : null,
+    projectName: typeof value.projectName === "string" ? value.projectName : null,
+    periodStart: value.periodStart,
+    periodEnd: value.periodEnd,
+    type: normalizeReportType(value.type),
+    status: normalizeReportStatus(value.status),
+    summary: typeof value.summary === "string" ? value.summary : null,
+    metricsSnapshot: isRecord(value.metricsSnapshot)
+      ? value.metricsSnapshot
+      : value.metricsSnapshot === null
+        ? null
+        : null,
+    clientVisible: typeof value.clientVisible === "boolean" ? value.clientVisible : false,
+    publishedAt: typeof value.publishedAt === "string" ? value.publishedAt : null,
+    acknowledgementRequestedAt:
+      typeof value.acknowledgementRequestedAt === "string" ? value.acknowledgementRequestedAt : null,
+    acknowledgedAt: typeof value.acknowledgedAt === "string" ? value.acknowledgedAt : null,
+    acknowledgementStatus: normalizeAcknowledgementStatus(value.acknowledgementStatus),
+    acknowledgementTaskId: typeof value.acknowledgementTaskId === "string" ? value.acknowledgementTaskId : null,
+    acknowledgementTaskUpdatedAt:
+      typeof value.acknowledgementTaskUpdatedAt === "string" ? value.acknowledgementTaskUpdatedAt : null,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+  };
+}
+
 function normalizeCampaignRow(value: unknown): MetaAdsCampaign | null {
   if (!isRecord(value)) {
     return null;
@@ -326,6 +440,30 @@ function serializeInsightsQuery(
   return params;
 }
 
+function serializeReportsQuery(
+  query: MetaAdsReportsQuery | void,
+): Record<string, string | number | boolean> {
+  if (!query) {
+    return {};
+  }
+
+  const params: Record<string, string | number | boolean> = {};
+  if (query.status) {
+    params.status = query.status;
+  }
+  if (query.type) {
+    params.type = query.type;
+  }
+  if (query.clientVisible !== undefined) {
+    params.clientVisible = query.clientVisible;
+  }
+  if (typeof query.limit === "number" && Number.isFinite(query.limit)) {
+    params.limit = Math.trunc(query.limit);
+  }
+
+  return params;
+}
+
 function normalizeInsightLevel(value: unknown): MetaAdsInsightLevel {
   if (value === "ACCOUNT" || value === "CAMPAIGN" || value === "ADSET" || value === "AD") {
     return value;
@@ -345,6 +483,41 @@ function normalizePixelEventStatus(value: unknown): MetaAdsPixelStatusResponse["
   }
 
   return "NO_DATA";
+}
+
+function normalizeReportType(value: unknown): MetaAdsReportType {
+  if (
+    value === "WEEKLY" ||
+    value === "MONTHLY" ||
+    value === "CAMPAIGN_PERFORMANCE" ||
+    value === "CREATIVE_PERFORMANCE" ||
+    value === "BUDGET_RECOMMENDATION"
+  ) {
+    return value;
+  }
+
+  return "WEEKLY";
+}
+
+function normalizeReportStatus(value: unknown): MetaAdsReportStatus {
+  if (value === "DRAFT" || value === "PUBLISHED" || value === "ARCHIVED") {
+    return value;
+  }
+
+  return "DRAFT";
+}
+
+function normalizeAcknowledgementStatus(value: unknown): MetaAdsReportItem["acknowledgementStatus"] {
+  if (
+    value === "NOT_REQUESTED" ||
+    value === "PENDING" ||
+    value === "ACKNOWLEDGED" ||
+    value === "CHANGES_REQUESTED"
+  ) {
+    return value;
+  }
+
+  return "NOT_REQUESTED";
 }
 
 function readNumber(
