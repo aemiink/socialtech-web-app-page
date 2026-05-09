@@ -4,7 +4,10 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ClientSummaryResponse } from "../../features/clients/clientsTypes";
+import type {
+  AdminClientMetaAdsConnection,
+  ClientSummaryResponse,
+} from "../../features/clients/clientsTypes";
 import { ClientDetail } from "../ClientDetail";
 
 type QueryOptions = {
@@ -15,6 +18,14 @@ type ClientSummaryQueryResult = {
   data?: ClientSummaryResponse;
   error?: unknown;
   isError: boolean;
+  isLoading: boolean;
+  isFetching: boolean;
+  refetch: () => void;
+};
+
+type MetaAdsConnectionQueryResult = {
+  data?: AdminClientMetaAdsConnection;
+  error?: unknown;
   isLoading: boolean;
   isFetching: boolean;
   refetch: () => void;
@@ -31,11 +42,25 @@ const mockUseGetClientSummaryQuery = vi.fn<
   (id: string, options: QueryOptions) => ClientSummaryQueryResult
 >();
 const mockUseGetAdminAssignmentsQuery = vi.fn();
+const mockUseGetAdminClientMetaAdsConnectionQuery = vi.fn<
+  (id: string, options: QueryOptions) => MetaAdsConnectionQueryResult
+>();
+const mockUseConnectAdminClientMetaAdsManualMutation = vi.fn();
+const mockUseTestAdminClientMetaAdsConnectionMutation = vi.fn();
+const mockUseDisconnectAdminClientMetaAdsMutation = vi.fn();
 const mockUseResetClientOwnerPasswordMutation = vi.fn();
 
 vi.mock("../../features/clients/clientsApi", () => ({
   useGetClientSummaryQuery: (id: string, options: QueryOptions) =>
     mockUseGetClientSummaryQuery(id, options),
+  useGetAdminClientMetaAdsConnectionQuery: (id: string, options: QueryOptions) =>
+    mockUseGetAdminClientMetaAdsConnectionQuery(id, options),
+  useConnectAdminClientMetaAdsManualMutation: () =>
+    mockUseConnectAdminClientMetaAdsManualMutation(),
+  useTestAdminClientMetaAdsConnectionMutation: () =>
+    mockUseTestAdminClientMetaAdsConnectionMutation(),
+  useDisconnectAdminClientMetaAdsMutation: () =>
+    mockUseDisconnectAdminClientMetaAdsMutation(),
   useResetClientOwnerPasswordMutation: () => mockUseResetClientOwnerPasswordMutation(),
 }));
 vi.mock("../../features/adminAssignments/adminAssignmentsApi", () => ({
@@ -97,11 +122,47 @@ const clientSummary: ClientSummaryResponse = {
   },
 };
 
+const metaAdsConnectionSummary: AdminClientMetaAdsConnection = {
+  clientProfileId,
+  connectionStatus: "CONNECTED",
+  hasActiveService: true,
+  ids: {
+    businessId: "biz-1",
+    adAccountId: "act-1",
+    pixelId: "px-1",
+    instagramAccountId: "ig-1",
+    facebookPageId: "pg-1",
+  },
+  settings: {
+    currency: "TRY",
+    timezone: "Europe/Istanbul",
+  },
+  lastSyncAt: "2026-05-01T10:00:00.000Z",
+  syncError: null,
+  credential: {
+    hasToken: true,
+    tokenLastUpdatedAt: "2026-05-01T09:00:00.000Z",
+    tokenExpiresAt: "2026-06-01T09:00:00.000Z",
+    grantedScopes: ["ads_read"],
+  },
+};
+
 function setupSummaryState(overrides: Partial<ClientSummaryQueryResult> = {}) {
   mockUseGetClientSummaryQuery.mockReturnValue({
     data: clientSummary,
     error: undefined,
     isError: false,
+    isLoading: false,
+    isFetching: false,
+    refetch: vi.fn(),
+    ...overrides,
+  });
+}
+
+function setupMetaAdsConnectionState(overrides: Partial<MetaAdsConnectionQueryResult> = {}) {
+  mockUseGetAdminClientMetaAdsConnectionQuery.mockReturnValue({
+    data: metaAdsConnectionSummary,
+    error: undefined,
     isLoading: false,
     isFetching: false,
     refetch: vi.fn(),
@@ -123,6 +184,10 @@ describe("ClientDetail", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setupSummaryState();
+    setupMetaAdsConnectionState();
+    mockUseConnectAdminClientMetaAdsManualMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
+    mockUseTestAdminClientMetaAdsConnectionMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
+    mockUseDisconnectAdminClientMetaAdsMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseResetClientOwnerPasswordMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseGetAdminAssignmentsQuery.mockReturnValue({
       data: [],
@@ -181,6 +246,8 @@ describe("ClientDetail", () => {
     expect(screen.getAllByText("Aktif").length).toBeGreaterThan(0);
     expect(screen.getByText(clientProfileId)).toBeInTheDocument();
     expect(screen.getByText("Müşteri Portal Şifre Sıfırlama")).toBeInTheDocument();
+    expect(screen.getByText("Meta Ads Bağlantı Yönetimi")).toBeInTheDocument();
+    expect(screen.getByText("Token Durumu")).toBeInTheDocument();
   });
 
   it("renders project and task counts", () => {

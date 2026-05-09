@@ -18,23 +18,29 @@ import request from "supertest";
 import { AppModule } from "../src/app.module";
 import { GlobalExceptionFilter } from "../src/common/filters/global-exception.filter";
 import { createCorsOptions } from "../src/config/cors.config";
+import {
+  MetaAdsApiService,
+  type MetaAdsConnectionTestResult,
+} from "../src/meta-ads/meta-ads-api.service";
 
 const AUTH_LOGIN_PATH = "/api/v1/auth/login";
 const CLIENT_OWN_META_ADS_CONFIG_PATH = "/api/v1/clients/me/meta-ads/config";
 const ASSIGNED_META_ADS_CONFIG_PATH = "/api/v1/meta-ads/clients";
+const ADMIN_META_ADS_CONNECTION_PATH_PREFIX = "/api/v1/admin/clients";
 const TEST_EMAIL_PREFIX = "authz-meta-ads-";
 const TEST_SLUG_PREFIX = "authz-meta-ads-";
 const DEMO_PASSWORD = "demo123";
 const DEMO_PASSWORD_HASH = "$2b$10$3yBQjNKNtpc7eG3y8onlVevimS9tkKBjSCpXCL3hWfI0mzQDGqcwi";
+const TEST_META_TOKEN_ENCRYPTION_KEY = "meta-token-encryption-key-for-e2e-tests-0123456789";
 const SENSITIVE_RESPONSE_TOKENS = [
   "accessTokenEnc",
   "tokenHash",
-  "grantedScopes",
-  "tokenExpiresAt",
   "metaAdsCredential",
-  "credential",
   "refreshToken",
 ] as const;
+
+let mockMetaAdsApiResult: MetaAdsConnectionTestResult | null = null;
+let mockMetaAdsApiError: Error | null = null;
 
 type LoginBody = {
   accessToken: string;
@@ -60,11 +66,52 @@ describe("Meta Ads Config Authorization (e2e)", () => {
   let inactiveMetaAdsClientId = "";
   let missingMetaAdsClientId = "";
   let performanceUserId = "";
+  let previousMetaTokenEncryptionKey: string | undefined;
 
   beforeAll(async () => {
+    previousMetaTokenEncryptionKey = process.env.META_TOKEN_ENCRYPTION_KEY;
+    process.env.META_TOKEN_ENCRYPTION_KEY = TEST_META_TOKEN_ENCRYPTION_KEY;
+    mockMetaAdsApiResult = {
+      adAccountId: "act-test-12345",
+      currency: "TRY",
+      timezone: "Europe/Istanbul",
+      grantedScopes: ["ads_read", "business_management"],
+    };
+    mockMetaAdsApiError = null;
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(MetaAdsApiService)
+      .useValue({
+        testConnection: async () => {
+          if (mockMetaAdsApiError) {
+            throw mockMetaAdsApiError;
+          }
+
+          if (!mockMetaAdsApiResult) {
+            throw new Error("Mock Meta Ads API result is not configured.");
+          }
+
+          return mockMetaAdsApiResult;
+        },
+        normalizeError: (error: unknown) => {
+          if (error instanceof Error) {
+            if (/permission/i.test(error.message)) {
+              return { category: "PERMISSION" as const, message: error.message };
+            }
+
+            if (/token/i.test(error.message)) {
+              return { category: "AUTH" as const, message: error.message };
+            }
+
+            return { category: "NETWORK" as const, message: error.message };
+          }
+
+          return { category: "UNKNOWN" as const, message: "Unknown Meta API error." };
+        },
+      })
+      .compile();
 
     app = moduleFixture.createNestApplication();
     const configService = app.get(ConfigService);
@@ -245,6 +292,11 @@ describe("Meta Ads Config Authorization (e2e)", () => {
 
   afterAll(async () => {
     await cleanupRuntimeFixtures();
+    if (previousMetaTokenEncryptionKey === undefined) {
+      delete process.env.META_TOKEN_ENCRYPTION_KEY;
+    } else {
+      process.env.META_TOKEN_ENCRYPTION_KEY = previousMetaTokenEncryptionKey;
+    }
     await prisma.$disconnect();
     await app.close();
   });
@@ -317,6 +369,152 @@ describe("Meta Ads Config Authorization (e2e)", () => {
     expectNoSensitiveTokens(response.body);
   });
 
+  it("admin can read client Meta Ads connection summary without sensitive fields", async () => {
+    const response = await request(app.getHttpServer())
+      .get(adminMetaAdsConnectionPath(activeMetaAdsClientId))
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        clientProfileId: activeMetaAdsClientId,
+        hasActiveService: true,
+        credential: expect.objectContaining({
+          hasToken: true,
+          grantedScopes: expect.arrayContaining(["ads_read"]),
+        }),
+      }),
+    );
+    expectNoSensitiveTokens(response.body);
+  });
+
+  it("admin manual connect stores encrypted token and returns summary only", async () => {
+    const rawToken = "EAAGm0PX4ZCpsBAJmanualConnectTokenForMetaAdsTests";
+    const response = await request(app.getHttpServer())
+      .post(adminMetaAdsManualConnectPath(activeMetaAdsClientId))
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        accessToken: rawToken,
+        adAccountId: "act-manual-123",
+        businessId: "biz-manual-123",
+        currency: "TRY",
+        timezone: "Europe/Istanbul",
+      })
+      .expect(201);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        clientProfileId: activeMetaAdsClientId,
+        connectionStatus: MetaAdsConnectionStatus.PENDING,
+        credential: expect.objectContaining({
+          hasToken: true,
+        }),
+      }),
+    );
+    expectNoSensitiveTokens(response.body);
+
+    const credential = await prisma.clientMetaAdsCredential.findUnique({
+      where: { clientProfileId: activeMetaAdsClientId },
+      select: {
+        accessTokenEnc: true,
+        tokenHash: true,
+      },
+    });
+
+    expect(credential?.accessTokenEnc).toEqual(expect.any(String));
+    expect(credential?.tokenHash).toEqual(expect.any(String));
+    expect(credential?.accessTokenEnc).not.toBe(rawToken);
+    expect(credential?.tokenHash).not.toContain(rawToken);
+  });
+
+  it("admin can run connection test successfully with mocked Meta API", async () => {
+    mockMetaAdsApiError = null;
+    mockMetaAdsApiResult = {
+      adAccountId: "act-verified-456",
+      currency: "USD",
+      timezone: "America/New_York",
+      grantedScopes: ["ads_read", "business_management"],
+    };
+
+    const response = await request(app.getHttpServer())
+      .post(adminMetaAdsTestConnectionPath(activeMetaAdsClientId))
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        requiredScopes: ["ads_read"],
+      })
+      .expect(201);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        success: true,
+        account: {
+          adAccountId: "act-verified-456",
+          currency: "USD",
+          timezone: "America/New_York",
+        },
+        grantedScopes: ["ads_read", "business_management"],
+      }),
+    );
+    expect(response.body.connection).toEqual(
+      expect.objectContaining({
+        connectionStatus: MetaAdsConnectionStatus.CONNECTED,
+      }),
+    );
+    expectNoSensitiveTokens(response.body);
+  });
+
+  it("test connection permission error is normalized and marks connection as ERROR", async () => {
+    mockMetaAdsApiError = new Error("Missing permission: ads_read");
+
+    const errorResponse = await request(app.getHttpServer())
+      .post(adminMetaAdsTestConnectionPath(activeMetaAdsClientId))
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        requiredScopes: ["ads_read"],
+      })
+      .expect(403);
+
+    expectApiError(errorResponse.body, /Missing permission: ads_read/i);
+
+    const connectionResponse = await request(app.getHttpServer())
+      .get(adminMetaAdsConnectionPath(activeMetaAdsClientId))
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(connectionResponse.body.connectionStatus).toBe(MetaAdsConnectionStatus.ERROR);
+    expect(connectionResponse.body.syncError).toMatch(/Missing permission: ads_read/i);
+    mockMetaAdsApiError = null;
+  });
+
+  it("disconnect marks config as DISCONNECTED and clears stored token", async () => {
+    const response = await request(app.getHttpServer())
+      .post(adminMetaAdsDisconnectPath(activeMetaAdsClientId))
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(201);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        connectionStatus: MetaAdsConnectionStatus.DISCONNECTED,
+        credential: expect.objectContaining({
+          hasToken: false,
+          grantedScopes: [],
+        }),
+      }),
+    );
+    expectNoSensitiveTokens(response.body);
+
+    const credential = await prisma.clientMetaAdsCredential.findUnique({
+      where: { clientProfileId: activeMetaAdsClientId },
+      select: {
+        accessTokenEnc: true,
+        tokenHash: true,
+      },
+    });
+
+    expect(credential?.accessTokenEnc).toBeNull();
+    expect(credential?.tokenHash).toBeNull();
+  });
+
   it("assigned employee can read assigned client Meta Ads config", async () => {
     const response = await request(app.getHttpServer())
       .get(assignedMetaAdsConfigPath(activeMetaAdsClientId))
@@ -326,7 +524,7 @@ describe("Meta Ads Config Authorization (e2e)", () => {
     expect(response.body).toEqual(
       expect.objectContaining({
         clientProfileId: activeMetaAdsClientId,
-        connectionStatus: MetaAdsConnectionStatus.CONNECTED,
+        connectionStatus: MetaAdsConnectionStatus.DISCONNECTED,
       }),
     );
     expectNoSensitiveTokens(response.body);
@@ -495,6 +693,22 @@ describe("Meta Ads Config Authorization (e2e)", () => {
 
   function adminMetaAdsConfigPath(clientId: string): string {
     return `/api/v1/admin/clients/${clientId}/meta-ads/config`;
+  }
+
+  function adminMetaAdsConnectionPath(clientId: string): string {
+    return `${ADMIN_META_ADS_CONNECTION_PATH_PREFIX}/${clientId}/meta-ads/connection`;
+  }
+
+  function adminMetaAdsManualConnectPath(clientId: string): string {
+    return `${ADMIN_META_ADS_CONNECTION_PATH_PREFIX}/${clientId}/meta-ads/connect/manual`;
+  }
+
+  function adminMetaAdsDisconnectPath(clientId: string): string {
+    return `${ADMIN_META_ADS_CONNECTION_PATH_PREFIX}/${clientId}/meta-ads/disconnect`;
+  }
+
+  function adminMetaAdsTestConnectionPath(clientId: string): string {
+    return `${ADMIN_META_ADS_CONNECTION_PATH_PREFIX}/${clientId}/meta-ads/test-connection`;
   }
 
   function assignedMetaAdsConfigPath(clientId: string): string {

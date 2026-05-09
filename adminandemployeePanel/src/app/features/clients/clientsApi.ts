@@ -1,5 +1,7 @@
 import { baseApi } from "../../services/baseApi";
 import type {
+  AdminClientMetaAdsConnection,
+  ConnectManualMetaAdsRequest,
   ClientProfile,
   ClientsListQuery,
   ClientsListResponse,
@@ -7,17 +9,22 @@ import type {
   CreateAdminClientRequest,
   CreateOrLinkClientOwnerRequest,
   ResetClientOwnerPasswordRequest,
+  TestMetaAdsConnectionRequest,
+  TestMetaAdsConnectionResponse,
   UpdateAdminClientRequest,
 } from "./clientsTypes";
 import {
   normalizeClientResponse,
   normalizeClientSummaryResponse,
   normalizeClientsListResponse,
+  normalizeAdminMetaAdsConnectionResponse,
+  normalizeTestMetaAdsConnectionResponse,
   toBackendServiceKey,
 } from "./clientsUtils";
 
 const CLIENTS_LIST_ID = "LIST";
 const CLIENT_SUMMARY_ID_PREFIX = "SUMMARY";
+const CLIENT_META_ADS_CONNECTION_ID_PREFIX = "META_ADS_CONNECTION";
 const ADMIN_SUMMARY_ID = "SUMMARY";
 const AUDIT_LOGS_LIST_ID = "LIST";
 const ADMIN_USERS_LIST_ID = "LIST";
@@ -58,6 +65,57 @@ export const clientsApi = baseApi.injectEndpoints({
       transformResponse: (response: unknown) => normalizeClientSummaryResponse(response),
       providesTags: (_result, _error, id) => [
         { type: "Clients", id: getClientSummaryTagId(id) },
+      ],
+    }),
+    getAdminClientMetaAdsConnection: builder.query<AdminClientMetaAdsConnection, string>({
+      query: (clientId) => ({
+        url: `/admin/clients/${clientId}/meta-ads/connection`,
+        method: "GET",
+      }),
+      transformResponse: (response: unknown) => normalizeAdminMetaAdsConnectionResponse(response),
+      providesTags: (_result, _error, clientId) => [
+        { type: "Clients", id: getClientMetaAdsConnectionTagId(clientId) },
+      ],
+    }),
+    connectAdminClientMetaAdsManual: builder.mutation<
+      AdminClientMetaAdsConnection,
+      { clientId: string; body: ConnectManualMetaAdsRequest }
+    >({
+      query: ({ clientId, body }) => ({
+        url: `/admin/clients/${clientId}/meta-ads/connect/manual`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeAdminMetaAdsConnectionResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        ...getAdminClientMutationInvalidations(clientId),
+        { type: "Clients", id: getClientMetaAdsConnectionTagId(clientId) },
+      ],
+    }),
+    disconnectAdminClientMetaAds: builder.mutation<AdminClientMetaAdsConnection, { clientId: string }>({
+      query: ({ clientId }) => ({
+        url: `/admin/clients/${clientId}/meta-ads/disconnect`,
+        method: "POST",
+      }),
+      transformResponse: (response: unknown) => normalizeAdminMetaAdsConnectionResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        ...getAdminClientMutationInvalidations(clientId),
+        { type: "Clients", id: getClientMetaAdsConnectionTagId(clientId) },
+      ],
+    }),
+    testAdminClientMetaAdsConnection: builder.mutation<
+      TestMetaAdsConnectionResponse,
+      { clientId: string; body: TestMetaAdsConnectionRequest }
+    >({
+      query: ({ clientId, body }) => ({
+        url: `/admin/clients/${clientId}/meta-ads/test-connection`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeTestMetaAdsConnectionResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        ...getAdminClientMutationInvalidations(clientId),
+        { type: "Clients", id: getClientMetaAdsConnectionTagId(clientId) },
       ],
     }),
     createAdminClient: builder.mutation<ClientProfile, CreateAdminClientRequest>({
@@ -132,6 +190,10 @@ export const {
   useGetClientQuery,
   useLazyGetClientQuery,
   useGetClientSummaryQuery,
+  useGetAdminClientMetaAdsConnectionQuery,
+  useConnectAdminClientMetaAdsManualMutation,
+  useDisconnectAdminClientMetaAdsMutation,
+  useTestAdminClientMetaAdsConnectionMutation,
   useCreateAdminClientMutation,
   useUpdateAdminClientMutation,
   useDeactivateAdminClientMutation,
@@ -142,6 +204,10 @@ export const {
 
 function getClientSummaryTagId(id: string): string {
   return `${CLIENT_SUMMARY_ID_PREFIX}:${id}`;
+}
+
+function getClientMetaAdsConnectionTagId(id: string): string {
+  return `${CLIENT_META_ADS_CONNECTION_ID_PREFIX}:${id}`;
 }
 
 function getAdminClientMutationInvalidations(id: string) {

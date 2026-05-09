@@ -1,6 +1,7 @@
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { extractApiErrorMessage } from "../adminUsers/adminUsersUtils";
 import type {
+  AdminClientMetaAdsConnection,
   BackendPurchasedServiceKey,
   BackendPurchasedServiceStatus,
   ClientProfile,
@@ -11,8 +12,10 @@ import type {
   ClientSummaryRecentProject,
   ClientSummaryRecentTask,
   ClientSummaryResponse,
+  MetaAdsConnectionStatus,
   PurchasedServiceStatus,
   ServiceKey,
+  TestMetaAdsConnectionResponse,
 } from "./clientsTypes";
 
 export { extractApiErrorMessage };
@@ -304,6 +307,46 @@ export function getClientStatusBadgeClass(status: string | null | undefined): st
   return "border-white/[0.12] bg-white/[0.08] text-[#E5E5E5]";
 }
 
+export function getMetaAdsConnectionStatusLabel(status: MetaAdsConnectionStatus): string {
+  if (status === "CONNECTED") {
+    return "Connected";
+  }
+
+  if (status === "PENDING") {
+    return "Pending";
+  }
+
+  if (status === "ERROR") {
+    return "Error";
+  }
+
+  if (status === "DISCONNECTED") {
+    return "Disconnected";
+  }
+
+  return "Not Connected";
+}
+
+export function getMetaAdsConnectionStatusBadgeClass(status: MetaAdsConnectionStatus): string {
+  if (status === "CONNECTED") {
+    return "bg-[#AAFF01] text-[#131313]";
+  }
+
+  if (status === "PENDING") {
+    return "bg-amber-500/20 text-amber-300";
+  }
+
+  if (status === "ERROR") {
+    return "bg-red-600 text-white";
+  }
+
+  if (status === "DISCONNECTED") {
+    return "border-white/[0.12] bg-white/[0.04] text-[#A0A0A0]";
+  }
+
+  return "border-white/[0.12] bg-white/[0.04] text-[#A0A0A0]";
+}
+
 export function getServiceLabel(serviceKey: string | null | undefined): string {
   const normalizedServiceKey = normalizeToUiServiceKey(serviceKey);
   const service = SERVICE_CATALOG.find((item) => item.key === normalizedServiceKey);
@@ -346,6 +389,73 @@ export function normalizeToUiServiceKey(value: unknown): ServiceKey | null {
 
 export function getClientPurchasedServices(client: ClientProfile): ClientPurchasedService[] {
   return client.purchasedServices ?? [];
+}
+
+export function normalizeAdminMetaAdsConnectionResponse(
+  response: unknown,
+): AdminClientMetaAdsConnection {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  if (!isRecord(candidate)) {
+    throw new Error("Meta Ads connection response could not be parsed.");
+  }
+
+  const statusValue = normalizeMetaAdsConnectionStatus(candidate.connectionStatus);
+  const ids = isRecord(candidate.ids) ? candidate.ids : {};
+  const settings = isRecord(candidate.settings) ? candidate.settings : {};
+  const credential = isRecord(candidate.credential) ? candidate.credential : {};
+
+  return {
+    clientProfileId: typeof candidate.clientProfileId === "string" ? candidate.clientProfileId : "",
+    connectionStatus: statusValue,
+    hasActiveService: typeof candidate.hasActiveService === "boolean" ? candidate.hasActiveService : false,
+    ids: {
+      businessId: isStringOrNull(ids.businessId) ? ids.businessId : null,
+      adAccountId: isStringOrNull(ids.adAccountId) ? ids.adAccountId : null,
+      pixelId: isStringOrNull(ids.pixelId) ? ids.pixelId : null,
+      instagramAccountId: isStringOrNull(ids.instagramAccountId) ? ids.instagramAccountId : null,
+      facebookPageId: isStringOrNull(ids.facebookPageId) ? ids.facebookPageId : null,
+    },
+    settings: {
+      currency: isStringOrNull(settings.currency) ? settings.currency : null,
+      timezone: isStringOrNull(settings.timezone) ? settings.timezone : null,
+    },
+    lastSyncAt: isStringOrNull(candidate.lastSyncAt) ? candidate.lastSyncAt : null,
+    syncError: isStringOrNull(candidate.syncError) ? candidate.syncError : null,
+    credential: {
+      hasToken: typeof credential.hasToken === "boolean" ? credential.hasToken : false,
+      tokenLastUpdatedAt: isStringOrNull(credential.tokenLastUpdatedAt)
+        ? credential.tokenLastUpdatedAt
+        : null,
+      tokenExpiresAt: isStringOrNull(credential.tokenExpiresAt) ? credential.tokenExpiresAt : null,
+      grantedScopes: Array.isArray(credential.grantedScopes)
+        ? credential.grantedScopes.filter((item): item is string => typeof item === "string")
+        : [],
+    },
+  };
+}
+
+export function normalizeTestMetaAdsConnectionResponse(
+  response: unknown,
+): TestMetaAdsConnectionResponse {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  if (!isRecord(candidate)) {
+    throw new Error("Meta Ads test connection response could not be parsed.");
+  }
+
+  const connection = normalizeAdminMetaAdsConnectionResponse(candidate.connection);
+  return {
+    success: true,
+    checkedAt: typeof candidate.checkedAt === "string" ? candidate.checkedAt : "",
+    connection,
+    account: {
+      adAccountId: readString(candidate.account, "adAccountId"),
+      currency: readNullableString(candidate.account, "currency"),
+      timezone: readNullableString(candidate.account, "timezone"),
+    },
+    grantedScopes: Array.isArray(candidate.grantedScopes)
+      ? candidate.grantedScopes.filter((item): item is string => typeof item === "string")
+      : [],
+  };
 }
 
 export function getActivePurchasedServices(client: ClientProfile): ClientPurchasedService[] {
@@ -805,6 +915,44 @@ function normalizePurchasedServiceStatus(value: unknown): PurchasedServiceStatus
   }
 
   return "ACTIVE";
+}
+
+function normalizeMetaAdsConnectionStatus(value: unknown): MetaAdsConnectionStatus {
+  if (value === "CONNECTED") {
+    return "CONNECTED";
+  }
+
+  if (value === "PENDING") {
+    return "PENDING";
+  }
+
+  if (value === "ERROR") {
+    return "ERROR";
+  }
+
+  if (value === "DISCONNECTED") {
+    return "DISCONNECTED";
+  }
+
+  return "NOT_CONNECTED";
+}
+
+function readString(value: unknown, key: string): string {
+  if (!isRecord(value)) {
+    return "";
+  }
+
+  const target = value[key];
+  return typeof target === "string" ? target : "";
+}
+
+function readNullableString(value: unknown, key: string): string | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const target = value[key];
+  return typeof target === "string" ? target : null;
 }
 
 function isStringOrNull(value: unknown): value is string | null {

@@ -182,3 +182,66 @@ export type ClientSummaryResponse = {
     generatedAt: string;
   };
 };
+
+export type MetaAdsConnectionStatus =
+  | "NOT_CONNECTED"
+  | "PENDING"
+  | "CONNECTED"
+  | "ERROR"
+  | "DISCONNECTED";
+
+export type AdminClientMetaAdsConnection = {
+  clientProfileId: string;
+  connectionStatus: MetaAdsConnectionStatus;
+  hasActiveService: boolean;
+  ids: {
+    businessId: string | null;
+    adAccountId: string | null;
+    pixelId: string | null;
+    instagramAccountId: string | null;
+    facebookPageId: string | null;
+  };
+  settings: {
+    currency: string | null;
+    timezone: string | null;
+  };
+  lastSyncAt: string | null;
+  syncError: string | null;
+  credential: {
+    hasToken: boolean;
+    tokenLastUpdatedAt: string | null;
+    tokenExpiresAt: string | null;
+    grantedScopes: string[];
+  };
+};
+
+export type ConnectManualMetaAdsRequest = {
+  accessToken: string;
+  businessId?: string;
+  adAccountId?: string;
+  pixelId?: string;
+  instagramAccountId?: string;
+  facebookPageId?: string;
+  currency?: string;
+  timezone?: string;
+  tokenExpiresAt?: string;
+  grantedScopes?: string[];
+};
+
+export type TestMetaAdsConnectionRequest = {
+  accessToken?: string;
+  adAccountId?: string;
+  requiredScopes?: string[];
+};
+
+export type TestMetaAdsConnectionResponse = {
+  success: true;
+  checkedAt: string;
+  connection: AdminClientMetaAdsConnection;
+  account: {
+    adAccountId: string;
+    currency: string | null;
+    timezone: string | null;
+  };
+  grantedScopes: string[];
+};

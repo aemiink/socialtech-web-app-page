@@ -1,12 +1,15 @@
-import { type FormEvent, type ReactNode, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import {
   ArrowLeft,
   Building2,
   Calendar,
+  CheckCircle2,
+  Link2Off,
   ExternalLink,
   FolderKanban,
   ListChecks,
+  PlugZap,
   RefreshCw,
 } from "lucide-react";
 import { Badge } from "../components/ui/badge";
@@ -14,7 +17,14 @@ import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { useGetAdminAssignmentsQuery } from "../features/adminAssignments/adminAssignmentsApi";
-import { useGetClientSummaryQuery, useResetClientOwnerPasswordMutation } from "../features/clients/clientsApi";
+import {
+  useConnectAdminClientMetaAdsManualMutation,
+  useDisconnectAdminClientMetaAdsMutation,
+  useGetAdminClientMetaAdsConnectionQuery,
+  useGetClientSummaryQuery,
+  useResetClientOwnerPasswordMutation,
+  useTestAdminClientMetaAdsConnectionMutation,
+} from "../features/clients/clientsApi";
 import type {
   ClientSummaryRecentProject,
   ClientSummaryRecentTask,
@@ -27,6 +37,8 @@ import {
   getClientPriorityBadgeClass,
   getClientPriorityLabel,
   getClientProjectStatusBadgeClass,
+  getMetaAdsConnectionStatusBadgeClass,
+  getMetaAdsConnectionStatusLabel,
   getClientProjectStatusLabel,
   getClientStatusBadgeClass,
   getClientStatusLabel,
@@ -43,8 +55,17 @@ export function ClientDetail() {
   const [ownerPassword, setOwnerPassword] = useState("");
   const [ownerPasswordConfirm, setOwnerPasswordConfirm] = useState("");
   const [ownerPasswordFeedback, setOwnerPasswordFeedback] = useState<string | null>(null);
+  const [metaAccessToken, setMetaAccessToken] = useState("");
+  const [metaAdAccountId, setMetaAdAccountId] = useState("");
+  const [metaConnectionFeedback, setMetaConnectionFeedback] = useState<string | null>(null);
   const [resetClientOwnerPassword, { isLoading: isResettingOwnerPassword }] =
     useResetClientOwnerPasswordMutation();
+  const [connectMetaAdsManual, { isLoading: isMetaConnecting }] =
+    useConnectAdminClientMetaAdsManualMutation();
+  const [testMetaAdsConnection, { isLoading: isMetaTesting }] =
+    useTestAdminClientMetaAdsConnectionMutation();
+  const [disconnectMetaAds, { isLoading: isMetaDisconnecting }] =
+    useDisconnectAdminClientMetaAdsMutation();
 
   const {
     data: summary,
@@ -64,6 +85,25 @@ export function ClientDetail() {
     { clientProfileId: clientProfileId ?? "", isActive: true },
     { skip: !isValidId },
   );
+  const {
+    data: metaAdsConnection,
+    error: metaAdsConnectionError,
+    isFetching: isMetaAdsConnectionFetching,
+    isLoading: isMetaAdsConnectionLoading,
+    refetch: refetchMetaAdsConnection,
+  } = useGetAdminClientMetaAdsConnectionQuery(clientProfileId ?? "", {
+    skip: !isValidId,
+  });
+
+  useEffect(() => {
+    if (!metaAdsConnection?.ids.adAccountId) {
+      return;
+    }
+
+    setMetaAdAccountId((currentValue) =>
+      currentValue.trim().length > 0 ? currentValue : metaAdsConnection.ids.adAccountId ?? "",
+    );
+  }, [metaAdsConnection?.ids.adAccountId]);
 
   if (!isValidId) {
     return (
@@ -123,6 +163,83 @@ export function ClientDetail() {
   }
 
   const { client, projects, tasks } = summary;
+  const hasMetaConnectionError = Boolean(metaAdsConnectionError);
+
+  const handleManualMetaConnect = async () => {
+    if (!clientProfileId) {
+      return;
+    }
+
+    const trimmedToken = metaAccessToken.trim();
+    if (!trimmedToken) {
+      setMetaConnectionFeedback("Manual bağlantı için access token gereklidir.");
+      return;
+    }
+
+    setMetaConnectionFeedback(null);
+
+    try {
+      await connectMetaAdsManual({
+        clientId: clientProfileId,
+        body: {
+          accessToken: trimmedToken,
+          ...(metaAdAccountId.trim() ? { adAccountId: metaAdAccountId.trim() } : {}),
+        },
+      }).unwrap();
+      setMetaAccessToken("");
+      setMetaConnectionFeedback("Meta bağlantı bilgileri kaydedildi.");
+      await refetchMetaAdsConnection();
+    } catch (mutationError) {
+      setMetaConnectionFeedback(
+        extractApiErrorMessage(mutationError, "Meta bağlantısı kaydedilemedi."),
+      );
+    }
+  };
+
+  const handleMetaConnectionTest = async () => {
+    if (!clientProfileId) {
+      return;
+    }
+
+    setMetaConnectionFeedback(null);
+
+    try {
+      await testMetaAdsConnection({
+        clientId: clientProfileId,
+        body: {
+          ...(metaAccessToken.trim() ? { accessToken: metaAccessToken.trim() } : {}),
+          ...(metaAdAccountId.trim() ? { adAccountId: metaAdAccountId.trim() } : {}),
+          requiredScopes: ["ads_read"],
+        },
+      }).unwrap();
+      setMetaAccessToken("");
+      setMetaConnectionFeedback("Meta bağlantı testi başarılı.");
+      await refetchMetaAdsConnection();
+    } catch (mutationError) {
+      setMetaConnectionFeedback(
+        extractApiErrorMessage(mutationError, "Meta bağlantı testi başarısız."),
+      );
+    }
+  };
+
+  const handleMetaDisconnect = async () => {
+    if (!clientProfileId) {
+      return;
+    }
+
+    setMetaConnectionFeedback(null);
+
+    try {
+      await disconnectMetaAds({ clientId: clientProfileId }).unwrap();
+      setMetaAccessToken("");
+      setMetaConnectionFeedback("Meta bağlantısı kesildi.");
+      await refetchMetaAdsConnection();
+    } catch (mutationError) {
+      setMetaConnectionFeedback(
+        extractApiErrorMessage(mutationError, "Meta bağlantısı kesilemedi."),
+      );
+    }
+  };
 
   const handleOwnerPasswordReset = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -203,6 +320,117 @@ export function ClientDetail() {
           <DetailRow label="Oluşturulma tarihi" value={formatClientDateTime(client.createdAt)} />
           <DetailRow label="Son güncelleme" value={formatClientDateTime(client.updatedAt)} />
         </div>
+      </Card>
+
+      <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-white">Meta Ads Bağlantı Yönetimi</h2>
+          <div className="flex items-center gap-2">
+            {isMetaAdsConnectionFetching && (
+              <span className="text-xs text-[#d2ff8a]">Bağlantı güncelleniyor...</span>
+            )}
+            {metaAdsConnection ? (
+              <Badge className={getMetaAdsConnectionStatusBadgeClass(metaAdsConnection.connectionStatus)}>
+                {getMetaAdsConnectionStatusLabel(metaAdsConnection.connectionStatus)}
+              </Badge>
+            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => refetchMetaAdsConnection()}
+            >
+              <RefreshCw className="h-4 w-4" />
+              Yenile
+            </Button>
+          </div>
+        </div>
+
+        {isMetaAdsConnectionLoading ? (
+          <p className="text-sm text-[#A0A0A0]">Meta bağlantı özeti yükleniyor...</p>
+        ) : null}
+        {hasMetaConnectionError ? (
+          <p className="text-sm text-red-300">
+            {extractApiErrorMessage(metaAdsConnectionError, "Meta bağlantı özeti alınamadı.")}
+          </p>
+        ) : null}
+
+        {metaAdsConnection ? (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <DetailRow label="Meta Ad Account ID" value={metaAdsConnection.ids.adAccountId ?? "—"} mono />
+            <DetailRow
+              label="Aktif Purchased Service"
+              value={metaAdsConnection.hasActiveService ? "Evet" : "Hayır"}
+            />
+            <DetailRow
+              label="Token Durumu"
+              value={metaAdsConnection.credential.hasToken ? "Kayıtlı" : "Kayıtlı değil"}
+            />
+            <DetailRow
+              label="Son Token Güncellemesi"
+              value={formatClientDateTime(metaAdsConnection.credential.tokenLastUpdatedAt)}
+            />
+            <DetailRow
+              label="Son Senkronizasyon"
+              value={formatClientDateTime(metaAdsConnection.lastSyncAt)}
+            />
+            <DetailRow label="Sync Hata Özeti" value={metaAdsConnection.syncError ?? "—"} />
+          </div>
+        ) : null}
+
+        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
+          <Input
+            value={metaAdAccountId}
+            onChange={(event) => setMetaAdAccountId(event.target.value)}
+            className="border-white/[0.12] bg-black/20 text-white placeholder:text-[#7A7A7A]"
+            placeholder="Ad Account ID (örn: act_123456789)"
+          />
+          <Input
+            type="password"
+            value={metaAccessToken}
+            onChange={(event) => setMetaAccessToken(event.target.value)}
+            className="border-white/[0.12] bg-black/20 text-white placeholder:text-[#7A7A7A]"
+            placeholder="Yeni access token (write-only)"
+            autoComplete="off"
+          />
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button
+            type="button"
+            className="gap-2"
+            onClick={handleManualMetaConnect}
+            disabled={isMetaConnecting || isMetaTesting || isMetaDisconnecting}
+          >
+            <PlugZap className="h-4 w-4" />
+            {isMetaConnecting ? "Kaydediliyor..." : "Token Güncelle / Manual Connect"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-2"
+            onClick={handleMetaConnectionTest}
+            disabled={isMetaConnecting || isMetaTesting || isMetaDisconnecting}
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            {isMetaTesting ? "Test Ediliyor..." : "Meta Bağlantısını Test Et"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-2 border-red-500/30 text-red-200 hover:bg-red-500/10"
+            onClick={handleMetaDisconnect}
+            disabled={isMetaConnecting || isMetaTesting || isMetaDisconnecting}
+          >
+            <Link2Off className="h-4 w-4" />
+            {isMetaDisconnecting ? "Kesiliyor..." : "Bağlantıyı Kes"}
+          </Button>
+        </div>
+
+        {metaConnectionFeedback ? (
+          <p className="mt-3 text-sm text-[#d8ff8f]">{metaConnectionFeedback}</p>
+        ) : null}
       </Card>
 
       <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">

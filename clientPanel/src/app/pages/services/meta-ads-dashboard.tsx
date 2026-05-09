@@ -2,6 +2,7 @@ import { DollarSign, Users, MousePointerClick, TrendingUp, TrendingDown, Message
 import { Button } from '../../components/button';
 import { AutomationPreview } from '../../components/automation-preview';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { useGetOwnMetaAdsConfigQuery } from '../../features/metaAds/metaAdsApi';
 
 const kpiData = [
   { title: 'ROAS', value: '4.8x', change: 12.3, icon: TrendingUp },
@@ -82,6 +83,36 @@ const pixelStatus = [
 ];
 
 export function MetaAdsDashboard() {
+  const { data: ownMetaAdsConfig, isLoading, isError } = useGetOwnMetaAdsConfigQuery();
+  const connectionStatus = ownMetaAdsConfig?.connectionStatus ?? 'NOT_CONNECTED';
+  const statusCopy = getClientConnectionCopy(connectionStatus, isError);
+
+  if (isLoading) {
+    return (
+      <div className="p-8">
+        <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08] text-[#A0A0A0]">
+          Meta bağlantı durumu yükleniyor...
+        </div>
+      </div>
+    );
+  }
+
+  if (statusCopy.kind !== 'connected') {
+    return (
+      <div className="p-8 space-y-6">
+        <div>
+          <h1 className="text-3xl text-white mb-2">Meta Ads</h1>
+          <p className="text-[#A0A0A0]">Facebook ve Instagram reklam performansı</p>
+        </div>
+
+        <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
+          <h2 className="text-xl text-white mb-2">{statusCopy.title}</h2>
+          <p className="text-[#A0A0A0] text-sm">{statusCopy.description}</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-8 space-y-6">
       <div className="flex items-center justify-between">
@@ -362,4 +393,40 @@ export function MetaAdsDashboard() {
       </div>
     </div>
   );
+}
+
+function getClientConnectionCopy(connectionStatus: string, hasQueryError: boolean): {
+  kind: 'connected' | 'pending' | 'issue';
+  title: string;
+  description: string;
+} {
+  if (hasQueryError) {
+    return {
+      kind: 'issue',
+      title: 'Bağlantıda sorun var',
+      description: 'Bağlantıda sorun var, ekibimiz ilgileniyor.',
+    };
+  }
+
+  if (connectionStatus === 'CONNECTED') {
+    return {
+      kind: 'connected',
+      title: 'Bağlantı aktif',
+      description: 'Meta Ads bağlantısı aktif.',
+    };
+  }
+
+  if (connectionStatus === 'PENDING') {
+    return {
+      kind: 'pending',
+      title: 'Bağlantı bekleniyor',
+      description: 'Bağlantı bekleniyor, ekibimiz kurulumu tamamlıyor.',
+    };
+  }
+
+  return {
+    kind: 'issue',
+    title: 'Bağlantıda sorun var',
+    description: 'Bağlantıda sorun var, ekibimiz ilgileniyor.',
+  };
 }
