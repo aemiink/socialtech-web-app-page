@@ -6,8 +6,10 @@ import {
 } from "@nestjs/common";
 import {
   AccountType,
+  MetaAdsApprovalStatus,
   PurchasedServiceKey,
   Prisma,
+  TaskStatus,
   TaskType,
   TaskTodoVisibility,
   UserRole,
@@ -88,6 +90,18 @@ const taskReadSelect = {
   codePreparedByUserId: true,
   assigneeUserId: true,
   dueDate: true,
+  approvalRequired: true,
+  approvalType: true,
+  approvalStatus: true,
+  approvalResponseNote: true,
+  approvalRequestedAt: true,
+  approvalRespondedAt: true,
+  approvalRespondedByUserId: true,
+  approvalContext: true,
+  referenceProjectFileId: true,
+  campaignRef: true,
+  adSetRef: true,
+  adRef: true,
   createdAt: true,
   updatedAt: true,
   project: {
@@ -98,6 +112,21 @@ const taskReadSelect = {
   },
   codePreparedBy: {
     select: assigneeSummarySelect,
+  },
+  approvalRespondedBy: {
+    select: assigneeSummarySelect,
+  },
+  referenceProjectFile: {
+    select: {
+      id: true,
+      title: true,
+      secureUrl: true,
+      category: true,
+      mimeType: true,
+      visibility: true,
+      approvalRequired: true,
+      approvalStatus: true,
+    },
   },
   sprint: {
     select: {
@@ -175,6 +204,7 @@ const TASK_ASSIGN_ASSIGNED_PERMISSION = "tasks.assign.assigned";
 const TASK_TODOS_MANAGE_ASSIGNED_PERMISSION = "tasks.todos.manage.assigned";
 const TASK_UPDATE_ASSIGNED_PERMISSION = "tasks.update.assigned";
 const TASK_UPDATE_OWN_FALLBACK_PERMISSION = "tasks.update.own";
+const APPROVAL_RESPOND_OWN_PERMISSION = "approvals.respond.own";
 
 @Injectable()
 export class TasksService {
@@ -237,7 +267,16 @@ export class TasksService {
     }
     await this.assertAssigneeIsValidForProject(dto.assigneeUserId, project.clientProfileId);
     await this.assertSprintBelongsToProject(dto.sprintId, project.id);
+    await this.assertReferenceProjectFileBelongsToProject(dto.referenceProjectFileId, project.id);
     const generatedCode = dto.code?.trim() || (await this.generateTaskCode(dto.type ?? TaskType.FEATURE));
+    const approvalStatus =
+      dto.approvalStatus ?? (dto.approvalRequired ? MetaAdsApprovalStatus.PENDING : null);
+    const approvalRequestedAt =
+      this.parseNullableDate(dto.approvalRequestedAt) ??
+      (approvalStatus === MetaAdsApprovalStatus.PENDING ? new Date() : null);
+    const approvalRespondedAt = this.parseNullableDate(dto.approvalRespondedAt) ?? null;
+    const shouldSetApprovalResponder =
+      approvalStatus !== null && this.isTerminalApprovalStatus(approvalStatus);
 
     const task = await this.prisma.task.create({
       data: {
@@ -261,6 +300,19 @@ export class TasksService {
         ...(dto.assigneeUserId
           ? { assignee: { connect: { id: dto.assigneeUserId } } }
           : {}),
+        approvalRequired: dto.approvalRequired ?? false,
+        approvalType: dto.approvalType ?? null,
+        approvalStatus,
+        approvalResponseNote: dto.approvalResponseNote ?? null,
+        approvalRequestedAt,
+        approvalRespondedAt,
+        ...(shouldSetApprovalResponder ? { approvalRespondedBy: { connect: { id: currentUser.id } } } : {}),
+        ...(dto.referenceProjectFileId
+          ? { referenceProjectFile: { connect: { id: dto.referenceProjectFileId } } }
+          : {}),
+        campaignRef: dto.campaignRef ?? null,
+        adSetRef: dto.adSetRef ?? null,
+        adRef: dto.adRef ?? null,
       },
       select: taskReadSelect,
     });
@@ -288,7 +340,11 @@ export class TasksService {
       return this.updateOwnTaskStatus(currentUser, taskId, dto);
     }
 
-    throw new ForbiddenException("Client accounts cannot update tasks.");
+    if (this.isClient(currentUser)) {
+      return this.updateTaskAsClientApprovalResponse(currentUser, taskId, dto);
+    }
+
+    throw new ForbiddenException("You are not allowed to update tasks.");
   }
 
   async createTaskTodo(
@@ -481,8 +537,18 @@ export class TasksService {
     if (dto.sprintId !== undefined) {
       await this.assertSprintBelongsToProject(dto.sprintId, nextProject.id);
     }
+    if (dto.referenceProjectFileId !== undefined) {
+      await this.assertReferenceProjectFileBelongsToProject(dto.referenceProjectFileId, nextProject.id);
+    }
 
     const dueDateUpdate = this.parseNullableDate(dto.dueDate);
+    const approvalRequestedAtUpdate = this.parseNullableDate(dto.approvalRequestedAt);
+    const approvalRespondedAtUpdate = this.parseNullableDate(dto.approvalRespondedAt);
+    const approvalStatusUpdate = this.buildApprovalStatusUpdateData(
+      dto.approvalStatus,
+      currentUser.id,
+      approvalRespondedAtUpdate,
+    );
     const data: Prisma.TaskUpdateInput = {
       ...(dto.projectId ? { project: { connect: { id: dto.projectId } } } : {}),
       ...(dto.sprintId !== undefined
@@ -508,6 +574,26 @@ export class TasksService {
       ...(dto.reportedBy !== undefined ? { reportedBy: dto.reportedBy } : {}),
       ...(dto.code !== undefined ? { code: dto.code } : {}),
       ...(dueDateUpdate !== undefined ? { dueDate: dueDateUpdate } : {}),
+      ...(dto.approvalRequired !== undefined ? { approvalRequired: dto.approvalRequired } : {}),
+      ...(dto.approvalType !== undefined ? { approvalType: dto.approvalType } : {}),
+      ...(dto.approvalResponseNote !== undefined
+        ? { approvalResponseNote: dto.approvalResponseNote }
+        : {}),
+      ...(approvalRequestedAtUpdate !== undefined
+        ? { approvalRequestedAt: approvalRequestedAtUpdate }
+        : {}),
+      ...(approvalStatusUpdate ?? {}),
+      ...(dto.referenceProjectFileId !== undefined
+        ? {
+            referenceProjectFile:
+              dto.referenceProjectFileId === null
+                ? { disconnect: true }
+                : { connect: { id: dto.referenceProjectFileId } },
+          }
+        : {}),
+      ...(dto.campaignRef !== undefined ? { campaignRef: dto.campaignRef } : {}),
+      ...(dto.adSetRef !== undefined ? { adSetRef: dto.adSetRef } : {}),
+      ...(dto.adRef !== undefined ? { adRef: dto.adRef } : {}),
       ...(dto.assigneeUserId !== undefined
         ? {
             assignee:
@@ -554,8 +640,18 @@ export class TasksService {
     if (dto.sprintId !== undefined) {
       await this.assertSprintBelongsToProject(dto.sprintId, nextProject.id);
     }
+    if (dto.referenceProjectFileId !== undefined) {
+      await this.assertReferenceProjectFileBelongsToProject(dto.referenceProjectFileId, nextProject.id);
+    }
 
     const dueDateUpdate = this.parseNullableDate(dto.dueDate);
+    const approvalRequestedAtUpdate = this.parseNullableDate(dto.approvalRequestedAt);
+    const approvalRespondedAtUpdate = this.parseNullableDate(dto.approvalRespondedAt);
+    const approvalStatusUpdate = this.buildApprovalStatusUpdateData(
+      dto.approvalStatus,
+      currentUser.id,
+      approvalRespondedAtUpdate,
+    );
     const data: Prisma.TaskUpdateInput = {
       ...(dto.projectId ? { project: { connect: { id: dto.projectId } } } : {}),
       ...(dto.sprintId !== undefined
@@ -581,6 +677,26 @@ export class TasksService {
       ...(dto.reportedBy !== undefined ? { reportedBy: dto.reportedBy } : {}),
       ...(dto.code !== undefined ? { code: dto.code } : {}),
       ...(dueDateUpdate !== undefined ? { dueDate: dueDateUpdate } : {}),
+      ...(dto.approvalRequired !== undefined ? { approvalRequired: dto.approvalRequired } : {}),
+      ...(dto.approvalType !== undefined ? { approvalType: dto.approvalType } : {}),
+      ...(dto.approvalResponseNote !== undefined
+        ? { approvalResponseNote: dto.approvalResponseNote }
+        : {}),
+      ...(approvalRequestedAtUpdate !== undefined
+        ? { approvalRequestedAt: approvalRequestedAtUpdate }
+        : {}),
+      ...(approvalStatusUpdate ?? {}),
+      ...(dto.referenceProjectFileId !== undefined
+        ? {
+            referenceProjectFile:
+              dto.referenceProjectFileId === null
+                ? { disconnect: true }
+                : { connect: { id: dto.referenceProjectFileId } },
+          }
+        : {}),
+      ...(dto.campaignRef !== undefined ? { campaignRef: dto.campaignRef } : {}),
+      ...(dto.adSetRef !== undefined ? { adSetRef: dto.adSetRef } : {}),
+      ...(dto.adRef !== undefined ? { adRef: dto.adRef } : {}),
       ...(dto.assigneeUserId !== undefined
         ? {
             assignee:
@@ -633,6 +749,57 @@ export class TasksService {
     const updatedTask = await this.prisma.task.update({
       where: { id: taskId },
       data: { status: dto.status },
+      select: taskReadSelect,
+    });
+
+    return this.toTaskResponse(updatedTask, currentUser);
+  }
+
+  private async updateTaskAsClientApprovalResponse(
+    currentUser: AuthenticatedUser,
+    taskId: string,
+    dto: UpdateTaskDto,
+  ): Promise<TaskResponse> {
+    this.assertCanRespondOwnApprovals(currentUser);
+    this.assertClientApprovalOnlyUpdate(dto);
+
+    const clientProfileId = this.getClientProfileIdOrFail(currentUser);
+    const approvalStatus = dto.approvalStatus as MetaAdsApprovalStatus;
+
+    if (
+      (approvalStatus === MetaAdsApprovalStatus.REJECTED ||
+        approvalStatus === MetaAdsApprovalStatus.CHANGES_REQUESTED) &&
+      (!dto.approvalResponseNote || dto.approvalResponseNote.trim().length < 2)
+    ) {
+      throw new BadRequestException("Rejection or revision requests require a response note.");
+    }
+
+    const task = await this.prisma.task.findFirst({
+      where: {
+        id: taskId,
+        approvalRequired: true,
+        approvalStatus: MetaAdsApprovalStatus.PENDING,
+        project: {
+          clientProfileId,
+          serviceKey: PurchasedServiceKey.META_ADS,
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!task) {
+      throw new NotFoundException("Task not found.");
+    }
+
+    const updatedTask = await this.prisma.task.update({
+      where: { id: task.id },
+      data: {
+        approvalStatus,
+        approvalResponseNote: dto.approvalResponseNote ?? null,
+        approvalRespondedAt: new Date(),
+        approvalRespondedBy: { connect: { id: currentUser.id } },
+        status: this.resolveTaskStatusFromClientApproval(approvalStatus),
+      },
       select: taskReadSelect,
     });
 
@@ -752,6 +919,11 @@ export class TasksService {
       ...(query.workstream ? { workstream: query.workstream } : {}),
       ...(query.severity ? { severity: query.severity } : {}),
       ...(query.environment ? { environment: query.environment } : {}),
+      ...(query.approvalRequired !== undefined
+        ? { approvalRequired: query.approvalRequired }
+        : {}),
+      ...(query.approvalStatus ? { approvalStatus: query.approvalStatus } : {}),
+      ...(query.approvalType ? { approvalType: query.approvalType } : {}),
       ...(query.clientProfileId ? { project: { clientProfileId: query.clientProfileId } } : {}),
     };
 
@@ -886,6 +1058,27 @@ export class TasksService {
     }
   }
 
+  private async assertReferenceProjectFileBelongsToProject(
+    fileId: string | null | undefined,
+    projectId: string,
+  ): Promise<void> {
+    if (!fileId) {
+      return;
+    }
+
+    const file = await this.prisma.projectFile.findFirst({
+      where: {
+        id: fileId,
+        projectId,
+      },
+      select: { id: true },
+    });
+
+    if (!file) {
+      throw new BadRequestException("Referenced project file must belong to the same project.");
+    }
+  }
+
   private assertHasUpdatePayload(dto: UpdateTaskDto): void {
     if (
       dto.projectId === undefined &&
@@ -903,7 +1096,17 @@ export class TasksService {
       dto.reportedBy === undefined &&
       dto.code === undefined &&
       dto.assigneeUserId === undefined &&
-      dto.dueDate === undefined
+      dto.dueDate === undefined &&
+      dto.approvalRequired === undefined &&
+      dto.approvalType === undefined &&
+      dto.approvalStatus === undefined &&
+      dto.approvalResponseNote === undefined &&
+      dto.approvalRequestedAt === undefined &&
+      dto.approvalRespondedAt === undefined &&
+      dto.referenceProjectFileId === undefined &&
+      dto.campaignRef === undefined &&
+      dto.adSetRef === undefined &&
+      dto.adRef === undefined
     ) {
       throw new BadRequestException("Provide at least one task field to update.");
     }
@@ -941,13 +1144,67 @@ export class TasksService {
       dto.reportedBy !== undefined ||
       dto.code !== undefined ||
       dto.assigneeUserId !== undefined ||
-      dto.dueDate !== undefined
+      dto.dueDate !== undefined ||
+      dto.approvalRequired !== undefined ||
+      dto.approvalType !== undefined ||
+      dto.approvalStatus !== undefined ||
+      dto.approvalResponseNote !== undefined ||
+      dto.approvalRequestedAt !== undefined ||
+      dto.approvalRespondedAt !== undefined ||
+      dto.referenceProjectFileId !== undefined ||
+      dto.campaignRef !== undefined ||
+      dto.adSetRef !== undefined ||
+      dto.adRef !== undefined
     ) {
       throw new ForbiddenException("Employees can only update task status.");
     }
 
     if (dto.status === undefined) {
       throw new BadRequestException("Employees can only update task status.");
+    }
+  }
+
+  private assertClientApprovalOnlyUpdate(dto: UpdateTaskDto): void {
+    if (
+      dto.projectId !== undefined ||
+      dto.sprintId !== undefined ||
+      dto.title !== undefined ||
+      dto.description !== undefined ||
+      dto.status !== undefined ||
+      dto.priority !== undefined ||
+      dto.type !== undefined ||
+      dto.workstream !== undefined ||
+      dto.severity !== undefined ||
+      dto.environment !== undefined ||
+      dto.affectedUrl !== undefined ||
+      dto.reproductionSteps !== undefined ||
+      dto.reportedBy !== undefined ||
+      dto.code !== undefined ||
+      dto.assigneeUserId !== undefined ||
+      dto.dueDate !== undefined ||
+      dto.approvalRequired !== undefined ||
+      dto.approvalType !== undefined ||
+      dto.approvalRequestedAt !== undefined ||
+      dto.approvalRespondedAt !== undefined ||
+      dto.referenceProjectFileId !== undefined ||
+      dto.campaignRef !== undefined ||
+      dto.adSetRef !== undefined ||
+      dto.adRef !== undefined
+    ) {
+      throw new ForbiddenException("Clients can only respond to approval status.");
+    }
+
+    if (!dto.approvalStatus) {
+      throw new BadRequestException("Approval status is required.");
+    }
+
+    if (
+      dto.approvalStatus !== MetaAdsApprovalStatus.APPROVED &&
+      dto.approvalStatus !== MetaAdsApprovalStatus.REJECTED &&
+      dto.approvalStatus !== MetaAdsApprovalStatus.CHANGES_REQUESTED &&
+      dto.approvalStatus !== MetaAdsApprovalStatus.ACKNOWLEDGED
+    ) {
+      throw new BadRequestException("Unsupported approval status for client response.");
     }
   }
 
@@ -981,6 +1238,53 @@ export class TasksService {
     }
 
     return new Date(value);
+  }
+
+  private buildApprovalStatusUpdateData(
+    approvalStatus: MetaAdsApprovalStatus | null | undefined,
+    actorUserId: string,
+    approvalRespondedAtUpdate: Date | null | undefined,
+  ): Prisma.TaskUpdateInput | undefined {
+    if (approvalStatus === undefined) {
+      return undefined;
+    }
+
+    if (approvalStatus === null) {
+      return {
+        approvalStatus: null,
+        approvalRespondedAt: null,
+        approvalRespondedBy: { disconnect: true },
+      };
+    }
+
+    if (!this.isTerminalApprovalStatus(approvalStatus)) {
+      return {
+        approvalStatus,
+        approvalRespondedAt: null,
+        approvalRespondedBy: { disconnect: true },
+      };
+    }
+
+    return {
+      approvalStatus,
+      approvalRespondedAt: approvalRespondedAtUpdate ?? new Date(),
+      approvalRespondedBy: { connect: { id: actorUserId } },
+    };
+  }
+
+  private resolveTaskStatusFromClientApproval(approvalStatus: MetaAdsApprovalStatus): TaskStatus {
+    if (
+      approvalStatus === MetaAdsApprovalStatus.APPROVED ||
+      approvalStatus === MetaAdsApprovalStatus.ACKNOWLEDGED
+    ) {
+      return TaskStatus.DONE;
+    }
+
+    return TaskStatus.IN_PROGRESS;
+  }
+
+  private isTerminalApprovalStatus(approvalStatus: MetaAdsApprovalStatus): boolean {
+    return approvalStatus !== MetaAdsApprovalStatus.PENDING;
   }
 
   private toTaskResponse(task: TaskReadModel, currentUser: AuthenticatedUser): TaskResponse {
@@ -1245,6 +1549,15 @@ export class TasksService {
     }
 
     return currentUser.clientProfileId;
+  }
+
+  private assertCanRespondOwnApprovals(currentUser: AuthenticatedUser): void {
+    if (!this.isClient(currentUser)) {
+      throw new ForbiddenException("Only client users can respond to approvals.");
+    }
+
+    this.assertHasPermission(currentUser, APPROVAL_RESPOND_OWN_PERMISSION);
+    this.getClientProfileIdOrFail(currentUser);
   }
 
   private assertHasPermission(

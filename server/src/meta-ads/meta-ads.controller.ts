@@ -6,6 +6,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from "@nestjs/common";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
@@ -14,6 +15,9 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { ConnectManualMetaAdsDto } from "./dto/connect-manual-meta-ads.dto";
+import { MetaAdsCampaignsQueryDto } from "./dto/meta-ads-campaigns-query.dto";
+import { MetaAdsDateRangeQueryDto } from "./dto/meta-ads-date-range-query.dto";
+import { MetaAdsInsightsQueryDto } from "./dto/meta-ads-insights-query.dto";
 import { TestMetaAdsConnectionDto } from "./dto/test-meta-ads-connection.dto";
 import { UpdateMetaAdsConfigDto } from "./dto/update-meta-ads-config.dto";
 import { MetaAdsService } from "./meta-ads.service";
@@ -22,6 +26,15 @@ import { MetaAdsService } from "./meta-ads.service";
 @Controller()
 export class MetaAdsController {
   constructor(private readonly metaAdsService: MetaAdsService) {}
+
+  @Get("admin/meta-ads/clients")
+  @RequirePermissions("metaAds.config.read.any")
+  getAdminMetaAdsClients(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Query() query: MetaAdsDateRangeQueryDto,
+  ) {
+    return this.metaAdsService.getAdminMetaAdsClients(currentUser, query);
+  }
 
   @Get("admin/clients/:clientId/meta-ads/config")
   @RequirePermissions("metaAds.config.read.any")
@@ -80,6 +93,75 @@ export class MetaAdsController {
     return this.metaAdsService.testAdminClientConnection(currentUser, clientId, dto);
   }
 
+  @Get("admin/clients/:clientId/meta-ads/summary")
+  @RequirePermissions("metaAds.config.read.any")
+  getAdminClientMetaAdsSummary(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: MetaAdsDateRangeQueryDto,
+  ) {
+    return this.metaAdsService.getAdminClientSummary(currentUser, clientId, query);
+  }
+
+  @Get("admin/clients/:clientId/meta-ads/campaigns")
+  @RequirePermissions("metaAds.config.read.any")
+  getAdminClientMetaAdsCampaigns(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: MetaAdsCampaignsQueryDto,
+  ) {
+    return this.metaAdsService.getAdminClientCampaigns(currentUser, clientId, query);
+  }
+
+  @Get("admin/clients/:clientId/meta-ads/adsets")
+  @RequirePermissions("metaAds.config.read.any")
+  getAdminClientMetaAdsAdSets(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: MetaAdsCampaignsQueryDto,
+  ) {
+    return this.metaAdsService.getAdminClientAdSets(currentUser, clientId, query);
+  }
+
+  @Get("admin/clients/:clientId/meta-ads/ads")
+  @RequirePermissions("metaAds.config.read.any")
+  getAdminClientMetaAdsAds(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: MetaAdsCampaignsQueryDto,
+  ) {
+    return this.metaAdsService.getAdminClientAds(currentUser, clientId, query);
+  }
+
+  @Get("admin/clients/:clientId/meta-ads/pixel-status")
+  @RequirePermissions("metaAds.config.read.any")
+  getAdminClientMetaAdsPixelStatus(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+  ) {
+    return this.metaAdsService.getAdminClientPixelStatus(currentUser, clientId);
+  }
+
+  @Get("admin/clients/:clientId/meta-ads/insights")
+  @RequirePermissions("metaAds.config.read.any")
+  getAdminClientMetaAdsInsights(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: MetaAdsInsightsQueryDto,
+  ) {
+    return this.metaAdsService.getAdminClientInsights(currentUser, clientId, query);
+  }
+
+  @Post("admin/clients/:clientId/meta-ads/sync")
+  @RequirePermissions("metaAds.config.manage.any")
+  syncAdminClientMetaAdsInsights(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: MetaAdsDateRangeQueryDto,
+  ) {
+    return this.metaAdsService.syncAdminClientInsights(currentUser, clientId, query);
+  }
+
   @Get("meta-ads/clients/:clientId/config")
   @RequirePermissions("metaAds.config.read.assigned")
   getAssignedClientMetaAdsConfig(
@@ -89,9 +171,129 @@ export class MetaAdsController {
     return this.metaAdsService.getAssignedClientConfig(currentUser, clientId);
   }
 
+  @Get("meta-ads/clients/:clientId/summary")
+  @RequirePermissions("metaAds.config.read.assigned")
+  getAssignedClientMetaAdsSummary(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: MetaAdsDateRangeQueryDto,
+  ) {
+    return this.metaAdsService.getAssignedClientSummary(currentUser, clientId, query);
+  }
+
+  @Get("meta-ads/clients/:clientId/campaigns")
+  @RequirePermissions("metaAds.config.read.assigned")
+  getAssignedClientMetaAdsCampaigns(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: MetaAdsCampaignsQueryDto,
+  ) {
+    return this.metaAdsService.getAssignedClientCampaigns(currentUser, clientId, query);
+  }
+
+  @Get("meta-ads/clients/:clientId/adsets")
+  @RequirePermissions("metaAds.config.read.assigned")
+  getAssignedClientMetaAdsAdSets(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: MetaAdsCampaignsQueryDto,
+  ) {
+    return this.metaAdsService.getAssignedClientAdSets(currentUser, clientId, query);
+  }
+
+  @Get("meta-ads/clients/:clientId/ads")
+  @RequirePermissions("metaAds.config.read.assigned")
+  getAssignedClientMetaAdsAds(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: MetaAdsCampaignsQueryDto,
+  ) {
+    return this.metaAdsService.getAssignedClientAds(currentUser, clientId, query);
+  }
+
+  @Get("meta-ads/clients/:clientId/pixel-status")
+  @RequirePermissions("metaAds.config.read.assigned")
+  getAssignedClientMetaAdsPixelStatus(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+  ) {
+    return this.metaAdsService.getAssignedClientPixelStatus(currentUser, clientId);
+  }
+
+  @Get("meta-ads/clients/:clientId/insights")
+  @RequirePermissions("metaAds.config.read.assigned")
+  getAssignedClientMetaAdsInsights(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: MetaAdsInsightsQueryDto,
+  ) {
+    return this.metaAdsService.getAssignedClientInsights(currentUser, clientId, query);
+  }
+
+  @Post("meta-ads/clients/:clientId/sync")
+  @RequirePermissions("metaAds.config.read.assigned")
+  syncAssignedClientMetaAdsInsights(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: MetaAdsDateRangeQueryDto,
+  ) {
+    return this.metaAdsService.syncAssignedClientInsights(currentUser, clientId, query);
+  }
+
   @Get("clients/me/meta-ads/config")
   @RequirePermissions("metaAds.config.read.own")
   getOwnClientMetaAdsConfig(@CurrentUser() currentUser: AuthenticatedUser) {
     return this.metaAdsService.getOwnClientConfig(currentUser);
+  }
+
+  @Get("clients/me/meta-ads/summary")
+  @RequirePermissions("metaAds.config.read.own")
+  getOwnClientMetaAdsSummary(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Query() query: MetaAdsDateRangeQueryDto,
+  ) {
+    return this.metaAdsService.getOwnClientSummary(currentUser, query);
+  }
+
+  @Get("clients/me/meta-ads/campaigns")
+  @RequirePermissions("metaAds.config.read.own")
+  getOwnClientMetaAdsCampaigns(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Query() query: MetaAdsCampaignsQueryDto,
+  ) {
+    return this.metaAdsService.getOwnClientCampaigns(currentUser, query);
+  }
+
+  @Get("clients/me/meta-ads/adsets")
+  @RequirePermissions("metaAds.config.read.own")
+  getOwnClientMetaAdsAdSets(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Query() query: MetaAdsCampaignsQueryDto,
+  ) {
+    return this.metaAdsService.getOwnClientAdSets(currentUser, query);
+  }
+
+  @Get("clients/me/meta-ads/ads")
+  @RequirePermissions("metaAds.config.read.own")
+  getOwnClientMetaAdsAds(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Query() query: MetaAdsCampaignsQueryDto,
+  ) {
+    return this.metaAdsService.getOwnClientAds(currentUser, query);
+  }
+
+  @Get("clients/me/meta-ads/pixel-status")
+  @RequirePermissions("metaAds.config.read.own")
+  getOwnClientMetaAdsPixelStatus(@CurrentUser() currentUser: AuthenticatedUser) {
+    return this.metaAdsService.getOwnClientPixelStatus(currentUser);
+  }
+
+  @Get("clients/me/meta-ads/insights")
+  @RequirePermissions("metaAds.config.read.own")
+  getOwnClientMetaAdsInsights(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Query() query: MetaAdsInsightsQueryDto,
+  ) {
+    return this.metaAdsService.getOwnClientInsights(currentUser, query);
   }
 }

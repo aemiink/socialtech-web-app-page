@@ -53,6 +53,7 @@ Developer/Delivery is now a backend-native operations module built on top of `Pr
 Role-based sidebar. Common pages: Dashboard, Gorevlerim, Musterilerim, Takvim, Bildirimler, Dosyalar, Ayarlar. Specialist pages vary per role (see routes.tsx).
 `CRM_SPECIALIST` employees receive CRM Leadleri and Bugünkü Takipler routes and only see assigned CRM leads.
 `DEVELOPER` employees now use API-driven Dashboard, Frontend, Backend/API, Buglar, Revizyonlar, Sprintler, Test & Yayın, and Projeler pages backed by delivery/task/repository endpoints.
+`SOCIAL_MEDIA_SPECIALIST`, `PERFORMANCE_SPECIALIST`, and `DESIGNER` now have an assigned-scope Meta Ads employee workspace (`/employee/meta-ads`) and role-specific workspace sections/actions via `MetaAdsWorkspace`.
 
 ### Client Portal
 Separate Vite + React SPA at `clientPanel/`. It is a customer-facing visibility panel, not a public SaaS product.
@@ -874,6 +875,32 @@ Latest reported checks: `adminandemployeePanel npm run check`, `clientPanel npm 
 - Admin CRM owner picker uses `GET /api/v1/admin/users` with `role=CRM_SPECIALIST`; a dedicated CRM owner candidates endpoint can reduce coupling later.
 - CRM reminders, pipeline analytics, and outbound email/WhatsApp sending integrations are planned follow-ups.
 
+## Update - 2026-05-09 (Meta Ads Faz 5 Admin Global Panel)
+
+### Backend Architecture
+- Global admin Meta Ads listing endpoint added:
+  - `GET /api/v1/admin/meta-ads/clients`
+- Endpoint returns META_ADS purchased-service client rows with:
+  - connection status / token presence / sync error / last sync
+  - report-range spend summary (ACCOUNT insight aggregate)
+  - pending approvals aggregate (review tasks + pending release approvals on META_ADS projects)
+  - active assigned employees
+- Sensitive token material remains response-hidden.
+
+### Admin Panel Frontend
+- New admin route/page:
+  - `/meta-ads` (`MetaAdsAdmin`)
+- Page provides:
+  - global Meta Ads client table + KPI cards
+  - permission-aware actions: config edit, connection test, manual sync, disconnect
+  - approval request create shortcut (V1 mapped to `Task(type=REVISION, status=REVIEW)` on META_ADS project)
+- `ClientDetail` Meta Ads section now includes a manual sync action.
+
+### Testing
+- Backend: `npm run check` passed.
+- Frontend: targeted page tests passed (`MetaAdsAdmin`, `ClientDetail`) and `npm run check` passed.
+- Backend targeted e2e run is guarded until `DATABASE_URL` points to a test-pattern DB (`*_test` / `test_*` / `*testing*`).
+
 ## Update - 2026-05-03 (Developer / Delivery Operations Milestone)
 
 ### Product Summary
@@ -1041,3 +1068,23 @@ Latest reported checks: `adminandemployeePanel npm run check`, `clientPanel npm 
 
 ### Known Risks / Notes
 - Bazı eski frontend testlerinde timeout kaynaklı kırılganlık devam edebilir; hedefli test stabilizasyonu follow-up gerektirir.
+
+## 2026-05-09 Update - Meta Ads Faz 7 Approval + Creative Collaboration
+
+### Backend
+- `Task` modeline Meta Ads approval lifecycle alanları eklendi (`approvalRequired`, `approvalType`, `approvalStatus`, `approvalResponseNote`, approval timestamps, creative reference).
+- `ProjectFile` modeline creative approval metadata alanları eklendi (approval flags/status + campaign/adset/ad refs + performance summary).
+- Client kullanıcılar için task update tarafında daraltılmış approval-response akışı açıldı:
+  - sadece own scope
+  - sadece `META_ADS` proje
+  - sadece pending approval task
+  - sadece approval status response alanları
+
+### Client Panel
+- Meta Ads `approvals` tabı local aksiyon yerine gerçek backend mutation (`PATCH /tasks/:id`) ile çalışır.
+- Pending approvals card + creative preview + approval history aynı ekranda render edilir.
+- Revizyon isteğinde açıklama notu akışı UI ve backend doğrulamasıyla hizalandı.
+
+### Admin/Employee Panel
+- Meta Ads workspace approval listesi artık approval type/status/note alanlarını gösterir.
+- Approval task create aksiyonları role-aware approval type ile oluşturulur (`campaign/budget/creative`).

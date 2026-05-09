@@ -42,6 +42,8 @@ Location: `adminandemployeePanel/`
   - `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
   - `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`
   - `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
+  - `adminandemployeePanel/src/app/features/metaAds/metaAdsApi.ts`
+  - `adminandemployeePanel/src/app/features/metaAds/metaAdsTypes.ts`
   - `adminandemployeePanel/src/app/features/projects/projectsApi.ts`
   - `adminandemployeePanel/src/app/features/projects/projectsTypes.ts`
   - `adminandemployeePanel/src/app/features/projects/projectsUtils.ts`
@@ -87,6 +89,7 @@ Location: `adminandemployeePanel/`
 - Employee pages: `adminandemployeePanel/src/app/employee/pages/`
 - Developer employee shared UI:
   - `adminandemployeePanel/src/app/employee/components/DeveloperTasksPage.tsx`
+  - `adminandemployeePanel/src/app/employee/components/MetaAdsWorkspace.tsx`
 - Employee CRM pages:
   - `adminandemployeePanel/src/app/employee/pages/CrmLeadlerim.tsx`
   - `adminandemployeePanel/src/app/employee/pages/CrmLeadDetail.tsx`
@@ -103,6 +106,7 @@ Location: `adminandemployeePanel/`
   - `adminandemployeePanel/src/app/employee/pages/Projeler.tsx`
 - Employee page tests:
   - `adminandemployeePanel/src/app/employee/pages/__tests__/Musterilerim.test.tsx`
+  - `adminandemployeePanel/src/app/employee/pages/__tests__/MetaAdsWorkspace.test.tsx`
   - `adminandemployeePanel/src/app/employee/pages/__tests__/CrmLeadDetail.test.tsx`
   - `adminandemployeePanel/src/app/employee/pages/__tests__/DeveloperTaskPages.test.tsx`
   - `adminandemployeePanel/src/app/employee/pages/__tests__/ProjectManagerServiceWorkspace.test.tsx`
@@ -871,3 +875,74 @@ The `client/` directory is the public/marketing Social Tech website, not the Cli
   - WEB_APP revision create + approve/reject UI
   - non-WEB revision sekmelerinde task-based revision panel
 - `clientPanel/src/app/pages/__tests__/service-tab-page.webapp.test.tsx`
+
+## 2026-05-09 Update Map (Meta Ads Faz 5 Admin Global Panel)
+
+### Backend
+- `server/src/meta-ads/meta-ads.controller.ts`
+  - `GET /api/v1/admin/meta-ads/clients`
+- `server/src/meta-ads/meta-ads.service.ts`
+  - global admin Meta Ads client list aggregation (connection + spend + pending approvals + assignments)
+- `server/test/meta-ads-authz.e2e-spec.ts`
+  - admin global list + non-admin forbidden coverage
+
+### Admin + Employee Panel Frontend
+- `adminandemployeePanel/src/app/pages/MetaAdsAdmin.tsx`
+  - global admin `/meta-ads` yönetim ekranı
+- `adminandemployeePanel/src/app/routes.tsx`
+  - `/meta-ads` route
+- `adminandemployeePanel/src/app/components/RootLayout.tsx`
+  - Meta Ads sidebar menü girdisi
+- `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
+  - global list/config/sync endpoint hooks
+- `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
+  - global list + sync response normalizerları
+- `adminandemployeePanel/src/app/pages/ClientDetail.tsx`
+  - Meta Ads manual sync aksiyonu
+- `adminandemployeePanel/src/app/pages/__tests__/MetaAdsAdmin.test.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/ClientDetail.test.tsx`
+
+## 2026-05-09 Update Map (Meta Ads Faz 7 Approval + Creative Collaboration)
+
+### Backend
+- `server/prisma/schema.prisma`
+  - `MetaAdsApprovalType`, `MetaAdsApprovalStatus` enumları
+  - `Task` approval lifecycle alanları
+  - `ProjectFile` creative approval metadata alanları
+- `server/prisma/migrations/20260509193000_add_meta_ads_approval_flow/migration.sql`
+- `server/src/tasks/dto/create-task.dto.ts`
+- `server/src/tasks/dto/update-task.dto.ts`
+- `server/src/tasks/dto/task-query.dto.ts`
+- `server/src/tasks/tasks.service.ts`
+  - client approval response authorization + scope check + status transitions
+  - approval query filters + approval relation select genişletmesi
+- `server/src/project-files/dto/create-upload-signature.dto.ts`
+- `server/src/project-files/dto/complete-upload.dto.ts`
+- `server/src/project-files/dto/project-file-query.dto.ts`
+- `server/src/project-files/project-files.service.ts`
+  - approval metadata persistence + query filtering
+- `server/src/meta-ads/meta-ads.service.ts`
+  - pending approval aggregation now includes new task approval status fields
+- `server/test/projects-tasks-authz.e2e-spec.ts`
+  - client approve/reject + rejection note + out-of-scope approval mutation coverage
+
+### Client Panel Frontend
+- `clientPanel/src/app/features/tasks/tasksTypes.ts`
+- `clientPanel/src/app/features/tasks/tasksUtils.ts`
+- `clientPanel/src/app/features/tasks/tasksApi.ts`
+  - `useUpdateClientTaskApprovalMutation`
+- `clientPanel/src/app/features/projectFiles/projectFilesTypes.ts`
+- `clientPanel/src/app/features/projectFiles/projectFilesApi.ts`
+  - approval-aware query params
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+  - pending approvals + creative preview + approval history UI
+- `clientPanel/src/app/components/button.tsx`
+  - `disabled` prop support
+- `clientPanel/src/app/pages/__tests__/service-tab-page.meta-ads.test.tsx`
+
+### Admin + Employee Panel Frontend
+- `adminandemployeePanel/src/app/features/tasks/tasksTypes.ts`
+  - approval fields/types
+- `adminandemployeePanel/src/app/employee/components/MetaAdsWorkspace.tsx`
+  - approval type/status/note rendering and role-based approval task creation metadata

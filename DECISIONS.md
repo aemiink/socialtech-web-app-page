@@ -1946,3 +1946,193 @@ Affected files:
 - `server/src/meta-ads/*`
 - `server/src/app.module.ts`
 - `server/test/meta-ads-authz.e2e-spec.ts`
+
+---
+
+## 2026-05-09 - Meta Ads Faz 3 Reporting Sync (Snapshot + Read API)
+
+Context:
+Meta Ads Faz 2 ile bağlantı/token yönetimi tamamlandıktan sonra, client ve operasyon panellerinde gerçek performans verisi göstermek için read-only reporting katmanının snapshot tabanlı şekilde eklenmesi gerekiyordu.
+
+Decision:
+Faz 3 aşağıdaki sınırla uygulandı:
+
+- Prisma’ya `MetaAdsInsightLevel` enumu ve `MetaAdsDailyInsight` modeli eklendi.
+- Manual reporting sync endpointleri eklendi:
+  - `POST /api/v1/admin/clients/:clientId/meta-ads/sync`
+  - `POST /api/v1/meta-ads/clients/:clientId/sync`
+- Snapshot okuma endpointleri eklendi:
+  - Admin: `GET /api/v1/admin/clients/:clientId/meta-ads/{summary|campaigns|insights}`
+  - Assigned employee: `GET /api/v1/meta-ads/clients/:clientId/{summary|campaigns|insights}`
+  - Own client: `GET /api/v1/clients/me/meta-ads/{summary|campaigns|insights}`
+- Sync akışında Meta API response’u normalize edilip günlük snapshot’lar DB’ye yazılır; hata halinde connection `ERROR` + `syncError` güncellenir.
+- Client panel `meta-ads-dashboard` KPI ve campaign alanları gerçek summary/campaigns endpointlerinden beslenir; bağlantı durumuna göre fail-safe görünüm korunur.
+- Admin `ClientDetail` içinde minimal Meta Ads performans özeti gösterimi eklendi.
+
+Reason:
+Snapshot-first yaklaşımı, canlı API çağrılarını her ekran yüklemesinden ayırarak rate-limit riskini azaltır, sorgu sürelerini öngörülebilir hale getirir ve Faz 4+ raporlama/genişletme adımları için kalıcı veri tabanı oluşturur.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260509150000_add_meta_ads_reporting_snapshot/migration.sql`
+- `server/src/meta-ads/*`
+- `server/test/meta-ads-authz.e2e-spec.ts`
+- `clientPanel/src/app/features/metaAds/*`
+- `clientPanel/src/app/pages/services/meta-ads-dashboard.tsx`
+- `clientPanel/src/app/pages/__tests__/meta-ads-dashboard.test.tsx`
+- `adminandemployeePanel/src/app/features/clients/*`
+- `adminandemployeePanel/src/app/pages/ClientDetail.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/ClientDetail.test.tsx`
+
+---
+
+## 2026-05-09 - Meta Ads Faz 4 Client Panel (API-Driven Tab Workspace)
+
+Context:
+Faz 3 sonrası client panelde Meta Ads dashboard kısmi API entegrasyonuna geçmişti ancak service-tab alanındaki Meta Ads sekmeleri hâlâ generic/mock renderer akışıyla çalışıyordu. Ayrıca adset/ads/pixel-status gibi panel sekmeleri için dedicated backend endpoint yüzeyi eksikti.
+
+Decision:
+Faz 4 için client panel Meta Ads sekmeleri API-driven özel renderer’a taşındı ve backend reporting yüzeyi genişletildi.
+
+- Client panelde `serviceId === "meta-ads"` için özel sekme renderer kullanıldı:
+  - `campaigns`, `ad-sets`, `creatives`, `audiences`, `pixel-events`, `meta-reports`, `agency-notes`, `approvals`
+  - loading/error/empty/connection-missing durumları fail-safe şekilde eklendi
+  - mock fallback yerine API sonuçlarına dayalı görünüm benimsendi
+- RTK Query Meta Ads feature genişletildi:
+  - own `adsets`, `ads`, `insights`, `pixel-status` endpointleri bağlandı
+- Backend Meta Ads API genişletildi:
+  - own/assigned/admin scope için `adsets`, `ads`, `pixel-status` endpointleri eklendi
+  - reporting sync akışı `ADSET` ve `AD` insight level snapshot yazacak şekilde genişletildi
+- Meta Ads sidebar sekme yapısı Faz 4 dokümanına hizalanarak reports/notes/approvals akışı eklendi.
+
+Reason:
+Bu karar, client panelde Meta Ads operasyon görünürlüğünü generic mock katmandan çıkarıp doğrudan backend contract’a bağlayarak sürdürülebilirliği artırır, UI davranışını connection/reporting gerçekliğine hizalar ve Faz 5/6 admin-employee genişlemeleri için ortak endpoint yüzeyi oluşturur.
+
+Affected files:
+- `server/src/meta-ads/meta-ads-api.service.ts`
+- `server/src/meta-ads/meta-ads.service.ts`
+- `server/src/meta-ads/meta-ads.controller.ts`
+- `server/test/meta-ads-authz.e2e-spec.ts`
+- `clientPanel/src/app/features/metaAds/metaAdsTypes.ts`
+- `clientPanel/src/app/features/metaAds/metaAdsApi.ts`
+- `clientPanel/src/app/components/sidebar.tsx`
+- `clientPanel/src/app/data/service-pages.ts`
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+- `clientPanel/src/app/pages/services/meta-ads-dashboard.tsx`
+- `clientPanel/src/app/pages/__tests__/meta-ads-dashboard.test.tsx`
+- `clientPanel/src/app/pages/__tests__/service-tab-page.meta-ads.test.tsx`
+
+---
+
+## 2026-05-09 - Meta Ads Faz 5 Admin Global Panel + Yönetim Aksiyonları
+
+Context:
+Faz 4 sonrası Meta Ads operasyonları client panelde API-driven hale geldi ancak admin tarafında tüm Meta Ads müşterilerini tek yerden yönetebileceği global ekran ve özet endpoint eksikti.
+
+Decision:
+Faz 5 kapsamında admin global yönetim yüzeyi eklendi:
+
+- Backend’e `GET /api/v1/admin/meta-ads/clients` endpointi eklendi.
+  - `META_ADS` purchased service’i olan client profilleri döner.
+  - connection status, token varlığı, sync error/last sync, spend summary, pending approvals ve assigned employees özetlenir.
+  - response hiçbir credential/token alanı içermez.
+- Admin panelde `/meta-ads` route/page eklendi.
+  - Global müşteri listesi, durum KPI’ları ve permission-aware aksiyonlar (`config`, `test`, `sync`, `disconnect`, `onay talebi`) sunulur.
+- `ClientDetail` Meta Ads section’a manual sync aksiyonu eklendi.
+- Onay talebi aksiyonu V1’de mevcut domain sınırını bozmadan `Task(type=REVISION, status=REVIEW)` oluşturma akışıyla sağlandı.
+
+Reason:
+Bu karar, admin operasyonlarının müşteri-bazlı tekil ekranlardan çıkarılıp global gözlem ve müdahale ekranına taşınmasını sağlar; mevcut `tasks` ve `meta-ads` API sınırlarını koruyarak minimum invaziv ilerler.
+
+Affected files:
+- `server/src/meta-ads/meta-ads.controller.ts`
+- `server/src/meta-ads/meta-ads.service.ts`
+- `server/test/meta-ads-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
+- `adminandemployeePanel/src/app/pages/MetaAdsAdmin.tsx`
+- `adminandemployeePanel/src/app/pages/ClientDetail.tsx`
+- `adminandemployeePanel/src/app/components/RootLayout.tsx`
+- `adminandemployeePanel/src/app/routes.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/MetaAdsAdmin.test.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/ClientDetail.test.tsx`
+
+---
+
+## 2026-05-09 - Meta Ads Faz 6 Employee Workspace (Generic Component + Assigned Scope)
+
+Context:
+Faz 5 sonrası Meta Ads akışı admin/client panellerde çalışıyordu ancak employee panelde Social Media Specialist, Performance Specialist ve Designer için assigned-scope operasyon ekranı ve ortak bileşen katmanı yoktu.
+
+Decision:
+Employee panelde generic `MetaAdsWorkspace` bileşeni benimsendi ve ilgili rol menülerine `/employee/meta-ads` giriş noktası eklendi.
+
+- Tek component (`MetaAdsWorkspace`) ile role-aware görünüm:
+  - social: campaign/copy/approval/messages odaklı aksiyonlar
+  - performance: metrics/optimization/reporting odaklı aksiyonlar
+  - designer: creative/upload/share/todo odaklı aksiyonlar
+- Data scope frontend tarafında sıkı filtrelendi:
+  - sadece assigned clients
+  - sadece `ACTIVE META_ADS` purchased service
+  - sadece `serviceKey=meta-ads` project context
+- Assigned Meta Ads reporting endpointleri için admin/employee panelde ayrı RTK Query feature eklendi (`features/metaAds/*`).
+- Mevcut employee Meta Ads sayfaları (`Kampanyalar`, `Optimizasyonlar`, `PixelTracking`, `RaporNotlari`, `Kreatifler`, `OnayBekleyenler`) generic workspace’e bağlandı.
+- Permission-aware UX eklendi; izin olmayan aksiyonlar disabled/uyarı ile gösteriliyor.
+
+Reason:
+Bu karar faz kapsamını minimum invaziv biçimde ilerletir: farklı rol sayfaları için tekrar eden kod yerine tek bir bakım noktası sağlar, backend assigned-scope sözleşmesini doğrudan kullanır ve ileride rol aksiyonlarını genişletmeyi kolaylaştırır.
+
+Affected files:
+- `adminandemployeePanel/src/app/features/metaAds/metaAdsApi.ts`
+- `adminandemployeePanel/src/app/features/metaAds/metaAdsTypes.ts`
+- `adminandemployeePanel/src/app/employee/components/MetaAdsWorkspace.tsx`
+- `adminandemployeePanel/src/app/employee/pages/MetaAdsCalismaAlani.tsx`
+- `adminandemployeePanel/src/app/employee/pages/Kampanyalar.tsx`
+- `adminandemployeePanel/src/app/employee/pages/Optimizasyonlar.tsx`
+- `adminandemployeePanel/src/app/employee/pages/PixelTracking.tsx`
+- `adminandemployeePanel/src/app/employee/pages/RaporNotlari.tsx`
+- `adminandemployeePanel/src/app/employee/pages/Kreatifler.tsx`
+- `adminandemployeePanel/src/app/employee/pages/OnayBekleyenler.tsx`
+- `adminandemployeePanel/src/app/employee/EmployeeLayout.tsx`
+- `adminandemployeePanel/src/app/routes.tsx`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/MetaAdsWorkspace.test.tsx`
+
+---
+
+## 2026-05-09 - Meta Ads Faz 7 Approval + Creative Collaboration (Task-Centric V1)
+
+Context:
+Faz 6 sonrası employee/admin/client taraflarında Meta Ads workspace görünürlüğü vardı ancak approval aksiyonları client panelde kalıcı değildi (`runClientAction` local feedback), creative approval metadata’sı `ProjectFile` modelinde taşınmıyordu ve task bazlı approval lifecycle backend’de standart alanlarla temsil edilmiyordu.
+
+Decision:
+FAZ-07 için ayrı bir `ApprovalRequest` modülü açmadan, mevcut domain’i bozmadan task-merkezli V1 uygulandı:
+- `Task` modeline Meta Ads approval alanları eklendi (`approvalRequired`, `approvalType`, `approvalStatus`, `approvalResponseNote`, request/response timestamps, creative reference).
+- Client kullanıcılar için `PATCH /tasks/:id` içinde daraltılmış approval-response akışı açıldı:
+  - sadece `approvals.respond.own` ile,
+  - sadece own client scope + `META_ADS` project + `approvalRequired=true` + `approvalStatus=PENDING`,
+  - sadece `APPROVED | CHANGES_REQUESTED | REJECTED | ACKNOWLEDGED`.
+- `ProjectFile` modeline creative approval metadata alanları eklendi (approval flags/status/note + campaign/adset/ad refs + performance summary).
+- Client panel Meta Ads approvals sekmesi backend mutation’a bağlandı; pending approvals, creative preview ve approval history tek ekranda render edildi.
+- Employee Meta Ads workspace approvals listesi approval type/status/note alanlarını gösterecek şekilde genişletildi.
+
+Reason:
+Bu yaklaşım mevcut `Task` + `ProjectFile` domainleriyle uyumlu, minimum invaziv ve hızlı deploy edilebilir bir approval lifecycle sağlar. Ayrı approval modülü için schema/service parçalanması, migration bağımlılığı ve yüksek entegrasyon riski yerine Faz 7 hedeflerini karşılayan pragmatik bir V1 elde edildi.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260509193000_add_meta_ads_approval_flow/migration.sql`
+- `server/src/tasks/dto/*`
+- `server/src/tasks/tasks.service.ts`
+- `server/src/project-files/dto/*`
+- `server/src/project-files/project-files.service.ts`
+- `server/src/meta-ads/meta-ads.service.ts`
+- `server/test/projects-tasks-authz.e2e-spec.ts`
+- `clientPanel/src/app/features/tasks/*`
+- `clientPanel/src/app/features/projectFiles/*`
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+- `clientPanel/src/app/pages/__tests__/service-tab-page.meta-ads.test.tsx`
+- `clientPanel/src/app/components/button.tsx`
+- `adminandemployeePanel/src/app/features/tasks/tasksTypes.ts`
+- `adminandemployeePanel/src/app/employee/components/MetaAdsWorkspace.tsx`
+- `ROAD_MAP.md`

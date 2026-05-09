@@ -7,6 +7,7 @@ import {
 import {
   AccountType,
   EmployeeClientAssignmentScope,
+  MetaAdsApprovalStatus,
   Prisma,
   ProjectFileVisibility,
   UserRole,
@@ -48,6 +49,17 @@ const projectFileReadSelect = {
   bytes: true,
   mimeType: true,
   originalFileName: true,
+  approvalRequired: true,
+  approvalType: true,
+  approvalStatus: true,
+  approvalResponseNote: true,
+  approvalRequestedAt: true,
+  approvalRespondedAt: true,
+  approvalRespondedByUserId: true,
+  campaignRef: true,
+  adSetRef: true,
+  adRef: true,
+  performanceSummary: true,
   uploadedByUserId: true,
   createdAt: true,
   updatedAt: true,
@@ -79,6 +91,13 @@ const projectFileReadSelect = {
       role: true,
     },
   },
+  approvalRespondedBy: {
+    select: {
+      id: true,
+      displayName: true,
+      role: true,
+    },
+  },
 } satisfies Prisma.ProjectFileSelect;
 
 @Injectable()
@@ -99,6 +118,8 @@ export class ProjectFilesService {
     this.assertFileSizeLimit(dto.bytes);
     this.assertFolderSelectionRequired(dto.folderId);
     const overwrite = Boolean(dto.overwrite && dto.overwriteFileId);
+    const approvalStatus =
+      dto.approvalStatus ?? (dto.approvalRequired ? MetaAdsApprovalStatus.PENDING : null);
 
     if (overwrite && dto.overwriteFileId) {
       await this.assertOverwriteFile(currentUser, project.id, dto.overwriteFileId);
@@ -126,6 +147,14 @@ export class ProjectFilesService {
       description: dto.description ?? null,
       overwrite,
       overwriteFileId: dto.overwriteFileId ?? null,
+      approvalRequired: dto.approvalRequired ?? false,
+      approvalType: dto.approvalType ?? null,
+      approvalStatus,
+      approvalResponseNote: dto.approvalResponseNote ?? null,
+      campaignRef: dto.campaignRef ?? null,
+      adSetRef: dto.adSetRef ?? null,
+      adRef: dto.adRef ?? null,
+      performanceSummary: dto.performanceSummary ?? null,
     };
   }
 
@@ -140,6 +169,16 @@ export class ProjectFilesService {
     this.assertFolderSelectionRequired(dto.folderId);
 
     const overwrite = Boolean(dto.overwrite && dto.overwriteFileId);
+    const approvalStatus =
+      dto.approvalStatus ?? (dto.approvalRequired ? MetaAdsApprovalStatus.PENDING : null);
+    const shouldCaptureApprovalResponse =
+      approvalStatus !== null && approvalStatus !== MetaAdsApprovalStatus.PENDING;
+    const approvalRequestedAt = approvalStatus === MetaAdsApprovalStatus.PENDING ? new Date() : null;
+    const approvalRespondedAt = shouldCaptureApprovalResponse ? new Date() : null;
+    const approvalRespondedByUserId = shouldCaptureApprovalResponse ? currentUser.id : null;
+    const performanceSummaryInput = dto.performanceSummary
+      ? (dto.performanceSummary as Prisma.InputJsonValue)
+      : Prisma.JsonNull;
     await this.assertFolder(project.id, dto.folderId);
     await this.assertEmployeeFolderAssignmentForUpload(currentUser, project.id, dto.folderId);
     if (overwrite && dto.overwriteFileId) {
@@ -159,6 +198,17 @@ export class ProjectFilesService {
           category: dto.category,
           visibility: dto.visibility,
           folderId: dto.folderId,
+          approvalRequired: dto.approvalRequired ?? false,
+          approvalType: dto.approvalType ?? null,
+          approvalStatus,
+          approvalResponseNote: dto.approvalResponseNote ?? null,
+          approvalRequestedAt,
+          approvalRespondedAt,
+          approvalRespondedByUserId,
+          campaignRef: dto.campaignRef ?? null,
+          adSetRef: dto.adSetRef ?? null,
+          adRef: dto.adRef ?? null,
+          performanceSummary: performanceSummaryInput,
           uploadedByUserId: currentUser.id,
         },
         select: projectFileReadSelect,
@@ -182,6 +232,17 @@ export class ProjectFilesService {
         category: dto.category,
         visibility: dto.visibility,
         folderId: dto.folderId,
+        approvalRequired: dto.approvalRequired ?? false,
+        approvalType: dto.approvalType ?? null,
+        approvalStatus,
+        approvalResponseNote: dto.approvalResponseNote ?? null,
+        approvalRequestedAt,
+        approvalRespondedAt,
+        approvalRespondedByUserId,
+        campaignRef: dto.campaignRef ?? null,
+        adSetRef: dto.adSetRef ?? null,
+        adRef: dto.adRef ?? null,
+        performanceSummary: performanceSummaryInput,
         uploadedByUserId: currentUser.id,
       },
       select: projectFileReadSelect,
@@ -199,6 +260,11 @@ export class ProjectFilesService {
       projectId: project.id,
       ...(query.category ? { category: query.category } : {}),
       ...(query.visibility ? { visibility: query.visibility } : {}),
+      ...(query.approvalRequired !== undefined
+        ? { approvalRequired: query.approvalRequired }
+        : {}),
+      ...(query.approvalStatus ? { approvalStatus: query.approvalStatus } : {}),
+      ...(query.approvalType ? { approvalType: query.approvalType } : {}),
       ...(query.search
         ? {
             OR: [

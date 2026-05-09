@@ -21,12 +21,18 @@ import { createCorsOptions } from "../src/config/cors.config";
 import {
   MetaAdsApiService,
   type MetaAdsConnectionTestResult,
+  type MetaAdsReportingSnapshotResult,
 } from "../src/meta-ads/meta-ads-api.service";
 
 const AUTH_LOGIN_PATH = "/api/v1/auth/login";
 const CLIENT_OWN_META_ADS_CONFIG_PATH = "/api/v1/clients/me/meta-ads/config";
+const CLIENT_OWN_META_ADS_SUMMARY_PATH = "/api/v1/clients/me/meta-ads/summary";
+const CLIENT_OWN_META_ADS_ADSETS_PATH = "/api/v1/clients/me/meta-ads/adsets";
+const CLIENT_OWN_META_ADS_PIXEL_STATUS_PATH = "/api/v1/clients/me/meta-ads/pixel-status";
 const ASSIGNED_META_ADS_CONFIG_PATH = "/api/v1/meta-ads/clients";
+const ASSIGNED_META_ADS_REPORTING_PATH = "/api/v1/meta-ads/clients";
 const ADMIN_META_ADS_CONNECTION_PATH_PREFIX = "/api/v1/admin/clients";
+const ADMIN_META_ADS_CLIENTS_LIST_PATH = "/api/v1/admin/meta-ads/clients";
 const TEST_EMAIL_PREFIX = "authz-meta-ads-";
 const TEST_SLUG_PREFIX = "authz-meta-ads-";
 const DEMO_PASSWORD = "demo123";
@@ -41,6 +47,8 @@ const SENSITIVE_RESPONSE_TOKENS = [
 
 let mockMetaAdsApiResult: MetaAdsConnectionTestResult | null = null;
 let mockMetaAdsApiError: Error | null = null;
+let mockMetaAdsReportingResult: MetaAdsReportingSnapshotResult | null = null;
+let mockMetaAdsReportingError: Error | null = null;
 
 type LoginBody = {
   accessToken: string;
@@ -78,6 +86,8 @@ describe("Meta Ads Config Authorization (e2e)", () => {
       grantedScopes: ["ads_read", "business_management"],
     };
     mockMetaAdsApiError = null;
+    mockMetaAdsReportingResult = buildMockMetaAdsReportingSnapshot();
+    mockMetaAdsReportingError = null;
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -94,6 +104,17 @@ describe("Meta Ads Config Authorization (e2e)", () => {
           }
 
           return mockMetaAdsApiResult;
+        },
+        fetchReportingSnapshot: async () => {
+          if (mockMetaAdsReportingError) {
+            throw mockMetaAdsReportingError;
+          }
+
+          if (!mockMetaAdsReportingResult) {
+            throw new Error("Mock Meta Ads reporting snapshot is not configured.");
+          }
+
+          return mockMetaAdsReportingResult;
         },
         normalizeError: (error: unknown) => {
           if (error instanceof Error) {
@@ -252,6 +273,30 @@ describe("Meta Ads Config Authorization (e2e)", () => {
         ],
       });
 
+      await tx.metaAdsDailyInsight.create({
+        data: {
+          clientProfileId: ownClient.id,
+          adAccountId: "act-own-001",
+          date: new Date("2026-05-09T00:00:00.000Z"),
+          level: "ACCOUNT",
+          spend: "120.50",
+          impressions: 8200,
+          reach: 4100,
+          clicks: 164,
+          ctr: "2.000000",
+          cpc: "0.734146",
+          cpm: "14.695121",
+          frequency: "2.000000",
+          results: 11,
+          costPerResult: "10.954545",
+          purchaseValue: "302.10",
+          roas: "2.507054",
+          raw: {
+            source: "fixture",
+          },
+        },
+      });
+
       await tx.user.create({
         data: {
           email: ownClientEmail,
@@ -326,6 +371,38 @@ describe("Meta Ads Config Authorization (e2e)", () => {
       }),
     );
     expect(response.body.lastSyncAt).toEqual(expect.any(String));
+    expectNoSensitiveTokens(response.body);
+  });
+
+  it("admin global Meta Ads clients endpoint returns managed rows without sensitive token fields", async () => {
+    const response = await request(app.getHttpServer())
+      .get(`${ADMIN_META_ADS_CLIENTS_LIST_PATH}?since=2026-05-07&until=2026-05-09`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        data: expect.any(Array),
+        dateRange: {
+          since: "2026-05-07",
+          until: "2026-05-09",
+        },
+        meta: expect.objectContaining({
+          total: expect.any(Number),
+          connected: expect.any(Number),
+          error: expect.any(Number),
+          pendingApprovals: expect.any(Number),
+        }),
+      }),
+    );
+
+    const rows = response.body.data as Array<Record<string, unknown>>;
+    const rowIds = rows
+      .map((row) => (isRecord(row.client) && typeof row.client.id === "string" ? row.client.id : ""))
+      .filter((item) => item.length > 0);
+
+    expect(rowIds).toContain(activeMetaAdsClientId);
+    expect(rowIds).toContain(inactiveMetaAdsClientId);
     expectNoSensitiveTokens(response.body);
   });
 
@@ -563,9 +640,216 @@ describe("Meta Ads Config Authorization (e2e)", () => {
     expectNoSensitiveTokens(response.body);
   });
 
+  it("client own summary endpoint returns aggregated snapshot metrics", async () => {
+    const response = await request(app.getHttpServer())
+      .get(`${CLIENT_OWN_META_ADS_SUMMARY_PATH}?since=2026-05-09&until=2026-05-09`)
+      .set("Authorization", `Bearer ${ownClientToken}`)
+      .expect(200);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        spend: 120.5,
+        impressions: 8200,
+        reach: 4100,
+        clicks: 164,
+        results: 11,
+      }),
+    );
+    expect(response.body.dateRange).toEqual({
+      since: "2026-05-09",
+      until: "2026-05-09",
+    });
+  });
+
+  it("client own adsets endpoint returns ADSET-level snapshot payload", async () => {
+    const response = await request(app.getHttpServer())
+      .get(`${CLIENT_OWN_META_ADS_ADSETS_PATH}?since=2026-05-09&until=2026-05-09`)
+      .set("Authorization", `Bearer ${ownClientToken}`)
+      .expect(200);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        level: "ADSET",
+        data: expect.any(Array),
+      }),
+    );
+  });
+
+  it("client own pixel-status endpoint returns client-safe integration status", async () => {
+    const response = await request(app.getHttpServer())
+      .get(CLIENT_OWN_META_ADS_PIXEL_STATUS_PATH)
+      .set("Authorization", `Bearer ${ownClientToken}`)
+      .expect(200);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        connectionStatus: MetaAdsConnectionStatus.CONNECTED,
+        adAccountId: "act-own-001",
+        pixelId: "px-own-001",
+        eventStatus: expect.any(String),
+      }),
+    );
+  });
+
+  it("admin sync writes reporting snapshot and reporting endpoints read from snapshots", async () => {
+    mockMetaAdsReportingError = null;
+    mockMetaAdsReportingResult = buildMockMetaAdsReportingSnapshot();
+
+    await request(app.getHttpServer())
+      .post(adminMetaAdsManualConnectPath(activeMetaAdsClientId))
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        accessToken: "EAAGm0PX4ZCpsBAJsyncAccessTokenForPhase03",
+        adAccountId: "act-reporting-001",
+      })
+      .expect(201);
+
+    const syncResponse = await request(app.getHttpServer())
+      .post(`${adminMetaAdsSyncPath(activeMetaAdsClientId)}?since=2026-05-07&until=2026-05-08`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(201);
+
+    expect(syncResponse.body).toEqual(
+      expect.objectContaining({
+        success: true,
+        inserted: {
+          account: 2,
+          campaigns: 3,
+          total: 5,
+        },
+        connectionStatus: MetaAdsConnectionStatus.CONNECTED,
+      }),
+    );
+
+    const insightCount = await prisma.metaAdsDailyInsight.count({
+      where: {
+        clientProfileId: activeMetaAdsClientId,
+        level: {
+          in: ["ACCOUNT", "CAMPAIGN"],
+        },
+      },
+    });
+    expect(insightCount).toBeGreaterThanOrEqual(5);
+
+    const summaryResponse = await request(app.getHttpServer())
+      .get(`${adminMetaAdsSummaryPath(activeMetaAdsClientId)}?since=2026-05-07&until=2026-05-08`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(summaryResponse.body).toEqual(
+      expect.objectContaining({
+        spend: 150,
+        impressions: 15000,
+        clicks: 300,
+        ctr: 2,
+        cpc: 0.5,
+        cpm: 10,
+        results: 30,
+        costPerResult: 5,
+        roas: 2.8,
+      }),
+    );
+
+    const campaignsResponse = await request(app.getHttpServer())
+      .get(`${adminMetaAdsCampaignsPath(activeMetaAdsClientId)}?since=2026-05-07&until=2026-05-08`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(Array.isArray(campaignsResponse.body.data)).toBe(true);
+    expect(campaignsResponse.body.data[0]).toEqual(
+      expect.objectContaining({
+        id: "12010000001",
+        objective: "OUTCOME_SALES",
+        status: "ACTIVE",
+      }),
+    );
+
+    const insightsResponse = await request(app.getHttpServer())
+      .get(
+        `${adminMetaAdsInsightsPath(activeMetaAdsClientId)}?level=CAMPAIGN&since=2026-05-07&until=2026-05-08`,
+      )
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(insightsResponse.body.level).toBe("CAMPAIGN");
+    expect(Array.isArray(insightsResponse.body.data)).toBe(true);
+    expect(insightsResponse.body.data.length).toBeGreaterThan(0);
+  });
+
+  it("assigned employee can read assigned client Meta Ads summary", async () => {
+    const response = await request(app.getHttpServer())
+      .get(`${assignedMetaAdsSummaryPath(activeMetaAdsClientId)}?since=2026-05-07&until=2026-05-08`)
+      .set("Authorization", `Bearer ${performanceToken}`)
+      .expect(200);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        spend: 150,
+        impressions: 15000,
+        clicks: 300,
+      }),
+    );
+  });
+
+  it("assigned employee cannot read unassigned client Meta Ads summary", async () => {
+    const response = await request(app.getHttpServer())
+      .get(`${assignedMetaAdsSummaryPath(missingMetaAdsClientId)}?since=2026-05-07&until=2026-05-08`)
+      .set("Authorization", `Bearer ${performanceToken}`)
+      .expect(404);
+
+    expectApiError(response.body, /Client profile not found/i);
+  });
+
+  it("client account cannot access assigned reporting endpoints", async () => {
+    const response = await request(app.getHttpServer())
+      .get(`${assignedMetaAdsSummaryPath(activeMetaAdsClientId)}?since=2026-05-07&until=2026-05-08`)
+      .set("Authorization", `Bearer ${ownClientToken}`)
+      .expect(403);
+
+    expectApiError(response.body);
+  });
+
+  it("sync error is normalized and marks connection as ERROR", async () => {
+    mockMetaAdsReportingError = new Error("Meta API temporary outage");
+
+    await request(app.getHttpServer())
+      .post(adminMetaAdsManualConnectPath(activeMetaAdsClientId))
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        accessToken: "EAAGm0PX4ZCpsBAJsyncErrorTokenForPhase03",
+        adAccountId: "act-reporting-001",
+      })
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post(`${adminMetaAdsSyncPath(activeMetaAdsClientId)}?since=2026-05-07&until=2026-05-08`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(502);
+
+    expectApiError(response.body, /Meta API temporary outage/i);
+
+    const connectionResponse = await request(app.getHttpServer())
+      .get(adminMetaAdsConnectionPath(activeMetaAdsClientId))
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(connectionResponse.body.connectionStatus).toBe(MetaAdsConnectionStatus.ERROR);
+    expect(connectionResponse.body.syncError).toMatch(/Meta API temporary outage/i);
+    mockMetaAdsReportingError = null;
+  });
+
   it("cross-client access to admin Meta Ads route is denied for client accounts", async () => {
     const response = await request(app.getHttpServer())
       .get(adminMetaAdsConfigPath(activeMetaAdsClientId))
+      .set("Authorization", `Bearer ${ownClientToken}`)
+      .expect(403);
+
+    expectApiError(response.body);
+  });
+
+  it("non-admin users cannot access the global admin Meta Ads clients endpoint", async () => {
+    const response = await request(app.getHttpServer())
+      .get(ADMIN_META_ADS_CLIENTS_LIST_PATH)
       .set("Authorization", `Bearer ${ownClientToken}`)
       .expect(403);
 
@@ -657,6 +941,14 @@ describe("Meta Ads Config Authorization (e2e)", () => {
         },
       });
 
+      await prisma.metaAdsDailyInsight.deleteMany({
+        where: {
+          clientProfileId: {
+            in: clientProfileIds,
+          },
+        },
+      });
+
       await prisma.clientMetaAdsConfig.deleteMany({
         where: {
           clientProfileId: {
@@ -711,8 +1003,28 @@ describe("Meta Ads Config Authorization (e2e)", () => {
     return `${ADMIN_META_ADS_CONNECTION_PATH_PREFIX}/${clientId}/meta-ads/test-connection`;
   }
 
+  function adminMetaAdsSyncPath(clientId: string): string {
+    return `${ADMIN_META_ADS_CONNECTION_PATH_PREFIX}/${clientId}/meta-ads/sync`;
+  }
+
+  function adminMetaAdsSummaryPath(clientId: string): string {
+    return `${ADMIN_META_ADS_CONNECTION_PATH_PREFIX}/${clientId}/meta-ads/summary`;
+  }
+
+  function adminMetaAdsCampaignsPath(clientId: string): string {
+    return `${ADMIN_META_ADS_CONNECTION_PATH_PREFIX}/${clientId}/meta-ads/campaigns`;
+  }
+
+  function adminMetaAdsInsightsPath(clientId: string): string {
+    return `${ADMIN_META_ADS_CONNECTION_PATH_PREFIX}/${clientId}/meta-ads/insights`;
+  }
+
   function assignedMetaAdsConfigPath(clientId: string): string {
     return `${ASSIGNED_META_ADS_CONFIG_PATH}/${clientId}/config`;
+  }
+
+  function assignedMetaAdsSummaryPath(clientId: string): string {
+    return `${ASSIGNED_META_ADS_REPORTING_PATH}/${clientId}/summary`;
   }
 
   function expectNoSensitiveTokens(value: unknown): void {
@@ -762,5 +1074,148 @@ describe("Meta Ads Config Authorization (e2e)", () => {
 
   function uniqueSuffix(label: string): string {
     return `${label}-${randomUUID().slice(0, 8)}`;
+  }
+
+  function buildMockMetaAdsReportingSnapshot(): MetaAdsReportingSnapshotResult {
+    return {
+      adAccountId: "act-reporting-001",
+      accountInsights: [
+        {
+          dateStart: "2026-05-07",
+          dateStop: "2026-05-07",
+          campaignId: null,
+          campaignName: null,
+          adSetId: null,
+          adSetName: null,
+          adId: null,
+          adName: null,
+          spend: "100",
+          impressions: 10000,
+          reach: 5000,
+          clicks: 200,
+          ctr: "2.0",
+          cpc: "0.5",
+          cpm: "10",
+          frequency: "2.0",
+          actions: [{ actionType: "purchase", value: "20" }],
+          costPerActionType: [{ actionType: "purchase", value: "5" }],
+          actionValues: [{ actionType: "purchase", value: "300" }],
+          purchaseRoas: [{ actionType: "purchase", value: "3" }],
+          raw: { level: "account", day: "2026-05-07" },
+        },
+        {
+          dateStart: "2026-05-08",
+          dateStop: "2026-05-08",
+          campaignId: null,
+          campaignName: null,
+          adSetId: null,
+          adSetName: null,
+          adId: null,
+          adName: null,
+          spend: "50",
+          impressions: 5000,
+          reach: 3000,
+          clicks: 100,
+          ctr: "2.0",
+          cpc: "0.5",
+          cpm: "10",
+          frequency: "1.6667",
+          actions: [{ actionType: "purchase", value: "10" }],
+          costPerActionType: [{ actionType: "purchase", value: "5" }],
+          actionValues: [{ actionType: "purchase", value: "120" }],
+          purchaseRoas: [{ actionType: "purchase", value: "2.4" }],
+          raw: { level: "account", day: "2026-05-08" },
+        },
+      ],
+      campaignInsights: [
+        {
+          dateStart: "2026-05-07",
+          dateStop: "2026-05-07",
+          campaignId: "12010000001",
+          campaignName: "Prospecting CBO",
+          adSetId: null,
+          adSetName: null,
+          adId: null,
+          adName: null,
+          spend: "100",
+          impressions: 10000,
+          reach: 5000,
+          clicks: 200,
+          ctr: "2.0",
+          cpc: "0.5",
+          cpm: "10",
+          frequency: "2.0",
+          actions: [{ actionType: "purchase", value: "20" }],
+          costPerActionType: [{ actionType: "purchase", value: "5" }],
+          actionValues: [{ actionType: "purchase", value: "300" }],
+          purchaseRoas: [{ actionType: "purchase", value: "3" }],
+          raw: { level: "campaign", day: "2026-05-07" },
+        },
+        {
+          dateStart: "2026-05-08",
+          dateStop: "2026-05-08",
+          campaignId: "12010000001",
+          campaignName: "Prospecting CBO",
+          adSetId: null,
+          adSetName: null,
+          adId: null,
+          adName: null,
+          spend: "50",
+          impressions: 5000,
+          reach: 3000,
+          clicks: 100,
+          ctr: "2.0",
+          cpc: "0.5",
+          cpm: "10",
+          frequency: "1.6667",
+          actions: [{ actionType: "purchase", value: "10" }],
+          costPerActionType: [{ actionType: "purchase", value: "5" }],
+          actionValues: [{ actionType: "purchase", value: "120" }],
+          purchaseRoas: [{ actionType: "purchase", value: "2.4" }],
+          raw: { level: "campaign", day: "2026-05-08" },
+        },
+        {
+          dateStart: "2026-05-08",
+          dateStop: "2026-05-08",
+          campaignId: "12010000002",
+          campaignName: "Retargeting",
+          adSetId: null,
+          adSetName: null,
+          adId: null,
+          adName: null,
+          spend: "40",
+          impressions: 3500,
+          reach: 2200,
+          clicks: 70,
+          ctr: "2.0",
+          cpc: "0.5714",
+          cpm: "11.4285",
+          frequency: "1.59",
+          actions: [{ actionType: "purchase", value: "7" }],
+          costPerActionType: [{ actionType: "purchase", value: "5.7142" }],
+          actionValues: [{ actionType: "purchase", value: "96" }],
+          purchaseRoas: [{ actionType: "purchase", value: "2.4" }],
+          raw: { level: "campaign", day: "2026-05-08" },
+        },
+      ],
+      adSetInsights: [],
+      adInsights: [],
+      campaigns: [
+        {
+          id: "12010000001",
+          name: "Prospecting CBO",
+          objective: "OUTCOME_SALES",
+          status: "ACTIVE",
+          effectiveStatus: "ACTIVE",
+        },
+        {
+          id: "12010000002",
+          name: "Retargeting",
+          objective: "OUTCOME_TRAFFIC",
+          status: "PAUSED",
+          effectiveStatus: "PAUSED",
+        },
+      ],
+    };
   }
 });

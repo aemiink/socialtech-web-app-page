@@ -2,12 +2,16 @@ import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Test, TestingModule } from "@nestjs/testing";
 import {
+  MetaAdsApprovalStatus,
+  MetaAdsApprovalType,
   Prisma,
   PrismaClient,
   Priority,
   ProjectStatus,
+  PurchasedServiceKey,
   TaskStatus,
   TaskTodoVisibility,
+  TaskType,
 } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 import cookieParser from "cookie-parser";
@@ -20,6 +24,7 @@ const PROJECTS_PATH = "/api/v1/projects";
 const TASKS_PATH = "/api/v1/tasks";
 const E2E_PROJECT_NAME_PREFIX = "Authz E2E Project";
 const E2E_TODO_TITLE_PREFIX = "Authz E2E Todo";
+const E2E_META_APPROVAL_TASK_PREFIX = "Authz E2E Meta Approval";
 
 type LoginBody = {
   accessToken: string;
@@ -110,6 +115,8 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
   let projectManagerAssignedProjectId = "";
   let employeeUnassignedProjectId = "";
   let clientOtherTaskId = "";
+  let clientOwnMetaApprovalTaskId = "";
+  let clientOtherMetaApprovalTaskId = "";
   let employeeOwnTaskId = "";
   let employeeOwnTaskOriginalStatus: TaskStatus = TaskStatus.TODO;
   let taskWithMixedTodosId = "";
@@ -120,6 +127,7 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
   let employeeOutOfScopeTaskId = "";
   let employeeOutOfScopeTaskTodoId = "";
   let clientVisibleTodoId = "";
+  let clientOwnMetaAdsProjectId = "";
   let createdProjectId = "";
   const taskStatusRestores: TaskStatusRestore[] = [];
   const taskTodoRestores: TaskTodoRestore[] = [];
@@ -661,7 +669,83 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
       .expect(403);
   });
 
-  it("client cannot update task", async () => {
+  it("client can approve own meta ads approval task", async () => {
+    await request(app.getHttpServer())
+      .patch(`${TASKS_PATH}/${clientOwnMetaApprovalTaskId}`)
+      .set("Authorization", `Bearer ${clientToken}`)
+      .send({ approvalStatus: MetaAdsApprovalStatus.APPROVED })
+      .expect(200);
+
+    const updated = await prisma.task.findUnique({
+      where: { id: clientOwnMetaApprovalTaskId },
+      select: {
+        approvalStatus: true,
+        approvalResponseNote: true,
+        approvalRespondedAt: true,
+        status: true,
+      },
+    });
+    expect(updated).toEqual(
+      expect.objectContaining({
+        approvalStatus: MetaAdsApprovalStatus.APPROVED,
+        approvalResponseNote: null,
+        status: TaskStatus.DONE,
+      }),
+    );
+    expect(updated?.approvalRespondedAt).toBeTruthy();
+  });
+
+  it("client can request changes with rejection note and cannot update out-of-scope approval", async () => {
+    const pendingApproval = await prisma.task.create({
+      data: {
+        projectId: clientOwnMetaAdsProjectId,
+        title: `${E2E_META_APPROVAL_TASK_PREFIX} Runtime ${Date.now()}`,
+        status: TaskStatus.REVIEW,
+        priority: Priority.HIGH,
+        type: TaskType.REVISION,
+        approvalRequired: true,
+        approvalType: MetaAdsApprovalType.META_ADS_CREATIVE_APPROVAL,
+        approvalStatus: MetaAdsApprovalStatus.PENDING,
+        approvalRequestedAt: new Date(),
+      },
+      select: { id: true },
+    });
+
+    await request(app.getHttpServer())
+      .patch(`${TASKS_PATH}/${pendingApproval.id}`)
+      .set("Authorization", `Bearer ${clientToken}`)
+      .send({
+        approvalStatus: MetaAdsApprovalStatus.CHANGES_REQUESTED,
+        approvalResponseNote: "Kreatif metin tonu marka diline göre güncellensin.",
+      })
+      .expect(200);
+
+    const changed = await prisma.task.findUnique({
+      where: { id: pendingApproval.id },
+      select: {
+        approvalStatus: true,
+        approvalResponseNote: true,
+        approvalRespondedAt: true,
+        status: true,
+      },
+    });
+    expect(changed).toEqual(
+      expect.objectContaining({
+        approvalStatus: MetaAdsApprovalStatus.CHANGES_REQUESTED,
+        approvalResponseNote: "Kreatif metin tonu marka diline göre güncellensin.",
+        status: TaskStatus.IN_PROGRESS,
+      }),
+    );
+    expect(changed?.approvalRespondedAt).toBeTruthy();
+
+    await request(app.getHttpServer())
+      .patch(`${TASKS_PATH}/${clientOtherMetaApprovalTaskId}`)
+      .set("Authorization", `Bearer ${clientToken}`)
+      .send({ approvalStatus: MetaAdsApprovalStatus.APPROVED })
+      .expect(404);
+  });
+
+  it("client cannot update non-approval fields on tasks", async () => {
     await request(app.getHttpServer())
       .patch(`${TASKS_PATH}/${employeeOwnTaskId}`)
       .set("Authorization", `Bearer ${clientToken}`)
@@ -746,6 +830,52 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
       throw new Error("Client demo user must have a linked clientProfileId.");
     }
     clientOwnProfileId = clientUser.clientProfileId;
+    clientOwnMetaAdsProjectId = await resolveClientMetaAdsProjectId(clientOwnProfileId);
+
+    const otherClientMetaAdsProject = await prisma.project.findFirst({
+      where: {
+        clientProfileId: { not: clientOwnProfileId },
+        serviceKey: PurchasedServiceKey.META_ADS,
+      },
+      select: { id: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    if (!otherClientMetaAdsProject) {
+      throw new Error("Expected at least one META_ADS project outside the demo client scope.");
+    }
+
+    const [ownApprovalTask, otherApprovalTask] = await prisma.$transaction([
+      prisma.task.create({
+        data: {
+          projectId: clientOwnMetaAdsProjectId,
+          title: `${E2E_META_APPROVAL_TASK_PREFIX} Own ${Date.now()}`,
+          status: TaskStatus.REVIEW,
+          priority: Priority.HIGH,
+          type: TaskType.REVISION,
+          approvalRequired: true,
+          approvalType: MetaAdsApprovalType.META_ADS_CREATIVE_APPROVAL,
+          approvalStatus: MetaAdsApprovalStatus.PENDING,
+          approvalRequestedAt: new Date(),
+        },
+        select: { id: true },
+      }),
+      prisma.task.create({
+        data: {
+          projectId: otherClientMetaAdsProject.id,
+          title: `${E2E_META_APPROVAL_TASK_PREFIX} Other ${Date.now()}`,
+          status: TaskStatus.REVIEW,
+          priority: Priority.HIGH,
+          type: TaskType.REVISION,
+          approvalRequired: true,
+          approvalType: MetaAdsApprovalType.META_ADS_CAMPAIGN_APPROVAL,
+          approvalStatus: MetaAdsApprovalStatus.PENDING,
+          approvalRequestedAt: new Date(),
+        },
+        select: { id: true },
+      }),
+    ]);
+    clientOwnMetaApprovalTaskId = ownApprovalTask.id;
+    clientOtherMetaApprovalTaskId = otherApprovalTask.id;
 
     const employeeUser = await prisma.user.findUnique({
       where: { email: "performance@socialtech.com" },
@@ -983,6 +1113,34 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
     return todo;
   }
 
+  async function resolveClientMetaAdsProjectId(clientProfileId: string): Promise<string> {
+    const existingMetaAdsProject = await prisma.project.findFirst({
+      where: {
+        clientProfileId,
+        serviceKey: PurchasedServiceKey.META_ADS,
+      },
+      select: { id: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    if (existingMetaAdsProject) {
+      return existingMetaAdsProject.id;
+    }
+
+    const createdProject = await prisma.project.create({
+      data: {
+        clientProfileId,
+        serviceKey: PurchasedServiceKey.META_ADS,
+        name: `${E2E_PROJECT_NAME_PREFIX} Meta Ads ${Date.now()}`,
+        slug: `authz-meta-ads-${Date.now()}`,
+        status: ProjectStatus.IN_PROGRESS,
+        priority: Priority.HIGH,
+      },
+      select: { id: true },
+    });
+
+    return createdProject.id;
+  }
+
   async function getProjectIds(where: Prisma.ProjectWhereInput): Promise<string[]> {
     const rows = await prisma.project.findMany({
       where,
@@ -1026,6 +1184,10 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
   async function cleanupProjectTaskAuthzArtifacts(): Promise<void> {
     await prisma.taskTodo.deleteMany({
       where: { title: { startsWith: E2E_TODO_TITLE_PREFIX } },
+    });
+
+    await prisma.task.deleteMany({
+      where: { title: { startsWith: E2E_META_APPROVAL_TASK_PREFIX } },
     });
 
     if (createdProjectId) {

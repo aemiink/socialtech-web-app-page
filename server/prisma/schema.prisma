@@ -68,6 +68,13 @@ enum MetaAdsConnectionStatus {
   DISCONNECTED
 }
 
+enum MetaAdsInsightLevel {
+  ACCOUNT
+  CAMPAIGN
+  ADSET
+  AD
+}
+
 enum EmployeeClientAssignmentScope {
   PROJECT
   PERFORMANCE
@@ -135,6 +142,22 @@ enum TaskEnvironment {
   DEVELOPMENT
   STAGING
   PRODUCTION
+}
+
+enum MetaAdsApprovalType {
+  META_ADS_CAMPAIGN_APPROVAL
+  META_ADS_CREATIVE_APPROVAL
+  META_ADS_BUDGET_CHANGE_APPROVAL
+  META_ADS_REPORT_ACKNOWLEDGEMENT
+  META_ADS_STRATEGY_APPROVAL
+}
+
+enum MetaAdsApprovalStatus {
+  PENDING
+  APPROVED
+  CHANGES_REQUESTED
+  REJECTED
+  ACKNOWLEDGED
 }
 
 enum DeliverySprintStatus {
@@ -302,9 +325,11 @@ model User {
   employeeClientAssignments EmployeeClientAssignment[] @relation("EmployeeClientAssignments")
   assignedTasks             Task[]                     @relation("TaskAssignee")
   codePreparedTasks         Task[]                     @relation("TaskCodePreparedBy")
+  taskApprovalActions       Task[]                     @relation("TaskApprovalResponder")
   completedTaskTodos        TaskTodo[]                 @relation("TaskTodoCompletedBy")
   taskWorkNotes             TaskWorkNote[]             @relation("TaskWorkNoteAuthor")
   uploadedProjectFiles      ProjectFile[]              @relation("ProjectFileUploadedBy")
+  projectFileApprovalActions ProjectFile[]             @relation("ProjectFileApprovalResponder")
   createdProjectFileFolders ProjectFileFolder[]        @relation("ProjectFileFolderCreatedBy")
   assignedProjectFileFolders ProjectFileFolderAssignment[] @relation("ProjectFileFolderAssignedUser")
   projectFileShareLinks     ProjectFileShareLink[]     @relation("ProjectFileShareLinkCreatedBy")
@@ -357,6 +382,7 @@ model ClientProfile {
   purchasedServices   ClientPurchasedService[]
   metaAdsConfig       ClientMetaAdsConfig?
   metaAdsCredential   ClientMetaAdsCredential?
+  metaAdsInsights     MetaAdsDailyInsight[]
   projects            Project[]
   files               ProjectFile[]
   convertedCrmLeads   CrmLead[]                  @relation("CrmLeadConvertedClient")
@@ -400,6 +426,38 @@ model ClientMetaAdsCredential {
 
   @@index([tokenHash])
   @@index([tokenExpiresAt])
+}
+
+model MetaAdsDailyInsight {
+  id             String               @id @default(uuid()) @db.Uuid
+  clientProfileId String              @db.Uuid
+  adAccountId    String
+  date           DateTime
+  level          MetaAdsInsightLevel
+  entityId       String?
+  entityName     String?
+  spend          Decimal?
+  impressions    Int?
+  reach          Int?
+  clicks         Int?
+  ctr            Decimal?
+  cpc            Decimal?
+  cpm            Decimal?
+  frequency      Decimal?
+  results        Int?
+  costPerResult  Decimal?
+  purchaseValue  Decimal?
+  roas           Decimal?
+  raw            Json?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@index([clientProfileId, date])
+  @@index([clientProfileId, level, date])
+  @@index([clientProfileId, adAccountId, level, date])
+  @@index([adAccountId, date])
 }
 
 model ClientPurchasedService {
@@ -477,6 +535,18 @@ model Task {
   codePreparedByUserId String?          @db.Uuid
   assigneeUserId       String?          @db.Uuid
   dueDate              DateTime?
+  approvalRequired     Boolean          @default(false)
+  approvalType         MetaAdsApprovalType?
+  approvalStatus       MetaAdsApprovalStatus?
+  approvalResponseNote String?
+  approvalRequestedAt  DateTime?
+  approvalRespondedAt  DateTime?
+  approvalRespondedByUserId String?     @db.Uuid
+  approvalContext      Json?
+  referenceProjectFileId String?        @db.Uuid
+  campaignRef          String?
+  adSetRef             String?
+  adRef                String?
   createdAt            DateTime         @default(now())
   updatedAt            DateTime         @updatedAt
 
@@ -484,6 +554,8 @@ model Task {
   sprint         DeliverySprint? @relation(fields: [sprintId], references: [id], onDelete: SetNull)
   assignee       User?           @relation("TaskAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
   codePreparedBy User?           @relation("TaskCodePreparedBy", fields: [codePreparedByUserId], references: [id], onDelete: SetNull)
+  approvalRespondedBy User?      @relation("TaskApprovalResponder", fields: [approvalRespondedByUserId], references: [id], onDelete: SetNull)
+  referenceProjectFile ProjectFile? @relation("TaskReferenceProjectFile", fields: [referenceProjectFileId], references: [id], onDelete: SetNull)
   todos          TaskTodo[]
   workNotes      TaskWorkNote[]
   workspaceRevisions WebAppWorkspaceRevision[]
@@ -498,6 +570,11 @@ model Task {
   @@index([workstream])
   @@index([severity])
   @@index([environment])
+  @@index([approvalRequired])
+  @@index([approvalType])
+  @@index([approvalStatus])
+  @@index([approvalRespondedByUserId])
+  @@index([referenceProjectFileId])
   @@index([code])
   @@index([branchName])
 }
@@ -592,6 +669,17 @@ model ProjectFile {
   bytes            Int
   mimeType         String
   originalFileName String
+  approvalRequired Boolean               @default(false)
+  approvalType     MetaAdsApprovalType?
+  approvalStatus   MetaAdsApprovalStatus?
+  approvalResponseNote String?
+  approvalRequestedAt DateTime?
+  approvalRespondedAt DateTime?
+  approvalRespondedByUserId String?      @db.Uuid
+  campaignRef      String?
+  adSetRef         String?
+  adRef            String?
+  performanceSummary Json?
   uploadedByUserId String                @db.Uuid
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
@@ -600,6 +688,8 @@ model ProjectFile {
   folder     ProjectFileFolder?     @relation(fields: [folderId], references: [id], onDelete: SetNull)
   clientProfile ClientProfile       @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
   uploader   User                   @relation("ProjectFileUploadedBy", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+  approvalRespondedBy User?         @relation("ProjectFileApprovalResponder", fields: [approvalRespondedByUserId], references: [id], onDelete: SetNull)
+  approvalTasks Task[]              @relation("TaskReferenceProjectFile")
   shareLinks ProjectFileShareLink[]
   workspaceRevisions WebAppWorkspaceRevision[]
 
@@ -610,6 +700,10 @@ model ProjectFile {
   @@index([serviceKey])
   @@index([category])
   @@index([visibility])
+  @@index([approvalRequired])
+  @@index([approvalType])
+  @@index([approvalStatus])
+  @@index([approvalRespondedByUserId])
   @@index([uploadedByUserId])
   @@unique([projectId, publicId])
 }

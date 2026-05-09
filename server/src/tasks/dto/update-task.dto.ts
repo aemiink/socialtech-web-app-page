@@ -1,6 +1,8 @@
 import { Transform } from "class-transformer";
-import { IsDateString, IsEnum, IsString, IsUUID, MaxLength, MinLength, ValidateIf } from "class-validator";
+import { IsBoolean, IsDateString, IsEnum, IsString, IsUUID, MaxLength, MinLength, ValidateIf } from "class-validator";
 import {
+  MetaAdsApprovalStatus,
+  MetaAdsApprovalType,
   Priority,
   TaskEnvironment,
   TaskSeverity,
@@ -90,4 +92,52 @@ export class UpdateTaskDto {
   @ValidateIf((_, value: unknown) => value !== undefined && value !== null)
   @IsDateString()
   dueDate?: string | null;
+
+  @ValidateIf((_, value: unknown) => value !== undefined)
+  @IsBoolean()
+  approvalRequired?: boolean;
+
+  @ValidateIf((_, value: unknown) => value !== undefined && value !== null)
+  @IsEnum(MetaAdsApprovalType)
+  approvalType?: MetaAdsApprovalType | null;
+
+  @ValidateIf((_, value: unknown) => value !== undefined && value !== null)
+  @IsEnum(MetaAdsApprovalStatus)
+  approvalStatus?: MetaAdsApprovalStatus | null;
+
+  @ValidateIf((_, value: unknown) => value !== undefined && value !== null)
+  @Transform(({ value }) => trimString(value))
+  @IsString()
+  @MaxLength(1000)
+  approvalResponseNote?: string | null;
+
+  @ValidateIf((_, value: unknown) => value !== undefined && value !== null)
+  @IsDateString()
+  approvalRequestedAt?: string | null;
+
+  @ValidateIf((_, value: unknown) => value !== undefined && value !== null)
+  @IsDateString()
+  approvalRespondedAt?: string | null;
+
+  @ValidateIf((_, value: unknown) => value !== undefined && value !== null)
+  @IsUUID()
+  referenceProjectFileId?: string | null;
+
+  @ValidateIf((_, value: unknown) => value !== undefined && value !== null)
+  @Transform(({ value }) => trimString(value))
+  @IsString()
+  @MaxLength(120)
+  campaignRef?: string | null;
+
+  @ValidateIf((_, value: unknown) => value !== undefined && value !== null)
+  @Transform(({ value }) => trimString(value))
+  @IsString()
+  @MaxLength(120)
+  adSetRef?: string | null;
+
+  @ValidateIf((_, value: unknown) => value !== undefined && value !== null)
+  @Transform(({ value }) => trimString(value))
+  @IsString()
+  @MaxLength(120)
+  adRef?: string | null;
 }

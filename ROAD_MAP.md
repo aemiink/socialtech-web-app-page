@@ -140,6 +140,12 @@
 - Workspace revision authz e2e coverage (`server/test/web-app-workspace-revisions-authz.e2e-spec.ts`)
 - Meta Ads Faz 0 discovery contract (official docs alignment + V1 read-first scope + permission/token strategy)
 - Meta Ads Faz 1 backend foundation (Prisma model + authz API + e2e coverage)
+- Meta Ads Faz 2 auth/token/connection management (manual connect + encrypted token storage + connection test/disconnect + admin/client connection UI)
+- Meta Ads Faz 3 reporting sync (daily snapshot model + manual sync + summary/campaign/insights API + client/admin summary integration)
+- Meta Ads Faz 4 client panel API-driven tab workspace (adsets/ads/pixel-status endpoints + dedicated meta tabs + approvals/reports states)
+- Meta Ads Faz 5 admin global panel (`/meta-ads`) + backend clients list endpoint + config/test/sync/disconnect/onay talebi aksiyonları
+- Meta Ads Faz 6 employee role workspaces (Social/Performance/Designer assigned scope + generic `MetaAdsWorkspace` + role-aware actions + tests)
+- Meta Ads Faz 7 approval + creative collaboration (task-based approval metadata, client approve/reject mutation, creative approval preview/history, shared panel rendering)
 
 ## Blocked
 
@@ -147,9 +153,23 @@ None identified.
 
 ## Notes
 
-- Latest backend validation checkpoint: `10/10` authz suites, `209/209` tests.
-- Latest admin/employee frontend validation checkpoint: `19` test files, `134/134` tests.
-- Latest client portal frontend validation checkpoint: `1` test file, `6/6` tests.
+- Latest backend validation checkpoint: Meta Ads authz/reporting suite `21/21` tests + backend `npm run check`.
+- Latest admin/employee frontend validation checkpoint: `25` test files, `153/153` tests.
+- Latest client portal frontend validation checkpoint: `4` test files, `17/17` tests.
+- Latest FAZ-05 validation checkpoint:
+  - `server`: `npm run check` ✅
+  - `server`: `ALLOW_E2E_DB_RESET=true npm run test:e2e -- meta-ads-authz.e2e-spec.ts` ⛔ (test DB guard: current `DATABASE_URL` test DB patterniyle eşleşmiyor)
+  - `adminandemployeePanel`: `npm run test:run -- src/app/pages/__tests__/MetaAdsAdmin.test.tsx src/app/pages/__tests__/ClientDetail.test.tsx` ✅
+  - `adminandemployeePanel`: `npm run check` ✅
+- Latest FAZ-06 validation checkpoint:
+  - `adminandemployeePanel`: `npm run test:run -- src/app/employee/pages/__tests__/MetaAdsWorkspace.test.tsx` ✅
+  - `adminandemployeePanel`: `npm run check` ✅
+- Latest FAZ-07 validation checkpoint:
+  - `server`: `npm run prisma:generate` ✅
+  - `server`: `npm run typecheck && npm run typecheck:seed && npm run typecheck:spec && npm run build` ✅
+  - `server`: `ALLOW_E2E_DB_RESET=true node ./test/run-e2e.cjs projects-tasks-authz.e2e-spec.ts` ⛔ (test DB guard: current `DATABASE_URL` name is `socialtech_server`)
+  - `clientPanel`: `npm run typecheck && npm run test -- src/app/pages/__tests__/service-tab-page.meta-ads.test.tsx && npm run build` ✅
+  - `adminandemployeePanel`: `npm run typecheck && npm run test:run -- src/app/employee/pages/__tests__/MetaAdsWorkspace.test.tsx && npm run build` ✅
 - Summary query optimization and summary-side cache/TTL remain relevant follow-ups as data volume grows.
 ## 2026-04-29 Checkpoint
 
