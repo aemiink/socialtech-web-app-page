@@ -35,10 +35,22 @@ import {
 } from 'lucide-react';
 import { Button } from '../components/button';
 import { getServiceTabContent, ServiceTabContent } from '../data/service-pages';
+import {
+  useGetOwnMetaAdsAdSetsQuery,
+  useGetOwnMetaAdsAdsQuery,
+  useGetOwnMetaAdsCampaignsQuery,
+  useGetOwnMetaAdsConfigQuery,
+  useGetOwnMetaAdsInsightsQuery,
+  useGetOwnMetaAdsPixelStatusQuery,
+  useGetOwnMetaAdsSummaryQuery,
+} from '../features/metaAds/metaAdsApi';
+import type { MetaAdsCampaign, MetaAdsInsightItem } from '../features/metaAds/metaAdsTypes';
+import type { ProjectFile } from '../features/projectFiles/projectFilesTypes';
 import { useGetClientProjectFilesQuery } from '../features/projectFiles/projectFilesApi';
-import { useGetClientTasksQuery } from '../features/tasks/tasksApi';
+import { useGetClientTasksQuery, useUpdateClientTaskApprovalMutation } from '../features/tasks/tasksApi';
 import type {
   ClientTask,
+  ClientTaskMetaAdsApprovalStatus,
   ClientTaskPriority,
   ClientTaskStatus,
   ClientTaskType,
@@ -303,6 +315,10 @@ export function ServiceTabPage({ serviceId, tabId, projectId }: ServiceTabPagePr
   }
 
   const content = getServiceTabContent(serviceId, tabId);
+
+  if (serviceId === "meta-ads" && tabId !== "service-dashboard") {
+    return <MetaAdsServiceTab tabId={tabId} content={content} />;
+  }
 
   if (shouldUseTaskBasedRevisions) {
     return (
@@ -1025,6 +1041,756 @@ function TaskBasedRevisionPanel({
       </div>
     </div>
   );
+}
+
+function MetaAdsServiceTab({
+  tabId,
+  content,
+}: {
+  tabId: string;
+  content: ServiceTabContent;
+}) {
+  const {
+    data: config,
+    isLoading: isConfigLoading,
+    isError: isConfigError,
+  } = useGetOwnMetaAdsConfigQuery();
+  const isConnected = config?.connectionStatus === "CONNECTED";
+  const shouldSkipReportingQueries = !isConnected;
+
+  const {
+    data: summary,
+    isLoading: isSummaryLoading,
+    isError: isSummaryError,
+  } = useGetOwnMetaAdsSummaryQuery(undefined, { skip: shouldSkipReportingQueries });
+  const {
+    data: campaignsResponse,
+    isLoading: isCampaignsLoading,
+    isError: isCampaignsError,
+  } = useGetOwnMetaAdsCampaignsQuery({ limit: 24 }, { skip: shouldSkipReportingQueries });
+  const {
+    data: adSetsResponse,
+    isLoading: isAdSetsLoading,
+    isError: isAdSetsError,
+  } = useGetOwnMetaAdsAdSetsQuery({ limit: 60 }, { skip: shouldSkipReportingQueries });
+  const {
+    data: adsResponse,
+    isLoading: isAdsLoading,
+    isError: isAdsError,
+  } = useGetOwnMetaAdsAdsQuery({ limit: 60 }, { skip: shouldSkipReportingQueries });
+  const {
+    data: insightsResponse,
+    isLoading: isInsightsLoading,
+    isError: isInsightsError,
+  } = useGetOwnMetaAdsInsightsQuery(
+    { level: "ACCOUNT", limit: 60 },
+    { skip: shouldSkipReportingQueries },
+  );
+  const {
+    data: pixelStatus,
+    isLoading: isPixelLoading,
+    isError: isPixelError,
+  } = useGetOwnMetaAdsPixelStatusQuery(undefined, { skip: shouldSkipReportingQueries });
+  const {
+    data: approvalTasks = [],
+    isLoading: isApprovalsLoading,
+    isError: isApprovalsError,
+  } = useGetClientTasksQuery(
+    { approvalRequired: true },
+    { skip: !isConnected || tabId !== "approvals" },
+  );
+  const [updateClientTaskApproval, { isLoading: isUpdatingApproval }] =
+    useUpdateClientTaskApprovalMutation();
+  const [activeApprovalTaskId, setActiveApprovalTaskId] = useState<string | null>(null);
+
+  const campaigns = campaignsResponse?.data ?? [];
+  const adSets = adSetsResponse?.data ?? [];
+  const ads = adsResponse?.data ?? [];
+  const reportRows = insightsResponse?.data ?? [];
+  const metaAdsApprovalTasks = useMemo(
+    () =>
+      approvalTasks
+        .filter((task) => task.projectServiceId === "meta-ads"),
+    [approvalTasks],
+  );
+  const pendingApprovalRows = useMemo(
+    () => metaAdsApprovalTasks.filter((task) => task.approvalStatus === "PENDING").slice(0, 10),
+    [metaAdsApprovalTasks],
+  );
+  const approvalHistoryRows = useMemo(
+    () =>
+      metaAdsApprovalTasks
+        .filter((task) => task.approvalStatus && task.approvalStatus !== "PENDING")
+        .slice(0, 10),
+    [metaAdsApprovalTasks],
+  );
+  const approvalProjectId = pendingApprovalRows[0]?.projectId ?? metaAdsApprovalTasks[0]?.projectId ?? null;
+  const {
+    data: approvalCreativeFilesResponse,
+    isLoading: isApprovalCreativeFilesLoading,
+    isError: isApprovalCreativeFilesError,
+  } = useGetClientProjectFilesQuery(
+    {
+      projectId: approvalProjectId ?? "",
+      category: "ADS_CREATIVE",
+      approvalRequired: true,
+    },
+    { skip: tabId !== "approvals" || !approvalProjectId },
+  );
+  const pendingApprovalCreativeFiles = useMemo(
+    () =>
+      (approvalCreativeFilesResponse?.data ?? [])
+        .filter((file) => file.approvalStatus === "PENDING")
+        .slice(0, 6),
+    [approvalCreativeFilesResponse?.data],
+  );
+  const notes = useMemo(() => buildMetaAdsAgencyNotes(summary, campaigns), [summary, campaigns]);
+  const lastSyncAt =
+    summary?.lastSyncAt ??
+    campaignsResponse?.lastSyncAt ??
+    insightsResponse?.lastSyncAt ??
+    pixelStatus?.lastSyncAt ??
+    config?.lastSyncAt ??
+    null;
+
+  const handleMetaAdsApprovalDecision = async (
+    task: ClientTask,
+    approvalStatus: ClientTaskMetaAdsApprovalStatus,
+    approvalResponseNote?: string,
+  ) => {
+    if (isUpdatingApproval) {
+      return;
+    }
+
+    setActiveApprovalTaskId(task.id);
+    try {
+      await updateClientTaskApproval({
+        taskId: task.id,
+        body: {
+          approvalStatus,
+          approvalResponseNote: approvalResponseNote?.trim() || undefined,
+        },
+      }).unwrap();
+      runClientAction(
+        `${task.title} ${approvalStatus === "APPROVED" ? "onaylandı" : "revizyona gönderildi"}`,
+        approvalStatus === "APPROVED" ? "approve" : "revision",
+      );
+    } catch {
+      runClientAction(`${task.title} onayı güncellenemedi`, "comment");
+    } finally {
+      setActiveApprovalTaskId(null);
+    }
+  };
+
+  if (isConfigLoading) {
+    return (
+      <div className="p-8">
+        <MetaAdsStatePanel title="Meta bağlantısı kontrol ediliyor..." />
+      </div>
+    );
+  }
+
+  if (isConfigError) {
+    return (
+      <div className="p-8">
+        <MetaAdsStatePanel
+          title="Meta bağlantı bilgileri alınamadı"
+          description="Lütfen biraz sonra tekrar deneyin."
+          tone="error"
+        />
+      </div>
+    );
+  }
+
+  if (!isConnected) {
+    return (
+      <div className="p-8 space-y-6">
+        <PageHero content={content} tabId={tabId} />
+        <MetaAdsStatePanel
+          title="Meta Ads bağlantısı aktif değil"
+          description="Bu hizmetin verileri sadece aktif bağlantı sonrası görüntülenebilir."
+          tone="muted"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-8 space-y-6">
+      <PageHero content={content} tabId={tabId} />
+
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+        <MetricPill label="Harcama" value={formatMetaCurrency(summary?.spend ?? 0)} />
+        <MetricPill label="Gösterim" value={formatMetaInteger(summary?.impressions ?? 0)} />
+        <MetricPill label="Tıklama" value={formatMetaInteger(summary?.clicks ?? 0)} />
+        <MetricPill label="CTR" value={formatMetaPercent(summary?.ctr ?? 0)} />
+        <MetricPill label="Sonuç" value={formatMetaInteger(summary?.results ?? 0)} />
+        <MetricPill
+          label="ROAS"
+          value={summary?.roas !== null && summary?.roas !== undefined ? `${summary.roas.toFixed(2)}x` : "—"}
+        />
+      </div>
+
+      <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-4 text-xs text-[#A0A0A0]">
+        Veriler Meta’dan alınmıştır. Son senkron:{" "}
+        <span className="text-white">
+          {lastSyncAt ? new Date(lastSyncAt).toLocaleString("tr-TR") : "Henüz senkron yok"}
+        </span>
+      </div>
+
+      {tabId === "campaigns" ? (
+        <MetaAdsEntityGrid
+          title="Kampanyalar"
+          loading={isCampaignsLoading || isSummaryLoading}
+          isError={isCampaignsError || isSummaryError}
+          rows={campaigns}
+          emptyMessage="Seçili tarih aralığında kampanya verisi bulunamadı."
+        />
+      ) : null}
+
+      {tabId === "ad-sets" ? (
+        <MetaAdsInsightGrid
+          title="Reklam Setleri"
+          loading={isAdSetsLoading}
+          isError={isAdSetsError}
+          rows={adSets}
+          emptyMessage="Reklam seti verisi bulunamadı."
+        />
+      ) : null}
+
+      {tabId === "creatives" ? (
+        <MetaAdsInsightGrid
+          title="Reklamlar / Kreatifler"
+          loading={isAdsLoading}
+          isError={isAdsError}
+          rows={ads}
+          emptyMessage="Reklam/kreatif verisi bulunamadı."
+        />
+      ) : null}
+
+      {tabId === "audiences" ? (
+        <MetaAdsAudiencePanel rows={adSets} loading={isAdSetsLoading} isError={isAdSetsError} />
+      ) : null}
+
+      {tabId === "pixel-events" ? (
+        <MetaAdsPixelPanel data={pixelStatus} loading={isPixelLoading} isError={isPixelError} />
+      ) : null}
+
+      {tabId === "meta-reports" ? (
+        <MetaAdsReportPanel rows={reportRows} loading={isInsightsLoading} isError={isInsightsError} />
+      ) : null}
+
+      {tabId === "agency-notes" ? (
+        <MetaAdsAgencyNotesPanel notes={notes} loading={isCampaignsLoading || isSummaryLoading} />
+      ) : null}
+
+      {tabId === "approvals" ? (
+        <MetaAdsApprovalsPanel
+          tasks={pendingApprovalRows}
+          history={approvalHistoryRows}
+          creativeFiles={pendingApprovalCreativeFiles}
+          loading={isApprovalsLoading || isApprovalCreativeFilesLoading}
+          isError={isApprovalsError || isApprovalCreativeFilesError}
+          isActionLoading={isUpdatingApproval}
+          activeTaskId={activeApprovalTaskId}
+          onDecision={handleMetaAdsApprovalDecision}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function MetaAdsEntityGrid({
+  title,
+  loading,
+  isError,
+  rows,
+  emptyMessage,
+}: {
+  title: string;
+  loading: boolean;
+  isError: boolean;
+  rows: MetaAdsCampaign[];
+  emptyMessage: string;
+}) {
+  if (loading) {
+    return <MetaAdsStatePanel title={`${title} yükleniyor...`} />;
+  }
+
+  if (isError) {
+    return (
+      <MetaAdsStatePanel
+        title={`${title} alınamadı`}
+        description="Rapor verisi şu anda ulaşılamıyor."
+        tone="error"
+      />
+    );
+  }
+
+  if (rows.length === 0) {
+    return <MetaAdsStatePanel title={emptyMessage} tone="muted" />;
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {rows.map((campaign) => (
+        <div key={campaign.id} className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-5">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="text-white">{campaign.name}</h3>
+            <span className="rounded border border-[#AAFF01]/20 bg-[#AAFF01]/10 px-2 py-1 text-xs text-[#AAFF01]">
+              {campaign.objective}
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <MetricPill label="Spend" value={formatMetaCurrency(campaign.spend)} />
+            <MetricPill label="CTR" value={formatMetaPercent(campaign.ctr)} />
+            <MetricPill label="ROAS" value={campaign.roas !== null ? `${campaign.roas.toFixed(2)}x` : "—"} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MetaAdsInsightGrid({
+  title,
+  loading,
+  isError,
+  rows,
+  emptyMessage,
+}: {
+  title: string;
+  loading: boolean;
+  isError: boolean;
+  rows: MetaAdsInsightItem[];
+  emptyMessage: string;
+}) {
+  if (loading) {
+    return <MetaAdsStatePanel title={`${title} yükleniyor...`} />;
+  }
+
+  if (isError) {
+    return (
+      <MetaAdsStatePanel
+        title={`${title} alınamadı`}
+        description="Rapor verisi şu anda ulaşılamıyor."
+        tone="error"
+      />
+    );
+  }
+
+  if (rows.length === 0) {
+    return <MetaAdsStatePanel title={emptyMessage} tone="muted" />;
+  }
+
+  return (
+    <div className="space-y-3">
+      {rows.slice(0, 14).map((row) => (
+        <div key={row.id} className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-4">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <p className="text-sm text-white">{row.entityName ?? row.entityId ?? "N/A"}</p>
+            <span className="text-xs text-[#A0A0A0]">{new Date(row.date).toLocaleDateString("tr-TR")}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <MetricPill label="Spend" value={formatMetaCurrency(row.spend)} />
+            <MetricPill label="CTR" value={formatMetaPercent(row.ctr)} />
+            <MetricPill label="Result" value={formatMetaInteger(row.results)} />
+            <MetricPill label="ROAS" value={row.roas !== null ? `${row.roas.toFixed(2)}x` : "—"} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MetaAdsAudiencePanel({
+  rows,
+  loading,
+  isError,
+}: {
+  rows: MetaAdsInsightItem[];
+  loading: boolean;
+  isError: boolean;
+}) {
+  if (loading) {
+    return <MetaAdsStatePanel title="Kitle verileri yükleniyor..." />;
+  }
+
+  if (isError) {
+    return (
+      <MetaAdsStatePanel
+        title="Kitle verileri alınamadı"
+        description="Ad set kırılımı şu anda ulaşılamıyor."
+        tone="error"
+      />
+    );
+  }
+
+  if (rows.length === 0) {
+    return <MetaAdsStatePanel title="Kitle segment verisi bulunamadı." tone="muted" />;
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {rows.slice(0, 8).map((row) => (
+        <div key={row.id} className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-4">
+          <p className="text-white">{row.entityName ?? "Audience Segment"}</p>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <MetricPill label="Reach" value={formatMetaInteger(row.reach)} />
+            <MetricPill label="CTR" value={formatMetaPercent(row.ctr)} />
+            <MetricPill label="Result" value={formatMetaInteger(row.results)} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MetaAdsPixelPanel({
+  data,
+  loading,
+  isError,
+}: {
+  data: {
+    adAccountId: string | null;
+    pixelId: string | null;
+    eventStatus: string;
+    setupWarning: string | null;
+    syncError: string | null;
+    lastInsightAt: string | null;
+  } | undefined;
+  loading: boolean;
+  isError: boolean;
+}) {
+  if (loading) {
+    return <MetaAdsStatePanel title="Pixel/Event durumu yükleniyor..." />;
+  }
+
+  if (isError || !data) {
+    return (
+      <MetaAdsStatePanel
+        title="Pixel/Event durumu alınamadı"
+        description="Lütfen tekrar deneyin."
+        tone="error"
+      />
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-5">
+        <h3 className="mb-3 text-white">Kurulum</h3>
+        <div className="space-y-2 text-sm">
+          <p className="text-[#A0A0A0]">Ad Account: <span className="text-white">{data.adAccountId ?? "—"}</span></p>
+          <p className="text-[#A0A0A0]">Pixel ID: <span className="text-white">{data.pixelId ?? "—"}</span></p>
+          <p className="text-[#A0A0A0]">Event Durumu: <span className="text-white">{data.eventStatus}</span></p>
+          <p className="text-[#A0A0A0]">
+            Son Event Verisi:{" "}
+            <span className="text-white">
+              {data.lastInsightAt ? new Date(data.lastInsightAt).toLocaleString("tr-TR") : "Yok"}
+            </span>
+          </p>
+        </div>
+      </div>
+      <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-5">
+        <h3 className="mb-3 text-white">Uyarılar</h3>
+        {data.setupWarning ? <p className="text-sm text-[#FFA726]">{data.setupWarning}</p> : null}
+        {data.syncError ? <p className="mt-2 text-sm text-[#ff8e8e]">{data.syncError}</p> : null}
+        {!data.setupWarning && !data.syncError ? (
+          <p className="text-sm text-[#AAFF01]">Konfigürasyon ve event akışı sağlıklı görünüyor.</p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function MetaAdsReportPanel({
+  rows,
+  loading,
+  isError,
+}: {
+  rows: MetaAdsInsightItem[];
+  loading: boolean;
+  isError: boolean;
+}) {
+  if (loading) {
+    return <MetaAdsStatePanel title="Rapor verisi yükleniyor..." />;
+  }
+
+  if (isError) {
+    return (
+      <MetaAdsStatePanel
+        title="Rapor verisi alınamadı"
+        description="Meta raporu şu anda ulaşılamıyor."
+        tone="error"
+      />
+    );
+  }
+
+  if (rows.length === 0) {
+    return <MetaAdsStatePanel title="Rapor verisi bulunamadı." tone="muted" />;
+  }
+
+  return (
+    <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-5">
+      <h3 className="mb-4 text-white">Günlük Performans Özeti</h3>
+      <div className="space-y-2">
+        {rows.slice(0, 20).map((row) => (
+          <div key={row.id} className="grid grid-cols-4 gap-2 rounded-xl bg-[#202020] p-3 text-sm">
+            <span className="text-white">{new Date(row.date).toLocaleDateString("tr-TR")}</span>
+            <span className="text-[#A0A0A0]">{formatMetaCurrency(row.spend)}</span>
+            <span className="text-[#A0A0A0]">CTR {formatMetaPercent(row.ctr)}</span>
+            <span className="text-[#A0A0A0]">ROAS {row.roas !== null ? `${row.roas.toFixed(2)}x` : "—"}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MetaAdsAgencyNotesPanel({
+  notes,
+  loading,
+}: {
+  notes: string[];
+  loading: boolean;
+}) {
+  if (loading) {
+    return <MetaAdsStatePanel title="Ajans notları hazırlanıyor..." />;
+  }
+
+  if (notes.length === 0) {
+    return <MetaAdsStatePanel title="Ajans notu için yeterli veri bulunamadı." tone="muted" />;
+  }
+
+  return (
+    <div className="space-y-3">
+      {notes.map((note) => (
+        <div key={note} className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-4 text-sm text-[#d7d7d7]">
+          {note}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MetaAdsApprovalsPanel({
+  tasks,
+  history,
+  creativeFiles,
+  loading,
+  isError,
+  isActionLoading,
+  activeTaskId,
+  onDecision,
+}: {
+  tasks: ClientTask[];
+  history: ClientTask[];
+  creativeFiles: ProjectFile[];
+  loading: boolean;
+  isError: boolean;
+  isActionLoading: boolean;
+  activeTaskId: string | null;
+  onDecision: (
+    task: ClientTask,
+    approvalStatus: ClientTaskMetaAdsApprovalStatus,
+    approvalResponseNote?: string,
+  ) => Promise<void>;
+}) {
+  const [decisionNotes, setDecisionNotes] = useState<Record<string, string>>({});
+
+  if (loading) {
+    return <MetaAdsStatePanel title="Onay kuyruğu yükleniyor..." />;
+  }
+
+  if (isError) {
+    return (
+      <MetaAdsStatePanel
+        title="Onay kuyruğu alınamadı"
+        description="Revizyon görevleri şu anda okunamıyor."
+        tone="error"
+      />
+    );
+  }
+
+  if (tasks.length === 0 && creativeFiles.length === 0) {
+    return <MetaAdsStatePanel title="Bekleyen onay bulunmuyor." tone="muted" />;
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-4">
+        <p className="text-sm text-white">Bekleyen Meta Ads onayı: {tasks.length}</p>
+      </div>
+      {creativeFiles.length > 0 ? (
+        <div className="space-y-2">
+          <p className="text-sm text-white">Kreatif Önizleme</p>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {creativeFiles.map((file) => (
+              <div key={file.id} className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-3">
+                <p className="mb-2 text-sm text-white">{file.title}</p>
+                {file.mimeType.startsWith("image/") ? (
+                  <img
+                    src={file.secureUrl}
+                    alt={file.title}
+                    className="mb-2 h-40 w-full rounded-lg object-cover"
+                  />
+                ) : file.mimeType.startsWith("video/") ? (
+                  <video
+                    className="mb-2 h-40 w-full rounded-lg object-cover"
+                    controls
+                    src={file.secureUrl}
+                  />
+                ) : null}
+                <div className="flex items-center justify-between gap-2 text-xs text-[#A0A0A0]">
+                  <span>{file.originalFileName}</span>
+                  <Button
+                    variant="secondary"
+                    className="text-xs"
+                    onClick={() => window.open(file.secureUrl, "_blank", "noopener,noreferrer")}
+                  >
+                    Görüntüle
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {tasks.map((task) => (
+        <div key={task.id} className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-4">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-white">{task.title}</p>
+            <span className={`rounded border px-2 py-1 text-[11px] ${getClientTaskStatusTone(task.status)}`}>
+              {getClientTaskStatusLabel(task.status)}
+            </span>
+          </div>
+              {task.approvalType ? (
+                <p className="mb-2 text-xs text-[#A0A0A0]">
+                  Onay tipi: {task.approvalType.replace("META_ADS_", "").replace(/_/g, " ")}
+                </p>
+              ) : null}
+          {task.description ? <p className="text-sm text-[#A0A0A0]">{task.description}</p> : null}
+          <textarea
+            className="mt-3 min-h-20 w-full rounded-xl border border-white/[0.08] bg-[#151515] p-3 text-sm text-white outline-none focus:border-[#AAFF01]/40"
+            placeholder="Revizyon notu (isteğe bağlı)"
+            value={decisionNotes[task.id] ?? ""}
+            onChange={(event) =>
+              setDecisionNotes((prev) => ({
+                ...prev,
+                [task.id]: event.target.value,
+              }))
+            }
+          />
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button
+              variant="primary"
+              className="text-xs"
+              disabled={isActionLoading}
+              onClick={() => void onDecision(task, "APPROVED", decisionNotes[task.id])}
+            >
+              {activeTaskId === task.id ? "Kaydediliyor..." : "Onayla"}
+            </Button>
+            <Button
+              variant="secondary"
+              className="text-xs"
+              disabled={isActionLoading || (decisionNotes[task.id]?.trim().length ?? 0) < 2}
+              onClick={() => void onDecision(task, "CHANGES_REQUESTED", decisionNotes[task.id])}
+            >
+              Revizyon İste
+            </Button>
+          </div>
+        </div>
+      ))}
+      {history.length > 0 ? (
+        <div className="space-y-2">
+          <p className="text-sm text-white">Onay Geçmişi</p>
+          {history.map((task) => (
+            <div
+              key={task.id}
+              className="rounded-xl border border-white/[0.08] bg-[#171717] p-3 text-xs text-[#A0A0A0]"
+            >
+              <p className="text-sm text-white">{task.title}</p>
+              <p>Durum: {task.approvalStatus ?? "—"}</p>
+              {task.approvalResponseNote ? <p>Not: {task.approvalResponseNote}</p> : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function MetaAdsStatePanel({
+  title,
+  description,
+  tone = "default",
+}: {
+  title: string;
+  description?: string;
+  tone?: "default" | "error" | "muted";
+}) {
+  const toneClass =
+    tone === "error"
+      ? "border-red-500/30 bg-red-500/10 text-red-200"
+      : tone === "muted"
+        ? "border-white/[0.08] bg-[#1A1A1A] text-[#A0A0A0]"
+        : "border-white/[0.08] bg-[#1A1A1A] text-[#A0A0A0]";
+
+  return (
+    <div className={`rounded-2xl border p-5 ${toneClass}`}>
+      <p className="text-sm">{title}</p>
+      {description ? <p className="mt-1 text-xs">{description}</p> : null}
+    </div>
+  );
+}
+
+function buildMetaAdsAgencyNotes(
+  summary: {
+    spend: number;
+    ctr: number;
+    roas: number | null;
+    results: number;
+  } | undefined,
+  campaigns: MetaAdsCampaign[],
+): string[] {
+  const notes: string[] = [];
+  if (summary) {
+    notes.push(
+      `Toplam ${formatMetaCurrency(summary.spend)} harcama ile ${formatMetaInteger(summary.results)} sonuç üretildi.`,
+    );
+    notes.push(`Ortalama CTR ${formatMetaPercent(summary.ctr)} seviyesinde seyrediyor.`);
+    if (summary.roas !== null) {
+      notes.push(`Toplam ROAS ${summary.roas.toFixed(2)}x; bütçe dağılımı bu skora göre optimize ediliyor.`);
+    }
+  }
+
+  const topCampaign = campaigns[0];
+  if (topCampaign) {
+    notes.push(
+      `${topCampaign.name} kampanyası ${formatMetaCurrency(topCampaign.spend)} harcama ile en yüksek hacmi taşıyor.`,
+    );
+  }
+
+  return notes.slice(0, 4);
+}
+
+function formatMetaCurrency(value: number): string {
+  return new Intl.NumberFormat("tr-TR", {
+    style: "currency",
+    currency: "TRY",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function formatMetaInteger(value: number): string {
+  return new Intl.NumberFormat("tr-TR", {
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function formatMetaPercent(value: number): string {
+  return `${value.toFixed(2)}%`;
 }
 
 function getClientTaskStatusLabel(status: ClientTaskStatus): string {

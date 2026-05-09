@@ -73,8 +73,9 @@ const serviceMenuItems: Record<string, MenuItem[]> = {
     { id: 'creatives', label: 'Kreatifler', icon: Image },
     { id: 'audiences', label: 'Kitleler', icon: Users },
     { id: 'pixel-events', label: 'Pixel & Events', icon: Activity },
-    { id: 'funnel-structure', label: 'Funnel Yapısı', icon: TrendingUp },
-    { id: 'optimization-notes', label: 'Optimizasyon Notları', icon: Zap },
+    { id: 'meta-reports', label: 'Raporlar', icon: BarChart3 },
+    { id: 'agency-notes', label: 'Ajans Notları', icon: MessageSquare },
+    { id: 'approvals', label: 'Onaylar', icon: CheckSquare },
   ],
   'tiktok-ads': [
     { id: 'service-dashboard', label: 'Genel Bakış', icon: LayoutDashboard },

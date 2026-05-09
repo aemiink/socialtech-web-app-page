@@ -19,6 +19,18 @@ export type ClientTaskWorkstream =
 export type ClientTaskSeverity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
 export type ClientTaskEnvironment = "DEVELOPMENT" | "STAGING" | "PRODUCTION";
+export type ClientTaskMetaAdsApprovalType =
+  | "META_ADS_CAMPAIGN_APPROVAL"
+  | "META_ADS_CREATIVE_APPROVAL"
+  | "META_ADS_BUDGET_CHANGE_APPROVAL"
+  | "META_ADS_REPORT_ACKNOWLEDGEMENT"
+  | "META_ADS_STRATEGY_APPROVAL";
+export type ClientTaskMetaAdsApprovalStatus =
+  | "PENDING"
+  | "APPROVED"
+  | "CHANGES_REQUESTED"
+  | "REJECTED"
+  | "ACKNOWLEDGED";
 
 export type ClientTaskSprintSummary = {
   id: string;
@@ -59,6 +71,30 @@ export type ClientTask = {
   projectServiceId?: ServiceId | null;
   sprint?: ClientTaskSprintSummary | null;
   completion?: ClientTaskCompletion | null;
+  approvalRequired?: boolean;
+  approvalType?: ClientTaskMetaAdsApprovalType | null;
+  approvalStatus?: ClientTaskMetaAdsApprovalStatus | null;
+  approvalResponseNote?: string | null;
+  approvalRequestedAt?: string | null;
+  approvalRespondedAt?: string | null;
+  campaignRef?: string | null;
+  adSetRef?: string | null;
+  adRef?: string | null;
+  referenceProjectFile?: {
+    id: string;
+    title: string;
+    secureUrl: string;
+    mimeType: string;
+    category: string;
+    visibility: ClientTaskVisibility;
+    approvalRequired: boolean;
+    approvalStatus: ClientTaskMetaAdsApprovalStatus | null;
+  } | null;
   todos: ClientTaskTodo[];
   progressPercent: number;
+};
+
+export type UpdateClientTaskApprovalRequest = {
+  approvalStatus: ClientTaskMetaAdsApprovalStatus;
+  approvalResponseNote?: string | null;
 };

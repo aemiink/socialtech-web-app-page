@@ -2,14 +2,11 @@ import { DollarSign, Users, MousePointerClick, TrendingUp, TrendingDown, Message
 import { Button } from '../../components/button';
 import { AutomationPreview } from '../../components/automation-preview';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { useGetOwnMetaAdsConfigQuery } from '../../features/metaAds/metaAdsApi';
-
-const kpiData = [
-  { title: 'ROAS', value: '4.8x', change: 12.3, icon: TrendingUp },
-  { title: 'Tıklama Oranı', value: '3.2%', change: -5.4, icon: MousePointerClick },
-  { title: 'Harcama', value: '₺28,450', change: 8.1, icon: DollarSign },
-  { title: 'Potansiyel Müşteriler', value: '147', change: 23.5, icon: Users },
-];
+import {
+  useGetOwnMetaAdsCampaignsQuery,
+  useGetOwnMetaAdsConfigQuery,
+  useGetOwnMetaAdsSummaryQuery,
+} from '../../features/metaAds/metaAdsApi';
 
 const chartData = [
   { date: '20 Nis', ctr: 3.8, cpa: 95 },
@@ -24,42 +21,6 @@ const chartData = [
 const clientActions = [
   { type: 'approval', title: 'Yeni kampanya görselleri onay bekliyor', priority: 'high' },
   { type: 'feedback', title: 'Bütçe artışı için geri bildiriminiz gerekli', priority: 'medium' },
-];
-
-const campaigns = [
-  {
-    name: 'Yaz İndirimi 2026',
-    budget: '₺15,000',
-    roas: '4.8x',
-    ctr: '3.2%',
-    cpa: '₺97',
-    status: 'Scaling',
-    statusColor: 'green',
-    objective: 'TOF',
-    comment: 'Kampanya hedeflerin üzerinde performans gösteriyor. UGC formatı çok iyi sonuç veriyor.'
-  },
-  {
-    name: 'Yeniden Hedefleme',
-    budget: '₺8,000',
-    roas: '6.2x',
-    ctr: '4.1%',
-    cpa: '₺64',
-    status: 'Scaling',
-    statusColor: 'green',
-    objective: 'BOF',
-    comment: 'En yüksek ROAS. Carousel format etkili.'
-  },
-  {
-    name: 'Soğuk Kitle Testi',
-    budget: '₺5,450',
-    roas: '2.1x',
-    ctr: '1.8%',
-    cpa: '₺142',
-    status: 'Testing',
-    statusColor: 'blue',
-    objective: 'MOF',
-    comment: 'Henüz erken. Farklı segmentleri test ediyoruz.'
-  },
 ];
 
 const funnelCampaigns = [
@@ -86,6 +47,40 @@ export function MetaAdsDashboard() {
   const { data: ownMetaAdsConfig, isLoading, isError } = useGetOwnMetaAdsConfigQuery();
   const connectionStatus = ownMetaAdsConfig?.connectionStatus ?? 'NOT_CONNECTED';
   const statusCopy = getClientConnectionCopy(connectionStatus, isError);
+  const shouldSkipReportingQueries = statusCopy.kind !== 'connected';
+  const {
+    data: summary,
+    isLoading: isSummaryLoading,
+    isError: isSummaryError,
+  } = useGetOwnMetaAdsSummaryQuery(undefined, { skip: shouldSkipReportingQueries });
+  const {
+    data: campaignsResponse,
+    isLoading: isCampaignsLoading,
+    isError: isCampaignsError,
+  } = useGetOwnMetaAdsCampaignsQuery({ limit: 6 }, { skip: shouldSkipReportingQueries });
+
+  const displayKpiData = summary
+    ? [
+        { title: 'ROAS', value: summary.roas !== null ? `${summary.roas.toFixed(2)}x` : '—', change: 0, icon: TrendingUp },
+        { title: 'Tıklama Oranı', value: `${summary.ctr.toFixed(2)}%`, change: 0, icon: MousePointerClick },
+        { title: 'Harcama', value: formatCurrency(summary.spend), change: 0, icon: DollarSign },
+        { title: 'Sonuçlar', value: formatInteger(summary.results), change: 0, icon: Users },
+      ]
+    : [];
+
+  const displayCampaigns = campaignsResponse && campaignsResponse.data.length > 0
+    ? campaignsResponse.data.map((campaign) => ({
+        name: campaign.name,
+        budget: formatCurrency(campaign.spend),
+        roas: campaign.roas !== null ? `${campaign.roas.toFixed(2)}x` : '—',
+        ctr: `${campaign.ctr.toFixed(2)}%`,
+        cpa: campaign.results > 0 ? formatCurrency(campaign.spend / campaign.results) : '—',
+        status: normalizeCampaignStatusLabel(campaign.effectiveStatus),
+        statusColor: campaign.effectiveStatus === 'ACTIVE' ? 'green' : 'blue',
+        objective: campaign.objective,
+        comment: buildCampaignComment(campaign),
+      }))
+    : [];
 
   if (isLoading) {
     return (
@@ -122,8 +117,25 @@ export function MetaAdsDashboard() {
         </div>
       </div>
 
+      {(isSummaryLoading || isCampaignsLoading) ? (
+        <div className="bg-[#1A1A1A] rounded-2xl p-4 border border-white/[0.08] text-sm text-[#A0A0A0]">
+          Meta Ads raporu güncelleniyor...
+        </div>
+      ) : null}
+      {(isSummaryError || isCampaignsError) ? (
+        <div className="bg-red-500/10 rounded-2xl p-4 border border-red-500/30 text-sm text-red-200">
+          Rapor verileri alınamadı. Lütfen daha sonra tekrar deneyin.
+        </div>
+      ) : null}
+
+      {!isSummaryLoading && !isSummaryError && !summary ? (
+        <div className="bg-[#1A1A1A] rounded-2xl p-4 border border-white/[0.08] text-sm text-[#A0A0A0]">
+          Seçili tarih aralığı için özet rapor verisi bulunamadı.
+        </div>
+      ) : null}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpiData.map((kpi, i) => (
+        {displayKpiData.map((kpi, i) => (
           <div key={i} className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
             <div className="flex items-start justify-between mb-4">
               <span className="text-[#A0A0A0] text-sm">{kpi.title}</span>
@@ -315,7 +327,7 @@ export function MetaAdsDashboard() {
         <div className="lg:col-span-2">
           <h2 className="text-2xl text-white mb-4">Kampanyalar</h2>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {campaigns.map((campaign, i) => (
+            {displayCampaigns.map((campaign, i) => (
             <div key={i} className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
               <div className="flex items-start justify-between mb-4">
                 <div>
@@ -359,6 +371,11 @@ export function MetaAdsDashboard() {
               </div>
             </div>
           ))}
+            {!isCampaignsLoading && !isCampaignsError && displayCampaigns.length === 0 ? (
+              <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08] text-sm text-[#A0A0A0] lg:col-span-2">
+                Kampanya verisi bulunamadı.
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -393,6 +410,44 @@ export function MetaAdsDashboard() {
       </div>
     </div>
   );
+}
+
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat('tr-TR', {
+    style: 'currency',
+    currency: 'TRY',
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function formatInteger(value: number): string {
+  return new Intl.NumberFormat('tr-TR', {
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function normalizeCampaignStatusLabel(status: string): string {
+  if (status === 'ACTIVE') {
+    return 'Active';
+  }
+
+  if (status === 'PAUSED') {
+    return 'Paused';
+  }
+
+  return status;
+}
+
+function buildCampaignComment(campaign: { roas: number | null; ctr: number; results: number }): string {
+  if (campaign.roas !== null && campaign.roas >= 3) {
+    return 'Bu kampanya güçlü dönüşüm performansı üretiyor; mevcut kreatif varyantları korunmalı.';
+  }
+
+  if (campaign.ctr >= 2 && campaign.results > 0) {
+    return 'Kampanya dengeli ilerliyor, bir sonraki iterasyonda kreatif testleri ile optimize edilebilir.';
+  }
+
+  return 'Bu kampanya test aşamasında; kitle ve kreatif kombinasyonları optimize ediliyor.';
 }
 
 function getClientConnectionCopy(connectionStatus: string, hasQueryError: boolean): {

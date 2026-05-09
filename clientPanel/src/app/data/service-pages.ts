@@ -209,8 +209,9 @@ const profiles: Record<ServiceId, ServiceProfile> = {
       creatives: { title: 'Kreatifler', description: 'Kreatif grid, hook skoru, CTR ve dönüşüm karşılaştırması.', focus: ['Creative grid', 'Hook score', 'CTR', 'Conversion rate', 'Winner / Testing / Fatigue labels'] },
       audiences: { title: 'Kitleler', description: 'Cold, warm ve retargeting segmentlerinin performans karşılaştırması.', focus: ['Audience segments', 'Cold / Warm / Retargeting labels', 'Performance comparison', 'Fatigue notes'] },
       'pixel-events': { title: 'Pixel & Events', description: 'Pixel, event match quality, Conversion API ve takip sorunları.', focus: ['Pixel status', 'Events status', 'Event match quality', 'Conversion API status', 'Tracking issues', 'Client required actions'] },
-      'funnel-structure': { title: 'Funnel Yapısı', description: 'TOF/MOF/BOF kampanya haritası ve drop-off notları.', focus: ['TOF / MOF / BOF campaign mapping', 'Retargeting status', 'Drop-off notes', 'Lead kalitesi'] },
-      'optimization-notes': { title: 'Optimizasyon Notları', description: 'Yapılan değişiklikler, nedeni, beklenen etki ve sonraki aksiyonlar.', focus: ['Changes made', 'Why they were made', 'Expected impact', 'Next actions'] },
+      'meta-reports': { title: 'Raporlar', description: 'Günlük performans raporu ve trend görünümü.', focus: ['Daily spend', 'CTR trend', 'ROAS trend', 'Conversion summary', 'Date range insights'] },
+      'agency-notes': { title: 'Ajans Notları', description: 'Haftalık optimizasyon notları ve aksiyon önerileri.', focus: ['Optimization highlights', 'Campaign focus', 'Creative direction', 'Budget pacing', 'Risk notes'] },
+      approvals: { title: 'Onaylar', description: 'Müşteri onayı bekleyen revizyon/aksiyon kuyruğu.', focus: ['Pending approvals', 'Revision requests', 'Approval actions', 'Feedback loop', 'Client decision log'] },
     },
   },
   'tiktok-ads': {

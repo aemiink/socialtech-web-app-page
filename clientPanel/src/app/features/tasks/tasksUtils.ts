@@ -1,6 +1,8 @@
 import type {
   ClientTaskCompletion,
   ClientTaskEnvironment,
+  ClientTaskMetaAdsApprovalStatus,
+  ClientTaskMetaAdsApprovalType,
   ClientTask,
   ClientTaskPriority,
   ClientTaskSeverity,
@@ -39,6 +41,20 @@ const TASK_WORKSTREAMS: readonly ClientTaskWorkstream[] = [
 ];
 const TASK_SEVERITIES: readonly ClientTaskSeverity[] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
 const TASK_ENVIRONMENTS: readonly ClientTaskEnvironment[] = ["DEVELOPMENT", "STAGING", "PRODUCTION"];
+const TASK_META_ADS_APPROVAL_TYPES: readonly ClientTaskMetaAdsApprovalType[] = [
+  "META_ADS_CAMPAIGN_APPROVAL",
+  "META_ADS_CREATIVE_APPROVAL",
+  "META_ADS_BUDGET_CHANGE_APPROVAL",
+  "META_ADS_REPORT_ACKNOWLEDGEMENT",
+  "META_ADS_STRATEGY_APPROVAL",
+];
+const TASK_META_ADS_APPROVAL_STATUSES: readonly ClientTaskMetaAdsApprovalStatus[] = [
+  "PENDING",
+  "APPROVED",
+  "CHANGES_REQUESTED",
+  "REJECTED",
+  "ACKNOWLEDGED",
+];
 
 export function normalizeClientTasksResponse(value: unknown): ClientTask[] {
   const taskList = readResponseArray(value);
@@ -47,6 +63,15 @@ export function normalizeClientTasksResponse(value: unknown): ClientTask[] {
     const task = normalizeClientTask(entry);
     return task ? [task] : [];
   });
+}
+
+export function normalizeClientTaskResponse(value: unknown): ClientTask {
+  const candidate = toRecord(value)?.data ?? value;
+  const task = normalizeClientTask(candidate);
+  if (!task) {
+    throw new Error("Task response could not be normalized.");
+  }
+  return task;
 }
 
 export function filterClientVisibleTodoProgressTasks(tasks: ClientTask[]): ClientTask[] {
@@ -107,6 +132,16 @@ function normalizeClientTask(value: unknown): ClientTask | null {
       normalizeServiceId(record.serviceKey),
     sprint: readTaskSprint(record.sprint),
     completion,
+    approvalRequired: readOptionalBoolean(record.approvalRequired),
+    approvalType: readEnumValue(record.approvalType, TASK_META_ADS_APPROVAL_TYPES),
+    approvalStatus: readEnumValue(record.approvalStatus, TASK_META_ADS_APPROVAL_STATUSES),
+    approvalResponseNote: readOptionalString(record.approvalResponseNote),
+    approvalRequestedAt: readOptionalString(record.approvalRequestedAt),
+    approvalRespondedAt: readOptionalString(record.approvalRespondedAt),
+    campaignRef: readOptionalString(record.campaignRef),
+    adSetRef: readOptionalString(record.adSetRef),
+    adRef: readOptionalString(record.adRef),
+    referenceProjectFile: readTaskReferenceProjectFile(record.referenceProjectFile),
     todos,
     progressPercent: readProgressPercent(record.progressPercent, completion, todos, status),
   };
@@ -134,6 +169,37 @@ function readTaskVisibility(record: Record<string, unknown>): ClientTaskVisibili
   return rawVisibility?.toUpperCase().replace(/-/g, "_") === "CLIENT_VISIBLE"
     ? "CLIENT_VISIBLE"
     : "INTERNAL";
+}
+
+function readTaskReferenceProjectFile(value: unknown): ClientTask["referenceProjectFile"] {
+  const record = toRecord(value);
+  if (!record) {
+    return null;
+  }
+
+  const id = readRequiredString(record.id);
+  const title = readRequiredString(record.title);
+  const secureUrl = readRequiredString(record.secureUrl);
+  const mimeType = readRequiredString(record.mimeType);
+  const category = readRequiredString(record.category);
+  const visibility = readTaskVisibility(record);
+  const approvalRequired = readOptionalBoolean(record.approvalRequired) ?? false;
+  const approvalStatus = readEnumValue(record.approvalStatus, TASK_META_ADS_APPROVAL_STATUSES);
+
+  if (!id || !title || !secureUrl || !mimeType || !category) {
+    return null;
+  }
+
+  return {
+    id,
+    title,
+    secureUrl,
+    mimeType,
+    category,
+    visibility,
+    approvalRequired,
+    approvalStatus,
+  };
 }
 
 function readTaskTodos(value: unknown): ClientTaskTodo[] {
@@ -269,6 +335,10 @@ function readFiniteNumber(value: unknown): number | null {
     return null;
   }
   return value;
+}
+
+function readOptionalBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
 }
 
 function toRecord(value: unknown): Record<string, unknown> | null {
