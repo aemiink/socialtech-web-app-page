@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
+import { ScheduleModule } from "@nestjs/schedule";
 import { AdminAssignmentsModule } from "./admin-assignments/admin-assignments.module";
 import { AdminAuditLogsModule } from "./admin-audit-logs/admin-audit-logs.module";
 import { AdminClientsModule } from "./admin-clients/admin-clients.module";
@@ -31,6 +32,7 @@ import { WebAppWorkspaceModule } from "./web-app-workspace/web-app-workspace.mod
         abortEarly: false,
       },
     }),
+    ScheduleModule.forRoot(),
     DatabaseModule,
     HealthModule,
     AuthModule,
