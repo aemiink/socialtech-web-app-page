@@ -1,5 +1,7 @@
 import { baseApi } from "../../services/baseApi";
 import type {
+  AdminMetaAdsSyncLogsQuery,
+  AdminMetaAdsSyncLogsResponse,
   AdminMetaAdsClientListResponse,
   AdminClientMetaAdsConnection,
   ConnectManualMetaAdsRequest,
@@ -20,6 +22,7 @@ import type {
 } from "./clientsTypes";
 import {
   normalizeAdminMetaAdsClientListResponse,
+  normalizeAdminMetaAdsSyncLogsResponse,
   normalizeClientResponse,
   normalizeClientSummaryResponse,
   normalizeClientsListResponse,
@@ -34,6 +37,7 @@ const CLIENTS_LIST_ID = "LIST";
 const CLIENT_SUMMARY_ID_PREFIX = "SUMMARY";
 const CLIENT_META_ADS_CONNECTION_ID_PREFIX = "META_ADS_CONNECTION";
 const CLIENT_META_ADS_GLOBAL_LIST_ID = "META_ADS_GLOBAL_LIST";
+const CLIENT_META_ADS_SYNC_LOGS_LIST_ID = "META_ADS_SYNC_LOGS_LIST";
 const ADMIN_SUMMARY_ID = "SUMMARY";
 const AUDIT_LOGS_LIST_ID = "LIST";
 const ADMIN_USERS_LIST_ID = "LIST";
@@ -113,6 +117,18 @@ export const clientsApi = baseApi.injectEndpoints({
           : []),
       ],
     }),
+    getAdminMetaAdsSyncLogs: builder.query<
+      AdminMetaAdsSyncLogsResponse,
+      AdminMetaAdsSyncLogsQuery | void
+    >({
+      query: (query) => ({
+        url: "/admin/meta-ads/sync-logs",
+        method: "GET",
+        params: serializeMetaAdsSyncLogsQuery(query),
+      }),
+      transformResponse: (response: unknown) => normalizeAdminMetaAdsSyncLogsResponse(response),
+      providesTags: [{ type: "Clients", id: CLIENT_META_ADS_SYNC_LOGS_LIST_ID }],
+    }),
     updateAdminClientMetaAdsConfig: builder.mutation<
       AdminClientMetaAdsConnection,
       { clientId: string; body: UpdateAdminClientMetaAdsConfigRequest }
@@ -187,6 +203,24 @@ export const clientsApi = baseApi.injectEndpoints({
         ...getAdminClientMutationInvalidations(clientId),
         { type: "Clients", id: getClientMetaAdsConnectionTagId(clientId) },
         { type: "Clients", id: CLIENT_META_ADS_GLOBAL_LIST_ID },
+        { type: "Clients", id: CLIENT_META_ADS_SYNC_LOGS_LIST_ID },
+      ],
+    }),
+    retryAdminClientMetaAdsSync: builder.mutation<
+      MetaAdsSyncResponse,
+      { clientId: string; query?: MetaAdsDateRangeQuery }
+    >({
+      query: ({ clientId, query }) => ({
+        url: `/admin/clients/${clientId}/meta-ads/sync/retry`,
+        method: "POST",
+        params: serializeMetaAdsDateRangeQuery(query),
+      }),
+      transformResponse: (response: unknown) => normalizeMetaAdsSyncResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        ...getAdminClientMutationInvalidations(clientId),
+        { type: "Clients", id: getClientMetaAdsConnectionTagId(clientId) },
+        { type: "Clients", id: CLIENT_META_ADS_GLOBAL_LIST_ID },
+        { type: "Clients", id: CLIENT_META_ADS_SYNC_LOGS_LIST_ID },
       ],
     }),
     createAdminClient: builder.mutation<ClientProfile, CreateAdminClientRequest>({
@@ -264,11 +298,13 @@ export const {
   useGetAdminClientMetaAdsConnectionQuery,
   useGetAdminClientMetaAdsSummaryQuery,
   useGetAdminMetaAdsClientsQuery,
+  useGetAdminMetaAdsSyncLogsQuery,
   useUpdateAdminClientMetaAdsConfigMutation,
   useConnectAdminClientMetaAdsManualMutation,
   useDisconnectAdminClientMetaAdsMutation,
   useTestAdminClientMetaAdsConnectionMutation,
   useSyncAdminClientMetaAdsMutation,
+  useRetryAdminClientMetaAdsSyncMutation,
   useCreateAdminClientMutation,
   useUpdateAdminClientMutation,
   useDeactivateAdminClientMutation,
@@ -362,6 +398,34 @@ function serializeMetaAdsDateRangeQuery(
 
   if (query.until !== undefined && query.until.trim().length > 0) {
     params.until = query.until.trim();
+  }
+
+  return params;
+}
+
+function serializeMetaAdsSyncLogsQuery(
+  query: AdminMetaAdsSyncLogsQuery | void,
+): Record<string, string | number | boolean> {
+  if (!query) {
+    return {};
+  }
+
+  const params: Record<string, string | number | boolean> = {};
+
+  if (query.clientProfileId !== undefined && query.clientProfileId.trim().length > 0) {
+    params.clientProfileId = query.clientProfileId.trim();
+  }
+
+  if (query.status !== undefined) {
+    params.status = query.status;
+  }
+
+  if (query.failedOnly !== undefined) {
+    params.failedOnly = query.failedOnly;
+  }
+
+  if (typeof query.limit === "number" && Number.isFinite(query.limit)) {
+    params.limit = Math.trunc(query.limit);
   }
 
   return params;

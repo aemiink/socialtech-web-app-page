@@ -18,6 +18,7 @@ import { ConnectManualMetaAdsDto } from "./dto/connect-manual-meta-ads.dto";
 import { MetaAdsCampaignsQueryDto } from "./dto/meta-ads-campaigns-query.dto";
 import { MetaAdsDateRangeQueryDto } from "./dto/meta-ads-date-range-query.dto";
 import { MetaAdsInsightsQueryDto } from "./dto/meta-ads-insights-query.dto";
+import { MetaAdsSyncLogsQueryDto } from "./dto/meta-ads-sync-logs-query.dto";
 import { TestMetaAdsConnectionDto } from "./dto/test-meta-ads-connection.dto";
 import { UpdateMetaAdsConfigDto } from "./dto/update-meta-ads-config.dto";
 import { MetaAdsService } from "./meta-ads.service";
@@ -34,6 +35,15 @@ export class MetaAdsController {
     @Query() query: MetaAdsDateRangeQueryDto,
   ) {
     return this.metaAdsService.getAdminMetaAdsClients(currentUser, query);
+  }
+
+  @Get("admin/meta-ads/sync-logs")
+  @RequirePermissions("metaAds.config.read.any")
+  getAdminMetaAdsSyncLogs(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Query() query: MetaAdsSyncLogsQueryDto,
+  ) {
+    return this.metaAdsService.getAdminSyncLogs(currentUser, query);
   }
 
   @Get("admin/clients/:clientId/meta-ads/config")
@@ -160,6 +170,16 @@ export class MetaAdsController {
     @Query() query: MetaAdsDateRangeQueryDto,
   ) {
     return this.metaAdsService.syncAdminClientInsights(currentUser, clientId, query);
+  }
+
+  @Post("admin/clients/:clientId/meta-ads/sync/retry")
+  @RequirePermissions("metaAds.config.manage.any")
+  retryAdminClientMetaAdsInsights(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: MetaAdsDateRangeQueryDto,
+  ) {
+    return this.metaAdsService.retryAdminClientInsights(currentUser, clientId, query);
   }
 
   @Get("meta-ads/clients/:clientId/config")
@@ -295,5 +315,14 @@ export class MetaAdsController {
     @Query() query: MetaAdsInsightsQueryDto,
   ) {
     return this.metaAdsService.getOwnClientInsights(currentUser, query);
+  }
+
+  @Post("clients/me/meta-ads/sync")
+  @RequirePermissions("metaAds.config.read.own")
+  syncOwnClientMetaAdsInsights(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Query() query: MetaAdsDateRangeQueryDto,
+  ) {
+    return this.metaAdsService.syncOwnClientInsights(currentUser, query);
   }
 }

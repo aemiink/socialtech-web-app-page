@@ -1,5 +1,14 @@
 import { type FormEvent, useMemo, useState } from "react";
-import { BadgeCheck, Link2Off, RefreshCw, ShieldAlert, ShieldCheck, TestTube2, Wrench } from "lucide-react";
+import {
+  BadgeCheck,
+  Link2Off,
+  RefreshCw,
+  RotateCcw,
+  ShieldAlert,
+  ShieldCheck,
+  TestTube2,
+  Wrench,
+} from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -17,11 +26,13 @@ import { hasAdminPermission, selectCurrentUser } from "../features/auth/authSele
 import {
   useDisconnectAdminClientMetaAdsMutation,
   useGetAdminMetaAdsClientsQuery,
+  useGetAdminMetaAdsSyncLogsQuery,
+  useRetryAdminClientMetaAdsSyncMutation,
   useSyncAdminClientMetaAdsMutation,
   useTestAdminClientMetaAdsConnectionMutation,
   useUpdateAdminClientMetaAdsConfigMutation,
 } from "../features/clients/clientsApi";
-import type { AdminMetaAdsClientListItem } from "../features/clients/clientsTypes";
+import type { AdminMetaAdsClientListItem, MetaAdsSyncStatus } from "../features/clients/clientsTypes";
 import {
   extractApiErrorMessage,
   formatClientDateTime,
@@ -69,11 +80,25 @@ export function MetaAdsAdmin() {
   } = useGetAdminMetaAdsClientsQuery(undefined, {
     skip: !canReadMetaAds,
   });
+  const {
+    data: syncLogsResponse,
+    error: syncLogsError,
+    isError: isSyncLogsError,
+    isLoading: isSyncLogsLoading,
+  } = useGetAdminMetaAdsSyncLogsQuery(
+    {
+      limit: 20,
+    },
+    {
+      skip: !canReadMetaAds,
+    },
+  );
   const [updateMetaAdsConfig, { isLoading: isUpdatingConfig }] =
     useUpdateAdminClientMetaAdsConfigMutation();
   const [testMetaAdsConnection, { isLoading: isTestingConnection }] =
     useTestAdminClientMetaAdsConnectionMutation();
   const [syncMetaAds, { isLoading: isSyncing }] = useSyncAdminClientMetaAdsMutation();
+  const [retryMetaAdsSync, { isLoading: isRetryingSync }] = useRetryAdminClientMetaAdsSyncMutation();
   const [disconnectMetaAds, { isLoading: isDisconnecting }] =
     useDisconnectAdminClientMetaAdsMutation();
   const [createTask, { isLoading: isCreatingApproval }] = useCreateTaskMutation();
@@ -86,8 +111,19 @@ export function MetaAdsAdmin() {
   const listItems = response?.data ?? [];
   const meta = response?.meta;
   const dateRange = response?.dateRange;
+  const syncLogs = syncLogsResponse?.data ?? [];
+  const syncLogsMeta = syncLogsResponse?.meta;
+  const failedClients = useMemo(
+    () => listItems.filter((item) => item.connectionStatus === "ERROR" || Boolean(item.syncError)),
+    [listItems],
+  );
   const isMutating =
-    isUpdatingConfig || isTestingConnection || isSyncing || isDisconnecting || isCreatingApproval;
+    isUpdatingConfig ||
+    isTestingConnection ||
+    isSyncing ||
+    isRetryingSync ||
+    isDisconnecting ||
+    isCreatingApproval;
 
   const kpis = useMemo(
     () => [
@@ -221,6 +257,23 @@ export function MetaAdsAdmin() {
       },
       `${client.client.companyName} için Meta Ads senkronizasyonu tamamlandı.`,
       "Meta Ads senkronizasyonu çalıştırılamadı.",
+    );
+  }
+
+  async function handleRetrySync(client: AdminMetaAdsClientListItem) {
+    if (!canManageMetaAds || isMutating) {
+      return;
+    }
+
+    await runClientAction(
+      client.client.id,
+      async () => {
+        await retryMetaAdsSync({
+          clientId: client.client.id,
+        }).unwrap();
+      },
+      `${client.client.companyName} için retry senkronizasyonu tamamlandı.`,
+      "Retry senkronizasyonu çalıştırılamadı.",
     );
   }
 
@@ -506,6 +559,107 @@ export function MetaAdsAdmin() {
         ) : null}
       </Card>
 
+      <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-white">Başarısız Sync Müşterileri</h2>
+          <span className="rounded-md bg-red-500/15 px-2 py-1 text-xs text-red-200">
+            {failedClients.length} müşteri
+          </span>
+        </div>
+
+        {failedClients.length === 0 ? (
+          <p className="text-sm text-[#A0A0A0]">Aktif başarısız sync kaydı yok.</p>
+        ) : (
+          <div className="space-y-3">
+            {failedClients.map((client) => (
+              <div
+                key={client.client.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-500/25 bg-red-500/10 p-3"
+              >
+                <div>
+                  <p className="font-medium text-white">{client.client.companyName}</p>
+                  <p className="text-xs text-red-200">{client.syncError ?? "Bilinmeyen sync hatası."}</p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="gap-1 border-red-500/30 text-red-200 hover:bg-red-500/10"
+                  onClick={() => {
+                    void handleRetrySync(client);
+                  }}
+                  disabled={!canManageMetaAds || isMutating}
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Retry
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-white">Sync Logları</h2>
+          {syncLogsMeta ? (
+            <p className="text-xs text-[#A0A0A0]">
+              Toplam: {syncLogsMeta.total} · Failed: {syncLogsMeta.failed} · Running: {syncLogsMeta.running} ·
+              Skipped: {syncLogsMeta.skipped}
+            </p>
+          ) : null}
+        </div>
+
+        {isSyncLogsLoading ? <p className="text-sm text-[#A0A0A0]">Sync logları yükleniyor...</p> : null}
+        {isSyncLogsError ? (
+          <p className="text-sm text-red-300">
+            {extractApiErrorMessage(syncLogsError, "Sync logları alınamadı.")}
+          </p>
+        ) : null}
+        {!isSyncLogsLoading && !isSyncLogsError && syncLogs.length === 0 ? (
+          <p className="text-sm text-[#A0A0A0]">Henüz sync log kaydı oluşmadı.</p>
+        ) : null}
+
+        {!isSyncLogsLoading && !isSyncLogsError && syncLogs.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[920px]">
+              <thead className="border-b border-white/[0.06] text-left text-xs text-[#A0A0A0]">
+                <tr>
+                  <th className="py-3 pr-3">Müşteri</th>
+                  <th className="py-3 pr-3">Durum</th>
+                  <th className="py-3 pr-3">Başlangıç</th>
+                  <th className="py-3 pr-3">Süre</th>
+                  <th className="py-3 pr-3">Kayıt</th>
+                  <th className="py-3 pr-3">API Call</th>
+                  <th className="py-3">Hata Nedeni</th>
+                </tr>
+              </thead>
+              <tbody>
+                {syncLogs.map((row) => (
+                  <tr key={row.id} className="border-b border-white/[0.04] align-top">
+                    <td className="py-3 pr-3 text-sm text-white">{row.clientCompanyName}</td>
+                    <td className="py-3 pr-3">
+                      <span
+                        className={`rounded-md px-2 py-1 text-xs ${getSyncStatusClassName(row.status)}`}
+                      >
+                        {getSyncStatusLabel(row.status)}
+                      </span>
+                    </td>
+                    <td className="py-3 pr-3 text-xs text-[#DADADA]">{formatClientDateTime(row.startedAt)}</td>
+                    <td className="py-3 pr-3 text-xs text-[#DADADA]">
+                      {row.durationMs !== null ? `${Math.max(Math.round(row.durationMs / 1000), 0)} sn` : "—"}
+                    </td>
+                    <td className="py-3 pr-3 text-xs text-[#DADADA]">{row.recordsFetched ?? "—"}</td>
+                    <td className="py-3 pr-3 text-xs text-[#DADADA]">{row.apiCallCount ?? "—"}</td>
+                    <td className="py-3 text-xs text-red-200">{row.errorMessage ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </Card>
+
       <Dialog
         open={configTarget !== null}
         onOpenChange={(open) => {
@@ -632,6 +786,38 @@ function PermissionPill({ enabled, label }: { enabled: boolean; label: string })
       {label}
     </span>
   );
+}
+
+function getSyncStatusLabel(status: MetaAdsSyncStatus): string {
+  if (status === "RUNNING") {
+    return "Running";
+  }
+  if (status === "SUCCESS") {
+    return "Success";
+  }
+  if (status === "FAILED") {
+    return "Failed";
+  }
+  if (status === "PARTIAL") {
+    return "Partial";
+  }
+  return "Skipped";
+}
+
+function getSyncStatusClassName(status: MetaAdsSyncStatus): string {
+  if (status === "SUCCESS") {
+    return "bg-[#AAFF01]/15 text-[#d2ff8a]";
+  }
+  if (status === "FAILED") {
+    return "bg-red-500/15 text-red-200";
+  }
+  if (status === "RUNNING") {
+    return "bg-blue-500/15 text-blue-200";
+  }
+  if (status === "PARTIAL") {
+    return "bg-yellow-500/15 text-yellow-200";
+  }
+  return "bg-white/[0.06] text-[#DADADA]";
 }
 
 function getServiceStatusLabel(status: string): string {

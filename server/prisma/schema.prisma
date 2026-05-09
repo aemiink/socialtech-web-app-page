@@ -75,6 +75,14 @@ enum MetaAdsInsightLevel {
   AD
 }
 
+enum MetaAdsSyncStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+  PARTIAL
+  SKIPPED
+}
+
 enum EmployeeClientAssignmentScope {
   PROJECT
   PERFORMANCE
@@ -383,6 +391,7 @@ model ClientProfile {
   metaAdsConfig       ClientMetaAdsConfig?
   metaAdsCredential   ClientMetaAdsCredential?
   metaAdsInsights     MetaAdsDailyInsight[]
+  metaAdsSyncLogs     MetaAdsSyncLog[]
   projects            Project[]
   files               ProjectFile[]
   convertedCrmLeads   CrmLead[]                  @relation("CrmLeadConvertedClient")
@@ -458,6 +467,26 @@ model MetaAdsDailyInsight {
   @@index([clientProfileId, level, date])
   @@index([clientProfileId, adAccountId, level, date])
   @@index([adAccountId, date])
+}
+
+model MetaAdsSyncLog {
+  id              String            @id @default(uuid()) @db.Uuid
+  clientProfileId String            @db.Uuid
+  adAccountId     String?
+  status          MetaAdsSyncStatus
+  startedAt       DateTime
+  finishedAt      DateTime?
+  errorCode       String?
+  errorMessage    String?
+  recordsFetched  Int?
+  apiCallCount    Int?
+  createdAt       DateTime          @default(now())
+
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@index([clientProfileId, createdAt])
+  @@index([status, createdAt])
+  @@index([clientProfileId, status, createdAt])
 }
 
 model ClientPurchasedService {

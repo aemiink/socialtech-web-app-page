@@ -5,7 +5,10 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthUserProfile } from "../../features/auth/authTypes";
-import type { AdminMetaAdsClientListResponse } from "../../features/clients/clientsTypes";
+import type {
+  AdminMetaAdsClientListResponse,
+  AdminMetaAdsSyncLogsResponse,
+} from "../../features/clients/clientsTypes";
 import type { Task } from "../../features/tasks/tasksTypes";
 import { MetaAdsAdmin } from "../MetaAdsAdmin";
 
@@ -29,9 +32,11 @@ type MetaAdsListQueryResult = {
 const mockUseGetAdminMetaAdsClientsQuery = vi.fn<
   (query?: unknown, options?: QueryOptions) => MetaAdsListQueryResult
 >();
+const mockUseGetAdminMetaAdsSyncLogsQuery = vi.fn();
 const mockUseUpdateAdminClientMetaAdsConfigMutation = vi.fn();
 const mockUseTestAdminClientMetaAdsConnectionMutation = vi.fn();
 const mockUseSyncAdminClientMetaAdsMutation = vi.fn();
+const mockUseRetryAdminClientMetaAdsSyncMutation = vi.fn();
 const mockUseDisconnectAdminClientMetaAdsMutation = vi.fn();
 const mockUseCreateTaskMutation = vi.fn();
 
@@ -44,11 +49,14 @@ vi.mock("../../store/hooks", () => ({
 vi.mock("../../features/clients/clientsApi", () => ({
   useGetAdminMetaAdsClientsQuery: (query?: unknown, options?: QueryOptions) =>
     mockUseGetAdminMetaAdsClientsQuery(query, options),
+  useGetAdminMetaAdsSyncLogsQuery: (query?: unknown, options?: QueryOptions) =>
+    mockUseGetAdminMetaAdsSyncLogsQuery(query, options),
   useUpdateAdminClientMetaAdsConfigMutation: () =>
     mockUseUpdateAdminClientMetaAdsConfigMutation(),
   useTestAdminClientMetaAdsConnectionMutation: () =>
     mockUseTestAdminClientMetaAdsConnectionMutation(),
   useSyncAdminClientMetaAdsMutation: () => mockUseSyncAdminClientMetaAdsMutation(),
+  useRetryAdminClientMetaAdsSyncMutation: () => mockUseRetryAdminClientMetaAdsSyncMutation(),
   useDisconnectAdminClientMetaAdsMutation: () => mockUseDisconnectAdminClientMetaAdsMutation(),
 }));
 
@@ -126,6 +134,32 @@ const metaAdsClientListResponse: AdminMetaAdsClientListResponse = {
   },
 };
 
+const syncLogsResponse: AdminMetaAdsSyncLogsResponse = {
+  data: [
+    {
+      id: "sync-log-1",
+      clientProfileId: "11111111-1111-4111-8111-111111111111",
+      clientCompanyName: "Acme E-ticaret",
+      adAccountId: "act-1",
+      status: "SUCCESS",
+      startedAt: "2026-05-09T10:00:00.000Z",
+      finishedAt: "2026-05-09T10:00:05.000Z",
+      durationMs: 5000,
+      errorCode: null,
+      errorMessage: null,
+      recordsFetched: 18,
+      apiCallCount: 5,
+      createdAt: "2026-05-09T10:00:05.000Z",
+    },
+  ],
+  meta: {
+    total: 1,
+    failed: 0,
+    running: 0,
+    skipped: 0,
+  },
+};
+
 function createResolvedMutation<T>(value: T) {
   return vi.fn((): MutationResponse<T> => ({
     unwrap: async () => value,
@@ -145,6 +179,12 @@ describe("MetaAdsAdmin", () => {
       isLoading: false,
       refetch: vi.fn(),
     });
+    mockUseGetAdminMetaAdsSyncLogsQuery.mockReturnValue({
+      data: syncLogsResponse,
+      error: undefined,
+      isError: false,
+      isLoading: false,
+    });
     mockUseUpdateAdminClientMetaAdsConfigMutation.mockReturnValue([
       createResolvedMutation({}),
       { isLoading: false },
@@ -154,6 +194,10 @@ describe("MetaAdsAdmin", () => {
       { isLoading: false },
     ]);
     mockUseSyncAdminClientMetaAdsMutation.mockReturnValue([
+      createResolvedMutation({}),
+      { isLoading: false },
+    ]);
+    mockUseRetryAdminClientMetaAdsSyncMutation.mockReturnValue([
       createResolvedMutation({}),
       { isLoading: false },
     ]);
@@ -170,7 +214,7 @@ describe("MetaAdsAdmin", () => {
   it("renders success, loading, error, and empty states", () => {
     render(<MetaAdsAdmin />, { wrapper: MemoryRouter });
     expect(screen.getByRole("heading", { name: "Meta Ads Yönetimi" })).toBeInTheDocument();
-    expect(screen.getByText("Acme E-ticaret")).toBeInTheDocument();
+    expect(screen.getAllByText("Acme E-ticaret").length).toBeGreaterThan(0);
 
     mockUseGetAdminMetaAdsClientsQuery.mockReturnValueOnce({
       data: undefined,
@@ -212,6 +256,8 @@ describe("MetaAdsAdmin", () => {
     expect(screen.getAllByText("Bekleyen Onay").length).toBeGreaterThan(0);
     expect(screen.getByText("Performance Specialist (PERFORMANCE)")).toBeInTheDocument();
     expect(screen.getAllByText("3").length).toBeGreaterThan(0);
+    expect(screen.getByText("Sync Logları")).toBeInTheDocument();
+    expect(screen.getAllByText("Acme E-ticaret").length).toBeGreaterThan(0);
   });
 
   it("submits config update action", async () => {
@@ -257,6 +303,37 @@ describe("MetaAdsAdmin", () => {
           adAccountId: "act-1",
           requiredScopes: ["ads_read"],
         },
+      });
+    });
+  });
+
+  it("shows failed sync row and runs retry action", async () => {
+    const retryMutation = createResolvedMutation({});
+    mockUseRetryAdminClientMetaAdsSyncMutation.mockReturnValue([retryMutation, { isLoading: false }]);
+    mockUseGetAdminMetaAdsClientsQuery.mockReturnValue({
+      data: {
+        ...metaAdsClientListResponse,
+        data: [
+          {
+            ...metaAdsClientListResponse.data[0],
+            connectionStatus: "ERROR",
+            syncError: "Meta API rate limit sınırına ulaşıldı.",
+          },
+        ],
+      },
+      error: undefined,
+      isError: false,
+      isFetching: false,
+      isLoading: false,
+      refetch: vi.fn(),
+    });
+
+    render(<MetaAdsAdmin />, { wrapper: MemoryRouter });
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => {
+      expect(retryMutation).toHaveBeenCalledWith({
+        clientId: "11111111-1111-4111-8111-111111111111",
       });
     });
   });

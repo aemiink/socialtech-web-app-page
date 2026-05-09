@@ -5,12 +5,14 @@ import { MetaAdsDashboard } from "../services/meta-ads-dashboard";
 const mockUseGetOwnMetaAdsConfigQuery = vi.fn();
 const mockUseGetOwnMetaAdsSummaryQuery = vi.fn();
 const mockUseGetOwnMetaAdsCampaignsQuery = vi.fn();
+const mockUseSyncOwnMetaAdsMutation = vi.fn();
 
 vi.mock("../../features/metaAds/metaAdsApi", () => ({
   useGetOwnMetaAdsConfigQuery: () => mockUseGetOwnMetaAdsConfigQuery(),
   useGetOwnMetaAdsSummaryQuery: (...args: unknown[]) => mockUseGetOwnMetaAdsSummaryQuery(...args),
   useGetOwnMetaAdsCampaignsQuery: (...args: unknown[]) =>
     mockUseGetOwnMetaAdsCampaignsQuery(...args),
+  useSyncOwnMetaAdsMutation: (...args: unknown[]) => mockUseSyncOwnMetaAdsMutation(...args),
 }));
 
 describe("MetaAdsDashboard", () => {
@@ -27,6 +29,7 @@ describe("MetaAdsDashboard", () => {
     mockUseGetOwnMetaAdsConfigQuery.mockReset();
     mockUseGetOwnMetaAdsSummaryQuery.mockReset();
     mockUseGetOwnMetaAdsCampaignsQuery.mockReset();
+    mockUseSyncOwnMetaAdsMutation.mockReset();
 
     mockUseGetOwnMetaAdsConfigQuery.mockReturnValue({
       data: {
@@ -84,6 +87,10 @@ describe("MetaAdsDashboard", () => {
       isLoading: false,
       isError: false,
     });
+    mockUseSyncOwnMetaAdsMutation.mockReturnValue([
+      vi.fn(() => ({ unwrap: () => Promise.resolve({ syncStatus: "SUCCESS" }) })),
+      { isLoading: false },
+    ]);
   });
 
   afterEach(() => {

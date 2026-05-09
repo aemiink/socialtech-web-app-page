@@ -5,6 +5,13 @@ export type MetaAdsConnectionStatus =
   | "ERROR"
   | "DISCONNECTED";
 
+export type MetaAdsSyncStatus =
+  | "RUNNING"
+  | "SUCCESS"
+  | "FAILED"
+  | "PARTIAL"
+  | "SKIPPED";
+
 export type OwnMetaAdsConfigResponse = {
   connectionStatus: MetaAdsConnectionStatus;
   lastSyncAt: string | null;
@@ -95,4 +102,22 @@ export type MetaAdsPixelStatusResponse = {
   eventStatus: "ACTIVE" | "NO_DATA" | "NOT_CONFIGURED" | "CONNECTION_ERROR";
   setupWarning: string | null;
   syncError: string | null;
+};
+
+export type MetaAdsSyncResponse = {
+  success: true;
+  syncedAt: string;
+  dateRange: {
+    since: string;
+    until: string;
+  };
+  inserted: {
+    account: number;
+    campaigns: number;
+    total: number;
+  };
+  connectionStatus: MetaAdsConnectionStatus;
+  lastSyncAt: string | null;
+  syncStatus: MetaAdsSyncStatus;
+  skippedReason: string | null;
 };

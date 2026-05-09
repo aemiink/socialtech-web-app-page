@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { DollarSign, Users, MousePointerClick, TrendingUp, TrendingDown, MessageSquare, AlertCircle, CheckCircle, Clock, Target, Image, ArrowRight, Zap } from 'lucide-react';
 import { Button } from '../../components/button';
 import { AutomationPreview } from '../../components/automation-preview';
@@ -6,6 +7,7 @@ import {
   useGetOwnMetaAdsCampaignsQuery,
   useGetOwnMetaAdsConfigQuery,
   useGetOwnMetaAdsSummaryQuery,
+  useSyncOwnMetaAdsMutation,
 } from '../../features/metaAds/metaAdsApi';
 
 const chartData = [
@@ -44,20 +46,43 @@ const pixelStatus = [
 ];
 
 export function MetaAdsDashboard() {
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const { data: ownMetaAdsConfig, isLoading, isError } = useGetOwnMetaAdsConfigQuery();
   const connectionStatus = ownMetaAdsConfig?.connectionStatus ?? 'NOT_CONNECTED';
   const statusCopy = getClientConnectionCopy(connectionStatus, isError);
   const shouldSkipReportingQueries = statusCopy.kind !== 'connected';
+  const [syncOwnMetaAds, { isLoading: isSyncing }] = useSyncOwnMetaAdsMutation();
   const {
     data: summary,
     isLoading: isSummaryLoading,
     isError: isSummaryError,
+    refetch: refetchSummary,
   } = useGetOwnMetaAdsSummaryQuery(undefined, { skip: shouldSkipReportingQueries });
   const {
     data: campaignsResponse,
     isLoading: isCampaignsLoading,
     isError: isCampaignsError,
+    refetch: refetchCampaigns,
   } = useGetOwnMetaAdsCampaignsQuery({ limit: 6 }, { skip: shouldSkipReportingQueries });
+  const lastSyncAt = summary?.lastSyncAt ?? campaignsResponse?.lastSyncAt ?? ownMetaAdsConfig?.lastSyncAt ?? null;
+
+  async function handleSyncRefresh() {
+    if (isSyncing) {
+      return;
+    }
+
+    try {
+      const response = await syncOwnMetaAds(undefined).unwrap();
+      if (response.syncStatus === 'SKIPPED') {
+        setSyncMessage(response.skippedReason ?? 'Veriler çok kısa süre önce güncellendi.');
+      } else {
+        setSyncMessage('Veriler güncellendi.');
+      }
+      await Promise.all([refetchSummary(), refetchCampaigns()]);
+    } catch {
+      setSyncMessage('Bağlantı problemi var, ekibimiz ilgileniyor.');
+    }
+  }
 
   const displayKpiData = summary
     ? [
@@ -115,7 +140,20 @@ export function MetaAdsDashboard() {
           <h1 className="text-3xl text-white mb-2">Meta Ads</h1>
           <p className="text-[#A0A0A0]">Facebook ve Instagram reklam performansı</p>
         </div>
+        <Button variant="secondary" className="text-sm" onClick={() => void handleSyncRefresh()} disabled={isSyncing}>
+          {isSyncing ? 'Güncelleniyor...' : 'Yenile'}
+        </Button>
       </div>
+
+      <div className="bg-[#1A1A1A] rounded-2xl p-4 border border-white/[0.08] text-sm text-[#A0A0A0]">
+        Son güncelleme: <span className="text-white">{lastSyncAt ? new Date(lastSyncAt).toLocaleString('tr-TR') : 'Henüz senkron yok'}</span>
+      </div>
+
+      {syncMessage ? (
+        <div className="bg-[#1A1A1A] rounded-2xl p-4 border border-white/[0.08] text-sm text-[#DADADA]">
+          {syncMessage}
+        </div>
+      ) : null}
 
       {(isSummaryLoading || isCampaignsLoading) ? (
         <div className="bg-[#1A1A1A] rounded-2xl p-4 border border-white/[0.08] text-sm text-[#A0A0A0]">
@@ -474,8 +512,8 @@ function getClientConnectionCopy(connectionStatus: string, hasQueryError: boolea
   if (connectionStatus === 'PENDING') {
     return {
       kind: 'pending',
-      title: 'Bağlantı bekleniyor',
-      description: 'Bağlantı bekleniyor, ekibimiz kurulumu tamamlıyor.',
+      title: 'Veriler hazırlanıyor',
+      description: 'Veriler hazırlanıyor, kısa süre içinde dashboard güncellenecek.',
     };
   }
 

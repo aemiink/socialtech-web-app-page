@@ -1,6 +1,8 @@
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { extractApiErrorMessage } from "../adminUsers/adminUsersUtils";
 import type {
+  AdminMetaAdsSyncLogItem,
+  AdminMetaAdsSyncLogsResponse,
   AdminMetaAdsClientListItem,
   AdminMetaAdsClientListResponse,
   AdminClientMetaAdsConnection,
@@ -15,6 +17,7 @@ import type {
   ClientSummaryRecentTask,
   ClientSummaryResponse,
   MetaAdsConnectionStatus,
+  MetaAdsSyncStatus,
   MetaAdsSyncResponse,
   MetaAdsSummaryResponse,
   PurchasedServiceStatus,
@@ -511,6 +514,12 @@ export function normalizeMetaAdsSyncResponse(response: unknown): MetaAdsSyncResp
         : "NOT_CONNECTED",
     lastSyncAt:
       isRecord(candidate) && isStringOrNull(candidate.lastSyncAt) ? candidate.lastSyncAt : null,
+    syncStatus:
+      isRecord(candidate) && candidate.syncStatus
+        ? normalizeMetaAdsSyncStatus(candidate.syncStatus)
+        : "SUCCESS",
+    skippedReason:
+      isRecord(candidate) && isStringOrNull(candidate.skippedReason) ? candidate.skippedReason : null,
   };
 }
 
@@ -537,6 +546,28 @@ export function normalizeAdminMetaAdsClientListResponse(
       connected: readNumber(metaSource.connected, 0),
       error: readNumber(metaSource.error, 0),
       pendingApprovals: readNumber(metaSource.pendingApprovals, 0),
+    },
+  };
+}
+
+export function normalizeAdminMetaAdsSyncLogsResponse(
+  response: unknown,
+): AdminMetaAdsSyncLogsResponse {
+  const candidate = isRecord(response) && "data" in response && isRecord(response.data)
+    ? response.data
+    : response;
+  const rowsSource = isRecord(candidate) ? candidate.data : undefined;
+  const metaSource = isRecord(candidate) && isRecord(candidate.meta) ? candidate.meta : {};
+
+  return {
+    data: Array.isArray(rowsSource)
+      ? rowsSource.map((row) => normalizeAdminMetaAdsSyncLogItem(row)).filter(isDefined)
+      : [],
+    meta: {
+      total: readNumber(metaSource.total, 0),
+      failed: readNumber(metaSource.failed, 0),
+      running: readNumber(metaSource.running, 0),
+      skipped: readNumber(metaSource.skipped, 0),
     },
   };
 }
@@ -949,6 +980,44 @@ function normalizeAdminMetaAdsClientListItem(value: unknown): AdminMetaAdsClient
   };
 }
 
+function normalizeAdminMetaAdsSyncLogItem(value: unknown): AdminMetaAdsSyncLogItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (
+    typeof value.id !== "string" ||
+    typeof value.clientProfileId !== "string" ||
+    typeof value.clientCompanyName !== "string" ||
+    typeof value.startedAt !== "string" ||
+    typeof value.createdAt !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    clientProfileId: value.clientProfileId,
+    clientCompanyName: value.clientCompanyName,
+    adAccountId: isStringOrNull(value.adAccountId) ? value.adAccountId : null,
+    status: normalizeMetaAdsSyncStatus(value.status),
+    startedAt: value.startedAt,
+    finishedAt: isStringOrNull(value.finishedAt) ? value.finishedAt : null,
+    durationMs: typeof value.durationMs === "number" && Number.isFinite(value.durationMs)
+      ? value.durationMs
+      : null,
+    errorCode: isStringOrNull(value.errorCode) ? value.errorCode : null,
+    errorMessage: isStringOrNull(value.errorMessage) ? value.errorMessage : null,
+    recordsFetched: typeof value.recordsFetched === "number" && Number.isFinite(value.recordsFetched)
+      ? Math.trunc(value.recordsFetched)
+      : null,
+    apiCallCount: typeof value.apiCallCount === "number" && Number.isFinite(value.apiCallCount)
+      ? Math.trunc(value.apiCallCount)
+      : null,
+    createdAt: value.createdAt,
+  };
+}
+
 function isDefined<T>(value: T | null | undefined): value is T {
   return value !== null && value !== undefined;
 }
@@ -1132,6 +1201,20 @@ function normalizeMetaAdsConnectionStatus(value: unknown): MetaAdsConnectionStat
   }
 
   return "NOT_CONNECTED";
+}
+
+function normalizeMetaAdsSyncStatus(value: unknown): MetaAdsSyncStatus {
+  if (
+    value === "RUNNING" ||
+    value === "SUCCESS" ||
+    value === "FAILED" ||
+    value === "PARTIAL" ||
+    value === "SKIPPED"
+  ) {
+    return value;
+  }
+
+  return "SUCCESS";
 }
 
 function readString(value: unknown, key: string): string {

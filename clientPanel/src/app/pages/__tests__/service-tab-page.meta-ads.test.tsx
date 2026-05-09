@@ -196,6 +196,21 @@ describe("ServiceTabPage Meta Ads tabs", () => {
     expect(screen.getByText("Meta Ads bağlantısı aktif değil")).toBeInTheDocument();
   });
 
+  it("shows safe pending state when Meta Ads data is preparing", () => {
+    mockUseGetOwnMetaAdsConfigQuery.mockReturnValue({
+      data: { connectionStatus: "PENDING", lastSyncAt: null },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<ServiceTabPage serviceId="meta-ads" tabId="campaigns" />);
+
+    expect(screen.getByText("Veriler hazırlanıyor")).toBeInTheDocument();
+    expect(
+      screen.getByText("Veriler hazırlanıyor, kısa süre içinde dashboard güncellenecek."),
+    ).toBeInTheDocument();
+  });
+
   it("renders campaigns tab with API data", () => {
     render(<ServiceTabPage serviceId="meta-ads" tabId="campaigns" />);
 

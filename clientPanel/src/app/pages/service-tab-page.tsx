@@ -1203,13 +1203,14 @@ function MetaAdsServiceTab({
   }
 
   if (!isConnected) {
+    const connectionNotice = getClientMetaAdsConnectionNotice(config?.connectionStatus);
     return (
       <div className="p-8 space-y-6">
         <PageHero content={content} tabId={tabId} />
         <MetaAdsStatePanel
-          title="Meta Ads bağlantısı aktif değil"
-          description="Bu hizmetin verileri sadece aktif bağlantı sonrası görüntülenebilir."
-          tone="muted"
+          title={connectionNotice.title}
+          description={connectionNotice.description}
+          tone={connectionNotice.tone}
         />
       </div>
     );
@@ -1743,6 +1744,34 @@ function MetaAdsStatePanel({
       {description ? <p className="mt-1 text-xs">{description}</p> : null}
     </div>
   );
+}
+
+function getClientMetaAdsConnectionNotice(connectionStatus: string | undefined): {
+  title: string;
+  description: string;
+  tone: "default" | "error" | "muted";
+} {
+  if (connectionStatus === "PENDING") {
+    return {
+      title: "Veriler hazırlanıyor",
+      description: "Veriler hazırlanıyor, kısa süre içinde dashboard güncellenecek.",
+      tone: "muted",
+    };
+  }
+
+  if (connectionStatus === "ERROR" || connectionStatus === "DISCONNECTED") {
+    return {
+      title: "Bağlantı problemi var",
+      description: "Bağlantı problemi var, ekibimiz ilgileniyor.",
+      tone: "error",
+    };
+  }
+
+  return {
+    title: "Meta Ads bağlantısı aktif değil",
+    description: "Bu hizmetin verileri sadece aktif bağlantı sonrası görüntülenebilir.",
+    tone: "muted",
+  };
 }
 
 function buildMetaAdsAgencyNotes(

@@ -33,6 +33,8 @@ const ASSIGNED_META_ADS_CONFIG_PATH = "/api/v1/meta-ads/clients";
 const ASSIGNED_META_ADS_REPORTING_PATH = "/api/v1/meta-ads/clients";
 const ADMIN_META_ADS_CONNECTION_PATH_PREFIX = "/api/v1/admin/clients";
 const ADMIN_META_ADS_CLIENTS_LIST_PATH = "/api/v1/admin/meta-ads/clients";
+const ADMIN_META_ADS_SYNC_LOGS_PATH = "/api/v1/admin/meta-ads/sync-logs";
+const CLIENT_OWN_META_ADS_SYNC_PATH = "/api/v1/clients/me/meta-ads/sync";
 const TEST_EMAIL_PREFIX = "authz-meta-ads-";
 const TEST_SLUG_PREFIX = "authz-meta-ads-";
 const DEMO_PASSWORD = "demo123";
@@ -70,6 +72,7 @@ describe("Meta Ads Config Authorization (e2e)", () => {
   let ownClientToken = "";
 
   let ownClientEmail = "";
+  let ownMetaAdsClientId = "";
   let activeMetaAdsClientId = "";
   let inactiveMetaAdsClientId = "";
   let missingMetaAdsClientId = "";
@@ -320,12 +323,14 @@ describe("Meta Ads Config Authorization (e2e)", () => {
       });
 
       return {
+        ownMetaAdsClientId: ownClient.id,
         activeMetaAdsClientId: activeClient.id,
         inactiveMetaAdsClientId: inactiveClient.id,
         missingMetaAdsClientId: missingClient.id,
       };
     });
 
+    ownMetaAdsClientId = fixture.ownMetaAdsClientId;
     activeMetaAdsClientId = fixture.activeMetaAdsClientId;
     inactiveMetaAdsClientId = fixture.inactiveMetaAdsClientId;
     missingMetaAdsClientId = fixture.missingMetaAdsClientId;
@@ -404,6 +409,43 @@ describe("Meta Ads Config Authorization (e2e)", () => {
     expect(rowIds).toContain(activeMetaAdsClientId);
     expect(rowIds).toContain(inactiveMetaAdsClientId);
     expectNoSensitiveTokens(response.body);
+  });
+
+  it("admin can read sync logs with filters", async () => {
+    await prisma.metaAdsSyncLog.create({
+      data: {
+        clientProfileId: activeMetaAdsClientId,
+        adAccountId: "act-log-001",
+        status: "SUCCESS",
+        startedAt: new Date("2026-05-09T09:00:00.000Z"),
+        finishedAt: new Date("2026-05-09T09:00:08.000Z"),
+        recordsFetched: 14,
+        apiCallCount: 5,
+      },
+    });
+
+    const response = await request(app.getHttpServer())
+      .get(`${ADMIN_META_ADS_SYNC_LOGS_PATH}?clientProfileId=${activeMetaAdsClientId}&status=SUCCESS`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        data: expect.any(Array),
+        meta: expect.objectContaining({
+          total: expect.any(Number),
+          failed: expect.any(Number),
+          running: expect.any(Number),
+          skipped: expect.any(Number),
+        }),
+      }),
+    );
+    expect(response.body.data[0]).toEqual(
+      expect.objectContaining({
+        clientProfileId: activeMetaAdsClientId,
+        status: "SUCCESS",
+      }),
+    );
   });
 
   it("admin can update client Meta Ads config when META_ADS service is ACTIVE", async () => {
@@ -551,7 +593,7 @@ describe("Meta Ads Config Authorization (e2e)", () => {
       })
       .expect(403);
 
-    expectApiError(errorResponse.body, /Missing permission: ads_read/i);
+    expectApiError(errorResponse.body, /izinleri eksik/i);
 
     const connectionResponse = await request(app.getHttpServer())
       .get(adminMetaAdsConnectionPath(activeMetaAdsClientId))
@@ -559,7 +601,30 @@ describe("Meta Ads Config Authorization (e2e)", () => {
       .expect(200);
 
     expect(connectionResponse.body.connectionStatus).toBe(MetaAdsConnectionStatus.ERROR);
-    expect(connectionResponse.body.syncError).toMatch(/Missing permission: ads_read/i);
+    expect(connectionResponse.body.syncError).toMatch(/izinleri eksik/i);
+    mockMetaAdsApiError = null;
+  });
+
+  it("test connection token error is normalized and marks connection as ERROR", async () => {
+    mockMetaAdsApiError = new Error("Token expired for this user.");
+
+    const errorResponse = await request(app.getHttpServer())
+      .post(adminMetaAdsTestConnectionPath(activeMetaAdsClientId))
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        requiredScopes: ["ads_read"],
+      })
+      .expect(400);
+
+    expectApiError(errorResponse.body, /token süresi dolmuş/i);
+
+    const connectionResponse = await request(app.getHttpServer())
+      .get(adminMetaAdsConnectionPath(activeMetaAdsClientId))
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(connectionResponse.body.connectionStatus).toBe(MetaAdsConnectionStatus.ERROR);
+    expect(connectionResponse.body.syncError).toMatch(/token süresi dolmuş/i);
     mockMetaAdsApiError = null;
   });
 
@@ -691,6 +756,58 @@ describe("Meta Ads Config Authorization (e2e)", () => {
     );
   });
 
+  it("client own pixel-status does not expose technical sync error details", async () => {
+    await prisma.clientMetaAdsConfig.update({
+      where: {
+        clientProfileId: ownMetaAdsClientId,
+      },
+      data: {
+        connectionStatus: MetaAdsConnectionStatus.ERROR,
+        syncError: "Graph API stacktrace: OAuthException(190) ...",
+      },
+    });
+
+    const response = await request(app.getHttpServer())
+      .get(CLIENT_OWN_META_ADS_PIXEL_STATUS_PATH)
+      .set("Authorization", `Bearer ${ownClientToken}`)
+      .expect(200);
+
+    expect(response.body.syncError).toBe("Bağlantı problemi var, ekibimiz ilgileniyor.");
+
+    const adminResponse = await request(app.getHttpServer())
+      .get(adminMetaAdsConnectionPath(ownMetaAdsClientId))
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(adminResponse.body.syncError).toMatch(/OAuthException/);
+  });
+
+  it("client can trigger own on-demand sync endpoint", async () => {
+    mockMetaAdsReportingError = null;
+    mockMetaAdsReportingResult = buildMockMetaAdsReportingSnapshot();
+
+    await request(app.getHttpServer())
+      .post(adminMetaAdsManualConnectPath(ownMetaAdsClientId))
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        accessToken: "EAAGm0PX4ZCpsBAJownOnDemandSyncToken",
+        adAccountId: "act-reporting-001",
+      })
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post(`${CLIENT_OWN_META_ADS_SYNC_PATH}?since=2026-05-07&until=2026-05-08`)
+      .set("Authorization", `Bearer ${ownClientToken}`)
+      .expect(201);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        success: true,
+        syncStatus: expect.any(String),
+      }),
+    );
+  });
+
   it("admin sync writes reporting snapshot and reporting endpoints read from snapshots", async () => {
     mockMetaAdsReportingError = null;
     mockMetaAdsReportingResult = buildMockMetaAdsReportingSnapshot();
@@ -791,6 +908,39 @@ describe("Meta Ads Config Authorization (e2e)", () => {
     );
   });
 
+  it("assigned sync respects TTL and returns SKIPPED on rapid consecutive calls", async () => {
+    mockMetaAdsReportingError = null;
+    mockMetaAdsReportingResult = buildMockMetaAdsReportingSnapshot();
+
+    await request(app.getHttpServer())
+      .post(adminMetaAdsManualConnectPath(activeMetaAdsClientId))
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        accessToken: "EAAGm0PX4ZCpsBAJassignedSyncRateLimitToken",
+        adAccountId: "act-reporting-001",
+      })
+      .expect(201);
+
+    const firstSyncResponse = await request(app.getHttpServer())
+      .post(`${assignedMetaAdsSyncPath(activeMetaAdsClientId)}?since=2026-05-07&until=2026-05-08`)
+      .set("Authorization", `Bearer ${performanceToken}`)
+      .expect(201);
+
+    expect(firstSyncResponse.body).toEqual(
+      expect.objectContaining({
+        success: true,
+      }),
+    );
+
+    const secondSyncResponse = await request(app.getHttpServer())
+      .post(`${assignedMetaAdsSyncPath(activeMetaAdsClientId)}?since=2026-05-07&until=2026-05-08`)
+      .set("Authorization", `Bearer ${performanceToken}`)
+      .expect(201);
+
+    expect(secondSyncResponse.body.syncStatus).toBe("SKIPPED");
+    expect(secondSyncResponse.body.skippedReason).toEqual(expect.any(String));
+  });
+
   it("assigned employee cannot read unassigned client Meta Ads summary", async () => {
     const response = await request(app.getHttpServer())
       .get(`${assignedMetaAdsSummaryPath(missingMetaAdsClientId)}?since=2026-05-07&until=2026-05-08`)
@@ -834,7 +984,20 @@ describe("Meta Ads Config Authorization (e2e)", () => {
       .expect(200);
 
     expect(connectionResponse.body.connectionStatus).toBe(MetaAdsConnectionStatus.ERROR);
-    expect(connectionResponse.body.syncError).toMatch(/Meta API temporary outage/i);
+    expect(connectionResponse.body.syncError).toMatch(/Meta API hatası/i);
+
+    const syncLogsResponse = await request(app.getHttpServer())
+      .get(`${ADMIN_META_ADS_SYNC_LOGS_PATH}?clientProfileId=${activeMetaAdsClientId}&failedOnly=true`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(syncLogsResponse.body.data[0]).toEqual(
+      expect.objectContaining({
+        status: "FAILED",
+        errorCode: expect.any(String),
+        errorMessage: expect.stringMatching(/Meta API hatası/i),
+      }),
+    );
     mockMetaAdsReportingError = null;
   });
 
@@ -949,6 +1112,14 @@ describe("Meta Ads Config Authorization (e2e)", () => {
         },
       });
 
+      await prisma.metaAdsSyncLog.deleteMany({
+        where: {
+          clientProfileId: {
+            in: clientProfileIds,
+          },
+        },
+      });
+
       await prisma.clientMetaAdsConfig.deleteMany({
         where: {
           clientProfileId: {
@@ -1025,6 +1196,10 @@ describe("Meta Ads Config Authorization (e2e)", () => {
 
   function assignedMetaAdsSummaryPath(clientId: string): string {
     return `${ASSIGNED_META_ADS_REPORTING_PATH}/${clientId}/summary`;
+  }
+
+  function assignedMetaAdsSyncPath(clientId: string): string {
+    return `${ASSIGNED_META_ADS_REPORTING_PATH}/${clientId}/sync`;
   }
 
   function expectNoSensitiveTokens(value: unknown): void {

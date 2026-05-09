@@ -1088,3 +1088,44 @@ Latest reported checks: `adminandemployeePanel npm run check`, `clientPanel npm 
 ### Admin/Employee Panel
 - Meta Ads workspace approval listesi artık approval type/status/note alanlarını gösterir.
 - Approval task create aksiyonları role-aware approval type ile oluşturulur (`campaign/budget/creative`).
+
+## 2026-05-10 Update - Meta Ads Faz 8 Sync Automation Hardening
+
+### Backend
+- `MetaAdsSyncLog` modeli ve `MetaAdsSyncStatus` enumu eklendi; sync lifecycle artık DB’de `RUNNING/SUCCESS/FAILED/PARTIAL/SKIPPED` olarak izlenir.
+- Sync akışına `trigger` ve TTL-safe skip davranışı eklendi (`MANUAL_SYNC`, `ON_DEMAND_CLIENT`, `ON_DEMAND_ASSIGNED`, `ERROR_RETRY`).
+- Error normalization katmanı kullanıcı dostu kodlara standardize edildi:
+  - `TOKEN_EXPIRED`
+  - `PERMISSION_MISSING`
+  - `AD_ACCOUNT_UNAVAILABLE`
+  - `RATE_LIMIT`
+  - `BUSINESS_ACCESS_REVOKED`
+  - `UNKNOWN_API_ERROR`
+- Client-facing own endpoints tarafında teknik hata detayları maskelenir; admin/assigned rollerde operasyonel detay korunur.
+- Yeni endpointler:
+  - `GET /api/v1/admin/meta-ads/sync-logs`
+  - `POST /api/v1/admin/clients/:clientId/meta-ads/sync/retry`
+  - `POST /api/v1/clients/me/meta-ads/sync`
+
+### Admin Panel
+- `/meta-ads` ekranına sync observability katmanı eklendi:
+  - sync log tablosu
+  - failed sync müşteri listesi
+  - retry aksiyonu
+  - status/count özetleri
+
+### Client Panel
+- Meta Ads dashboard’da güvenli durum metinleri eklendi:
+  - “Son güncelleme”
+  - “Veriler hazırlanıyor…”
+  - “Bağlantı problemi var, ekibimiz ilgileniyor”
+- Client refresh aksiyonu rate-limit TTL’ye göre `SKIPPED` geri dönüşünü kullanıcıya açık mesajla gösterir.
+
+### Testing
+- Backend `meta-ads-authz` e2e senaryoları Faz 8 kapsamıyla genişletildi:
+  - sync logs read/filter
+  - token error normalization
+  - TTL skip behavior
+  - own sync endpoint
+  - client-safe error masking
+- Frontend tarafında admin sync log UI ve client safe-state davranışları için test güncellemeleri eklendi.

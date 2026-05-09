@@ -6,6 +6,7 @@ import type {
   MetaAdsInsightLevel,
   MetaAdsInsightsResponse,
   MetaAdsPixelStatusResponse,
+  MetaAdsSyncResponse,
   MetaAdsSummaryResponse,
   OwnMetaAdsConfigResponse,
 } from "./metaAdsTypes";
@@ -80,6 +81,14 @@ export const metaAdsApi = baseApi.injectEndpoints({
       }),
       transformResponse: (response: unknown) => normalizeOwnMetaAdsPixelStatusResponse(response),
     }),
+    syncOwnMetaAds: builder.mutation<MetaAdsSyncResponse, MetaAdsDateRangeQuery | void>({
+      query: (query) => ({
+        url: "/clients/me/meta-ads/sync",
+        method: "POST",
+        params: serializeDateRangeQuery(query),
+      }),
+      transformResponse: (response: unknown) => normalizeOwnMetaAdsSyncResponse(response),
+    }),
   }),
 });
 
@@ -91,6 +100,7 @@ export const {
   useGetOwnMetaAdsAdsQuery,
   useGetOwnMetaAdsInsightsQuery,
   useGetOwnMetaAdsPixelStatusQuery,
+  useSyncOwnMetaAdsMutation,
 } = metaAdsApi;
 
 function normalizeOwnMetaAdsConfigResponse(response: unknown): OwnMetaAdsConfigResponse {
@@ -197,6 +207,31 @@ function normalizeOwnMetaAdsPixelStatusResponse(response: unknown): MetaAdsPixel
     eventStatus: normalizePixelEventStatus(isRecord(candidate) ? candidate.eventStatus : undefined),
     setupWarning: isRecord(candidate) && typeof candidate.setupWarning === "string" ? candidate.setupWarning : null,
     syncError: isRecord(candidate) && typeof candidate.syncError === "string" ? candidate.syncError : null,
+  };
+}
+
+function normalizeOwnMetaAdsSyncResponse(response: unknown): MetaAdsSyncResponse {
+  const candidate = isRecord(response) && isRecord(response.data) ? response.data : response;
+  const dateRange = isRecord(candidate) && isRecord(candidate.dateRange) ? candidate.dateRange : {};
+  const inserted = isRecord(candidate) && isRecord(candidate.inserted) ? candidate.inserted : {};
+
+  return {
+    success: true,
+    syncedAt: isRecord(candidate) && typeof candidate.syncedAt === "string" ? candidate.syncedAt : "",
+    dateRange: {
+      since: typeof dateRange.since === "string" ? dateRange.since : "",
+      until: typeof dateRange.until === "string" ? dateRange.until : "",
+    },
+    inserted: {
+      account: readNumber(inserted, "account", 0, true),
+      campaigns: readNumber(inserted, "campaigns", 0, true),
+      total: readNumber(inserted, "total", 0, true),
+    },
+    connectionStatus: normalizeConnectionStatus(isRecord(candidate) ? candidate.connectionStatus : undefined),
+    lastSyncAt: isRecord(candidate) && typeof candidate.lastSyncAt === "string" ? candidate.lastSyncAt : null,
+    syncStatus: normalizeSyncStatus(isRecord(candidate) ? candidate.syncStatus : undefined),
+    skippedReason:
+      isRecord(candidate) && typeof candidate.skippedReason === "string" ? candidate.skippedReason : null,
   };
 }
 
@@ -322,6 +357,20 @@ function normalizePixelEventStatus(
   }
 
   return "NO_DATA";
+}
+
+function normalizeSyncStatus(value: unknown): MetaAdsSyncResponse["syncStatus"] {
+  if (
+    value === "RUNNING" ||
+    value === "SUCCESS" ||
+    value === "FAILED" ||
+    value === "PARTIAL" ||
+    value === "SKIPPED"
+  ) {
+    return value;
+  }
+
+  return "SUCCESS";
 }
 
 function readNumber(

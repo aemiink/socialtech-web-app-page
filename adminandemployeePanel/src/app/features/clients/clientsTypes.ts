@@ -190,6 +190,13 @@ export type MetaAdsConnectionStatus =
   | "ERROR"
   | "DISCONNECTED";
 
+export type MetaAdsSyncStatus =
+  | "RUNNING"
+  | "SUCCESS"
+  | "FAILED"
+  | "PARTIAL"
+  | "SKIPPED";
+
 export type AdminClientMetaAdsConnection = {
   clientProfileId: string;
   connectionStatus: MetaAdsConnectionStatus;
@@ -297,6 +304,8 @@ export type MetaAdsSyncResponse = {
   };
   connectionStatus: MetaAdsConnectionStatus;
   lastSyncAt: string | null;
+  syncStatus: MetaAdsSyncStatus;
+  skippedReason: string | null;
 };
 
 export type AdminMetaAdsClientListItem = {
@@ -354,4 +363,37 @@ export type AdminMetaAdsClientListResponse = {
     error: number;
     pendingApprovals: number;
   };
+};
+
+export type AdminMetaAdsSyncLogItem = {
+  id: string;
+  clientProfileId: string;
+  clientCompanyName: string;
+  adAccountId: string | null;
+  status: MetaAdsSyncStatus;
+  startedAt: string;
+  finishedAt: string | null;
+  durationMs: number | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  recordsFetched: number | null;
+  apiCallCount: number | null;
+  createdAt: string;
+};
+
+export type AdminMetaAdsSyncLogsResponse = {
+  data: AdminMetaAdsSyncLogItem[];
+  meta: {
+    total: number;
+    failed: number;
+    running: number;
+    skipped: number;
+  };
+};
+
+export type AdminMetaAdsSyncLogsQuery = {
+  clientProfileId?: string;
+  status?: MetaAdsSyncStatus;
+  failedOnly?: boolean;
+  limit?: number;
 };

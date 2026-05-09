@@ -4,6 +4,7 @@ import {
   MetaAdsApprovalStatus,
   MetaAdsInsightLevel,
   MetaAdsConnectionStatus,
+  MetaAdsSyncStatus,
   Prisma,
   PurchasedServiceKey,
   PurchasedServiceStatus,
@@ -18,12 +19,14 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { PrismaService } from "../database/prisma.service";
 import { ConnectManualMetaAdsDto } from "./dto/connect-manual-meta-ads.dto";
 import { MetaAdsCampaignsQueryDto } from "./dto/meta-ads-campaigns-query.dto";
 import { MetaAdsDateRangeQueryDto } from "./dto/meta-ads-date-range-query.dto";
 import { MetaAdsInsightsQueryDto } from "./dto/meta-ads-insights-query.dto";
+import { MetaAdsSyncLogsQueryDto } from "./dto/meta-ads-sync-logs-query.dto";
 import { TestMetaAdsConnectionDto } from "./dto/test-meta-ads-connection.dto";
 import { UpdateMetaAdsConfigDto } from "./dto/update-meta-ads-config.dto";
 import {
@@ -45,6 +48,7 @@ const DEFAULT_REPORTING_RANGE_DAYS = 7;
 const MAX_REPORTING_RANGE_DAYS = 90;
 const DEFAULT_CAMPAIGNS_LIMIT = 12;
 const DEFAULT_INSIGHTS_LIMIT = 100;
+const DEFAULT_META_ADS_SYNC_TTL_MINUTES = 30;
 const RESULT_ACTION_PRIORITY = [
   "offsite_conversion.fb_pixel_purchase",
   "purchase",
@@ -53,6 +57,7 @@ const RESULT_ACTION_PRIORITY = [
   "lead",
   "link_click",
 ] as const;
+const CLIENT_SAFE_SYNC_ERROR_MESSAGE = "Bağlantı problemi var, ekibimiz ilgileniyor.";
 
 const adminMetaAdsConfigSelect = {
   businessId: true,
@@ -103,6 +108,20 @@ const metaAdsDailyInsightSelect = {
   raw: true,
   updatedAt: true,
 } satisfies Prisma.MetaAdsDailyInsightSelect;
+
+const metaAdsSyncLogSelect = {
+  id: true,
+  clientProfileId: true,
+  adAccountId: true,
+  status: true,
+  startedAt: true,
+  finishedAt: true,
+  errorCode: true,
+  errorMessage: true,
+  recordsFetched: true,
+  apiCallCount: true,
+  createdAt: true,
+} satisfies Prisma.MetaAdsSyncLogSelect;
 
 type AdminMetaAdsConfigModel = Prisma.ClientMetaAdsConfigGetPayload<{
   select: typeof adminMetaAdsConfigSelect;
@@ -284,6 +303,56 @@ type MetaAdsSyncResponse = {
   };
   connectionStatus: MetaAdsConnectionStatus;
   lastSyncAt: Date | null;
+  syncStatus: MetaAdsSyncStatus;
+  skippedReason: string | null;
+};
+
+type MetaAdsSyncTrigger =
+  | "MANUAL_SYNC"
+  | "SCHEDULED_SYNC"
+  | "ON_DEMAND_CLIENT_REFRESH"
+  | "ON_DEMAND_ASSIGNED_REFRESH"
+  | "ERROR_RETRY";
+
+type MetaAdsSyncErrorCode =
+  | "TOKEN_EXPIRED"
+  | "PERMISSION_MISSING"
+  | "AD_ACCOUNT_UNAVAILABLE"
+  | "RATE_LIMIT"
+  | "BUSINESS_ACCESS_REVOKED"
+  | "UNKNOWN_API_ERROR";
+
+type MetaAdsSyncErrorInfo = {
+  code: MetaAdsSyncErrorCode;
+  category: NormalizedMetaAdsApiError["category"];
+  adminMessage: string;
+  clientMessage: string;
+};
+
+type AdminMetaAdsSyncLogItem = {
+  id: string;
+  clientProfileId: string;
+  clientCompanyName: string;
+  adAccountId: string | null;
+  status: MetaAdsSyncStatus;
+  startedAt: Date;
+  finishedAt: Date | null;
+  durationMs: number | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  recordsFetched: number | null;
+  apiCallCount: number | null;
+  createdAt: Date;
+};
+
+type AdminMetaAdsSyncLogsResponse = {
+  data: AdminMetaAdsSyncLogItem[];
+  meta: {
+    total: number;
+    failed: number;
+    running: number;
+    skipped: number;
+  };
 };
 
 type AdminMetaAdsClientListItem = {
@@ -347,6 +416,7 @@ type AdminMetaAdsClientListResponse = {
 export class MetaAdsService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
     private readonly metaAdsTokenService: MetaAdsTokenService,
     private readonly metaAdsApiService: MetaAdsApiService,
   ) {}
@@ -640,6 +710,90 @@ export class MetaAdsService {
     };
   }
 
+  async getAdminSyncLogs(
+    currentUser: AuthenticatedUser,
+    query: MetaAdsSyncLogsQueryDto,
+  ): Promise<AdminMetaAdsSyncLogsResponse> {
+    this.assertCanReadAnyConfig(currentUser);
+
+    const statusFilter =
+      query.status !== undefined
+        ? query.status
+        : query.failedOnly
+          ? {
+              in: [MetaAdsSyncStatus.FAILED, MetaAdsSyncStatus.PARTIAL],
+            }
+          : undefined;
+
+    const where: Prisma.MetaAdsSyncLogWhereInput = {
+      ...(query.clientProfileId ? { clientProfileId: query.clientProfileId } : {}),
+      ...(statusFilter ? { status: statusFilter } : {}),
+    };
+    const take = query.limit ?? 40;
+
+    const [rows, total, failed, running, skipped] = await Promise.all([
+      this.prisma.metaAdsSyncLog.findMany({
+        where,
+        select: {
+          ...metaAdsSyncLogSelect,
+          clientProfile: {
+            select: {
+              companyName: true,
+            },
+          },
+        },
+        orderBy: [{ createdAt: "desc" }],
+        take,
+      }),
+      this.prisma.metaAdsSyncLog.count({ where }),
+      this.prisma.metaAdsSyncLog.count({
+        where: {
+          ...where,
+          status: {
+            in: [MetaAdsSyncStatus.FAILED, MetaAdsSyncStatus.PARTIAL],
+          },
+        },
+      }),
+      this.prisma.metaAdsSyncLog.count({
+        where: {
+          ...where,
+          status: MetaAdsSyncStatus.RUNNING,
+        },
+      }),
+      this.prisma.metaAdsSyncLog.count({
+        where: {
+          ...where,
+          status: MetaAdsSyncStatus.SKIPPED,
+        },
+      }),
+    ]);
+
+    return {
+      data: rows.map((row) => ({
+        id: row.id,
+        clientProfileId: row.clientProfileId,
+        clientCompanyName: row.clientProfile.companyName,
+        adAccountId: row.adAccountId,
+        status: row.status,
+        startedAt: row.startedAt,
+        finishedAt: row.finishedAt,
+        durationMs:
+          row.finishedAt !== null ? row.finishedAt.getTime() - row.startedAt.getTime() : null,
+        errorCode: row.errorCode,
+        errorMessage: row.errorMessage,
+        recordsFetched: row.recordsFetched,
+        apiCallCount: row.apiCallCount,
+        createdAt: row.createdAt,
+      })),
+      meta: {
+        total,
+        failed,
+        running,
+        skipped,
+      },
+    };
+  }
+
   async updateAdminClientConfig(
     currentUser: AuthenticatedUser,
     clientProfileId: string,
@@ -787,9 +941,9 @@ export class MetaAdsService {
         requiredScopes,
       });
     } catch (error) {
-      const normalizedError = this.metaAdsApiService.normalizeError(error);
-      await this.markConnectionAsError(clientProfileId, normalizedError);
-      throw this.toConnectionTestException(normalizedError);
+      const syncErrorInfo = this.normalizeSyncError(error);
+      await this.markConnectionAsError(clientProfileId, syncErrorInfo);
+      throw this.toConnectionTestException(syncErrorInfo);
     }
 
     const checkedAt = new Date();
@@ -955,7 +1109,7 @@ export class MetaAdsService {
     await this.assertClientProfileExists(clientProfileId);
     await this.assertClientHasActiveMetaAdsService(clientProfileId);
 
-    return this.getPixelStatusByClientProfileId(clientProfileId);
+    return this.getPixelStatusByClientProfileId(clientProfileId, { revealDetailedError: true });
   }
 
   async syncAdminClientInsights(
@@ -967,7 +1121,25 @@ export class MetaAdsService {
     await this.assertClientProfileExists(clientProfileId);
     await this.assertClientHasActiveMetaAdsService(clientProfileId);
 
-    return this.syncInsightsByClientProfileId(clientProfileId, query);
+    return this.syncInsightsByClientProfileId(clientProfileId, query, {
+      trigger: "MANUAL_SYNC",
+      applySyncTtl: false,
+    });
+  }
+
+  async retryAdminClientInsights(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+    query: MetaAdsDateRangeQueryDto,
+  ): Promise<MetaAdsSyncResponse> {
+    this.assertCanManageAnyConfig(currentUser);
+    await this.assertClientProfileExists(clientProfileId);
+    await this.assertClientHasActiveMetaAdsService(clientProfileId);
+
+    return this.syncInsightsByClientProfileId(clientProfileId, query, {
+      trigger: "ERROR_RETRY",
+      applySyncTtl: false,
+    });
   }
 
   async getAssignedClientSummary(
@@ -1038,7 +1210,7 @@ export class MetaAdsService {
     await this.assertAssignedClientProfileOrFail(currentUser.id, clientProfileId);
     await this.assertClientHasActiveMetaAdsService(clientProfileId);
 
-    return this.getPixelStatusByClientProfileId(clientProfileId);
+    return this.getPixelStatusByClientProfileId(clientProfileId, { revealDetailedError: true });
   }
 
   async syncAssignedClientInsights(
@@ -1050,7 +1222,10 @@ export class MetaAdsService {
     await this.assertAssignedClientProfileOrFail(currentUser.id, clientProfileId);
     await this.assertClientHasActiveMetaAdsService(clientProfileId);
 
-    return this.syncInsightsByClientProfileId(clientProfileId, query);
+    return this.syncInsightsByClientProfileId(clientProfileId, query, {
+      trigger: "ON_DEMAND_ASSIGNED_REFRESH",
+      applySyncTtl: true,
+    });
   }
 
   async getOwnClientSummary(
@@ -1121,7 +1296,24 @@ export class MetaAdsService {
     await this.assertClientProfileExists(clientProfileId);
     await this.assertClientHasActiveMetaAdsService(clientProfileId);
 
-    return this.getPixelStatusByClientProfileId(clientProfileId);
+    return this.getPixelStatusByClientProfileId(clientProfileId, {
+      revealDetailedError: false,
+    });
+  }
+
+  async syncOwnClientInsights(
+    currentUser: AuthenticatedUser,
+    query: MetaAdsDateRangeQueryDto,
+  ): Promise<MetaAdsSyncResponse> {
+    this.assertCanReadOwnConfig(currentUser);
+    const clientProfileId = this.getClientProfileIdOrFail(currentUser);
+    await this.assertClientProfileExists(clientProfileId);
+    await this.assertClientHasActiveMetaAdsService(clientProfileId);
+
+    return this.syncInsightsByClientProfileId(clientProfileId, query, {
+      trigger: "ON_DEMAND_CLIENT_REFRESH",
+      applySyncTtl: true,
+    });
   }
 
   private async getSummaryByClientProfileId(
@@ -1316,6 +1508,9 @@ export class MetaAdsService {
 
   private async getPixelStatusByClientProfileId(
     clientProfileId: string,
+    options: {
+      revealDetailedError: boolean;
+    },
   ): Promise<MetaAdsPixelStatusResponse> {
     const [config, latestAccountInsight] = await this.prisma.$transaction([
       this.prisma.clientMetaAdsConfig.findUnique({
@@ -1371,148 +1566,235 @@ export class MetaAdsService {
       lastInsightAt: latestAccountInsight?.date.toISOString() ?? null,
       eventStatus,
       setupWarning,
-      syncError: config?.syncError ?? null,
+      syncError: config?.syncError
+        ? options.revealDetailedError
+          ? config.syncError
+          : CLIENT_SAFE_SYNC_ERROR_MESSAGE
+        : null,
     };
   }
 
   private async syncInsightsByClientProfileId(
     clientProfileId: string,
     query: MetaAdsDateRangeQueryDto,
+    options: {
+      trigger: MetaAdsSyncTrigger;
+      applySyncTtl: boolean;
+    },
   ): Promise<MetaAdsSyncResponse> {
     const dateRange = this.resolveReportDateRange(query);
-    const connection = await this.resolveReportingConnection(clientProfileId);
-
-    let snapshot: MetaAdsReportingSnapshotResult;
-    try {
-      snapshot = await this.metaAdsApiService.fetchReportingSnapshot({
-        accessToken: connection.accessToken,
-        adAccountId: connection.adAccountId,
-        since: dateRange.sinceIsoDate,
-        until: dateRange.untilIsoDate,
-      });
-    } catch (error) {
-      const normalizedError = this.metaAdsApiService.normalizeError(error);
-      await this.markConnectionAsError(clientProfileId, normalizedError);
-      throw this.toConnectionTestException(normalizedError);
-    }
-
-    const campaignCatalogById = new Map(
-      snapshot.campaigns.map((campaign) => [campaign.id, campaign]),
-    );
-    const accountRows = snapshot.accountInsights
-      .map((row) =>
-        this.toInsightCreateManyInput(
-          clientProfileId,
-          connection.adAccountId,
-          MetaAdsInsightLevel.ACCOUNT,
-          row,
-          null,
-        ),
-      )
-      .filter((row): row is Prisma.MetaAdsDailyInsightCreateManyInput => row !== null);
-
-    const campaignRows = snapshot.campaignInsights
-      .map((row) =>
-        this.toInsightCreateManyInput(
-          clientProfileId,
-          connection.adAccountId,
-          MetaAdsInsightLevel.CAMPAIGN,
-          row,
-          row.campaignId ? campaignCatalogById.get(row.campaignId) ?? null : null,
-        ),
-      )
-      .filter((row): row is Prisma.MetaAdsDailyInsightCreateManyInput => row !== null);
-
-    const adSetRows = snapshot.adSetInsights
-      .map((row) =>
-        this.toInsightCreateManyInput(
-          clientProfileId,
-          connection.adAccountId,
-          MetaAdsInsightLevel.ADSET,
-          row,
-          null,
-        ),
-      )
-      .filter((row): row is Prisma.MetaAdsDailyInsightCreateManyInput => row !== null);
-
-    const adRows = snapshot.adInsights
-      .map((row) =>
-        this.toInsightCreateManyInput(
-          clientProfileId,
-          connection.adAccountId,
-          MetaAdsInsightLevel.AD,
-          row,
-          null,
-        ),
-      )
-      .filter((row): row is Prisma.MetaAdsDailyInsightCreateManyInput => row !== null);
-
-    const allRows = [...accountRows, ...campaignRows, ...adSetRows, ...adRows];
-    const syncedAt = new Date();
-
-    await this.prisma.$transaction(async (tx) => {
-      await tx.metaAdsDailyInsight.deleteMany({
-        where: {
-          clientProfileId,
-          level: {
-            in: [
-              MetaAdsInsightLevel.ACCOUNT,
-              MetaAdsInsightLevel.CAMPAIGN,
-              MetaAdsInsightLevel.ADSET,
-              MetaAdsInsightLevel.AD,
-            ],
-          },
-          date: {
-            gte: dateRange.since,
-            lte: dateRange.until,
-          },
-        },
-      });
-
-      if (allRows.length > 0) {
-        await tx.metaAdsDailyInsight.createMany({
-          data: allRows,
-        });
-      }
-
-      await tx.clientMetaAdsConfig.upsert({
-        where: { clientProfileId },
-        update: {
-          adAccountId: connection.adAccountId,
-          connectionStatus: MetaAdsConnectionStatus.CONNECTED,
-          syncError: null,
-          lastSyncAt: syncedAt,
-        },
-        create: {
-          clientProfileId,
-          adAccountId: connection.adAccountId,
-          connectionStatus: MetaAdsConnectionStatus.CONNECTED,
-          syncError: null,
-          lastSyncAt: syncedAt,
-        },
-      });
+    const startedAt = new Date();
+    const syncLog = await this.prisma.metaAdsSyncLog.create({
+      data: {
+        clientProfileId,
+        status: MetaAdsSyncStatus.RUNNING,
+        startedAt,
+      },
+      select: {
+        id: true,
+      },
     });
 
-    return {
-      success: true,
-      syncedAt,
-      dateRange: {
-        since: dateRange.sinceIsoDate,
-        until: dateRange.untilIsoDate,
-      },
-      inserted: {
-        account: accountRows.length,
-        campaigns: campaignRows.length,
-        total: allRows.length,
-      },
-      connectionStatus: MetaAdsConnectionStatus.CONNECTED,
-      lastSyncAt: syncedAt,
-    };
+    try {
+      const connection = await this.resolveReportingConnection(clientProfileId);
+      await this.prisma.metaAdsSyncLog.update({
+        where: { id: syncLog.id },
+        data: {
+          adAccountId: connection.adAccountId,
+        },
+      });
+
+      if (options.applySyncTtl) {
+        const skipReason = this.resolveSyncSkipReason(connection.lastSyncAt, startedAt);
+        if (skipReason) {
+          await this.prisma.metaAdsSyncLog.update({
+            where: { id: syncLog.id },
+            data: {
+              status: MetaAdsSyncStatus.SKIPPED,
+              finishedAt: startedAt,
+              errorCode: "SYNC_TTL_ACTIVE",
+              errorMessage: `[${options.trigger}] ${skipReason}`,
+              recordsFetched: 0,
+              apiCallCount: 0,
+            },
+          });
+
+          return {
+            success: true,
+            syncedAt: connection.lastSyncAt ?? startedAt,
+            dateRange: {
+              since: dateRange.sinceIsoDate,
+              until: dateRange.untilIsoDate,
+            },
+            inserted: {
+              account: 0,
+              campaigns: 0,
+              total: 0,
+            },
+            connectionStatus: connection.connectionStatus,
+            lastSyncAt: connection.lastSyncAt,
+            syncStatus: MetaAdsSyncStatus.SKIPPED,
+            skippedReason: skipReason,
+          };
+        }
+      }
+
+      const snapshot: MetaAdsReportingSnapshotResult =
+        await this.metaAdsApiService.fetchReportingSnapshot({
+          accessToken: connection.accessToken,
+          adAccountId: connection.adAccountId,
+          since: dateRange.sinceIsoDate,
+          until: dateRange.untilIsoDate,
+        });
+
+      const campaignCatalogById = new Map(
+        snapshot.campaigns.map((campaign) => [campaign.id, campaign]),
+      );
+      const accountRows = snapshot.accountInsights
+        .map((row) =>
+          this.toInsightCreateManyInput(
+            clientProfileId,
+            connection.adAccountId,
+            MetaAdsInsightLevel.ACCOUNT,
+            row,
+            null,
+          ),
+        )
+        .filter((row): row is Prisma.MetaAdsDailyInsightCreateManyInput => row !== null);
+
+      const campaignRows = snapshot.campaignInsights
+        .map((row) =>
+          this.toInsightCreateManyInput(
+            clientProfileId,
+            connection.adAccountId,
+            MetaAdsInsightLevel.CAMPAIGN,
+            row,
+            row.campaignId ? campaignCatalogById.get(row.campaignId) ?? null : null,
+          ),
+        )
+        .filter((row): row is Prisma.MetaAdsDailyInsightCreateManyInput => row !== null);
+
+      const adSetRows = snapshot.adSetInsights
+        .map((row) =>
+          this.toInsightCreateManyInput(
+            clientProfileId,
+            connection.adAccountId,
+            MetaAdsInsightLevel.ADSET,
+            row,
+            null,
+          ),
+        )
+        .filter((row): row is Prisma.MetaAdsDailyInsightCreateManyInput => row !== null);
+
+      const adRows = snapshot.adInsights
+        .map((row) =>
+          this.toInsightCreateManyInput(
+            clientProfileId,
+            connection.adAccountId,
+            MetaAdsInsightLevel.AD,
+            row,
+            null,
+          ),
+        )
+        .filter((row): row is Prisma.MetaAdsDailyInsightCreateManyInput => row !== null);
+
+      const allRows = [...accountRows, ...campaignRows, ...adSetRows, ...adRows];
+      const syncedAt = new Date();
+      const syncStatus =
+        allRows.length > 0 ? MetaAdsSyncStatus.SUCCESS : MetaAdsSyncStatus.PARTIAL;
+
+      await this.prisma.$transaction(async (tx) => {
+        await tx.metaAdsDailyInsight.deleteMany({
+          where: {
+            clientProfileId,
+            level: {
+              in: [
+                MetaAdsInsightLevel.ACCOUNT,
+                MetaAdsInsightLevel.CAMPAIGN,
+                MetaAdsInsightLevel.ADSET,
+                MetaAdsInsightLevel.AD,
+              ],
+            },
+            date: {
+              gte: dateRange.since,
+              lte: dateRange.until,
+            },
+          },
+        });
+
+        if (allRows.length > 0) {
+          await tx.metaAdsDailyInsight.createMany({
+            data: allRows,
+          });
+        }
+
+        await tx.clientMetaAdsConfig.upsert({
+          where: { clientProfileId },
+          update: {
+            adAccountId: connection.adAccountId,
+            connectionStatus: MetaAdsConnectionStatus.CONNECTED,
+            syncError: null,
+            lastSyncAt: syncedAt,
+          },
+          create: {
+            clientProfileId,
+            adAccountId: connection.adAccountId,
+            connectionStatus: MetaAdsConnectionStatus.CONNECTED,
+            syncError: null,
+            lastSyncAt: syncedAt,
+          },
+        });
+
+        await tx.metaAdsSyncLog.update({
+          where: { id: syncLog.id },
+          data: {
+            status: syncStatus,
+            finishedAt: syncedAt,
+            recordsFetched: allRows.length,
+            apiCallCount: 5,
+          },
+        });
+      });
+
+      return {
+        success: true,
+        syncedAt,
+        dateRange: {
+          since: dateRange.sinceIsoDate,
+          until: dateRange.untilIsoDate,
+        },
+        inserted: {
+          account: accountRows.length,
+          campaigns: campaignRows.length,
+          total: allRows.length,
+        },
+        connectionStatus: MetaAdsConnectionStatus.CONNECTED,
+        lastSyncAt: syncedAt,
+        syncStatus,
+        skippedReason: null,
+      };
+    } catch (error) {
+      const syncErrorInfo = this.normalizeSyncError(error);
+      const finishedAt = new Date();
+      await this.markConnectionAsError(clientProfileId, syncErrorInfo, finishedAt);
+      await this.prisma.metaAdsSyncLog.update({
+        where: { id: syncLog.id },
+        data: {
+          status: MetaAdsSyncStatus.FAILED,
+          finishedAt,
+          errorCode: syncErrorInfo.code,
+          errorMessage: `[${options.trigger}] ${syncErrorInfo.adminMessage}`,
+        },
+      });
+      throw this.toConnectionTestException(syncErrorInfo);
+    }
   }
 
   private async resolveReportingConnection(clientProfileId: string): Promise<{
     accessToken: string;
     adAccountId: string;
+    lastSyncAt: Date | null;
+    connectionStatus: MetaAdsConnectionStatus;
   }> {
     const snapshot = await this.getConnectionSnapshot(clientProfileId);
     const encryptedAccessToken = snapshot.credential?.accessTokenEnc ?? null;
@@ -1533,6 +1815,9 @@ export class MetaAdsService {
     return {
       accessToken: this.metaAdsTokenService.decrypt(encryptedAccessToken),
       adAccountId,
+      lastSyncAt: snapshot.config?.lastSyncAt ?? null,
+      connectionStatus:
+        snapshot.config?.connectionStatus ?? MetaAdsConnectionStatus.NOT_CONNECTED,
     };
   }
 
@@ -1804,6 +2089,129 @@ export class MetaAdsService {
   private diffDaysInclusive(since: Date, until: Date): number {
     const millisecondsInDay = 24 * 60 * 60 * 1000;
     return Math.floor((until.getTime() - since.getTime()) / millisecondsInDay) + 1;
+  }
+
+  private resolveSyncSkipReason(lastSyncAt: Date | null, now: Date): string | null {
+    if (!lastSyncAt) {
+      return null;
+    }
+
+    const elapsedMs = now.getTime() - lastSyncAt.getTime();
+    if (!Number.isFinite(elapsedMs) || elapsedMs < 0) {
+      return null;
+    }
+
+    const syncTtlMinutes = this.getSyncTtlMinutes();
+    const ttlMs = syncTtlMinutes * 60 * 1000;
+    if (elapsedMs >= ttlMs) {
+      return null;
+    }
+
+    const remainingMinutes = Math.max(Math.ceil((ttlMs - elapsedMs) / (60 * 1000)), 1);
+    return `Son senkron çok yeni. Yaklaşık ${remainingMinutes} dakika sonra tekrar deneyin.`;
+  }
+
+  private getSyncTtlMinutes(): number {
+    const configuredValue = this.configService.get<string | number | undefined>(
+      "META_ADS_SYNC_TTL_MINUTES",
+    );
+
+    if (typeof configuredValue === "number" && Number.isFinite(configuredValue)) {
+      return Math.max(1, Math.trunc(configuredValue));
+    }
+
+    if (typeof configuredValue === "string") {
+      const parsed = Number.parseInt(configuredValue.trim(), 10);
+      if (!Number.isNaN(parsed) && Number.isFinite(parsed)) {
+        return Math.max(1, parsed);
+      }
+    }
+
+    return DEFAULT_META_ADS_SYNC_TTL_MINUTES;
+  }
+
+  private normalizeSyncError(error: unknown): MetaAdsSyncErrorInfo {
+    const normalizedError = this.metaAdsApiService.normalizeError(error);
+    const message = this.normalizeErrorMessage(normalizedError.message);
+    const lowerMessage = message.toLowerCase();
+
+    if (
+      normalizedError.category === "AUTH" ||
+      lowerMessage.includes("token") && (lowerMessage.includes("expired") || lowerMessage.includes("invalid"))
+    ) {
+      return {
+        code: "TOKEN_EXPIRED",
+        category: normalizedError.category,
+        adminMessage: "Meta erişim token süresi dolmuş veya geçersiz.",
+        clientMessage: CLIENT_SAFE_SYNC_ERROR_MESSAGE,
+      };
+    }
+
+    if (
+      lowerMessage.includes("rate limit") ||
+      lowerMessage.includes("too many") ||
+      lowerMessage.includes("throttle")
+    ) {
+      return {
+        code: "RATE_LIMIT",
+        category: normalizedError.category,
+        adminMessage: "Meta API rate limit sınırına ulaşıldı.",
+        clientMessage: CLIENT_SAFE_SYNC_ERROR_MESSAGE,
+      };
+    }
+
+    if (
+      lowerMessage.includes("business") &&
+      (lowerMessage.includes("revoked") ||
+        lowerMessage.includes("disabled") ||
+        lowerMessage.includes("access"))
+    ) {
+      return {
+        code: "BUSINESS_ACCESS_REVOKED",
+        category: normalizedError.category,
+        adminMessage: "Meta Business erişimi kaldırılmış görünüyor.",
+        clientMessage: CLIENT_SAFE_SYNC_ERROR_MESSAGE,
+      };
+    }
+
+    if (
+      lowerMessage.includes("ad account") &&
+      (lowerMessage.includes("not found") ||
+        lowerMessage.includes("unavailable") ||
+        lowerMessage.includes("disabled"))
+    ) {
+      return {
+        code: "AD_ACCOUNT_UNAVAILABLE",
+        category: normalizedError.category,
+        adminMessage: "Meta reklam hesabı erişilemez durumda.",
+        clientMessage: CLIENT_SAFE_SYNC_ERROR_MESSAGE,
+      };
+    }
+
+    if (
+      normalizedError.category === "PERMISSION" ||
+      lowerMessage.includes("permission") ||
+      lowerMessage.includes("not authorized")
+    ) {
+      return {
+        code: "PERMISSION_MISSING",
+        category: normalizedError.category,
+        adminMessage: "Meta API izinleri eksik veya yetersiz.",
+        clientMessage: CLIENT_SAFE_SYNC_ERROR_MESSAGE,
+      };
+    }
+
+    return {
+      code: "UNKNOWN_API_ERROR",
+      category: normalizedError.category,
+      adminMessage:
+        message.length > 0 ? `Meta API hatası: ${message}` : "Meta API beklenmeyen bir hata döndürdü.",
+      clientMessage: CLIENT_SAFE_SYNC_ERROR_MESSAGE,
+    };
+  }
+
+  private normalizeErrorMessage(message: string): string {
+    return message.trim().replace(/\s+/g, " ");
   }
 
   private parseMetricNumber(value: string | number | null | undefined): number | null {
@@ -2095,34 +2503,41 @@ export class MetaAdsService {
 
   private async markConnectionAsError(
     clientProfileId: string,
-    normalizedError: NormalizedMetaAdsApiError,
+    syncErrorInfo: MetaAdsSyncErrorInfo,
+    occurredAt = new Date(),
   ): Promise<void> {
     await this.prisma.clientMetaAdsConfig.upsert({
       where: { clientProfileId },
       update: {
         connectionStatus: MetaAdsConnectionStatus.ERROR,
-        syncError: normalizedError.message,
-        lastSyncAt: new Date(),
+        syncError: syncErrorInfo.adminMessage,
+        lastSyncAt: occurredAt,
       },
       create: {
         clientProfileId,
         connectionStatus: MetaAdsConnectionStatus.ERROR,
-        syncError: normalizedError.message,
-        lastSyncAt: new Date(),
+        syncError: syncErrorInfo.adminMessage,
+        lastSyncAt: occurredAt,
       },
     });
   }
 
-  private toConnectionTestException(normalizedError: NormalizedMetaAdsApiError): Error {
-    if (normalizedError.category === "PERMISSION") {
-      return new ForbiddenException(normalizedError.message);
+  private toConnectionTestException(syncErrorInfo: MetaAdsSyncErrorInfo): Error {
+    if (
+      syncErrorInfo.code === "PERMISSION_MISSING" ||
+      syncErrorInfo.code === "BUSINESS_ACCESS_REVOKED"
+    ) {
+      return new ForbiddenException(syncErrorInfo.adminMessage);
     }
 
-    if (normalizedError.category === "AUTH") {
-      return new BadRequestException(normalizedError.message);
+    if (
+      syncErrorInfo.code === "TOKEN_EXPIRED" ||
+      syncErrorInfo.code === "AD_ACCOUNT_UNAVAILABLE"
+    ) {
+      return new BadRequestException(syncErrorInfo.adminMessage);
     }
 
-    return new BadGatewayException(normalizedError.message);
+    return new BadGatewayException(syncErrorInfo.adminMessage);
   }
 
   private resolveTokenForConnectionTest(

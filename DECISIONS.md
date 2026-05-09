@@ -2136,3 +2136,59 @@ Affected files:
 - `adminandemployeePanel/src/app/features/tasks/tasksTypes.ts`
 - `adminandemployeePanel/src/app/employee/components/MetaAdsWorkspace.tsx`
 - `ROAD_MAP.md`
+
+---
+
+## 2026-05-10 - Meta Ads Faz 8 Sync Automation Hardening (Observability + Safe States)
+
+Context:
+Faz 7 sonrası approval/creative akışı üretime yakın hale geldi ancak sync operasyonları için merkezi log görünürlüğü, normalize hata sınıflandırması ve client-side güvenli hata sunumu sınırlıydı. Ayrıca dashboard refresh tetiklerinde TTL-safe koruma ve admin retry görünürlüğü eksikti.
+
+Decision:
+Faz 8 kapsamında sync pipeline gözlemlenebilir ve güvenli hale getirildi:
+
+- Prisma’ya `MetaAdsSyncLog` modeli ve `MetaAdsSyncStatus` enumu eklendi (`RUNNING | SUCCESS | FAILED | PARTIAL | SKIPPED`).
+- Sync lifecycle başlangıçta log açacak, akış sonunda sonuç + hata + metrik (records/apiCallCount/duration) yazacak şekilde standardize edildi.
+- Sync trigger sınıfları netleştirildi (`MANUAL_SYNC`, `ON_DEMAND_CLIENT`, `ON_DEMAND_ASSIGNED`, `ERROR_RETRY`) ve TTL kontrollü skip davranışı eklendi (`META_ADS_SYNC_TTL_MINUTES`, default `30`).
+- Error normalize helper’ı aşağıdaki operasyon kodlarını üretir:
+  - `TOKEN_EXPIRED`
+  - `PERMISSION_MISSING`
+  - `AD_ACCOUNT_UNAVAILABLE`
+  - `RATE_LIMIT`
+  - `BUSINESS_ACCESS_REVOKED`
+  - `UNKNOWN_API_ERROR`
+- Admin için sync observability endpointleri eklendi:
+  - `GET /api/v1/admin/meta-ads/sync-logs`
+  - `POST /api/v1/admin/clients/:clientId/meta-ads/sync/retry`
+- Client için own refresh endpointi eklendi:
+  - `POST /api/v1/clients/me/meta-ads/sync`
+- Client-safe error policy uygulandı: client pixel-status ve dashboard katmanında teknik detay maskelenir; admin/assigned rollerde operasyonel detay korunur.
+- Admin `/meta-ads` ekranında failed sync müşteriler, sync logs tablosu, retry aksiyonu ve status özetleri eklendi.
+- Client dashboard tarafında “Son güncelleme”, “Veriler hazırlanıyor…”, “Bağlantı problemi var, ekibimiz ilgileniyor” güvenli durumları gösterilir.
+
+Reason:
+Bu karar, Meta Ads sync operasyonlarında hem teknik izlenebilirliği artırır hem de client-facing UI’da hata sızıntısını önler. TTL-safe refresh yaklaşımı gereksiz API çağrılarını azaltır, retry/log akışları ise operasyon ekiplerinin müdahale hızını artırır.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260510001000_add_meta_ads_sync_logs/migration.sql`
+- `server/src/config/env.validation.ts`
+- `server/src/meta-ads/dto/meta-ads-sync-logs-query.dto.ts`
+- `server/src/meta-ads/meta-ads.controller.ts`
+- `server/src/meta-ads/meta-ads.service.ts`
+- `server/test/meta-ads-authz.e2e-spec.ts`
+- `server/.env.example`
+- `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
+- `adminandemployeePanel/src/app/pages/MetaAdsAdmin.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/MetaAdsAdmin.test.tsx`
+- `clientPanel/src/app/features/metaAds/metaAdsTypes.ts`
+- `clientPanel/src/app/features/metaAds/metaAdsApi.ts`
+- `clientPanel/src/app/pages/services/meta-ads-dashboard.tsx`
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+- `clientPanel/src/app/pages/__tests__/meta-ads-dashboard.test.tsx`
+- `clientPanel/src/app/pages/__tests__/service-tab-page.meta-ads.test.tsx`
+- `PROJECT_CONTEXT.md`
+- `REPO_MAP.md`
+- `ROAD_MAP.md`

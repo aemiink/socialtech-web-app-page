@@ -946,3 +946,49 @@ The `client/` directory is the public/marketing Social Tech website, not the Cli
   - approval fields/types
 - `adminandemployeePanel/src/app/employee/components/MetaAdsWorkspace.tsx`
   - approval type/status/note rendering and role-based approval task creation metadata
+
+## 2026-05-10 Update Map (Meta Ads Faz 8 Sync Automation Hardening)
+
+### Backend
+- `server/prisma/schema.prisma`
+  - `MetaAdsSyncStatus` enumu
+  - `MetaAdsSyncLog` modeli
+  - `ClientProfile.metaAdsSyncLogs` ilişkisi
+- `server/prisma/migrations/20260510001000_add_meta_ads_sync_logs/migration.sql`
+- `server/src/config/env.validation.ts`
+  - `META_ADS_SYNC_TTL_MINUTES`
+- `server/src/meta-ads/dto/meta-ads-sync-logs-query.dto.ts`
+- `server/src/meta-ads/meta-ads.controller.ts`
+  - `GET /api/v1/admin/meta-ads/sync-logs`
+  - `POST /api/v1/admin/clients/:clientId/meta-ads/sync/retry`
+  - `POST /api/v1/clients/me/meta-ads/sync`
+- `server/src/meta-ads/meta-ads.service.ts`
+  - sync lifecycle logging
+  - error normalization mapping
+  - TTL/rate-limit skip control
+  - client-safe error masking
+- `server/test/meta-ads-authz.e2e-spec.ts`
+  - sync logs, retry, TTL skip, own sync, safe error visibility coverage
+
+### Admin + Employee Panel Frontend
+- `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`
+  - `MetaAdsSyncStatus`, admin sync log response/query tipleri
+- `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
+  - sync log + sync response normalizerları
+- `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
+  - `getAdminMetaAdsSyncLogs`, `retryAdminClientMetaAdsSync`
+- `adminandemployeePanel/src/app/pages/MetaAdsAdmin.tsx`
+  - failed sync müşteriler, retry aksiyonu, sync logs tablosu
+- `adminandemployeePanel/src/app/pages/__tests__/MetaAdsAdmin.test.tsx`
+
+### Client Panel Frontend
+- `clientPanel/src/app/features/metaAds/metaAdsTypes.ts`
+  - `MetaAdsSyncStatus`, `MetaAdsSyncResponse`
+- `clientPanel/src/app/features/metaAds/metaAdsApi.ts`
+  - `syncOwnMetaAds` mutation
+- `clientPanel/src/app/pages/services/meta-ads-dashboard.tsx`
+  - refresh action + last sync + safe status messages
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+  - client-safe connection notices
+- `clientPanel/src/app/pages/__tests__/meta-ads-dashboard.test.tsx`
+- `clientPanel/src/app/pages/__tests__/service-tab-page.meta-ads.test.tsx`
