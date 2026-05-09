@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   AdminClientMetaAdsConnection,
   ClientSummaryResponse,
+  MetaAdsSummaryResponse,
 } from "../../features/clients/clientsTypes";
 import { ClientDetail } from "../ClientDetail";
 
@@ -45,8 +46,10 @@ const mockUseGetAdminAssignmentsQuery = vi.fn();
 const mockUseGetAdminClientMetaAdsConnectionQuery = vi.fn<
   (id: string, options: QueryOptions) => MetaAdsConnectionQueryResult
 >();
+const mockUseGetAdminClientMetaAdsSummaryQuery = vi.fn();
 const mockUseConnectAdminClientMetaAdsManualMutation = vi.fn();
 const mockUseTestAdminClientMetaAdsConnectionMutation = vi.fn();
+const mockUseSyncAdminClientMetaAdsMutation = vi.fn();
 const mockUseDisconnectAdminClientMetaAdsMutation = vi.fn();
 const mockUseResetClientOwnerPasswordMutation = vi.fn();
 
@@ -55,10 +58,13 @@ vi.mock("../../features/clients/clientsApi", () => ({
     mockUseGetClientSummaryQuery(id, options),
   useGetAdminClientMetaAdsConnectionQuery: (id: string, options: QueryOptions) =>
     mockUseGetAdminClientMetaAdsConnectionQuery(id, options),
+  useGetAdminClientMetaAdsSummaryQuery: (...args: unknown[]) =>
+    mockUseGetAdminClientMetaAdsSummaryQuery(...args),
   useConnectAdminClientMetaAdsManualMutation: () =>
     mockUseConnectAdminClientMetaAdsManualMutation(),
   useTestAdminClientMetaAdsConnectionMutation: () =>
     mockUseTestAdminClientMetaAdsConnectionMutation(),
+  useSyncAdminClientMetaAdsMutation: () => mockUseSyncAdminClientMetaAdsMutation(),
   useDisconnectAdminClientMetaAdsMutation: () =>
     mockUseDisconnectAdminClientMetaAdsMutation(),
   useResetClientOwnerPasswordMutation: () => mockUseResetClientOwnerPasswordMutation(),
@@ -147,6 +153,25 @@ const metaAdsConnectionSummary: AdminClientMetaAdsConnection = {
   },
 };
 
+const metaAdsSummary: MetaAdsSummaryResponse = {
+  spend: 150,
+  impressions: 15000,
+  reach: 8000,
+  clicks: 300,
+  ctr: 2,
+  cpc: 0.5,
+  cpm: 10,
+  frequency: 1.88,
+  results: 30,
+  costPerResult: 5,
+  roas: 2.8,
+  dateRange: {
+    since: "2026-05-07",
+    until: "2026-05-08",
+  },
+  lastSyncAt: "2026-05-09T10:00:00.000Z",
+};
+
 function setupSummaryState(overrides: Partial<ClientSummaryQueryResult> = {}) {
   mockUseGetClientSummaryQuery.mockReturnValue({
     data: clientSummary,
@@ -170,6 +195,24 @@ function setupMetaAdsConnectionState(overrides: Partial<MetaAdsConnectionQueryRe
   });
 }
 
+function setupMetaAdsSummaryState(
+  overrides: Partial<{
+    data: MetaAdsSummaryResponse | undefined;
+    error: unknown;
+    isLoading: boolean;
+    isFetching: boolean;
+  }> = {},
+) {
+  mockUseGetAdminClientMetaAdsSummaryQuery.mockReturnValue({
+    data: metaAdsSummary,
+    error: undefined,
+    isLoading: false,
+    isFetching: false,
+    refetch: vi.fn(),
+    ...overrides,
+  });
+}
+
 function renderClientDetail(id: string = clientProfileId) {
   render(
     <MemoryRouter initialEntries={[`/musteriler/${id}`]}>
@@ -185,8 +228,10 @@ describe("ClientDetail", () => {
     vi.clearAllMocks();
     setupSummaryState();
     setupMetaAdsConnectionState();
+    setupMetaAdsSummaryState();
     mockUseConnectAdminClientMetaAdsManualMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseTestAdminClientMetaAdsConnectionMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
+    mockUseSyncAdminClientMetaAdsMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseDisconnectAdminClientMetaAdsMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseResetClientOwnerPasswordMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseGetAdminAssignmentsQuery.mockReturnValue({

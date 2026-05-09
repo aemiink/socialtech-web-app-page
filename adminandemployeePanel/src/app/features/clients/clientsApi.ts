@@ -1,23 +1,31 @@
 import { baseApi } from "../../services/baseApi";
 import type {
+  AdminMetaAdsClientListResponse,
   AdminClientMetaAdsConnection,
   ConnectManualMetaAdsRequest,
   ClientProfile,
   ClientsListQuery,
   ClientsListResponse,
   ClientSummaryResponse,
+  MetaAdsDateRangeQuery,
+  MetaAdsSyncResponse,
   CreateAdminClientRequest,
   CreateOrLinkClientOwnerRequest,
+  MetaAdsSummaryResponse,
   ResetClientOwnerPasswordRequest,
   TestMetaAdsConnectionRequest,
   TestMetaAdsConnectionResponse,
+  UpdateAdminClientMetaAdsConfigRequest,
   UpdateAdminClientRequest,
 } from "./clientsTypes";
 import {
+  normalizeAdminMetaAdsClientListResponse,
   normalizeClientResponse,
   normalizeClientSummaryResponse,
   normalizeClientsListResponse,
   normalizeAdminMetaAdsConnectionResponse,
+  normalizeMetaAdsSyncResponse,
+  normalizeMetaAdsSummaryResponse,
   normalizeTestMetaAdsConnectionResponse,
   toBackendServiceKey,
 } from "./clientsUtils";
@@ -25,6 +33,7 @@ import {
 const CLIENTS_LIST_ID = "LIST";
 const CLIENT_SUMMARY_ID_PREFIX = "SUMMARY";
 const CLIENT_META_ADS_CONNECTION_ID_PREFIX = "META_ADS_CONNECTION";
+const CLIENT_META_ADS_GLOBAL_LIST_ID = "META_ADS_GLOBAL_LIST";
 const ADMIN_SUMMARY_ID = "SUMMARY";
 const AUDIT_LOGS_LIST_ID = "LIST";
 const ADMIN_USERS_LIST_ID = "LIST";
@@ -77,6 +86,49 @@ export const clientsApi = baseApi.injectEndpoints({
         { type: "Clients", id: getClientMetaAdsConnectionTagId(clientId) },
       ],
     }),
+    getAdminClientMetaAdsSummary: builder.query<MetaAdsSummaryResponse, string>({
+      query: (clientId) => ({
+        url: `/admin/clients/${clientId}/meta-ads/summary`,
+        method: "GET",
+      }),
+      transformResponse: (response: unknown) => normalizeMetaAdsSummaryResponse(response),
+      providesTags: (_result, _error, clientId) => [
+        { type: "Clients", id: getClientMetaAdsConnectionTagId(clientId) },
+      ],
+    }),
+    getAdminMetaAdsClients: builder.query<AdminMetaAdsClientListResponse, MetaAdsDateRangeQuery | void>({
+      query: (query) => ({
+        url: "/admin/meta-ads/clients",
+        method: "GET",
+        params: serializeMetaAdsDateRangeQuery(query),
+      }),
+      transformResponse: (response: unknown) => normalizeAdminMetaAdsClientListResponse(response),
+      providesTags: (result) => [
+        { type: "Clients", id: CLIENT_META_ADS_GLOBAL_LIST_ID },
+        ...(result
+          ? result.data.map((item) => ({
+              type: "Clients" as const,
+              id: getClientMetaAdsConnectionTagId(item.client.id),
+            }))
+          : []),
+      ],
+    }),
+    updateAdminClientMetaAdsConfig: builder.mutation<
+      AdminClientMetaAdsConnection,
+      { clientId: string; body: UpdateAdminClientMetaAdsConfigRequest }
+    >({
+      query: ({ clientId, body }) => ({
+        url: `/admin/clients/${clientId}/meta-ads/config`,
+        method: "PATCH",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeAdminMetaAdsConnectionResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        ...getAdminClientMutationInvalidations(clientId),
+        { type: "Clients", id: getClientMetaAdsConnectionTagId(clientId) },
+        { type: "Clients", id: CLIENT_META_ADS_GLOBAL_LIST_ID },
+      ],
+    }),
     connectAdminClientMetaAdsManual: builder.mutation<
       AdminClientMetaAdsConnection,
       { clientId: string; body: ConnectManualMetaAdsRequest }
@@ -90,6 +142,7 @@ export const clientsApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, { clientId }) => [
         ...getAdminClientMutationInvalidations(clientId),
         { type: "Clients", id: getClientMetaAdsConnectionTagId(clientId) },
+        { type: "Clients", id: CLIENT_META_ADS_GLOBAL_LIST_ID },
       ],
     }),
     disconnectAdminClientMetaAds: builder.mutation<AdminClientMetaAdsConnection, { clientId: string }>({
@@ -101,6 +154,7 @@ export const clientsApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, { clientId }) => [
         ...getAdminClientMutationInvalidations(clientId),
         { type: "Clients", id: getClientMetaAdsConnectionTagId(clientId) },
+        { type: "Clients", id: CLIENT_META_ADS_GLOBAL_LIST_ID },
       ],
     }),
     testAdminClientMetaAdsConnection: builder.mutation<
@@ -116,6 +170,23 @@ export const clientsApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, { clientId }) => [
         ...getAdminClientMutationInvalidations(clientId),
         { type: "Clients", id: getClientMetaAdsConnectionTagId(clientId) },
+        { type: "Clients", id: CLIENT_META_ADS_GLOBAL_LIST_ID },
+      ],
+    }),
+    syncAdminClientMetaAds: builder.mutation<
+      MetaAdsSyncResponse,
+      { clientId: string; query?: MetaAdsDateRangeQuery }
+    >({
+      query: ({ clientId, query }) => ({
+        url: `/admin/clients/${clientId}/meta-ads/sync`,
+        method: "POST",
+        params: serializeMetaAdsDateRangeQuery(query),
+      }),
+      transformResponse: (response: unknown) => normalizeMetaAdsSyncResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        ...getAdminClientMutationInvalidations(clientId),
+        { type: "Clients", id: getClientMetaAdsConnectionTagId(clientId) },
+        { type: "Clients", id: CLIENT_META_ADS_GLOBAL_LIST_ID },
       ],
     }),
     createAdminClient: builder.mutation<ClientProfile, CreateAdminClientRequest>({
@@ -191,9 +262,13 @@ export const {
   useLazyGetClientQuery,
   useGetClientSummaryQuery,
   useGetAdminClientMetaAdsConnectionQuery,
+  useGetAdminClientMetaAdsSummaryQuery,
+  useGetAdminMetaAdsClientsQuery,
+  useUpdateAdminClientMetaAdsConfigMutation,
   useConnectAdminClientMetaAdsManualMutation,
   useDisconnectAdminClientMetaAdsMutation,
   useTestAdminClientMetaAdsConnectionMutation,
+  useSyncAdminClientMetaAdsMutation,
   useCreateAdminClientMutation,
   useUpdateAdminClientMutation,
   useDeactivateAdminClientMutation,
@@ -213,6 +288,7 @@ function getClientMetaAdsConnectionTagId(id: string): string {
 function getAdminClientMutationInvalidations(id: string) {
   return [
     { type: "Clients" as const, id: CLIENTS_LIST_ID },
+    { type: "Clients" as const, id: CLIENT_META_ADS_GLOBAL_LIST_ID },
     { type: "Clients" as const, id },
     { type: "Clients" as const, id: getClientSummaryTagId(id) },
     { type: "AdminSummary" as const, id: ADMIN_SUMMARY_ID },
@@ -223,6 +299,7 @@ function getAdminClientMutationInvalidations(id: string) {
 function getAdminClientCreateInvalidations(result: ClientProfile | undefined) {
   return [
     { type: "Clients" as const, id: CLIENTS_LIST_ID },
+    { type: "Clients" as const, id: CLIENT_META_ADS_GLOBAL_LIST_ID },
     ...(result
       ? [
           { type: "Clients" as const, id: result.id },
@@ -265,6 +342,26 @@ function serializeClientsListQuery(
 
   if (query.status !== undefined) {
     params.status = query.status;
+  }
+
+  return params;
+}
+
+function serializeMetaAdsDateRangeQuery(
+  query: MetaAdsDateRangeQuery | void,
+): Record<string, string> {
+  if (!query) {
+    return {};
+  }
+
+  const params: Record<string, string> = {};
+
+  if (query.since !== undefined && query.since.trim().length > 0) {
+    params.since = query.since.trim();
+  }
+
+  if (query.until !== undefined && query.until.trim().length > 0) {
+    params.until = query.until.trim();
   }
 
   return params;

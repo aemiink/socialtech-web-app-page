@@ -14,6 +14,7 @@ import { Tasks } from "./pages/Tasks";
 import { TaskDetail } from "./pages/TaskDetail";
 import { Approvals } from "./pages/Approvals";
 import { Campaigns } from "./pages/Campaigns";
+import { MetaAdsAdmin } from "./pages/MetaAdsAdmin";
 import { Contents } from "./pages/Contents";
 import { Reports } from "./pages/Reports";
 import { ReportDetail } from "./pages/ReportDetail";
@@ -79,6 +80,7 @@ import { CrmLeadDetail as EmployeeCrmLeadDetail } from "./employee/pages/CrmLead
 import { BugunkuTakipler } from "./employee/pages/BugunkuTakipler";
 import { ProjectManagerClientDetail } from "./employee/pages/ProjectManagerClientDetail";
 import { ProjectManagerServiceWorkspace } from "./employee/pages/ProjectManagerServiceWorkspace";
+import { MetaAdsCalismaAlani } from "./employee/pages/MetaAdsCalismaAlani";
 
 function LoginRedirect() {
   return <Navigate to="/login" replace />;
@@ -107,6 +109,7 @@ export const router = createBrowserRouter([
       { path: "gorevler/:id", Component: TaskDetail },
       { path: "onaylar", Component: Approvals },
       { path: "kampanyalar", Component: Campaigns },
+      { path: "meta-ads", Component: MetaAdsAdmin },
       { path: "icerikler", Component: Contents },
       { path: "raporlar", Component: Reports },
       { path: "raporlar/:id", Component: ReportDetail },
@@ -134,6 +137,7 @@ export const router = createBrowserRouter([
       { path: "crm/leads/:id", Component: EmployeeCrmLeadDetail },
       { path: "crm/follow-ups", Component: BugunkuTakipler },
       { path: "gorevlerim", Component: Gorevlerim },
+      { path: "meta-ads", Component: MetaAdsCalismaAlani },
       { path: "gorevlerim/:id", Component: TaskDetail },
       { path: "musterilerim", Component: Musterilerim },
       { path: "project-manager/clients/:clientId", Component: ProjectManagerClientDetail },

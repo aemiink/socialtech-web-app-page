@@ -1,6 +1,8 @@
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { extractApiErrorMessage } from "../adminUsers/adminUsersUtils";
 import type {
+  AdminMetaAdsClientListItem,
+  AdminMetaAdsClientListResponse,
   AdminClientMetaAdsConnection,
   BackendPurchasedServiceKey,
   BackendPurchasedServiceStatus,
@@ -13,6 +15,8 @@ import type {
   ClientSummaryRecentTask,
   ClientSummaryResponse,
   MetaAdsConnectionStatus,
+  MetaAdsSyncResponse,
+  MetaAdsSummaryResponse,
   PurchasedServiceStatus,
   ServiceKey,
   TestMetaAdsConnectionResponse,
@@ -458,6 +462,85 @@ export function normalizeTestMetaAdsConnectionResponse(
   };
 }
 
+export function normalizeMetaAdsSummaryResponse(response: unknown): MetaAdsSummaryResponse {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  const dateRange = isRecord(candidate) && isRecord(candidate.dateRange) ? candidate.dateRange : {};
+  const roasValue = isRecord(candidate) ? candidate.roas : undefined;
+
+  return {
+    spend: readNumber(isRecord(candidate) ? candidate.spend : undefined, 0),
+    impressions: Math.trunc(readNumber(isRecord(candidate) ? candidate.impressions : undefined, 0)),
+    reach: Math.trunc(readNumber(isRecord(candidate) ? candidate.reach : undefined, 0)),
+    clicks: Math.trunc(readNumber(isRecord(candidate) ? candidate.clicks : undefined, 0)),
+    ctr: readNumber(isRecord(candidate) ? candidate.ctr : undefined, 0),
+    cpc: readNumber(isRecord(candidate) ? candidate.cpc : undefined, 0),
+    cpm: readNumber(isRecord(candidate) ? candidate.cpm : undefined, 0),
+    frequency: readNumber(isRecord(candidate) ? candidate.frequency : undefined, 0),
+    results: Math.trunc(readNumber(isRecord(candidate) ? candidate.results : undefined, 0)),
+    costPerResult: readNumber(isRecord(candidate) ? candidate.costPerResult : undefined, 0),
+    roas: typeof roasValue === "number" && Number.isFinite(roasValue) ? roasValue : null,
+    dateRange: {
+      since: typeof dateRange.since === "string" ? dateRange.since : "",
+      until: typeof dateRange.until === "string" ? dateRange.until : "",
+    },
+    lastSyncAt:
+      isRecord(candidate) && isStringOrNull(candidate.lastSyncAt) ? candidate.lastSyncAt : null,
+  };
+}
+
+export function normalizeMetaAdsSyncResponse(response: unknown): MetaAdsSyncResponse {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  const dateRange = isRecord(candidate) && isRecord(candidate.dateRange) ? candidate.dateRange : {};
+  const inserted = isRecord(candidate) && isRecord(candidate.inserted) ? candidate.inserted : {};
+
+  return {
+    success: true,
+    syncedAt: isRecord(candidate) && typeof candidate.syncedAt === "string" ? candidate.syncedAt : "",
+    dateRange: {
+      since: typeof dateRange.since === "string" ? dateRange.since : "",
+      until: typeof dateRange.until === "string" ? dateRange.until : "",
+    },
+    inserted: {
+      account: readNumber(inserted.account, 0),
+      campaigns: readNumber(inserted.campaigns, 0),
+      total: readNumber(inserted.total, 0),
+    },
+    connectionStatus:
+      isRecord(candidate) && candidate.connectionStatus
+        ? normalizeMetaAdsConnectionStatus(candidate.connectionStatus)
+        : "NOT_CONNECTED",
+    lastSyncAt:
+      isRecord(candidate) && isStringOrNull(candidate.lastSyncAt) ? candidate.lastSyncAt : null,
+  };
+}
+
+export function normalizeAdminMetaAdsClientListResponse(
+  response: unknown,
+): AdminMetaAdsClientListResponse {
+  const candidate = isRecord(response) && "data" in response && isRecord(response.data)
+    ? response.data
+    : response;
+  const rowsSource = isRecord(candidate) ? candidate.data : undefined;
+  const dateRangeSource = isRecord(candidate) && isRecord(candidate.dateRange) ? candidate.dateRange : {};
+  const metaSource = isRecord(candidate) && isRecord(candidate.meta) ? candidate.meta : {};
+
+  return {
+    data: Array.isArray(rowsSource)
+      ? rowsSource.map((row) => normalizeAdminMetaAdsClientListItem(row)).filter(isDefined)
+      : [],
+    dateRange: {
+      since: typeof dateRangeSource.since === "string" ? dateRangeSource.since : "",
+      until: typeof dateRangeSource.until === "string" ? dateRangeSource.until : "",
+    },
+    meta: {
+      total: readNumber(metaSource.total, 0),
+      connected: readNumber(metaSource.connected, 0),
+      error: readNumber(metaSource.error, 0),
+      pendingApprovals: readNumber(metaSource.pendingApprovals, 0),
+    },
+  };
+}
+
 export function getActivePurchasedServices(client: ClientProfile): ClientPurchasedService[] {
   return getClientPurchasedServices(client).filter((service) => service.status === "ACTIVE");
 }
@@ -778,6 +861,94 @@ function normalizeClientSummaryMeta(value: unknown): ClientSummaryResponse["meta
   };
 }
 
+function normalizeAdminMetaAdsClientListItem(value: unknown): AdminMetaAdsClientListItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const client = isRecord(value.client) ? value.client : {};
+  const ids = isRecord(value.ids) ? value.ids : {};
+  const settings = isRecord(value.settings) ? value.settings : {};
+  const spendSummary = isRecord(value.spendSummary) ? value.spendSummary : {};
+  const actionContext = isRecord(value.actionContext) ? value.actionContext : {};
+  const assignedEmployeesSource = Array.isArray(value.assignedEmployees) ? value.assignedEmployees : [];
+
+  if (
+    typeof client.id !== "string" ||
+    typeof client.slug !== "string" ||
+    typeof client.companyName !== "string"
+  ) {
+    return null;
+  }
+
+  const assignedEmployees = assignedEmployeesSource
+    .map((item) => {
+      if (!isRecord(item)) {
+        return null;
+      }
+
+      if (
+        typeof item.userId !== "string" ||
+        typeof item.email !== "string" ||
+        typeof item.role !== "string" ||
+        typeof item.scope !== "string"
+      ) {
+        return null;
+      }
+
+      return {
+        userId: item.userId,
+        email: item.email,
+        displayName: isStringOrNull(item.displayName) ? item.displayName : null,
+        role: item.role,
+        scope: item.scope,
+      };
+    })
+    .filter(isDefined);
+
+  return {
+    client: {
+      id: client.id,
+      slug: client.slug,
+      companyName: client.companyName,
+      status: normalizeClientStatus(client.status),
+    },
+    serviceStatus: normalizeMetaAdsServiceStatus(value.serviceStatus),
+    connectionStatus: normalizeMetaAdsConnectionStatus(value.connectionStatus),
+    hasToken: typeof value.hasToken === "boolean" ? value.hasToken : false,
+    ids: {
+      businessId: isStringOrNull(ids.businessId) ? ids.businessId : null,
+      adAccountId: isStringOrNull(ids.adAccountId) ? ids.adAccountId : null,
+      pixelId: isStringOrNull(ids.pixelId) ? ids.pixelId : null,
+      instagramAccountId: isStringOrNull(ids.instagramAccountId) ? ids.instagramAccountId : null,
+      facebookPageId: isStringOrNull(ids.facebookPageId) ? ids.facebookPageId : null,
+    },
+    settings: {
+      currency: isStringOrNull(settings.currency) ? settings.currency : null,
+      timezone: isStringOrNull(settings.timezone) ? settings.timezone : null,
+    },
+    lastSyncAt: isStringOrNull(value.lastSyncAt) ? value.lastSyncAt : null,
+    syncError: isStringOrNull(value.syncError) ? value.syncError : null,
+    spendSummary: {
+      spend: readNumber(spendSummary.spend, 0),
+      impressions: readNumber(spendSummary.impressions, 0),
+      clicks: readNumber(spendSummary.clicks, 0),
+      results: readNumber(spendSummary.results, 0),
+      roas:
+        typeof spendSummary.roas === "number" && Number.isFinite(spendSummary.roas)
+          ? spendSummary.roas
+          : null,
+    },
+    pendingApprovals: readNumber(value.pendingApprovals, 0),
+    assignedEmployees,
+    actionContext: {
+      metaAdsProjectId: isStringOrNull(actionContext.metaAdsProjectId)
+        ? actionContext.metaAdsProjectId
+        : null,
+    },
+  };
+}
+
 function isDefined<T>(value: T | null | undefined): value is T {
   return value !== null && value !== undefined;
 }
@@ -915,6 +1086,32 @@ function normalizePurchasedServiceStatus(value: unknown): PurchasedServiceStatus
   }
 
   return "ACTIVE";
+}
+
+function normalizeMetaAdsServiceStatus(value: unknown): PurchasedServiceStatus {
+  if (isPurchasedServiceStatus(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toUpperCase();
+    if (normalized === "PAUSED") {
+      return "PAUSED";
+    }
+    if (normalized === "INACTIVE" || normalized === "CANCELED") {
+      return "INACTIVE";
+    }
+  }
+
+  return "INACTIVE";
+}
+
+function normalizeClientStatus(value: unknown): ClientStatus {
+  if (value === "ACTIVE" || value === "INACTIVE" || value === "SUSPENDED") {
+    return value;
+  }
+
+  return "INACTIVE";
 }
 
 function normalizeMetaAdsConnectionStatus(value: unknown): MetaAdsConnectionStatus {

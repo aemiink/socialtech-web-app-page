@@ -245,3 +245,113 @@ export type TestMetaAdsConnectionResponse = {
   };
   grantedScopes: string[];
 };
+
+export type MetaAdsSummaryResponse = {
+  spend: number;
+  impressions: number;
+  reach: number;
+  clicks: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  frequency: number;
+  results: number;
+  costPerResult: number;
+  roas: number | null;
+  dateRange: {
+    since: string;
+    until: string;
+  };
+  lastSyncAt: string | null;
+};
+
+export type MetaAdsDateRangeQuery = {
+  since?: string;
+  until?: string;
+};
+
+export type UpdateAdminClientMetaAdsConfigRequest = {
+  businessId?: string | null;
+  adAccountId?: string | null;
+  pixelId?: string | null;
+  instagramAccountId?: string | null;
+  facebookPageId?: string | null;
+  currency?: string | null;
+  timezone?: string | null;
+  connectionStatus?: MetaAdsConnectionStatus;
+  lastSyncAt?: string | null;
+  syncError?: string | null;
+};
+
+export type MetaAdsSyncResponse = {
+  success: true;
+  syncedAt: string;
+  dateRange: {
+    since: string;
+    until: string;
+  };
+  inserted: {
+    account: number;
+    campaigns: number;
+    total: number;
+  };
+  connectionStatus: MetaAdsConnectionStatus;
+  lastSyncAt: string | null;
+};
+
+export type AdminMetaAdsClientListItem = {
+  client: {
+    id: string;
+    slug: string;
+    companyName: string;
+    status: ClientStatus;
+  };
+  serviceStatus: PurchasedServiceStatus;
+  connectionStatus: MetaAdsConnectionStatus;
+  hasToken: boolean;
+  ids: {
+    businessId: string | null;
+    adAccountId: string | null;
+    pixelId: string | null;
+    instagramAccountId: string | null;
+    facebookPageId: string | null;
+  };
+  settings: {
+    currency: string | null;
+    timezone: string | null;
+  };
+  lastSyncAt: string | null;
+  syncError: string | null;
+  spendSummary: {
+    spend: number;
+    impressions: number;
+    clicks: number;
+    results: number;
+    roas: number | null;
+  };
+  pendingApprovals: number;
+  assignedEmployees: Array<{
+    userId: string;
+    email: string;
+    displayName: string | null;
+    role: string;
+    scope: string;
+  }>;
+  actionContext: {
+    metaAdsProjectId: string | null;
+  };
+};
+
+export type AdminMetaAdsClientListResponse = {
+  data: AdminMetaAdsClientListItem[];
+  dateRange: {
+    since: string;
+    until: string;
+  };
+  meta: {
+    total: number;
+    connected: number;
+    error: number;
+    pendingApprovals: number;
+  };
+};

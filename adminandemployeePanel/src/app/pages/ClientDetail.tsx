@@ -21,8 +21,10 @@ import {
   useConnectAdminClientMetaAdsManualMutation,
   useDisconnectAdminClientMetaAdsMutation,
   useGetAdminClientMetaAdsConnectionQuery,
+  useGetAdminClientMetaAdsSummaryQuery,
   useGetClientSummaryQuery,
   useResetClientOwnerPasswordMutation,
+  useSyncAdminClientMetaAdsMutation,
   useTestAdminClientMetaAdsConnectionMutation,
 } from "../features/clients/clientsApi";
 import type {
@@ -64,6 +66,7 @@ export function ClientDetail() {
     useConnectAdminClientMetaAdsManualMutation();
   const [testMetaAdsConnection, { isLoading: isMetaTesting }] =
     useTestAdminClientMetaAdsConnectionMutation();
+  const [syncMetaAds, { isLoading: isMetaSyncing }] = useSyncAdminClientMetaAdsMutation();
   const [disconnectMetaAds, { isLoading: isMetaDisconnecting }] =
     useDisconnectAdminClientMetaAdsMutation();
 
@@ -92,6 +95,15 @@ export function ClientDetail() {
     isLoading: isMetaAdsConnectionLoading,
     refetch: refetchMetaAdsConnection,
   } = useGetAdminClientMetaAdsConnectionQuery(clientProfileId ?? "", {
+    skip: !isValidId,
+  });
+  const {
+    data: metaAdsSummary,
+    error: metaAdsSummaryError,
+    isFetching: isMetaAdsSummaryFetching,
+    isLoading: isMetaAdsSummaryLoading,
+    refetch: refetchMetaAdsSummary,
+  } = useGetAdminClientMetaAdsSummaryQuery(clientProfileId ?? "", {
     skip: !isValidId,
   });
 
@@ -164,6 +176,7 @@ export function ClientDetail() {
 
   const { client, projects, tasks } = summary;
   const hasMetaConnectionError = Boolean(metaAdsConnectionError);
+  const hasMetaSummaryError = Boolean(metaAdsSummaryError);
 
   const handleManualMetaConnect = async () => {
     if (!clientProfileId) {
@@ -237,6 +250,24 @@ export function ClientDetail() {
     } catch (mutationError) {
       setMetaConnectionFeedback(
         extractApiErrorMessage(mutationError, "Meta bağlantısı kesilemedi."),
+      );
+    }
+  };
+
+  const handleMetaSync = async () => {
+    if (!clientProfileId) {
+      return;
+    }
+
+    setMetaConnectionFeedback(null);
+
+    try {
+      await syncMetaAds({ clientId: clientProfileId }).unwrap();
+      setMetaConnectionFeedback("Meta Ads senkronizasyonu tamamlandı.");
+      await Promise.all([refetchMetaAdsConnection(), refetchMetaAdsSummary()]);
+    } catch (mutationError) {
+      setMetaConnectionFeedback(
+        extractApiErrorMessage(mutationError, "Meta Ads senkronizasyonu çalıştırılamadı."),
       );
     }
   };
@@ -329,6 +360,9 @@ export function ClientDetail() {
             {isMetaAdsConnectionFetching && (
               <span className="text-xs text-[#d2ff8a]">Bağlantı güncelleniyor...</span>
             )}
+            {isMetaAdsSummaryFetching && (
+              <span className="text-xs text-[#d2ff8a]">Rapor özeti güncelleniyor...</span>
+            )}
             {metaAdsConnection ? (
               <Badge className={getMetaAdsConnectionStatusBadgeClass(metaAdsConnection.connectionStatus)}>
                 {getMetaAdsConnectionStatusLabel(metaAdsConnection.connectionStatus)}
@@ -339,7 +373,9 @@ export function ClientDetail() {
               variant="outline"
               size="sm"
               className="gap-2"
-              onClick={() => refetchMetaAdsConnection()}
+              onClick={() => {
+                void Promise.all([refetchMetaAdsConnection(), refetchMetaAdsSummary()]);
+              }}
             >
               <RefreshCw className="h-4 w-4" />
               Yenile
@@ -353,6 +389,14 @@ export function ClientDetail() {
         {hasMetaConnectionError ? (
           <p className="text-sm text-red-300">
             {extractApiErrorMessage(metaAdsConnectionError, "Meta bağlantı özeti alınamadı.")}
+          </p>
+        ) : null}
+        {isMetaAdsSummaryLoading ? (
+          <p className="mt-2 text-sm text-[#A0A0A0]">Meta Ads performans özeti yükleniyor...</p>
+        ) : null}
+        {hasMetaSummaryError ? (
+          <p className="mt-2 text-sm text-red-300">
+            {extractApiErrorMessage(metaAdsSummaryError, "Meta Ads performans özeti alınamadı.")}
           </p>
         ) : null}
 
@@ -379,6 +423,22 @@ export function ClientDetail() {
           </div>
         ) : null}
 
+        {metaAdsSummary ? (
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+            <DetailRow label="Toplam Harcama" value={`${metaAdsSummary.spend.toFixed(2)} TRY`} />
+            <DetailRow label="Toplam Gösterim" value={String(metaAdsSummary.impressions)} />
+            <DetailRow label="Toplam Tıklama" value={String(metaAdsSummary.clicks)} />
+            <DetailRow label="CTR" value={`${metaAdsSummary.ctr.toFixed(2)}%`} />
+            <DetailRow label="CPC" value={`${metaAdsSummary.cpc.toFixed(2)} TRY`} />
+            <DetailRow
+              label="ROAS"
+              value={
+                typeof metaAdsSummary.roas === "number" ? `${metaAdsSummary.roas.toFixed(2)}x` : "—"
+              }
+            />
+          </div>
+        ) : null}
+
         <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
           <Input
             value={metaAdAccountId}
@@ -401,7 +461,7 @@ export function ClientDetail() {
             type="button"
             className="gap-2"
             onClick={handleManualMetaConnect}
-            disabled={isMetaConnecting || isMetaTesting || isMetaDisconnecting}
+            disabled={isMetaConnecting || isMetaTesting || isMetaSyncing || isMetaDisconnecting}
           >
             <PlugZap className="h-4 w-4" />
             {isMetaConnecting ? "Kaydediliyor..." : "Token Güncelle / Manual Connect"}
@@ -411,7 +471,7 @@ export function ClientDetail() {
             variant="outline"
             className="gap-2"
             onClick={handleMetaConnectionTest}
-            disabled={isMetaConnecting || isMetaTesting || isMetaDisconnecting}
+            disabled={isMetaConnecting || isMetaTesting || isMetaSyncing || isMetaDisconnecting}
           >
             <CheckCircle2 className="h-4 w-4" />
             {isMetaTesting ? "Test Ediliyor..." : "Meta Bağlantısını Test Et"}
@@ -419,9 +479,19 @@ export function ClientDetail() {
           <Button
             type="button"
             variant="outline"
+            className="gap-2"
+            onClick={handleMetaSync}
+            disabled={isMetaConnecting || isMetaTesting || isMetaSyncing || isMetaDisconnecting}
+          >
+            <RefreshCw className="h-4 w-4" />
+            {isMetaSyncing ? "Sync Çalışıyor..." : "Manual Sync"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
             className="gap-2 border-red-500/30 text-red-200 hover:bg-red-500/10"
             onClick={handleMetaDisconnect}
-            disabled={isMetaConnecting || isMetaTesting || isMetaDisconnecting}
+            disabled={isMetaConnecting || isMetaTesting || isMetaSyncing || isMetaDisconnecting}
           >
             <Link2Off className="h-4 w-4" />
             {isMetaDisconnecting ? "Kesiliyor..." : "Bağlantıyı Kes"}

@@ -3,7 +3,7 @@ import {
   LayoutDashboard, CheckSquare, Users, Calendar, Bell, Folder, Settings,
   FileText, ThumbsUp, UserCheck, FolderKanban, TrendingUp, Zap, Image,
   MessageSquare, BookOpen, Code, Bug, Rocket, Headphones, Wrench, Shield,
-  Search as SearchIcon, BarChart, Globe, Search, Plus, LogOut, LucideIcon,
+  Search as SearchIcon, BarChart, Globe, Search, Plus, LogOut, LucideIcon, Megaphone,
   PhoneCall
 } from "lucide-react";
 import { Input } from "../components/ui/input";
@@ -42,6 +42,7 @@ const roleMenus: Record<EmployeePanelRole, SidebarItem[]> = {
   ],
   "performance-specialist": [
     { path: "/employee/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { path: "/employee/meta-ads", label: "Meta Ads Workspace", icon: Megaphone },
     { path: "/employee/gorevlerim", label: "Görevlerim", icon: CheckSquare },
     { path: "/employee/kampanyalar", label: "Kampanyalar", icon: TrendingUp },
     { path: "/employee/optimizasyonlar", label: "Optimizasyonlar", icon: Zap },
@@ -56,6 +57,7 @@ const roleMenus: Record<EmployeePanelRole, SidebarItem[]> = {
   ],
   "social-media-specialist": [
     { path: "/employee/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { path: "/employee/meta-ads", label: "Meta Ads Workspace", icon: Megaphone },
     { path: "/employee/gorevlerim", label: "Görevlerim", icon: CheckSquare },
     { path: "/employee/icerik-takvimi", label: "İçerik Takvimi", icon: Calendar },
     { path: "/employee/captionlar", label: "Captionlar", icon: FileText },
@@ -71,6 +73,7 @@ const roleMenus: Record<EmployeePanelRole, SidebarItem[]> = {
   ],
   designer: [
     { path: "/employee/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { path: "/employee/meta-ads", label: "Meta Ads Workspace", icon: Megaphone },
     { path: "/employee/gorevlerim", label: "Görevlerim", icon: CheckSquare },
     { path: "/employee/kreatifler", label: "Kreatifler", icon: Image },
     { path: "/employee/ui-tasarimlar", label: "UI Tasarımlar", icon: LayoutDashboard },
