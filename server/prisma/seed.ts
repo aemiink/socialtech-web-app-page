@@ -708,6 +708,10 @@ const PERMISSIONS: PermissionSeed[] = [
   { slug: "crm.leads.convert", description: "Convert CRM leads to client profiles." },
   { slug: "crm.leadScan.read", description: "Read CRM lead scan logs." },
   { slug: "crm.leadScan.run", description: "Run CRM lead scans." },
+  { slug: "metaAds.config.read.any", description: "Read all Meta Ads configurations." },
+  { slug: "metaAds.config.manage.any", description: "Create and manage all Meta Ads configurations." },
+  { slug: "metaAds.config.read.assigned", description: "Read Meta Ads configurations in assigned scope." },
+  { slug: "metaAds.config.read.own", description: "Read own Meta Ads configuration." },
   { slug: "delivery.sprints.read.assigned", description: "Read delivery sprints in assigned scope." },
   { slug: "delivery.sprints.manage.assigned", description: "Manage delivery sprints in assigned scope." },
   { slug: "delivery.sprints.manage.any", description: "Manage all delivery sprints." },
@@ -737,6 +741,7 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
   PROJECT_MANAGER: [
     "dashboard.read",
     "clients.read.assigned",
+    "metaAds.config.read.assigned",
     "projects.read.assigned",
     "projects.manage.assigned",
     "tasks.read.assigned",
@@ -767,6 +772,7 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
   PERFORMANCE_SPECIALIST: [
     "dashboard.read",
     "clients.read.assigned",
+    "metaAds.config.read.assigned",
     "projects.read.assigned",
     "tasks.read.assigned",
     "tasks.update.assigned",
@@ -786,6 +792,7 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
   SOCIAL_MEDIA_SPECIALIST: [
     "dashboard.read",
     "clients.read.assigned",
+    "metaAds.config.read.assigned",
     "projects.read.assigned",
     "tasks.read.assigned",
     "tasks.update.assigned",
@@ -886,6 +893,7 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
   CLIENT_OWNER: [
     "portal.read.own",
     "clients.read.own",
+    "metaAds.config.read.own",
     "projects.read.own",
     "tasks.read.own",
     "projects.files.read.own",
@@ -902,6 +910,7 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
   CLIENT_MEMBER: [
     "portal.read.own",
     "clients.read.own",
+    "metaAds.config.read.own",
     "projects.read.own",
     "tasks.read.own",
     "projects.files.read.own",

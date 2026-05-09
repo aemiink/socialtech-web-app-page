@@ -60,6 +60,14 @@ enum PurchasedServiceStatus {
   INACTIVE
 }
 
+enum MetaAdsConnectionStatus {
+  NOT_CONNECTED
+  PENDING
+  CONNECTED
+  ERROR
+  DISCONNECTED
+}
+
 enum EmployeeClientAssignmentScope {
   PROJECT
   PERFORMANCE
@@ -347,11 +355,51 @@ model ClientProfile {
   users               User[]
   employeeAssignments EmployeeClientAssignment[]
   purchasedServices   ClientPurchasedService[]
+  metaAdsConfig       ClientMetaAdsConfig?
+  metaAdsCredential   ClientMetaAdsCredential?
   projects            Project[]
   files               ProjectFile[]
   convertedCrmLeads   CrmLead[]                  @relation("CrmLeadConvertedClient")
 
   @@index([status])
+}
+
+model ClientMetaAdsConfig {
+  id                 String                  @id @default(uuid()) @db.Uuid
+  clientProfileId    String                  @unique @db.Uuid
+  businessId         String?
+  adAccountId        String?
+  pixelId            String?
+  instagramAccountId String?
+  facebookPageId     String?
+  currency           String?
+  timezone           String?
+  connectionStatus   MetaAdsConnectionStatus @default(NOT_CONNECTED)
+  lastSyncAt         DateTime?
+  syncError          String?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@index([connectionStatus])
+  @@index([lastSyncAt])
+}
+
+model ClientMetaAdsCredential {
+  id              String    @id @default(uuid()) @db.Uuid
+  clientProfileId String    @unique @db.Uuid
+  accessTokenEnc  String?
+  tokenHash       String?
+  tokenExpiresAt  DateTime?
+  grantedScopes   String[]  @default([])
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@index([tokenHash])
+  @@index([tokenExpiresAt])
 }
 
 model ClientPurchasedService {

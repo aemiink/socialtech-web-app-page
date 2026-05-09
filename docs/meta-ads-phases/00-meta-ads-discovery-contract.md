@@ -2,141 +2,200 @@
 
 # FAZ 0 — Meta Ads Discovery, Official Docs ve Technical Contract
 
+## Durum
+
+- Faz durumu: **Tamamlandı**
+- Tarih: **2026-05-09**
+- Sonuç: **Faz 1 implementation contract hazır**
+
 ## Amaç
 
-Meta Ads panelini geliştirmeye başlamadan önce official Meta Graph API / Marketing API dokümantasyonuna göre teknik contract’ı netleştirmek.
+Meta Ads entegrasyonu için implementation öncesinde, resmi Meta dokümantasyonuna ve mevcut repo mimarisine uyumlu net teknik kararları sabitlemek.
 
-Bu fazda kod yazımı minimum olmalı. Ana hedef:
+Bu fazda kod yazımı yerine contract netliği hedeflenmiştir:
 
-- Meta Ads için hangi veriler çekilecek?
-- Hangi Graph API / Marketing API endpointleri kullanılacak?
-- Hangi permission/scope gerekir?
-- Müşteri bazlı Meta Ads yapılandırması nasıl tutulacak?
-- Admin, employee ve client hangi veriyi görecek?
-- Mevcut mock tasarım hangi backend contract’a bağlanacak?
+- V1 scope (read-only vs manage) kararı
+- endpoint + field seti
+- permission + access-tier gereksinimi
+- token/auth stratejisi
+- role-scope matrisi
+- Faz 1’e giriş kriterleri
 
-## Mevcut Repo Bağlamı
+## Mevcut Repo Bağlamı (Doğrulandı)
 
-Mevcut sistemde:
+- `server/` NestJS + Prisma + RBAC.
+- `ClientPurchasedService.serviceKey` içinde `META_ADS` mevcut.
+- `Project.serviceKey` mevcut.
+- `clientPanel` sadece `ACTIVE` purchased service panellerini gösteriyor.
+- `clientPanel/src/app/pages/services/meta-ads-dashboard.tsx` hâlen mock ağırlıklı.
+- Admin/Employee tarafında RTK Query ve permission-based pattern hazır.
 
-- `server/` NestJS + Prisma + RBAC backend.
-- `adminandemployeePanel/` Admin Panel + Employee Panel.
-- `clientPanel/` müşteri portalı.
-- `ClientPurchasedService` modeli var.
-- Client Portal yalnızca satın alınmış ACTIVE hizmetleri gösteriyor.
-- `Project.serviceKey` var.
-- `clientPanel/src/app/pages/services/meta-ads-dashboard.tsx` mevcut.
-- Admin/Employee Panel RTK Query mimarisi var.
-- Platform integrations: Meta/TikTok/Amazon Ads roadmap’te planned.
+## İncelenen Resmi Kaynaklar
 
-## İncelenecek Resmi Kaynaklar
+> Not: Aşağıdaki kararlar bu kaynaklarla hizalanmıştır.
 
-Codex implementation öncesinde resmi Meta kaynaklarını incele:
+1. [Marketing API Overview](https://developers.facebook.com/docs/marketing-apis/overview/)  
+2. [Ads Insights API](https://developers.facebook.com/docs/marketing-api/insights/)  
+3. [Marketing API Authorization](https://developers.facebook.com/documentation/ads-commerce/marketing-api/get-started/authorization)  
+4. [Marketing API Rate Limiting](https://developers.facebook.com/documentation/ads-commerce/marketing-api/overview/rate-limiting)  
+5. [Facebook Login for Business](https://developers.facebook.com/docs/facebook-login/facebook-login-for-business/)  
+6. [Permissions Reference](https://developers.facebook.com/docs/permissions/)  
+7. [Ad Account reference](https://developers.facebook.com/documentation/ads-commerce/marketing-api/reference/ad-account)  
+8. [Ad Account -> Campaigns](https://developers.facebook.com/documentation/ads-commerce/marketing-api/reference/ad-account/campaigns)  
+9. [Ad Account -> Adsets](https://developers.facebook.com/documentation/ads-commerce/marketing-api/reference/ad-account/adsets)  
+10. [Ad Account -> Ads](https://developers.facebook.com/documentation/ads-commerce/marketing-api/reference/ad-account/ads)
 
-- Meta Marketing API Overview
-- Ads Insights API
-- Marketing API Authorization
-- Permissions Reference
-- Facebook Login for Business
-- Business Manager / Ad Account access model
-- App Review ve permission gereksinimleri
+## V1 Ürün Kapsam Kararı
 
-## İncelenecek Graph API Alanları
+**Meta Ads V1 = read-first operations (reporting + visibility).**
 
-### Ad Account
+- V1’de hedef: müşteriye performans görünürlüğü vermek ve ajans operasyonunu panelden izlemek.
+- V1’de **campaign create/update/pause** zorunlu kapsam değil.
+- V1’de kritik kapsam:
+  - account/config görünürlüğü
+  - campaign/adset/ad listeleri (read)
+  - insights metrikleri (snapshot ve rapor odaklı)
+  - connection status + last sync + user-safe error messaging
 
-- Ad Account ID
-- Business ID
-- Currency
-- Timezone
-- Account status
-- Account name
-- Funding/spend info, izin veriliyorsa
+## Meta API Contract (V1)
 
-### Campaign
+### 1) Çekilecek Kaynaklar
 
-- campaign id
-- name
-- objective
-- status
-- effective_status
-- start_time / stop_time
-- buying_type
-- budget summary
+- `/{ad-account-id}` (account metadata)
+- `/act_{ad_account_id}/campaigns`
+- `/act_{ad_account_id}/adsets`
+- `/act_{ad_account_id}/ads`
+- insights edge’leri:
+  - `/{ad-account-id}/insights`
+  - `/{campaign-id}/insights`
+  - `/{ad-set-id}/insights`
+  - `/{ad-id}/insights`
 
-### Ad Set
+### 2) Minimum Alan Seti
 
-- adset id
-- campaign id
-- name
-- optimization_goal
-- billing_event
-- daily_budget / lifetime_budget
-- targeting summary
-- status
-- effective_status
+#### Ad Account
 
-### Ad
+- `id`, `name`
+- `account_status`
+- `currency`
+- `timezone_name` (veya timezone alanları)
+- `business`
+- `amount_spent`, `spend_cap` (uygunsa)
 
-- ad id
-- adset id
-- campaign id
-- name
-- status
-- creative id
-- preview link / thumbnail, mümkünse
+#### Campaign
 
-### Insights
+- `id`, `name`
+- `objective`
+- `status`, `effective_status`
+- `start_time`, `stop_time`
+- `buying_type`
+- `daily_budget`, `lifetime_budget`
 
-Minimum V1 metrikleri:
+#### Ad Set
 
-- impressions
-- reach
-- spend
-- clicks
-- cpc
-- cpm
-- ctr
-- frequency
-- results / actions
-- cost_per_result / cost_per_action_type
-- leads / purchases / messages, campaign objective’e göre
-- ROAS, purchase value varsa
+- `id`, `campaign_id`, `name`
+- `optimization_goal`
+- `billing_event`
+- `daily_budget`, `lifetime_budget`
+- `targeting` (summary için gerekli alanlar)
+- `status`, `effective_status`
 
-## Çıktılar
+#### Ad
 
-Bu fazın sonunda şu contract net olmalı:
+- `id`, `campaign_id`, `adset_id`, `name`
+- `status`, `effective_status`
+- `creative`
+- preview için ayrı edge veya creative alanlarından türetim
 
-- Meta Ads için kullanılacak endpoint listesi.
-- Minimum permission listesi.
-- Token stratejisi.
-- Veri modelinin V1 kapsamı.
-- Client create/edit sırasında alınacak Meta Ads bilgileri.
-- Client Panel’de korunacak mock tasarım alanlarının API karşılığı.
-- Admin/Employee/Client role-scope matrisi.
+#### Insights (V1 minimum)
 
-## Codex Görevi
+- `impressions`, `reach`, `spend`
+- `clicks`, `cpc`, `cpm`, `ctr`, `frequency`
+- `actions`, `cost_per_action_type`
+- objective’e göre `leads`, `purchases`, `messages`
+- `purchase_roas` / `action_values` tabanlı ROAS ve value türetimi (varsa)
 
-Aynı repository context’i üzerinden devam et.
+### 3) Insights Query Standardı
 
-Bu fazda ana hedef kod yazmak değil, Meta Ads entegrasyonu için official docs ve mevcut repo mimarisi üzerinden teknik contract çıkarmaktır.
+- Varsayılan pencere: `date_preset` (örn. `last_7d`, `last_30d`)
+- Özel dönem: `time_range`
+- Granularity: `time_increment=1` (günlük trend)
+- Kırılımlar: `breakdowns`, gerektiğinde `action_breakdowns`
+- Büyük veri setlerinde: async insights (job-based)
 
-Şunları yap:
+## Permission & Erişim Kararları
 
-1. Mevcut `server/`, `adminandemployeePanel/`, `clientPanel/` yapısını incele.
-2. `ClientPurchasedService`, `Project.serviceKey`, auth/RBAC, RTK Query ve clientPanel service selection akışını kontrol et.
-3. Meta Ads için kullanılacak official Meta Marketing API / Graph API kaynaklarını incele.
-4. Meta Ads için V1 data contract önerisini çıkar.
-5. Admin, employee ve client için role-scope matrisi oluştur.
-6. Token/auth stratejisini V1 ve V2 olarak ayır.
-7. Faz 1 implementation için net teknik kararları yaz.
-8. Shared memory güncellemesi gerekiyorsa yalnızca ilgili notları ekle.
+### Minimum Permission Set (V1)
 
-## Kabul Kriterleri
+- `ads_read` (zorunlu, reporting/read için)
+- `ads_management` (V2 manage akışları için hazır tutulur)
+- `business_management` (Business Manager asset ilişkileri için V2/V1.5)
 
-- Official docs referansları okunmuş ve kararlar netleştirilmiş.
-- V1 read-only reporting mi yoksa campaign management mı yapılacak net.
-- Meta Ads panel data contract tanımlı.
-- Sensitive token stratejisi net.
-- Mevcut repo mimarisiyle çelişen karar yok.
-- Final response’ta “Faz 1 için implementation contract hazır mı?” sorusuna net cevap ver.
+### Permission Dependency Notları (Meta Permissions Reference)
+
+- `ads_read`: dependency yok
+- `ads_management`: `pages_read_engagement` + `pages_show_list` dependency
+- `business_management`: `pages_read_engagement` + `pages_show_list` dependency
+
+### Access Tier / Review Notları
+
+- Marketing API product ile default erişim: **Limited tier**
+- Canlı müşteri ölçeği için hedef: **Full access** (App Review sonrası)
+- Limited tier yüksek trafik için yeterli değil; prod için Full Access planlanmalı.
+
+## Token/Auth Stratejisi
+
+### V1 (önerilen)
+
+- Facebook Login for Business (`config_id`) ile onboarding.
+- Backend server-to-server code exchange pattern.
+- İlk sürümde read odaklı; tokenlar kesinlikle encrypted saklanır.
+- Tokenlar response’a dönmez, loglara yazılmaz.
+
+### V2
+
+- Business Integration System User token (daha stabil otomasyon akışları).
+- Sync ve scheduled pull operasyonları için system-user ağırlıklı model.
+- Manage (campaign mutation) açıldığında permission ve review kapsamı genişletilir.
+
+## Role-Scope Matrisi (Repo RBAC ile hizalı)
+
+| Rol | Meta Ads Config | Meta Ads Reporting | Meta Ads Manage |
+|---|---|---|---|
+| Admin | any read/write | any read | V2’de açılabilir |
+| Project Manager | assigned read | assigned read | V1’de yok |
+| Performance Specialist | assigned read | assigned read | V1’de yok |
+| Social Media Specialist | assigned read | assigned read | V1’de yok |
+| Client | own summary only | own summary only | yok |
+
+## Client Panel Mock -> API Eşleme
+
+`clientPanel/src/app/pages/services/meta-ads-dashboard.tsx` içindeki ana bloklar için API karşılığı:
+
+- KPI kartları: insights aggregate (`spend`, `ctr`, `cpc`, `reach`, `actions`)
+- Trend chart: `time_increment=1` insights serisi
+- Campaign listesi: `/act_{id}/campaigns` + campaign-level insights
+- Funnel/kreatif bölümü: campaign/adset/ad + breakdown summary
+- “Pixel & Event” alanı: V1’de “sınırlı görünürlük”, V2’de geniş takip
+
+## Faz 1 İçin Net Teknik Kararlar
+
+1. `META_ADS` serviceKey mevcut mimariyle devam edecek; yeni service namespace açılmayacak.
+2. Modelleme pattern’i `ClientMetaAdsConfig + ClientMetaAdsCredential` olarak ayrık olacak.
+3. Token lifecycle backend-only olacak; frontend write-only davranacak.
+4. V1’de read/reporting öncelikli gidilecek; mutation akışları Faz 2+.
+5. Client endpointleri `clientId` almayacak; `currentUser.clientProfileId` resolve edilecek.
+6. Employee görünürlüğü assignment-scope ile sınırlandırılacak.
+
+## Faz 1’e Giriş Kriteri (Go/No-Go)
+
+- [x] Endpoint ve field contract net
+- [x] Minimum permission set net
+- [x] Access tier riski net
+- [x] Token stratejisi (V1/V2) net
+- [x] Role-scope matrisi net
+- [x] Repo mimarisiyle çelişen karar yok
+
+## Faz 1 için implementation contract hazır mı?
+
+**Evet, hazır.**

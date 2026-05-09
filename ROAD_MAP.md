@@ -138,6 +138,8 @@
 - Revizyonlar sekmesi hibrit model (WEB_APP workspace + non-WEB task) üretim akışı
 - Client revision create + approve/reject lifecycle (WEB_APP) ve PM transition matrix uyumu
 - Workspace revision authz e2e coverage (`server/test/web-app-workspace-revisions-authz.e2e-spec.ts`)
+- Meta Ads Faz 0 discovery contract (official docs alignment + V1 read-first scope + permission/token strategy)
+- Meta Ads Faz 1 backend foundation (Prisma model + authz API + e2e coverage)
 
 ## Blocked
 

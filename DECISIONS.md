@@ -1892,3 +1892,57 @@ Affected files:
 - `clientPanel/src/app/features/webAppWorkspace/webAppWorkspaceApi.ts`
 - `clientPanel/src/app/pages/service-tab-page.tsx`
 - `clientPanel/src/app/pages/__tests__/service-tab-page.webapp.test.tsx`
+
+---
+
+## 2026-05-09 - Meta Ads Faz 0 Discovery Contract (Read-First V1)
+
+Context:
+Meta Ads entegrasyonu roadmap’te planlıydı ancak implementation öncesi scope, permission, token ve erişim modeli netleşmeden backend/frontend geliştirmeye geçmek regresyon ve tekrar iş riski oluşturuyordu.
+
+Decision:
+`docs/meta-ads-phases/00-meta-ads-discovery-contract.md` dosyasında Faz 0 tamamlandı ve V1 teknik contract sabitlendi.
+
+- V1 kapsamı read-first (reporting + visibility), campaign mutation akışları Faz 2+.
+- Minimum permission set `ads_read`; `ads_management` ve `business_management` staged.
+- Auth/token yaklaşımı V1 için Facebook Login for Business + backend-side exchange + encrypted storage; V2’de system user token yönü.
+- Role-scope matrisi mevcut repo RBAC ile hizalı şekilde belirlendi.
+- Faz 1’e geçiş için go/no-go checklist tamamlandı.
+
+Reason:
+Kod geliştirmesi başlamadan sınırları netleştirmek, yanlış permission/tier varsayımlarını erken kapatmak ve backend DTO/service contract’ını tek bir referans dokümandan yönetmek.
+
+Affected files:
+- `docs/meta-ads-phases/00-meta-ads-discovery-contract.md`
+
+---
+
+## 2026-05-09 - Meta Ads Faz 1 Backend Foundation (Config + Authz Endpoints)
+
+Context:
+Meta Ads Faz 0’da V1 read-first contract netleştirildikten sonra, frontend entegrasyonundan önce backend tarafında müşteri-bazlı config modeli, güvenli credential ayrımı ve authz kontrollü API temelinin tamamlanması gerekiyordu.
+
+Decision:
+Meta Ads backend foundation aşağıdaki sınırla tamamlandı:
+
+- Prisma’ya `MetaAdsConnectionStatus`, `ClientMetaAdsConfig`, `ClientMetaAdsCredential` eklendi.
+- Config ve credential, `ClientProfile` ile 1:1 ilişkide ayrık tutuldu.
+- `server/src/meta-ads/*` modülü eklendi:
+  - `GET /api/v1/admin/clients/:clientId/meta-ads/config`
+  - `PATCH /api/v1/admin/clients/:clientId/meta-ads/config`
+  - `GET /api/v1/meta-ads/clients/:clientId/config` (assigned employee read)
+  - `GET /api/v1/clients/me/meta-ads/config`
+- Permission seti ve role mapping’e `metaAds.config.*` slugları eklendi.
+- PATCH akışında `META_ADS` purchased service `ACTIVE` değilse update fail-closed (`400`) davranışı benimsendi.
+- Response contract summary-only tutuldu; credential/token alanları API response’a hiç dahil edilmedi.
+
+Reason:
+Bu yaklaşım, Faz 2 token/auth bağlantı işlerine geçmeden önce veri modeli + erişim sınırları + endpoint kontratını güvenli ve test edilebilir şekilde sabitleyerek entegrasyon riskini düşürür.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260509123000_add_client_meta_ads_foundation/migration.sql`
+- `server/prisma/seed.ts`
+- `server/src/meta-ads/*`
+- `server/src/app.module.ts`
+- `server/test/meta-ads-authz.e2e-spec.ts`
