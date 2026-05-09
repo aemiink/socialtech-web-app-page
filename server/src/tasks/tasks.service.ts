@@ -205,6 +205,7 @@ const TASK_TODOS_MANAGE_ASSIGNED_PERMISSION = "tasks.todos.manage.assigned";
 const TASK_UPDATE_ASSIGNED_PERMISSION = "tasks.update.assigned";
 const TASK_UPDATE_OWN_FALLBACK_PERMISSION = "tasks.update.own";
 const APPROVAL_RESPOND_OWN_PERMISSION = "approvals.respond.own";
+const META_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION = "metaAds.approvals.create.assigned";
 
 @Injectable()
 export class TasksService {
@@ -268,6 +269,7 @@ export class TasksService {
     await this.assertAssigneeIsValidForProject(dto.assigneeUserId, project.clientProfileId);
     await this.assertSprintBelongsToProject(dto.sprintId, project.id);
     await this.assertReferenceProjectFileBelongsToProject(dto.referenceProjectFileId, project.id);
+    this.assertCanCreateMetaAdsApprovalTask(currentUser, project, dto);
     const generatedCode = dto.code?.trim() || (await this.generateTaskCode(dto.type ?? TaskType.FEATURE));
     const approvalStatus =
       dto.approvalStatus ?? (dto.approvalRequired ? MetaAdsApprovalStatus.PENDING : null);
@@ -784,23 +786,62 @@ export class TasksService {
           serviceKey: PurchasedServiceKey.META_ADS,
         },
       },
-      select: { id: true },
+      select: {
+        id: true,
+        projectId: true,
+        title: true,
+        priority: true,
+        workstream: true,
+        assigneeUserId: true,
+        campaignRef: true,
+        adSetRef: true,
+        adRef: true,
+      },
     });
 
     if (!task) {
       throw new NotFoundException("Task not found.");
     }
 
-    const updatedTask = await this.prisma.task.update({
-      where: { id: task.id },
-      data: {
-        approvalStatus,
-        approvalResponseNote: dto.approvalResponseNote ?? null,
-        approvalRespondedAt: new Date(),
-        approvalRespondedBy: { connect: { id: currentUser.id } },
-        status: this.resolveTaskStatusFromClientApproval(approvalStatus),
-      },
-      select: taskReadSelect,
+    const updatedTask = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.task.update({
+        where: { id: task.id },
+        data: {
+          approvalStatus,
+          approvalResponseNote: dto.approvalResponseNote ?? null,
+          approvalRespondedAt: new Date(),
+          approvalRespondedBy: { connect: { id: currentUser.id } },
+          status: this.resolveTaskStatusFromClientApproval(approvalStatus),
+        },
+        select: taskReadSelect,
+      });
+
+      if (approvalStatus === MetaAdsApprovalStatus.CHANGES_REQUESTED || approvalStatus === MetaAdsApprovalStatus.REJECTED) {
+        await tx.task.create({
+          data: {
+            projectId: task.projectId,
+            title: this.buildMetaAdsRevisionTaskTitle(task.title),
+            description: this.buildMetaAdsRevisionTaskDescription(dto.approvalResponseNote),
+            status: TaskStatus.TODO,
+            priority: task.priority,
+            type: TaskType.REVISION,
+            workstream: task.workstream,
+            assigneeUserId: task.assigneeUserId,
+            approvalRequired: false,
+            approvalType: null,
+            approvalStatus: null,
+            approvalContext: {
+              sourceApprovalTaskId: task.id,
+              sourceApprovalStatus: approvalStatus,
+            },
+            campaignRef: task.campaignRef,
+            adSetRef: task.adSetRef,
+            adRef: task.adRef,
+          },
+        });
+      }
+
+      return updated;
     });
 
     return this.toTaskResponse(updatedTask, currentUser);
@@ -1374,6 +1415,26 @@ export class TasksService {
     this.assertHasPermission(currentUser, TASK_ASSIGN_ASSIGNED_PERMISSION);
   }
 
+  private assertCanCreateMetaAdsApprovalTask(
+    currentUser: AuthenticatedUser,
+    project: ProjectAssignmentContext,
+    dto: CreateTaskDto,
+  ): void {
+    if (project.serviceKey !== PurchasedServiceKey.META_ADS || !dto.approvalRequired) {
+      return;
+    }
+
+    if (!this.isEmployee(currentUser)) {
+      return;
+    }
+
+    if (!currentUser.permissions.includes(META_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION)) {
+      throw new ForbiddenException(
+        `Missing required permission: ${META_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION}.`,
+      );
+    }
+  }
+
   private async assertCanManageTaskTodoScope(
     currentUser: AuthenticatedUser,
     taskId: string,
@@ -1549,6 +1610,24 @@ export class TasksService {
     }
 
     return currentUser.clientProfileId;
+  }
+
+  private buildMetaAdsRevisionTaskTitle(sourceTitle: string): string {
+    const normalized = sourceTitle.trim();
+    if (!normalized) {
+      return "Meta Ads Revizyon Takibi";
+    }
+
+    return `Revizyon: ${normalized}`;
+  }
+
+  private buildMetaAdsRevisionTaskDescription(approvalResponseNote: string | null | undefined): string {
+    const note = approvalResponseNote?.trim();
+    if (note && note.length > 0) {
+      return `Müşteri revizyon notu: ${note}`;
+    }
+
+    return "Müşteri revizyon talebi sonrası otomatik oluşturulan takip görevi.";
   }
 
   private assertCanRespondOwnApprovals(currentUser: AuthenticatedUser): void {

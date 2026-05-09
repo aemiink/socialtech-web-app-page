@@ -15,11 +15,14 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { ConnectManualMetaAdsDto } from "./dto/connect-manual-meta-ads.dto";
+import { CreateMetaAdsReportDto } from "./dto/create-meta-ads-report.dto";
 import { MetaAdsCampaignsQueryDto } from "./dto/meta-ads-campaigns-query.dto";
 import { MetaAdsDateRangeQueryDto } from "./dto/meta-ads-date-range-query.dto";
 import { MetaAdsInsightsQueryDto } from "./dto/meta-ads-insights-query.dto";
+import { MetaAdsReportsQueryDto } from "./dto/meta-ads-reports-query.dto";
 import { MetaAdsSyncLogsQueryDto } from "./dto/meta-ads-sync-logs-query.dto";
 import { TestMetaAdsConnectionDto } from "./dto/test-meta-ads-connection.dto";
+import { UpdateMetaAdsReportDto } from "./dto/update-meta-ads-report.dto";
 import { UpdateMetaAdsConfigDto } from "./dto/update-meta-ads-config.dto";
 import { MetaAdsService } from "./meta-ads.service";
 
@@ -182,6 +185,36 @@ export class MetaAdsController {
     return this.metaAdsService.retryAdminClientInsights(currentUser, clientId, query);
   }
 
+  @Get("admin/clients/:clientId/meta-ads/reports")
+  @RequirePermissions("reports.read")
+  getAdminClientMetaAdsReports(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: MetaAdsReportsQueryDto,
+  ) {
+    return this.metaAdsService.getAdminClientReports(currentUser, clientId, query);
+  }
+
+  @Post("admin/clients/:clientId/meta-ads/reports")
+  @RequirePermissions("reports.manage")
+  createAdminClientMetaAdsReport(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Body() dto: CreateMetaAdsReportDto,
+  ) {
+    return this.metaAdsService.createAdminClientReport(currentUser, clientId, dto);
+  }
+
+  @Patch("admin/meta-ads/reports/:reportId")
+  @RequirePermissions("reports.manage")
+  updateAdminMetaAdsReport(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("reportId", ParseUUIDPipe) reportId: string,
+    @Body() dto: UpdateMetaAdsReportDto,
+  ) {
+    return this.metaAdsService.updateAdminReport(currentUser, reportId, dto);
+  }
+
   @Get("meta-ads/clients/:clientId/config")
   @RequirePermissions("metaAds.config.read.assigned")
   getAssignedClientMetaAdsConfig(
@@ -251,13 +284,43 @@ export class MetaAdsController {
   }
 
   @Post("meta-ads/clients/:clientId/sync")
-  @RequirePermissions("metaAds.config.read.assigned")
+  @RequirePermissions("metaAds.config.read.assigned", "metaAds.sync.read.assigned")
   syncAssignedClientMetaAdsInsights(
     @CurrentUser() currentUser: AuthenticatedUser,
     @Param("clientId", ParseUUIDPipe) clientId: string,
     @Query() query: MetaAdsDateRangeQueryDto,
   ) {
     return this.metaAdsService.syncAssignedClientInsights(currentUser, clientId, query);
+  }
+
+  @Get("meta-ads/clients/:clientId/reports")
+  @RequirePermissions("metaAds.config.read.assigned", "metaAds.reporting.read.assigned")
+  getAssignedClientMetaAdsReports(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: MetaAdsReportsQueryDto,
+  ) {
+    return this.metaAdsService.getAssignedClientReports(currentUser, clientId, query);
+  }
+
+  @Post("meta-ads/clients/:clientId/reports")
+  @RequirePermissions("metaAds.config.read.assigned", "metaAds.notes.manage.assigned")
+  createAssignedClientMetaAdsReport(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Body() dto: CreateMetaAdsReportDto,
+  ) {
+    return this.metaAdsService.createAssignedClientReport(currentUser, clientId, dto);
+  }
+
+  @Patch("meta-ads/reports/:reportId")
+  @RequirePermissions("metaAds.config.read.assigned", "metaAds.notes.manage.assigned")
+  updateAssignedMetaAdsReport(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("reportId", ParseUUIDPipe) reportId: string,
+    @Body() dto: UpdateMetaAdsReportDto,
+  ) {
+    return this.metaAdsService.updateAssignedReport(currentUser, reportId, dto);
   }
 
   @Get("clients/me/meta-ads/config")
@@ -324,5 +387,14 @@ export class MetaAdsController {
     @Query() query: MetaAdsDateRangeQueryDto,
   ) {
     return this.metaAdsService.syncOwnClientInsights(currentUser, query);
+  }
+
+  @Get("clients/me/meta-ads/reports")
+  @RequirePermissions("metaAds.config.read.own", "reports.read.own")
+  getOwnClientMetaAdsReports(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Query() query: MetaAdsReportsQueryDto,
+  ) {
+    return this.metaAdsService.getOwnClientReports(currentUser, query);
   }
 }

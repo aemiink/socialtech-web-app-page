@@ -10,6 +10,7 @@ import {
   MetaAdsApprovalStatus,
   Prisma,
   ProjectFileVisibility,
+  PurchasedServiceKey,
   UserRole,
 } from "@prisma/client";
 import { randomBytes, randomUUID, createHash } from "crypto";
@@ -31,6 +32,7 @@ const MANAGE_ASSIGNED_PERMISSION = "projects.files.manage.assigned";
 const READ_ASSIGNED_PERMISSION = "projects.files.read.assigned";
 const SHARE_ASSIGNED_PERMISSION = "projects.files.share.assigned";
 const READ_OWN_PERMISSION = "projects.files.read.own";
+const META_ADS_CREATIVES_MANAGE_ASSIGNED_PERMISSION = "metaAds.creatives.manage.assigned";
 
 const projectFileReadSelect = {
   id: true,
@@ -114,7 +116,7 @@ export class ProjectFilesService {
     dto: CreateUploadSignatureDto,
   ) {
     const project = await this.assertReadableProject(currentUser, projectId);
-    await this.assertCanManageFiles(currentUser, project.id, project.clientProfileId);
+    await this.assertCanManageFiles(currentUser, project.id, project.clientProfileId, project.serviceKey);
     this.assertFileSizeLimit(dto.bytes);
     this.assertFolderSelectionRequired(dto.folderId);
     const overwrite = Boolean(dto.overwrite && dto.overwriteFileId);
@@ -164,7 +166,7 @@ export class ProjectFilesService {
     dto: CompleteUploadDto,
   ) {
     const project = await this.assertReadableProject(currentUser, projectId);
-    await this.assertCanManageFiles(currentUser, project.id, project.clientProfileId);
+    await this.assertCanManageFiles(currentUser, project.id, project.clientProfileId, project.serviceKey);
     this.assertFileSizeLimit(dto.bytes);
     this.assertFolderSelectionRequired(dto.folderId);
 
@@ -347,7 +349,7 @@ export class ProjectFilesService {
 
   async getFolderAssignees(currentUser: AuthenticatedUser, projectId: string, folderId: string) {
     const project = await this.assertReadableProject(currentUser, projectId);
-    await this.assertCanManageFiles(currentUser, project.id, project.clientProfileId);
+    await this.assertCanManageFiles(currentUser, project.id, project.clientProfileId, project.serviceKey);
     await this.assertFolder(project.id, folderId);
 
     const assignableUsers = await this.getAssignableEmployees(project.clientProfileId);
@@ -373,7 +375,7 @@ export class ProjectFilesService {
     dto: UpdateProjectFileFolderAssigneesDto,
   ) {
     const project = await this.assertReadableProject(currentUser, projectId);
-    await this.assertCanManageFiles(currentUser, project.id, project.clientProfileId);
+    await this.assertCanManageFiles(currentUser, project.id, project.clientProfileId, project.serviceKey);
     await this.assertFolder(project.id, folderId);
 
     const nextUserIds = Array.from(new Set(dto.userIds ?? []));
@@ -411,7 +413,7 @@ export class ProjectFilesService {
     dto: CreateProjectFileFolderDto,
   ) {
     const project = await this.assertReadableProject(currentUser, projectId);
-    await this.assertCanManageFiles(currentUser, project.id, project.clientProfileId);
+    await this.assertCanManageFiles(currentUser, project.id, project.clientProfileId, project.serviceKey);
 
     const normalizedName = dto.name.trim();
     if (!normalizedName) {
@@ -452,7 +454,7 @@ export class ProjectFilesService {
     dto: UpdateProjectFileFolderDto,
   ) {
     const project = await this.assertReadableProject(currentUser, projectId);
-    await this.assertCanManageFiles(currentUser, project.id, project.clientProfileId);
+    await this.assertCanManageFiles(currentUser, project.id, project.clientProfileId, project.serviceKey);
 
     if (dto.folderId) {
       await this.assertFolder(project.id, dto.folderId);
@@ -475,7 +477,7 @@ export class ProjectFilesService {
 
   async deleteProjectFile(currentUser: AuthenticatedUser, projectId: string, fileId: string) {
     const project = await this.assertReadableProject(currentUser, projectId);
-    await this.assertCanManageFiles(currentUser, project.id, project.clientProfileId);
+    await this.assertCanManageFiles(currentUser, project.id, project.clientProfileId, project.serviceKey);
     const file = await this.prisma.projectFile.findFirst({
       where: { id: fileId, projectId: project.id },
       select: { id: true, publicId: true, resourceType: true },
@@ -496,7 +498,7 @@ export class ProjectFilesService {
     dto: CreateProjectFileShareLinkDto,
   ) {
     const project = await this.assertReadableProject(currentUser, projectId);
-    await this.assertCanShareFiles(currentUser, project.id, project.clientProfileId);
+    await this.assertCanShareFiles(currentUser, project.id, project.clientProfileId, project.serviceKey);
     const file = await this.prisma.projectFile.findFirst({
       where: { id: fileId, projectId: project.id },
       select: { id: true },
@@ -539,7 +541,7 @@ export class ProjectFilesService {
     query: ProjectFileShareLinkQueryDto,
   ) {
     const project = await this.assertReadableProject(currentUser, projectId);
-    await this.assertCanShareFiles(currentUser, project.id, project.clientProfileId);
+    await this.assertCanShareFiles(currentUser, project.id, project.clientProfileId, project.serviceKey);
 
     return this.prisma.projectFileShareLink.findMany({
       where: {
@@ -571,7 +573,7 @@ export class ProjectFilesService {
     shareId: string,
   ) {
     const project = await this.assertReadableProject(currentUser, projectId);
-    await this.assertCanShareFiles(currentUser, project.id, project.clientProfileId);
+    await this.assertCanShareFiles(currentUser, project.id, project.clientProfileId, project.serviceKey);
     const share = await this.prisma.projectFileShareLink.findFirst({
       where: {
         id: shareId,
@@ -685,6 +687,7 @@ export class ProjectFilesService {
     currentUser: AuthenticatedUser,
     projectId: string,
     clientProfileId: string,
+    projectServiceKey: PurchasedServiceKey | null,
   ) {
     if (currentUser.accountType === AccountType.ADMIN && currentUser.role === UserRole.ADMIN) {
       return;
@@ -705,6 +708,15 @@ export class ProjectFilesService {
     if (!this.hasPermission(currentUser, [MANAGE_ASSIGNED_PERMISSION])) {
       throw new ForbiddenException("Missing required project file permissions.");
     }
+
+    if (
+      currentUser.accountType === AccountType.EMPLOYEE &&
+      projectServiceKey === PurchasedServiceKey.META_ADS &&
+      !this.hasPermission(currentUser, [META_ADS_CREATIVES_MANAGE_ASSIGNED_PERMISSION])
+    ) {
+      throw new ForbiddenException("Missing required Meta Ads creative permissions.");
+    }
+
     if (currentUser.accountType === AccountType.ADMIN) {
       return;
     }
@@ -728,8 +740,9 @@ export class ProjectFilesService {
     currentUser: AuthenticatedUser,
     projectId: string,
     clientProfileId: string,
+    projectServiceKey: PurchasedServiceKey | null,
   ) {
-    await this.assertCanManageFiles(currentUser, projectId, clientProfileId);
+    await this.assertCanManageFiles(currentUser, projectId, clientProfileId, projectServiceKey);
     if (!this.hasPermission(currentUser, [SHARE_ASSIGNED_PERMISSION, MANAGE_ANY_PERMISSION])) {
       throw new ForbiddenException("Missing required project file share permissions.");
     }

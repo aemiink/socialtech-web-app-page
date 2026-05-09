@@ -1,8 +1,11 @@
 import {
   AccountType,
   DeliveryReleaseApprovalStatus,
+  MetaAdsApprovalType,
   MetaAdsApprovalStatus,
   MetaAdsInsightLevel,
+  MetaAdsReportStatus,
+  MetaAdsReportType,
   MetaAdsConnectionStatus,
   MetaAdsSyncStatus,
   Prisma,
@@ -23,11 +26,14 @@ import { ConfigService } from "@nestjs/config";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { PrismaService } from "../database/prisma.service";
 import { ConnectManualMetaAdsDto } from "./dto/connect-manual-meta-ads.dto";
+import { CreateMetaAdsReportDto } from "./dto/create-meta-ads-report.dto";
 import { MetaAdsCampaignsQueryDto } from "./dto/meta-ads-campaigns-query.dto";
 import { MetaAdsDateRangeQueryDto } from "./dto/meta-ads-date-range-query.dto";
 import { MetaAdsInsightsQueryDto } from "./dto/meta-ads-insights-query.dto";
+import { MetaAdsReportsQueryDto } from "./dto/meta-ads-reports-query.dto";
 import { MetaAdsSyncLogsQueryDto } from "./dto/meta-ads-sync-logs-query.dto";
 import { TestMetaAdsConnectionDto } from "./dto/test-meta-ads-connection.dto";
+import { UpdateMetaAdsReportDto } from "./dto/update-meta-ads-report.dto";
 import { UpdateMetaAdsConfigDto } from "./dto/update-meta-ads-config.dto";
 import {
   MetaAdsApiActionMetric,
@@ -43,6 +49,13 @@ const META_ADS_CONFIG_READ_ANY_PERMISSION = "metaAds.config.read.any";
 const META_ADS_CONFIG_MANAGE_ANY_PERMISSION = "metaAds.config.manage.any";
 const META_ADS_CONFIG_READ_ASSIGNED_PERMISSION = "metaAds.config.read.assigned";
 const META_ADS_CONFIG_READ_OWN_PERMISSION = "metaAds.config.read.own";
+const META_ADS_REPORTING_READ_ASSIGNED_PERMISSION = "metaAds.reporting.read.assigned";
+const META_ADS_NOTES_MANAGE_ASSIGNED_PERMISSION = "metaAds.notes.manage.assigned";
+const META_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION = "metaAds.approvals.create.assigned";
+const META_ADS_SYNC_READ_ASSIGNED_PERMISSION = "metaAds.sync.read.assigned";
+const REPORTS_READ_PERMISSION = "reports.read";
+const REPORTS_MANAGE_PERMISSION = "reports.manage";
+const REPORTS_READ_OWN_PERMISSION = "reports.read.own";
 const DEFAULT_META_ADS_REQUIRED_SCOPES = ["ads_read"] as const;
 const DEFAULT_REPORTING_RANGE_DAYS = 7;
 const MAX_REPORTING_RANGE_DAYS = 90;
@@ -123,6 +136,38 @@ const metaAdsSyncLogSelect = {
   createdAt: true,
 } satisfies Prisma.MetaAdsSyncLogSelect;
 
+const metaAdsReportSelect = {
+  id: true,
+  clientProfileId: true,
+  projectId: true,
+  periodStart: true,
+  periodEnd: true,
+  type: true,
+  status: true,
+  summary: true,
+  metricsSnapshot: true,
+  clientVisible: true,
+  publishedAt: true,
+  acknowledgementRequestedAt: true,
+  acknowledgedAt: true,
+  createdAt: true,
+  updatedAt: true,
+  project: {
+    select: {
+      id: true,
+      name: true,
+    },
+  },
+  acknowledgementTask: {
+    select: {
+      id: true,
+      approvalStatus: true,
+      status: true,
+      updatedAt: true,
+    },
+  },
+} satisfies Prisma.MetaAdsReportSelect;
+
 type AdminMetaAdsConfigModel = Prisma.ClientMetaAdsConfigGetPayload<{
   select: typeof adminMetaAdsConfigSelect;
 }>;
@@ -137,6 +182,10 @@ type MetaAdsCredentialSummaryModel = Prisma.ClientMetaAdsCredentialGetPayload<{
 
 type MetaAdsDailyInsightModel = Prisma.MetaAdsDailyInsightGetPayload<{
   select: typeof metaAdsDailyInsightSelect;
+}>;
+
+type MetaAdsReportModel = Prisma.MetaAdsReportGetPayload<{
+  select: typeof metaAdsReportSelect;
 }>;
 
 type MetaAdsConfigPatchData = {
@@ -409,6 +458,44 @@ type AdminMetaAdsClientListResponse = {
     connected: number;
     error: number;
     pendingApprovals: number;
+  };
+};
+
+type MetaAdsReportAcknowledgementStatus =
+  | "NOT_REQUESTED"
+  | "PENDING"
+  | "ACKNOWLEDGED"
+  | "CHANGES_REQUESTED";
+
+type MetaAdsReportItem = {
+  id: string;
+  clientProfileId: string;
+  projectId: string | null;
+  projectName: string | null;
+  periodStart: string;
+  periodEnd: string;
+  type: MetaAdsReportType;
+  status: MetaAdsReportStatus;
+  summary: string | null;
+  metricsSnapshot: Prisma.JsonValue | null;
+  clientVisible: boolean;
+  publishedAt: string | null;
+  acknowledgementRequestedAt: string | null;
+  acknowledgedAt: string | null;
+  acknowledgementStatus: MetaAdsReportAcknowledgementStatus;
+  acknowledgementTaskId: string | null;
+  acknowledgementTaskUpdatedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type MetaAdsReportsResponse = {
+  data: MetaAdsReportItem[];
+  meta: {
+    total: number;
+    draft: number;
+    published: number;
+    clientVisible: number;
   };
 };
 
@@ -1124,6 +1211,7 @@ export class MetaAdsService {
     return this.syncInsightsByClientProfileId(clientProfileId, query, {
       trigger: "MANUAL_SYNC",
       applySyncTtl: false,
+      revealDetailedError: true,
     });
   }
 
@@ -1139,6 +1227,7 @@ export class MetaAdsService {
     return this.syncInsightsByClientProfileId(clientProfileId, query, {
       trigger: "ERROR_RETRY",
       applySyncTtl: false,
+      revealDetailedError: true,
     });
   }
 
@@ -1219,12 +1308,14 @@ export class MetaAdsService {
     query: MetaAdsDateRangeQueryDto,
   ): Promise<MetaAdsSyncResponse> {
     this.assertCanReadAssignedConfig(currentUser);
+    this.assertCanRunAssignedSync(currentUser);
     await this.assertAssignedClientProfileOrFail(currentUser.id, clientProfileId);
     await this.assertClientHasActiveMetaAdsService(clientProfileId);
 
     return this.syncInsightsByClientProfileId(clientProfileId, query, {
       trigger: "ON_DEMAND_ASSIGNED_REFRESH",
       applySyncTtl: true,
+      revealDetailedError: true,
     });
   }
 
@@ -1313,6 +1404,109 @@ export class MetaAdsService {
     return this.syncInsightsByClientProfileId(clientProfileId, query, {
       trigger: "ON_DEMAND_CLIENT_REFRESH",
       applySyncTtl: true,
+      revealDetailedError: false,
+    });
+  }
+
+  async getAdminClientReports(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+    query: MetaAdsReportsQueryDto,
+  ): Promise<MetaAdsReportsResponse> {
+    this.assertCanReadAnyConfig(currentUser);
+    this.assertCanReadReports(currentUser);
+    await this.assertClientProfileExists(clientProfileId);
+    await this.assertClientHasActiveMetaAdsService(clientProfileId);
+
+    return this.getReportsByClientProfileId(clientProfileId, query, {
+      onlyClientVisible: false,
+    });
+  }
+
+  async createAdminClientReport(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+    dto: CreateMetaAdsReportDto,
+  ): Promise<MetaAdsReportItem> {
+    this.assertCanManageAnyConfig(currentUser);
+    this.assertCanManageReports(currentUser);
+    await this.assertClientProfileExists(clientProfileId);
+    await this.assertClientHasActiveMetaAdsService(clientProfileId);
+
+    return this.createReportByClientProfileId(currentUser, clientProfileId, dto);
+  }
+
+  async updateAdminReport(
+    currentUser: AuthenticatedUser,
+    reportId: string,
+    dto: UpdateMetaAdsReportDto,
+  ): Promise<MetaAdsReportItem> {
+    this.assertCanManageAnyConfig(currentUser);
+    this.assertCanManageReports(currentUser);
+
+    return this.updateReportById(currentUser, reportId, dto, { scope: "ANY" });
+  }
+
+  async getAssignedClientReports(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+    query: MetaAdsReportsQueryDto,
+  ): Promise<MetaAdsReportsResponse> {
+    this.assertCanReadAssignedConfig(currentUser);
+    this.assertCanReadAssignedReporting(currentUser);
+    await this.assertAssignedClientProfileOrFail(currentUser.id, clientProfileId);
+    await this.assertClientHasActiveMetaAdsService(clientProfileId);
+
+    return this.getReportsByClientProfileId(clientProfileId, query, {
+      onlyClientVisible: false,
+    });
+  }
+
+  async createAssignedClientReport(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+    dto: CreateMetaAdsReportDto,
+  ): Promise<MetaAdsReportItem> {
+    this.assertCanReadAssignedConfig(currentUser);
+    this.assertCanManageAssignedNotes(currentUser);
+    if (dto.requestAcknowledgement === true) {
+      this.assertCanCreateAssignedApprovals(currentUser);
+    }
+    await this.assertAssignedClientProfileOrFail(currentUser.id, clientProfileId);
+    await this.assertClientHasActiveMetaAdsService(clientProfileId);
+
+    return this.createReportByClientProfileId(currentUser, clientProfileId, dto);
+  }
+
+  async updateAssignedReport(
+    currentUser: AuthenticatedUser,
+    reportId: string,
+    dto: UpdateMetaAdsReportDto,
+  ): Promise<MetaAdsReportItem> {
+    this.assertCanReadAssignedConfig(currentUser);
+    this.assertCanManageAssignedNotes(currentUser);
+    if (dto.requestAcknowledgement === true) {
+      this.assertCanCreateAssignedApprovals(currentUser);
+    }
+
+    return this.updateReportById(currentUser, reportId, dto, {
+      scope: "ASSIGNED",
+      employeeUserId: currentUser.id,
+    });
+  }
+
+  async getOwnClientReports(
+    currentUser: AuthenticatedUser,
+    query: MetaAdsReportsQueryDto,
+  ): Promise<MetaAdsReportsResponse> {
+    this.assertCanReadOwnConfig(currentUser);
+    this.assertCanReadOwnReports(currentUser);
+    const clientProfileId = this.getClientProfileIdOrFail(currentUser);
+    await this.assertClientProfileExists(clientProfileId);
+    await this.assertClientHasActiveMetaAdsService(clientProfileId);
+
+    return this.getReportsByClientProfileId(clientProfileId, query, {
+      onlyClientVisible: true,
     });
   }
 
@@ -1580,6 +1774,7 @@ export class MetaAdsService {
     options: {
       trigger: MetaAdsSyncTrigger;
       applySyncTtl: boolean;
+      revealDetailedError: boolean;
     },
   ): Promise<MetaAdsSyncResponse> {
     const dateRange = this.resolveReportDateRange(query);
@@ -1786,7 +1981,477 @@ export class MetaAdsService {
           errorMessage: `[${options.trigger}] ${syncErrorInfo.adminMessage}`,
         },
       });
-      throw this.toConnectionTestException(syncErrorInfo);
+      throw this.toConnectionTestException(syncErrorInfo, {
+        revealDetailedError: options.revealDetailedError,
+      });
+    }
+  }
+
+  private async getReportsByClientProfileId(
+    clientProfileId: string,
+    query: MetaAdsReportsQueryDto,
+    options: {
+      onlyClientVisible: boolean;
+    },
+  ): Promise<MetaAdsReportsResponse> {
+    const where: Prisma.MetaAdsReportWhereInput = {
+      clientProfileId,
+    };
+
+    if (options.onlyClientVisible) {
+      where.clientVisible = true;
+    } else if (query.clientVisible !== undefined) {
+      where.clientVisible = query.clientVisible;
+    }
+
+    if (query.status !== undefined) {
+      where.status = query.status;
+    }
+
+    if (query.type !== undefined) {
+      where.type = query.type;
+    }
+
+    const statsWhere: Prisma.MetaAdsReportWhereInput = {
+      clientProfileId,
+      ...(options.onlyClientVisible ? { clientVisible: true } : {}),
+    };
+    const limit = query.limit ?? 30;
+
+    const [reports, total, draft, published, clientVisible] = await this.prisma.$transaction([
+      this.prisma.metaAdsReport.findMany({
+        where,
+        select: metaAdsReportSelect,
+        orderBy: [{ periodEnd: "desc" }, { createdAt: "desc" }],
+        take: limit,
+      }),
+      this.prisma.metaAdsReport.count({ where }),
+      this.prisma.metaAdsReport.count({
+        where: {
+          ...statsWhere,
+          status: MetaAdsReportStatus.DRAFT,
+        },
+      }),
+      this.prisma.metaAdsReport.count({
+        where: {
+          ...statsWhere,
+          status: MetaAdsReportStatus.PUBLISHED,
+        },
+      }),
+      this.prisma.metaAdsReport.count({
+        where: {
+          ...statsWhere,
+          clientVisible: true,
+        },
+      }),
+    ]);
+
+    return {
+      data: reports.map((report) => this.toMetaAdsReportItem(report)),
+      meta: {
+        total,
+        draft,
+        published,
+        clientVisible,
+      },
+    };
+  }
+
+  private async createReportByClientProfileId(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+    dto: CreateMetaAdsReportDto,
+  ): Promise<MetaAdsReportItem> {
+    const period = this.resolveMetaAdsReportPeriod(dto.periodStart, dto.periodEnd);
+    const summary = this.normalizeMetaAdsReportSummary(dto.summary);
+    const projectId = await this.resolveMetaAdsReportProjectId(clientProfileId, dto.projectId ?? null);
+    const shouldPublish = dto.clientVisible === true || dto.requestAcknowledgement === true;
+    const now = new Date();
+
+    let report = await this.prisma.metaAdsReport.create({
+      data: {
+        clientProfileId,
+        projectId,
+        periodStart: period.periodStart,
+        periodEnd: period.periodEnd,
+        type: dto.type,
+        status: shouldPublish ? MetaAdsReportStatus.PUBLISHED : MetaAdsReportStatus.DRAFT,
+        summary,
+        metricsSnapshot: dto.metricsSnapshot as Prisma.InputJsonValue | undefined,
+        createdByUserId: currentUser.id,
+        publishedByUserId: shouldPublish ? currentUser.id : null,
+        clientVisible: shouldPublish,
+        publishedAt: shouldPublish ? now : null,
+      },
+      select: metaAdsReportSelect,
+    });
+
+    if (dto.requestAcknowledgement === true) {
+      const acknowledgementProjectId =
+        projectId ?? (await this.resolveMetaAdsReportProjectId(clientProfileId, null));
+      if (!acknowledgementProjectId) {
+        throw new BadRequestException(
+          "A META_ADS project is required to request report acknowledgement.",
+        );
+      }
+
+      const task = await this.prisma.task.create({
+        data: {
+          projectId: acknowledgementProjectId,
+          title: this.buildReportAcknowledgementTaskTitle(
+            report.type,
+            report.periodStart,
+            report.periodEnd,
+          ),
+          description: this.buildReportAcknowledgementTaskDescription(summary),
+          status: TaskStatus.REVIEW,
+          type: TaskType.REVISION,
+          approvalRequired: true,
+          approvalType: MetaAdsApprovalType.META_ADS_REPORT_ACKNOWLEDGEMENT,
+          approvalStatus: MetaAdsApprovalStatus.PENDING,
+          approvalRequestedAt: now,
+          approvalContext: {
+            reportId: report.id,
+            reportType: report.type,
+            periodStart: report.periodStart.toISOString(),
+            periodEnd: report.periodEnd.toISOString(),
+          },
+        },
+        select: { id: true },
+      });
+
+      report = await this.prisma.metaAdsReport.update({
+        where: {
+          id: report.id,
+        },
+        data: {
+          acknowledgementRequestedAt: now,
+          acknowledgementTaskId: task.id,
+        },
+        select: metaAdsReportSelect,
+      });
+    }
+
+    return this.toMetaAdsReportItem(report);
+  }
+
+  private async updateReportById(
+    currentUser: AuthenticatedUser,
+    reportId: string,
+    dto: UpdateMetaAdsReportDto,
+    options: {
+      scope: "ANY" | "ASSIGNED";
+      employeeUserId?: string;
+    },
+  ): Promise<MetaAdsReportItem> {
+    this.assertHasMetaAdsReportUpdatePayload(dto);
+
+    const existing = await this.prisma.metaAdsReport.findUnique({
+      where: { id: reportId },
+      select: {
+        id: true,
+        clientProfileId: true,
+        projectId: true,
+        type: true,
+        periodStart: true,
+        periodEnd: true,
+        summary: true,
+        status: true,
+        clientVisible: true,
+        publishedAt: true,
+        publishedByUserId: true,
+        acknowledgementTaskId: true,
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundException("Meta Ads report not found.");
+    }
+
+    if (options.scope === "ASSIGNED") {
+      if (!options.employeeUserId) {
+        throw new ForbiddenException("Missing employee context for assigned report update.");
+      }
+      await this.assertAssignedClientProfileOrFail(options.employeeUserId, existing.clientProfileId);
+    }
+
+    await this.assertClientHasActiveMetaAdsService(existing.clientProfileId);
+
+    const now = new Date();
+    const updateData: Prisma.MetaAdsReportUpdateInput = {};
+    const normalizedSummary =
+      dto.summary !== undefined ? this.normalizeMetaAdsReportSummary(dto.summary) : undefined;
+
+    if (dto.summary !== undefined) {
+      updateData.summary = normalizedSummary;
+    }
+
+    if (dto.metricsSnapshot !== undefined) {
+      updateData.metricsSnapshot = dto.metricsSnapshot as Prisma.InputJsonValue;
+    }
+
+    if (dto.clientVisible !== undefined) {
+      updateData.clientVisible = dto.clientVisible;
+    }
+
+    if (dto.status !== undefined) {
+      updateData.status = dto.status;
+      if (dto.status === MetaAdsReportStatus.DRAFT) {
+        updateData.clientVisible = false;
+      }
+      if (dto.status === MetaAdsReportStatus.ARCHIVED) {
+        updateData.clientVisible = false;
+      }
+    }
+
+    if (dto.status === MetaAdsReportStatus.PUBLISHED && dto.clientVisible === false) {
+      throw new BadRequestException("Published report cannot be hidden from client.");
+    }
+
+    const shouldPublish =
+      dto.requestAcknowledgement === true ||
+      dto.clientVisible === true ||
+      dto.status === MetaAdsReportStatus.PUBLISHED;
+
+    if (shouldPublish) {
+      if (!existing.publishedAt) {
+        updateData.publishedAt = now;
+      }
+      if (!existing.publishedByUserId) {
+        updateData.publishedBy = {
+          connect: {
+            id: currentUser.id,
+          },
+        };
+      }
+      if (dto.status === undefined) {
+        updateData.status = MetaAdsReportStatus.PUBLISHED;
+      }
+      if (dto.clientVisible === undefined) {
+        updateData.clientVisible = true;
+      }
+    }
+
+    if (
+      dto.requestAcknowledgement === true &&
+      (dto.status === MetaAdsReportStatus.DRAFT || dto.status === MetaAdsReportStatus.ARCHIVED)
+    ) {
+      throw new BadRequestException(
+        "Acknowledgement request cannot be created for DRAFT or ARCHIVED report status.",
+      );
+    }
+
+    const fallbackProjectId =
+      existing.projectId ??
+      (await this.resolveMetaAdsReportProjectId(existing.clientProfileId, null));
+
+    if (dto.requestAcknowledgement === true && !fallbackProjectId) {
+      throw new BadRequestException(
+        "A META_ADS project is required to request report acknowledgement.",
+      );
+    }
+
+    if (dto.requestAcknowledgement === true && fallbackProjectId && !existing.projectId) {
+      updateData.project = {
+        connect: {
+          id: fallbackProjectId,
+        },
+      };
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      let acknowledgementTaskId = existing.acknowledgementTaskId;
+
+      if (dto.requestAcknowledgement === true && fallbackProjectId) {
+        const taskPayload: Prisma.TaskUncheckedCreateInput = {
+          projectId: fallbackProjectId,
+          title: this.buildReportAcknowledgementTaskTitle(
+            existing.type,
+            existing.periodStart,
+            existing.periodEnd,
+          ),
+          description: this.buildReportAcknowledgementTaskDescription(
+            normalizedSummary ?? existing.summary ?? null,
+          ),
+          status: TaskStatus.REVIEW,
+          type: TaskType.REVISION,
+          approvalRequired: true,
+          approvalType: MetaAdsApprovalType.META_ADS_REPORT_ACKNOWLEDGEMENT,
+          approvalStatus: MetaAdsApprovalStatus.PENDING,
+          approvalRequestedAt: now,
+          approvalContext: {
+            reportId: existing.id,
+          },
+        };
+
+        if (acknowledgementTaskId) {
+          await tx.task.update({
+            where: { id: acknowledgementTaskId },
+            data: {
+              title: taskPayload.title,
+              description: taskPayload.description,
+              status: TaskStatus.REVIEW,
+              approvalRequired: true,
+              approvalType: MetaAdsApprovalType.META_ADS_REPORT_ACKNOWLEDGEMENT,
+              approvalStatus: MetaAdsApprovalStatus.PENDING,
+              approvalRequestedAt: now,
+              approvalRespondedAt: null,
+              approvalRespondedByUserId: null,
+              approvalResponseNote: null,
+              approvalContext: taskPayload.approvalContext,
+            },
+          });
+        } else {
+          const createdTask = await tx.task.create({
+            data: taskPayload,
+            select: { id: true },
+          });
+          acknowledgementTaskId = createdTask.id;
+        }
+
+        updateData.acknowledgementRequestedAt = now;
+        if (acknowledgementTaskId) {
+          updateData.acknowledgementTask = {
+            connect: {
+              id: acknowledgementTaskId,
+            },
+          };
+        }
+      }
+
+      return tx.metaAdsReport.update({
+        where: { id: existing.id },
+        data: updateData,
+        select: metaAdsReportSelect,
+      });
+    });
+
+    return this.toMetaAdsReportItem(updated);
+  }
+
+  private toMetaAdsReportItem(report: MetaAdsReportModel): MetaAdsReportItem {
+    const acknowledgementStatus =
+      report.acknowledgementRequestedAt === null
+        ? "NOT_REQUESTED"
+        : report.acknowledgementTask?.approvalStatus === MetaAdsApprovalStatus.ACKNOWLEDGED ||
+            report.acknowledgementTask?.approvalStatus === MetaAdsApprovalStatus.APPROVED
+          ? "ACKNOWLEDGED"
+          : report.acknowledgementTask?.approvalStatus === MetaAdsApprovalStatus.CHANGES_REQUESTED ||
+              report.acknowledgementTask?.approvalStatus === MetaAdsApprovalStatus.REJECTED
+            ? "CHANGES_REQUESTED"
+            : "PENDING";
+
+    return {
+      id: report.id,
+      clientProfileId: report.clientProfileId,
+      projectId: report.projectId ?? null,
+      projectName: report.project?.name ?? null,
+      periodStart: report.periodStart.toISOString(),
+      periodEnd: report.periodEnd.toISOString(),
+      type: report.type,
+      status: report.status,
+      summary: report.summary ?? null,
+      metricsSnapshot: (report.metricsSnapshot as Prisma.JsonValue | null) ?? null,
+      clientVisible: report.clientVisible,
+      publishedAt: report.publishedAt?.toISOString() ?? null,
+      acknowledgementRequestedAt: report.acknowledgementRequestedAt?.toISOString() ?? null,
+      acknowledgedAt: report.acknowledgedAt?.toISOString() ?? null,
+      acknowledgementStatus,
+      acknowledgementTaskId: report.acknowledgementTask?.id ?? null,
+      acknowledgementTaskUpdatedAt: report.acknowledgementTask?.updatedAt.toISOString() ?? null,
+      createdAt: report.createdAt.toISOString(),
+      updatedAt: report.updatedAt.toISOString(),
+    };
+  }
+
+  private resolveMetaAdsReportPeriod(periodStartRaw: string, periodEndRaw: string): {
+    periodStart: Date;
+    periodEnd: Date;
+  } {
+    const periodStart = new Date(periodStartRaw);
+    const periodEnd = new Date(periodEndRaw);
+
+    if (Number.isNaN(periodStart.getTime()) || Number.isNaN(periodEnd.getTime())) {
+      throw new BadRequestException("Report periodStart and periodEnd must be valid ISO date values.");
+    }
+
+    if (periodStart > periodEnd) {
+      throw new BadRequestException("Report periodStart cannot be greater than periodEnd.");
+    }
+
+    return { periodStart, periodEnd };
+  }
+
+  private normalizeMetaAdsReportSummary(summary: string | undefined): string | null {
+    if (summary === undefined) {
+      return null;
+    }
+
+    const normalized = summary.trim();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  private async resolveMetaAdsReportProjectId(
+    clientProfileId: string,
+    projectId: string | null,
+  ): Promise<string | null> {
+    if (projectId) {
+      const project = await this.prisma.project.findFirst({
+        where: {
+          id: projectId,
+          clientProfileId,
+          serviceKey: PurchasedServiceKey.META_ADS,
+        },
+        select: { id: true },
+      });
+
+      if (!project) {
+        throw new BadRequestException(
+          "Provided projectId is not a META_ADS project for this client.",
+        );
+      }
+
+      return project.id;
+    }
+
+    const project = await this.prisma.project.findFirst({
+      where: {
+        clientProfileId,
+        serviceKey: PurchasedServiceKey.META_ADS,
+      },
+      select: { id: true },
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+    });
+
+    return project?.id ?? null;
+  }
+
+  private buildReportAcknowledgementTaskTitle(
+    reportType: MetaAdsReportType,
+    periodStart: Date,
+    periodEnd: Date,
+  ): string {
+    const start = periodStart.toISOString().slice(0, 10);
+    const end = periodEnd.toISOString().slice(0, 10);
+    return `Meta Ads Rapor Onayı · ${reportType} (${start} - ${end})`;
+  }
+
+  private buildReportAcknowledgementTaskDescription(summary: string | null): string {
+    if (summary) {
+      return `Rapor müşteri onayına açıldı. Özet: ${summary}`;
+    }
+    return "Rapor müşteri onayına açıldı.";
+  }
+
+  private assertHasMetaAdsReportUpdatePayload(dto: UpdateMetaAdsReportDto): void {
+    if (
+      dto.status === undefined &&
+      dto.summary === undefined &&
+      dto.metricsSnapshot === undefined &&
+      dto.clientVisible === undefined &&
+      dto.requestAcknowledgement === undefined
+    ) {
+      throw new BadRequestException("Provide at least one report field to update.");
     }
   }
 
@@ -2522,22 +3187,33 @@ export class MetaAdsService {
     });
   }
 
-  private toConnectionTestException(syncErrorInfo: MetaAdsSyncErrorInfo): Error {
+  private toConnectionTestException(
+    syncErrorInfo: MetaAdsSyncErrorInfo,
+    options: {
+      revealDetailedError: boolean;
+    } = {
+      revealDetailedError: true,
+    },
+  ): Error {
+    const errorMessage = options.revealDetailedError
+      ? syncErrorInfo.adminMessage
+      : syncErrorInfo.clientMessage;
+
     if (
       syncErrorInfo.code === "PERMISSION_MISSING" ||
       syncErrorInfo.code === "BUSINESS_ACCESS_REVOKED"
     ) {
-      return new ForbiddenException(syncErrorInfo.adminMessage);
+      return new ForbiddenException(errorMessage);
     }
 
     if (
       syncErrorInfo.code === "TOKEN_EXPIRED" ||
       syncErrorInfo.code === "AD_ACCOUNT_UNAVAILABLE"
     ) {
-      return new BadRequestException(syncErrorInfo.adminMessage);
+      return new BadRequestException(errorMessage);
     }
 
-    return new BadGatewayException(syncErrorInfo.adminMessage);
+    return new BadGatewayException(errorMessage);
   }
 
   private resolveTokenForConnectionTest(
@@ -2661,6 +3337,50 @@ export class MetaAdsService {
     }
 
     this.assertHasPermission(currentUser, META_ADS_CONFIG_READ_OWN_PERMISSION);
+  }
+
+  private assertCanReadReports(currentUser: AuthenticatedUser): void {
+    this.assertHasPermission(currentUser, REPORTS_READ_PERMISSION);
+  }
+
+  private assertCanManageReports(currentUser: AuthenticatedUser): void {
+    this.assertHasPermission(currentUser, REPORTS_MANAGE_PERMISSION);
+  }
+
+  private assertCanReadOwnReports(currentUser: AuthenticatedUser): void {
+    this.assertHasPermission(currentUser, REPORTS_READ_OWN_PERMISSION);
+  }
+
+  private assertCanReadAssignedReporting(currentUser: AuthenticatedUser): void {
+    if (currentUser.accountType !== AccountType.EMPLOYEE) {
+      throw new ForbiddenException("Only employee accounts can read assigned Meta Ads reports.");
+    }
+
+    this.assertHasPermission(currentUser, META_ADS_REPORTING_READ_ASSIGNED_PERMISSION);
+  }
+
+  private assertCanManageAssignedNotes(currentUser: AuthenticatedUser): void {
+    if (currentUser.accountType !== AccountType.EMPLOYEE) {
+      throw new ForbiddenException("Only employee accounts can manage assigned Meta Ads notes.");
+    }
+
+    this.assertHasPermission(currentUser, META_ADS_NOTES_MANAGE_ASSIGNED_PERMISSION);
+  }
+
+  private assertCanCreateAssignedApprovals(currentUser: AuthenticatedUser): void {
+    if (currentUser.accountType !== AccountType.EMPLOYEE) {
+      throw new ForbiddenException("Only employee accounts can create Meta Ads approvals.");
+    }
+
+    this.assertHasPermission(currentUser, META_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION);
+  }
+
+  private assertCanRunAssignedSync(currentUser: AuthenticatedUser): void {
+    if (currentUser.accountType !== AccountType.EMPLOYEE) {
+      throw new ForbiddenException("Only employee accounts can run assigned Meta Ads sync.");
+    }
+
+    this.assertHasPermission(currentUser, META_ADS_SYNC_READ_ASSIGNED_PERMISSION);
   }
 
   private getClientProfileIdOrFail(currentUser: AuthenticatedUser): string {

@@ -83,6 +83,20 @@ enum MetaAdsSyncStatus {
   SKIPPED
 }
 
+enum MetaAdsReportType {
+  WEEKLY
+  MONTHLY
+  CAMPAIGN_PERFORMANCE
+  CREATIVE_PERFORMANCE
+  BUDGET_RECOMMENDATION
+}
+
+enum MetaAdsReportStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
 enum EmployeeClientAssignmentScope {
   PROJECT
   PERFORMANCE
@@ -354,6 +368,9 @@ model User {
   releaseApprovalActions    DeliveryRelease[]          @relation("DeliveryReleaseApprovalActor")
   triggeredCrmLeadScans     CrmLeadScanLog[]           @relation("CrmLeadScanTriggeredBy")
   auditLogs                 AuditLog[]                 @relation("AuditActor")
+  createdMetaAdsReports     MetaAdsReport[]            @relation("MetaAdsReportCreatedBy")
+  publishedMetaAdsReports   MetaAdsReport[]            @relation("MetaAdsReportPublishedBy")
+  acknowledgedMetaAdsReports MetaAdsReport[]           @relation("MetaAdsReportAcknowledgedBy")
 
   @@index([accountType, role])
   @@index([accountType, status])
@@ -392,6 +409,7 @@ model ClientProfile {
   metaAdsCredential   ClientMetaAdsCredential?
   metaAdsInsights     MetaAdsDailyInsight[]
   metaAdsSyncLogs     MetaAdsSyncLog[]
+  metaAdsReports      MetaAdsReport[]
   projects            Project[]
   files               ProjectFile[]
   convertedCrmLeads   CrmLead[]                  @relation("CrmLeadConvertedClient")
@@ -489,6 +507,45 @@ model MetaAdsSyncLog {
   @@index([clientProfileId, status, createdAt])
 }
 
+model MetaAdsReport {
+  id                        String               @id @default(uuid()) @db.Uuid
+  clientProfileId           String               @db.Uuid
+  projectId                 String?              @db.Uuid
+  periodStart               DateTime
+  periodEnd                 DateTime
+  type                      MetaAdsReportType
+  status                    MetaAdsReportStatus  @default(DRAFT)
+  summary                   String?
+  metricsSnapshot           Json?
+  createdByUserId           String?              @db.Uuid
+  publishedByUserId         String?              @db.Uuid
+  clientVisible             Boolean              @default(false)
+  publishedAt               DateTime?
+  acknowledgementRequestedAt DateTime?
+  acknowledgedAt            DateTime?
+  acknowledgedByUserId      String?              @db.Uuid
+  acknowledgementTaskId     String?              @db.Uuid
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
+
+  clientProfile   ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  project         Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdBy       User?         @relation("MetaAdsReportCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  publishedBy     User?         @relation("MetaAdsReportPublishedBy", fields: [publishedByUserId], references: [id], onDelete: SetNull)
+  acknowledgedBy  User?         @relation("MetaAdsReportAcknowledgedBy", fields: [acknowledgedByUserId], references: [id], onDelete: SetNull)
+  acknowledgementTask Task?     @relation("MetaAdsReportAcknowledgementTask", fields: [acknowledgementTaskId], references: [id], onDelete: SetNull)
+
+  @@index([clientProfileId, createdAt])
+  @@index([clientProfileId, status, createdAt])
+  @@index([clientProfileId, type, periodStart, periodEnd])
+  @@index([clientVisible, status, createdAt])
+  @@index([projectId])
+  @@index([createdByUserId])
+  @@index([publishedByUserId])
+  @@index([acknowledgedByUserId])
+  @@index([acknowledgementTaskId])
+}
+
 model ClientPurchasedService {
   id              String                 @id @default(uuid()) @db.Uuid
   clientProfileId String                 @db.Uuid
@@ -529,6 +586,7 @@ model Project {
   repository       ProjectRepository?
   files            ProjectFile[]
   fileFolders      ProjectFileFolder[]
+  metaAdsReports   MetaAdsReport[]
   workspaceSections WebAppWorkspaceSection[]
   workspaceMessages WebAppWorkspaceMessage[]
   workspaceRevisions WebAppWorkspaceRevision[]
@@ -585,6 +643,7 @@ model Task {
   codePreparedBy User?           @relation("TaskCodePreparedBy", fields: [codePreparedByUserId], references: [id], onDelete: SetNull)
   approvalRespondedBy User?      @relation("TaskApprovalResponder", fields: [approvalRespondedByUserId], references: [id], onDelete: SetNull)
   referenceProjectFile ProjectFile? @relation("TaskReferenceProjectFile", fields: [referenceProjectFileId], references: [id], onDelete: SetNull)
+  metaAdsReportAcknowledgements MetaAdsReport[] @relation("MetaAdsReportAcknowledgementTask")
   todos          TaskTodo[]
   workNotes      TaskWorkNote[]
   workspaceRevisions WebAppWorkspaceRevision[]

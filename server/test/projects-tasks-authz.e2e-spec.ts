@@ -12,6 +12,7 @@ import {
   TaskStatus,
   TaskTodoVisibility,
   TaskType,
+  UserRole,
 } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 import cookieParser from "cookie-parser";
@@ -616,6 +617,56 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
     expect(toggledTodo.isCompleted).toBe(true);
   });
 
+  it("meta ads approval task creation requires metaAds.approvals.create.assigned permission", async () => {
+    const scopedMetaAdsProject = await prisma.project.findFirst({
+      where: {
+        clientProfileId: { in: projectManagerAssignedClientIds },
+        serviceKey: PurchasedServiceKey.META_ADS,
+      },
+      select: { id: true },
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+    });
+    if (!scopedMetaAdsProject) {
+      throw new Error("Expected at least one assigned META_ADS project for project manager.");
+    }
+
+    const permission = await prisma.permission.findUnique({
+      where: { slug: "metaAds.approvals.create.assigned" },
+      select: { id: true },
+    });
+    if (!permission) {
+      throw new Error("Expected metaAds.approvals.create.assigned permission to exist.");
+    }
+
+    await prisma.rolePermission.deleteMany({
+      where: {
+        role: UserRole.PROJECT_MANAGER,
+        permissionId: permission.id,
+      },
+    });
+
+    try {
+      await request(app.getHttpServer())
+        .post(TASKS_PATH)
+        .set("Authorization", `Bearer ${projectManagerToken}`)
+        .send({
+          projectId: scopedMetaAdsProject.id,
+          title: "PM Meta Ads Approval Permission Test",
+          status: TaskStatus.REVIEW,
+          priority: Priority.HIGH,
+          type: TaskType.REVISION,
+          approvalRequired: true,
+          approvalType: MetaAdsApprovalType.META_ADS_CAMPAIGN_APPROVAL,
+        })
+        .expect(403);
+    } finally {
+      await prisma.rolePermission.createMany({
+        data: [{ role: UserRole.PROJECT_MANAGER, permissionId: permission.id }],
+        skipDuplicates: true,
+      });
+    }
+  });
+
   it("project manager cannot assign task to employee outside client assignment scope", async () => {
     const scopedProject = await prisma.project.findUnique({
       where: { id: projectManagerAssignedProjectId },
@@ -737,6 +788,33 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
       }),
     );
     expect(changed?.approvalRespondedAt).toBeTruthy();
+
+    const generatedRevisionTask = await prisma.task.findFirst({
+      where: {
+        projectId: clientOwnMetaAdsProjectId,
+        type: TaskType.REVISION,
+        approvalRequired: false,
+        approvalContext: {
+          path: ["sourceApprovalTaskId"],
+          equals: pendingApproval.id,
+        },
+      },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        status: true,
+      },
+    });
+    expect(generatedRevisionTask).toEqual(
+      expect.objectContaining({
+        title: expect.stringContaining("Revizyon"),
+        status: TaskStatus.TODO,
+      }),
+    );
+    expect(generatedRevisionTask?.description).toContain(
+      "Kreatif metin tonu marka diline göre güncellensin.",
+    );
 
     await request(app.getHttpServer())
       .patch(`${TASKS_PATH}/${clientOtherMetaApprovalTaskId}`)

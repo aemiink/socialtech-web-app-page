@@ -6,6 +6,8 @@ import {
   ClientStatus,
   EmployeeClientAssignmentScope,
   MetaAdsConnectionStatus,
+  MetaAdsReportStatus,
+  MetaAdsReportType,
   PrismaClient,
   PurchasedServiceKey,
   PurchasedServiceStatus,
@@ -35,6 +37,7 @@ const ADMIN_META_ADS_CONNECTION_PATH_PREFIX = "/api/v1/admin/clients";
 const ADMIN_META_ADS_CLIENTS_LIST_PATH = "/api/v1/admin/meta-ads/clients";
 const ADMIN_META_ADS_SYNC_LOGS_PATH = "/api/v1/admin/meta-ads/sync-logs";
 const CLIENT_OWN_META_ADS_SYNC_PATH = "/api/v1/clients/me/meta-ads/sync";
+const CLIENT_OWN_META_ADS_REPORTS_PATH = "/api/v1/clients/me/meta-ads/reports";
 const TEST_EMAIL_PREFIX = "authz-meta-ads-";
 const TEST_SLUG_PREFIX = "authz-meta-ads-";
 const DEMO_PASSWORD = "demo123";
@@ -227,6 +230,23 @@ describe("Meta Ads Config Authorization (e2e)", () => {
             clientProfileId: inactiveClient.id,
             serviceKey: PurchasedServiceKey.META_ADS,
             status: PurchasedServiceStatus.INACTIVE,
+          },
+        ],
+      });
+
+      await tx.project.createMany({
+        data: [
+          {
+            clientProfileId: ownClient.id,
+            serviceKey: PurchasedServiceKey.META_ADS,
+            name: "Own Client Meta Ads Project",
+            slug: `${TEST_SLUG_PREFIX}own-project-${fixtureSuffix}`,
+          },
+          {
+            clientProfileId: activeClient.id,
+            serviceKey: PurchasedServiceKey.META_ADS,
+            name: "Active Client Meta Ads Project",
+            slug: `${TEST_SLUG_PREFIX}active-project-${fixtureSuffix}`,
           },
         ],
       });
@@ -446,6 +466,277 @@ describe("Meta Ads Config Authorization (e2e)", () => {
         status: "SUCCESS",
       }),
     );
+  });
+
+  it("admin sync logs endpoint respects limit pagination", async () => {
+    await prisma.metaAdsSyncLog.createMany({
+      data: [
+        {
+          clientProfileId: activeMetaAdsClientId,
+          adAccountId: "act-log-limit-001",
+          status: "SUCCESS",
+          startedAt: new Date("2026-05-09T10:00:00.000Z"),
+          finishedAt: new Date("2026-05-09T10:00:07.000Z"),
+          recordsFetched: 20,
+          apiCallCount: 5,
+        },
+        {
+          clientProfileId: activeMetaAdsClientId,
+          adAccountId: "act-log-limit-002",
+          status: "SUCCESS",
+          startedAt: new Date("2026-05-09T11:00:00.000Z"),
+          finishedAt: new Date("2026-05-09T11:00:06.000Z"),
+          recordsFetched: 22,
+          apiCallCount: 6,
+        },
+      ],
+    });
+
+    const response = await request(app.getHttpServer())
+      .get(
+        `${ADMIN_META_ADS_SYNC_LOGS_PATH}?clientProfileId=${activeMetaAdsClientId}&status=SUCCESS&limit=1`,
+      )
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(Array.isArray(response.body.data)).toBe(true);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.meta.total).toBeGreaterThanOrEqual(2);
+  });
+
+  it("admin can create Meta Ads report draft", async () => {
+    const response = await request(app.getHttpServer())
+      .post(adminMetaAdsReportsPath(activeMetaAdsClientId))
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        periodStart: "2026-05-01T00:00:00.000Z",
+        periodEnd: "2026-05-07T23:59:59.000Z",
+        type: MetaAdsReportType.WEEKLY,
+        summary: "Haftalık performans özeti",
+      })
+      .expect(201);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        clientProfileId: activeMetaAdsClientId,
+        type: MetaAdsReportType.WEEKLY,
+        status: MetaAdsReportStatus.DRAFT,
+        clientVisible: false,
+        acknowledgementStatus: "NOT_REQUESTED",
+      }),
+    );
+    expect(response.body.summary).toBe("Haftalık performans özeti");
+  });
+
+  it("assigned employee can create report and request acknowledgement for assigned client", async () => {
+    const response = await request(app.getHttpServer())
+      .post(assignedMetaAdsReportsPath(activeMetaAdsClientId))
+      .set("Authorization", `Bearer ${performanceToken}`)
+      .send({
+        periodStart: "2026-05-01T00:00:00.000Z",
+        periodEnd: "2026-05-07T23:59:59.000Z",
+        type: MetaAdsReportType.CAMPAIGN_PERFORMANCE,
+        summary: "Kampanya performans raporu",
+        requestAcknowledgement: true,
+      })
+      .expect(201);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        clientProfileId: activeMetaAdsClientId,
+        status: MetaAdsReportStatus.PUBLISHED,
+        clientVisible: true,
+        acknowledgementStatus: "PENDING",
+        acknowledgementTaskId: expect.any(String),
+      }),
+    );
+
+    const acknowledgementTask = await prisma.task.findUnique({
+      where: { id: response.body.acknowledgementTaskId },
+      select: {
+        approvalType: true,
+        approvalStatus: true,
+        project: {
+          select: {
+            clientProfileId: true,
+          },
+        },
+      },
+    });
+
+    expect(acknowledgementTask?.approvalType).toBe("META_ADS_REPORT_ACKNOWLEDGEMENT");
+    expect(acknowledgementTask?.approvalStatus).toBe("PENDING");
+    expect(acknowledgementTask?.project.clientProfileId).toBe(activeMetaAdsClientId);
+  });
+
+  it("assigned reporting endpoints require metaAds.reporting.read.assigned permission", async () => {
+    const permission = await prisma.permission.findUnique({
+      where: { slug: "metaAds.reporting.read.assigned" },
+      select: { id: true },
+    });
+    if (!permission) {
+      throw new Error("Expected metaAds.reporting.read.assigned permission to exist.");
+    }
+
+    await prisma.rolePermission.deleteMany({
+      where: {
+        role: UserRole.PERFORMANCE_SPECIALIST,
+        permissionId: permission.id,
+      },
+    });
+
+    try {
+      await request(app.getHttpServer())
+        .get(assignedMetaAdsReportsPath(activeMetaAdsClientId))
+        .set("Authorization", `Bearer ${performanceToken}`)
+        .expect(403);
+    } finally {
+      await prisma.rolePermission.createMany({
+        data: [{ role: UserRole.PERFORMANCE_SPECIALIST, permissionId: permission.id }],
+        skipDuplicates: true,
+      });
+    }
+  });
+
+  it("draft report is not visible in client own reports endpoint", async () => {
+    const draftReport = await prisma.metaAdsReport.create({
+      data: {
+        clientProfileId: ownMetaAdsClientId,
+        periodStart: new Date("2026-05-01T00:00:00.000Z"),
+        periodEnd: new Date("2026-05-07T23:59:59.000Z"),
+        type: MetaAdsReportType.WEEKLY,
+        status: MetaAdsReportStatus.DRAFT,
+        summary: "Client draft report",
+        clientVisible: false,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    const response = await request(app.getHttpServer())
+      .get(CLIENT_OWN_META_ADS_REPORTS_PATH)
+      .set("Authorization", `Bearer ${ownClientToken}`)
+      .expect(200);
+
+    const rows = Array.isArray(response.body.data) ? response.body.data : [];
+    const rowIds = rows
+      .map((row: unknown) =>
+        isRecord(row) && typeof row.id === "string" ? row.id : "",
+      )
+      .filter((value: string) => value.length > 0);
+
+    expect(rowIds).not.toContain(draftReport.id);
+  });
+
+  it("clientVisible report is visible in own client reports endpoint", async () => {
+    const visibleReport = await prisma.metaAdsReport.create({
+      data: {
+        clientProfileId: ownMetaAdsClientId,
+        periodStart: new Date("2026-05-08T00:00:00.000Z"),
+        periodEnd: new Date("2026-05-14T23:59:59.000Z"),
+        type: MetaAdsReportType.MONTHLY,
+        status: MetaAdsReportStatus.PUBLISHED,
+        summary: "Client visible monthly report",
+        clientVisible: true,
+        publishedAt: new Date("2026-05-15T09:00:00.000Z"),
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    const response = await request(app.getHttpServer())
+      .get(CLIENT_OWN_META_ADS_REPORTS_PATH)
+      .set("Authorization", `Bearer ${ownClientToken}`)
+      .expect(200);
+
+    const rows = Array.isArray(response.body.data) ? response.body.data : [];
+    const rowIds = rows
+      .map((row: unknown) =>
+        isRecord(row) && typeof row.id === "string" ? row.id : "",
+      )
+      .filter((value: string) => value.length > 0);
+
+    expect(rowIds).toContain(visibleReport.id);
+  });
+
+  it("client own reports endpoint cannot access other client reports", async () => {
+    const otherClientReport = await prisma.metaAdsReport.create({
+      data: {
+        clientProfileId: activeMetaAdsClientId,
+        periodStart: new Date("2026-05-08T00:00:00.000Z"),
+        periodEnd: new Date("2026-05-14T23:59:59.000Z"),
+        type: MetaAdsReportType.CREATIVE_PERFORMANCE,
+        status: MetaAdsReportStatus.PUBLISHED,
+        summary: "Another client report",
+        clientVisible: true,
+        publishedAt: new Date("2026-05-15T09:00:00.000Z"),
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    const response = await request(app.getHttpServer())
+      .get(CLIENT_OWN_META_ADS_REPORTS_PATH)
+      .set("Authorization", `Bearer ${ownClientToken}`)
+      .expect(200);
+
+    const rows = Array.isArray(response.body.data) ? response.body.data : [];
+    const rowIds = rows
+      .map((row: unknown) =>
+        isRecord(row) && typeof row.id === "string" ? row.id : "",
+      )
+      .filter((value: string) => value.length > 0);
+
+    expect(rowIds).not.toContain(otherClientReport.id);
+  });
+
+  it("publish report can request acknowledgement task", async () => {
+    const report = await prisma.metaAdsReport.create({
+      data: {
+        clientProfileId: activeMetaAdsClientId,
+        periodStart: new Date("2026-05-01T00:00:00.000Z"),
+        periodEnd: new Date("2026-05-07T23:59:59.000Z"),
+        type: MetaAdsReportType.BUDGET_RECOMMENDATION,
+        status: MetaAdsReportStatus.DRAFT,
+        summary: "Bütçe öneri raporu",
+        clientVisible: false,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    const response = await request(app.getHttpServer())
+      .patch(adminMetaAdsReportPath(report.id))
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        status: MetaAdsReportStatus.PUBLISHED,
+        requestAcknowledgement: true,
+      })
+      .expect(200);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        id: report.id,
+        status: MetaAdsReportStatus.PUBLISHED,
+        clientVisible: true,
+        acknowledgementStatus: "PENDING",
+        acknowledgementTaskId: expect.any(String),
+      }),
+    );
+
+    const linkedTask = await prisma.task.findUnique({
+      where: { id: response.body.acknowledgementTaskId },
+      select: {
+        approvalType: true,
+        approvalStatus: true,
+      },
+    });
+    expect(linkedTask?.approvalType).toBe("META_ADS_REPORT_ACKNOWLEDGEMENT");
+    expect(linkedTask?.approvalStatus).toBe("PENDING");
   });
 
   it("admin can update client Meta Ads config when META_ADS service is ACTIVE", async () => {
@@ -726,6 +1017,15 @@ describe("Meta Ads Config Authorization (e2e)", () => {
     });
   });
 
+  it("summary endpoint rejects ranges longer than 90 days", async () => {
+    const response = await request(app.getHttpServer())
+      .get(`${CLIENT_OWN_META_ADS_SUMMARY_PATH}?since=2026-01-01&until=2026-05-09`)
+      .set("Authorization", `Bearer ${ownClientToken}`)
+      .expect(400);
+
+    expectApiError(response.body, /cannot exceed 90 days/i);
+  });
+
   it("client own adsets endpoint returns ADSET-level snapshot payload", async () => {
     const response = await request(app.getHttpServer())
       .get(`${CLIENT_OWN_META_ADS_ADSETS_PATH}?since=2026-05-09&until=2026-05-09`)
@@ -806,6 +1106,37 @@ describe("Meta Ads Config Authorization (e2e)", () => {
         syncStatus: expect.any(String),
       }),
     );
+  });
+
+  it("client own sync endpoint returns sanitized error message", async () => {
+    mockMetaAdsReportingError = new Error("Meta Graph internal stacktrace id=trace-123");
+
+    await request(app.getHttpServer())
+      .post(adminMetaAdsManualConnectPath(ownMetaAdsClientId))
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        accessToken: "EAAGm0PX4ZCpsBAJownClientSanitizedErrorToken",
+        adAccountId: "act-reporting-001",
+      })
+      .expect(201);
+
+    await prisma.clientMetaAdsConfig.update({
+      where: { clientProfileId: ownMetaAdsClientId },
+      data: {
+        // Ensure the request is not TTL-skipped so we can assert sanitized error handling.
+        lastSyncAt: new Date("2026-05-01T00:00:00.000Z"),
+      },
+    });
+
+    const response = await request(app.getHttpServer())
+      .post(`${CLIENT_OWN_META_ADS_SYNC_PATH}?since=2026-05-07&until=2026-05-08`)
+      .set("Authorization", `Bearer ${ownClientToken}`)
+      .expect(502);
+
+    expectApiError(response.body, /Bağlantı problemi var/i);
+    const message = isRecord(response.body) ? extractApiErrorMessage(response.body) : "";
+    expect(message).not.toMatch(/stacktrace|trace-123|Meta Graph/i);
+    mockMetaAdsReportingError = null;
   });
 
   it("admin sync writes reporting snapshot and reporting endpoints read from snapshots", async () => {
@@ -1190,12 +1521,24 @@ describe("Meta Ads Config Authorization (e2e)", () => {
     return `${ADMIN_META_ADS_CONNECTION_PATH_PREFIX}/${clientId}/meta-ads/insights`;
   }
 
+  function adminMetaAdsReportsPath(clientId: string): string {
+    return `${ADMIN_META_ADS_CONNECTION_PATH_PREFIX}/${clientId}/meta-ads/reports`;
+  }
+
+  function adminMetaAdsReportPath(reportId: string): string {
+    return `/api/v1/admin/meta-ads/reports/${reportId}`;
+  }
+
   function assignedMetaAdsConfigPath(clientId: string): string {
     return `${ASSIGNED_META_ADS_CONFIG_PATH}/${clientId}/config`;
   }
 
   function assignedMetaAdsSummaryPath(clientId: string): string {
     return `${ASSIGNED_META_ADS_REPORTING_PATH}/${clientId}/summary`;
+  }
+
+  function assignedMetaAdsReportsPath(clientId: string): string {
+    return `${ASSIGNED_META_ADS_REPORTING_PATH}/${clientId}/reports`;
   }
 
   function assignedMetaAdsSyncPath(clientId: string): string {
