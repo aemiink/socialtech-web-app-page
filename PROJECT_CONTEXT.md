@@ -1129,3 +1129,69 @@ Latest reported checks: `adminandemployeePanel npm run check`, `clientPanel npm 
   - own sync endpoint
   - client-safe error masking
 - Frontend tarafında admin sync log UI ve client safe-state davranışları için test güncellemeleri eklendi.
+
+## 2026-05-10 Update - Meta Ads Faz 9 Reporting + Export Foundation
+
+### Backend
+- Meta Ads rapor domain’i eklendi:
+  - `MetaAdsReport` modeli
+  - `MetaAdsReportType` enumu (`WEEKLY`, `MONTHLY`, `CAMPAIGN_PERFORMANCE`, `CREATIVE_PERFORMANCE`, `BUDGET_RECOMMENDATION`)
+  - `MetaAdsReportStatus` enumu (`DRAFT`, `PUBLISHED`, `ARCHIVED`)
+- Report endpointleri eklendi:
+  - Admin:
+    - `GET /api/v1/admin/clients/:clientId/meta-ads/reports`
+    - `POST /api/v1/admin/clients/:clientId/meta-ads/reports`
+    - `PATCH /api/v1/admin/meta-ads/reports/:reportId`
+  - Assigned employee:
+    - `GET /api/v1/meta-ads/clients/:clientId/reports`
+    - `POST /api/v1/meta-ads/clients/:clientId/reports`
+    - `PATCH /api/v1/meta-ads/reports/:reportId`
+  - Own client:
+    - `GET /api/v1/clients/me/meta-ads/reports`
+- Publish + acknowledgement request akışı task lifecycle ile entegre edildi:
+  - `approvalType = META_ADS_REPORT_ACKNOWLEDGEMENT`
+  - report publish sırasında client-visible + pending approval task üretimi desteklenir
+  - report response’unda acknowledgement durumu (`NOT_REQUESTED`, `PENDING`, `ACKNOWLEDGED`, `CHANGES_REQUESTED`) döner.
+
+### Client Panel
+- `meta-reports` sekmesi insight-list tabanlı görünümden report-entity tabanlı görünüme taşındı.
+- Client panel artık `GET /clients/me/meta-ads/reports` endpointinden:
+  - rapor tipi
+  - yayın durumu
+  - dönem aralığı
+  - özet metni
+  - acknowledgement state
+  verilerini render eder.
+
+### Testing
+- `meta-ads-authz` e2e kapsamı Faz 9 senaryolarıyla genişletildi:
+  - admin report draft create
+  - assigned report create + acknowledgement task
+  - draft report client’a görünmez
+  - clientVisible report client’a görünür
+  - own client other-client report’u göremez
+  - publish + acknowledgement request task üretimi
+- Client panel `service-tab-page.meta-ads` testleri report tab render/assertionlarıyla güncellendi.
+
+## 2026-05-10 Update - Meta Ads Faz 10 Production Hardening
+
+### Backend
+- Own-client sync hata cevapları client-safe standarda çekildi; operasyonel detay sadece admin/assigned tarafında korunur.
+- `meta-ads-authz` e2e kapsamına production hardening senaryoları eklendi:
+  - sync logs limit/pagination davranışı
+  - summary date-range validation (`<= 90` gün)
+  - own sync endpoint error sanitization
+
+### Client Panel
+- `clientPanel/src/app/App.tsx` içinde dashboard/tab/shared sayfalar lazy import edildi ve `Suspense` fallback eklendi.
+- `clientPanel/vite.config.ts` için `manualChunks` ayrıştırması eklendi; Meta Ads yoğun ekranlarda ilk yük daha küçük parçalara bölündü.
+
+### Admin/Employee Panel
+- `adminandemployeePanel/vite.config.ts` için `manualChunks` ayrıştırması eklendi.
+- Employee Meta Ads workspace testleri role-specific görünürlük doğrulamasıyla genişletildi:
+  - Social role -> `Performans` / `Pixel` tabları gizli
+  - Performance role -> `Performans` / `Pixel` tabları görünür
+
+### Known Risks / Notes
+- Backend Meta Ads e2e suite’i bu checkpointte local test DB runtime erişimi olmadığı için çalıştırılamadı (`Schema engine error`).
+- Admin/Employee build çıktısında bir adet >500k app chunk uyarısı sürüyor; route-level lazy migration ayrı bir follow-up olarak planlanmalı.

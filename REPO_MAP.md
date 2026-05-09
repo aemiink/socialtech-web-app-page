@@ -992,3 +992,55 @@ The `client/` directory is the public/marketing Social Tech website, not the Cli
   - client-safe connection notices
 - `clientPanel/src/app/pages/__tests__/meta-ads-dashboard.test.tsx`
 - `clientPanel/src/app/pages/__tests__/service-tab-page.meta-ads.test.tsx`
+
+## 2026-05-10 Update Map (Meta Ads Faz 9 Reporting + Export Foundation)
+
+### Backend
+- `server/prisma/schema.prisma`
+  - `MetaAdsReportType`, `MetaAdsReportStatus` enumları
+  - `MetaAdsReport` modeli + `Task` acknowledgement relation
+- `server/prisma/migrations/20260510013000_add_meta_ads_reports/migration.sql`
+- `server/src/meta-ads/dto/create-meta-ads-report.dto.ts`
+- `server/src/meta-ads/dto/update-meta-ads-report.dto.ts`
+- `server/src/meta-ads/dto/meta-ads-reports-query.dto.ts`
+- `server/src/meta-ads/meta-ads.controller.ts`
+  - admin/assigned/client report endpointleri
+- `server/src/meta-ads/meta-ads.service.ts`
+  - report list/create/publish/update service akışları
+  - publish sonrası report acknowledgement task entegrasyonu
+- `server/test/meta-ads-authz.e2e-spec.ts`
+  - report authz + visibility + publish/ack request coverage
+
+### Client Panel Frontend
+- `clientPanel/src/app/features/metaAds/metaAdsTypes.ts`
+  - report response tipi + status/ack enums
+- `clientPanel/src/app/features/metaAds/metaAdsApi.ts`
+  - `getOwnMetaAdsReports` endpoint + normalize/serialize helpers
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+  - `meta-reports` tabı report-entity list render
+- `clientPanel/src/app/pages/__tests__/service-tab-page.meta-ads.test.tsx`
+  - report tab render/assertion senaryosu
+
+## 2026-05-10 Update Map (Meta Ads Faz 10 Production Hardening)
+
+### Backend
+- `server/src/meta-ads/meta-ads.service.ts`
+  - own-client sync error response sanitization (`client-safe` mesaj)
+  - sync error exception map’te role-aware detail handling
+- `server/test/meta-ads-authz.e2e-spec.ts`
+  - sync logs limit/pagination coverage
+  - summary date-range hard-limit validation coverage
+  - own-client sync error leak prevention coverage
+
+### Client Panel Frontend
+- `clientPanel/src/app/App.tsx`
+  - dashboard/tab/shared page lazy imports
+  - suspense loading fallback
+- `clientPanel/vite.config.ts`
+  - `manualChunks` vendor split (icons/redux/router/radix/recharts/core)
+
+### Admin + Employee Panel Frontend
+- `adminandemployeePanel/vite.config.ts`
+  - `manualChunks` vendor split
+- `adminandemployeePanel/src/app/employee/pages/__tests__/MetaAdsWorkspace.test.tsx`
+  - role-based view visibility assertions (`social` vs `performance`)

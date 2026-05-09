@@ -147,6 +147,8 @@
 - Meta Ads Faz 6 employee role workspaces (Social/Performance/Designer assigned scope + generic `MetaAdsWorkspace` + role-aware actions + tests)
 - Meta Ads Faz 7 approval + creative collaboration (task-based approval metadata, client approve/reject mutation, creative approval preview/history, shared panel rendering)
 - Meta Ads Faz 8 sync automation hardening (sync log modeli, TTL/rate-limit skip, normalize error catalog, admin sync observability, client safe-state refresh)
+- Meta Ads Faz 9 reporting/export foundation (`MetaAdsReport` entity, admin/assigned draft-publish endpoints, client own report visibility, publish->ack task bridge)
+- Meta Ads Faz 10 production hardening (client-safe sync error responses, authz/state coverage genişletmesi, client portal lazy loading + manualChunks)
 
 ## Blocked
 
@@ -154,21 +156,24 @@ None identified.
 
 ## Notes
 
-- Latest backend validation checkpoint: Meta Ads authz/reporting suite `28/28` tests + backend `npm run check`.
+- Latest backend validation checkpoint: Meta Ads authz/reporting suite `38/38` tests + backend `npm run check`.
 - Latest admin/employee frontend validation checkpoint: `25` test files, `153/153` tests.
 - Latest client portal frontend validation checkpoint: `4` test files, `17/17` tests.
 - Latest FAZ-05 validation checkpoint:
+  - `server`: `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true node ./test/run-e2e.cjs meta-ads-authz.e2e-spec.ts` ✅ (`38/38`)
+  - `server`: `npm run prisma:seed` ✅
   - `server`: `npm run check` ✅
-  - `server`: `ALLOW_E2E_DB_RESET=true npm run test:e2e -- meta-ads-authz.e2e-spec.ts` ⛔ (test DB guard: current `DATABASE_URL` test DB patterniyle eşleşmiyor)
   - `adminandemployeePanel`: `npm run test:run -- src/app/pages/__tests__/MetaAdsAdmin.test.tsx src/app/pages/__tests__/ClientDetail.test.tsx` ✅
   - `adminandemployeePanel`: `npm run check` ✅
 - Latest FAZ-06 validation checkpoint:
+  - `server`: permission sözlüğü (`metaAds.reporting.read.assigned`, `metaAds.notes.manage.assigned`, `metaAds.approvals.create.assigned`, `metaAds.creatives.manage.assigned`) seed/service katmanına taşındı ✅
+  - `server`: `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true node ./test/run-e2e.cjs meta-ads-authz.e2e-spec.ts` ✅ (`38/38`)
   - `adminandemployeePanel`: `npm run test:run -- src/app/employee/pages/__tests__/MetaAdsWorkspace.test.tsx` ✅
   - `adminandemployeePanel`: `npm run check` ✅
 - Latest FAZ-07 validation checkpoint:
   - `server`: `npm run prisma:generate` ✅
   - `server`: `npm run typecheck && npm run typecheck:seed && npm run typecheck:spec && npm run build` ✅
-  - `server`: `ALLOW_E2E_DB_RESET=true node ./test/run-e2e.cjs projects-tasks-authz.e2e-spec.ts` ⛔ (test DB guard: current `DATABASE_URL` name is `socialtech_server`)
+  - `server`: `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true node ./test/run-e2e.cjs projects-tasks-authz.e2e-spec.ts` ✅ (`26/26`; rejection note -> otomatik revision task assertion dahil)
   - `clientPanel`: `npm run typecheck && npm run test -- src/app/pages/__tests__/service-tab-page.meta-ads.test.tsx && npm run build` ✅
   - `adminandemployeePanel`: `npm run typecheck && npm run test:run -- src/app/employee/pages/__tests__/MetaAdsWorkspace.test.tsx && npm run build` ✅
 - Latest FAZ-08 validation checkpoint:
@@ -179,6 +184,23 @@ None identified.
   - `adminandemployeePanel`: `npm run check` ✅
   - `clientPanel`: `npm run test -- src/app/pages/__tests__/meta-ads-dashboard.test.tsx src/app/pages/__tests__/service-tab-page.meta-ads.test.tsx` ✅
   - `clientPanel`: `npm run check` ✅
+- Latest FAZ-09 validation checkpoint:
+  - `server`: `npm run prisma:generate` ✅
+  - `server`: `npm run typecheck` ✅
+  - `server`: `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true node ./test/run-e2e.cjs meta-ads-authz.e2e-spec.ts` ✅ (`38/38`)
+  - `server`: `npm run check` ✅
+  - `clientPanel`: `npm run typecheck` ✅
+  - `clientPanel`: `npm run test -- src/app/pages/__tests__/service-tab-page.meta-ads.test.tsx src/app/pages/__tests__/meta-ads-dashboard.test.tsx` ✅
+  - `clientPanel`: `npm run check` ✅
+  - `adminandemployeePanel`: `npm run test:run -- src/app/pages/__tests__/MetaAdsAdmin.test.tsx src/app/employee/pages/__tests__/MetaAdsWorkspace.test.tsx` ✅
+  - `adminandemployeePanel`: `npm run check` ✅
+- Latest FAZ-10 validation checkpoint:
+  - `server`: `npm run check` ✅
+  - `server`: `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true node ./test/run-e2e.cjs meta-ads-authz.e2e-spec.ts` ✅ (`38/38`; local test DB runtime doğrulandı)
+  - `adminandemployeePanel`: `npm run test:run -- src/app/employee/pages/__tests__/MetaAdsWorkspace.test.tsx src/app/pages/__tests__/MetaAdsAdmin.test.tsx` ✅
+  - `adminandemployeePanel`: `npm run check` ✅ (route-level lazy splitting sonrası >500k app chunk uyarısı yok)
+  - `clientPanel`: `npm run test -- src/app/pages/__tests__/service-tab-page.meta-ads.test.tsx src/app/pages/__tests__/meta-ads-dashboard.test.tsx src/app/__tests__/client-portal.test.tsx` ✅
+  - `clientPanel`: `npm run check` ✅ (lazy + chunk split sonrası Vite warning yok)
 - Summary query optimization and summary-side cache/TTL remain relevant follow-ups as data volume grows.
 ## 2026-04-29 Checkpoint
 

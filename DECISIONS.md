@@ -18,6 +18,90 @@ Affected files:
 
 ---
 
+## 2026-05-10 - Meta Ads Faz 9 Reporting + Export Foundation (Report Entity + Publish/Ack Bridge)
+
+Context:
+Faz 8 sonrası Meta Ads tarafında sync gözlemlenebilir hale geldi ancak rapor üretimi hâlâ insight tabanlı anlık görünüm seviyesindeydi. Ajans tarafında draft/publish lifecycle’ı, client-visible rapor ayrımı ve publish sonrası onay/acknowledgement köprüsü için kalıcı bir report domain eksikti.
+
+Decision:
+Faz 9 için dedicated `MetaAdsReport` entity’si eklendi ve rapor lifecycle backend-first olarak standartlaştırıldı:
+
+- Prisma’da:
+  - `MetaAdsReport` modeli
+  - `MetaAdsReportType` enumu
+  - `MetaAdsReportStatus` enumu
+  - report -> task acknowledgement relation eklendi
+- Endpoint yüzeyi:
+  - Admin:
+    - `GET /api/v1/admin/clients/:clientId/meta-ads/reports`
+    - `POST /api/v1/admin/clients/:clientId/meta-ads/reports`
+    - `PATCH /api/v1/admin/meta-ads/reports/:reportId`
+  - Assigned employee:
+    - `GET /api/v1/meta-ads/clients/:clientId/reports`
+    - `POST /api/v1/meta-ads/clients/:clientId/reports`
+    - `PATCH /api/v1/meta-ads/reports/:reportId`
+  - Own client:
+    - `GET /api/v1/clients/me/meta-ads/reports`
+- Publish + acknowledgement request köprüsü:
+  - report publish sırasında `Task(approvalType=META_ADS_REPORT_ACKNOWLEDGEMENT, approvalStatus=PENDING)` oluşturulabilir/güncellenebilir
+  - report response’unda acknowledgement state normalize edilerek döner (`NOT_REQUESTED`, `PENDING`, `ACKNOWLEDGED`, `CHANGES_REQUESTED`)
+- Client panel `meta-reports` sekmesi artık raw insight listesi yerine report entity listesi render eder.
+
+Reason:
+Bu karar, raporları sync snapshot’ından ayrı bir domain varlığına taşıyarak ajans deliverable akışını kalıcı hale getirir. Draft/publish/client-visible sınırları netleşir, onay süreci mevcut task approval altyapısıyla yeniden kullanılabilir ve Faz 10 production hardening/export adımları için stabil contract sağlar.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260510013000_add_meta_ads_reports/migration.sql`
+- `server/src/meta-ads/dto/create-meta-ads-report.dto.ts`
+- `server/src/meta-ads/dto/update-meta-ads-report.dto.ts`
+- `server/src/meta-ads/dto/meta-ads-reports-query.dto.ts`
+- `server/src/meta-ads/meta-ads.controller.ts`
+- `server/src/meta-ads/meta-ads.service.ts`
+- `server/test/meta-ads-authz.e2e-spec.ts`
+- `clientPanel/src/app/features/metaAds/metaAdsTypes.ts`
+- `clientPanel/src/app/features/metaAds/metaAdsApi.ts`
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+- `clientPanel/src/app/pages/__tests__/service-tab-page.meta-ads.test.tsx`
+- `PROJECT_CONTEXT.md`
+- `REPO_MAP.md`
+- `ROAD_MAP.md`
+
+---
+
+## 2026-05-10 - Meta Ads Faz 10 Production Hardening (Client-Safe Errors + Coverage + Safe Code-Splitting)
+
+Context:
+Faz 9 sonrası rapor domain’i ve publish/ack lifecycle çalışır durumdaydı ancak production öncesi hardening için üç kritik alan netleştirilmeliydi: client-facing hata güvenliği, authz/state kapsaması ve bundle davranışı.
+
+Decision:
+Faz 10 kapsamında aşağıdaki üretim sertleştirmeleri uygulandı:
+
+- Backend:
+  - Own-client on-demand sync hata mesajları client-safe seviyeye düşürüldü.
+  - Admin/assigned kullanıcılar için operasyonel hata detayları korunurken client endpointlerde generic güvenli mesaj standardı uygulandı.
+  - `meta-ads-authz` e2e kapsamı genişletildi:
+    - sync logs limit/pagination davranışı
+    - reporting date-range validation (90 gün sınırı)
+    - own-client sync error sanitization
+- Frontend:
+  - Client portal `App.tsx` içinde service/dashboard/tab sayfaları lazy import edildi ve runtime fallback eklendi.
+  - Vite `manualChunks` ayarıyla vendor parçalama iyileştirildi.
+  - Employee Meta Ads workspace testlerine role-specific tab visibility doğrulaması eklendi (social vs performance).
+
+Reason:
+Bu karar, client-facing güvenlik riskini (detaylı hata sızıntısı) azaltır, role/scope davranışını testle güçlendirir ve Meta Ads ağırlıklı ekranlarda ilk yük maliyetini düşürerek production stabilitesini artırır. Değişiklikler framework migration içermeden mevcut Vite + React mimarisiyle uyumludur.
+
+Affected files:
+- `server/src/meta-ads/meta-ads.service.ts`
+- `server/test/meta-ads-authz.e2e-spec.ts`
+- `clientPanel/src/app/App.tsx`
+- `clientPanel/vite.config.ts`
+- `adminandemployeePanel/vite.config.ts`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/MetaAdsWorkspace.test.tsx`
+
+---
+
 ## 2026-04-28 - Shared Project Memory for Claude Code and Codex
 
 Context:
