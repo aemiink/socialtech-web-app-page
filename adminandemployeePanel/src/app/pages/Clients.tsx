@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Edit,
   Eye,
+  FolderOpen,
   PauseCircle,
   PlayCircle,
   RefreshCw,
@@ -681,8 +682,29 @@ export function Clients() {
       </Card>
 
       {isLoading && (
-        <Card className="border-white/[0.06] bg-[#1A1A1A] p-8 text-center text-[#A0A0A0]">
-          Müşteri listesi yükleniyor...
+        <Card className="overflow-hidden border-white/[0.06] bg-[#1A1A1A]">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-[#202020]">
+                <tr>
+                  {["Firma", "Portal Slug", "Hizmetler", "Durum", "Oluşturulma", "Güncellenme", "Kayıt ID", "Aksiyonlar"].map((col) => (
+                    <th key={col} className="p-4 text-left text-sm font-medium text-[#A0A0A0]">{col}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: 5 }).map((_, index) => (
+                  <tr key={index} className="border-t border-white/[0.06]">
+                    {Array.from({ length: 8 }).map((_, cellIndex) => (
+                      <td key={cellIndex} className="p-4">
+                        <div className="h-4 rounded bg-white/[0.06] animate-pulse" style={{ width: cellIndex === 7 ? "120px" : "80%" }} />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </Card>
       )}
 
@@ -696,8 +718,29 @@ export function Clients() {
       )}
 
       {!isLoading && !isListError && clients.length === 0 && (
-        <Card className="border-white/[0.06] bg-[#1A1A1A] p-8 text-center text-[#A0A0A0]">
-          {hasActiveFilters ? "Filtrelere uygun müşteri bulunamadı." : "Henüz müşteri kaydı bulunmuyor."}
+        <Card className="border-white/[0.06] bg-[#1A1A1A] p-12">
+          <div className="flex flex-col items-center gap-3 text-center">
+            <div className="rounded-full bg-white/[0.04] p-4">
+              <FolderOpen className="h-8 w-8 text-[#A0A0A0]" />
+            </div>
+            <p className="text-[#A0A0A0]">
+              {hasActiveFilters ? "Filtrelere uygun müşteri bulunamadı." : "Henüz müşteri kaydı bulunmuyor."}
+            </p>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchInput("");
+                  setSearch("");
+                  setStatusFilter("ALL");
+                  setPage(1);
+                }}
+                className="text-sm text-[#AAFF01] hover:underline"
+              >
+                Filtreleri temizle
+              </button>
+            )}
+          </div>
         </Card>
       )}
 
@@ -725,7 +768,7 @@ export function Clients() {
                   return (
                     <tr
                       key={client.id}
-                      className="border-t border-white/[0.06] transition-colors hover:bg-white/5"
+                      className="border-t border-white/[0.06] transition-colors hover:bg-white/[0.04] even:bg-white/[0.02]"
                     >
                       <td className="p-4">
                         <div className="font-medium text-white">{client.companyName}</div>

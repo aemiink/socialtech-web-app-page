@@ -207,7 +207,7 @@ export function ServiceSelectionPage({
             </p>
           </div>
         ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {purchasedActiveServices.map((service) => {
             const Icon = service.icon;
 
@@ -215,31 +215,31 @@ export function ServiceSelectionPage({
               <button
                 key={service.id}
                 onClick={() => onServiceSelect(service.id)}
-                className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08] hover:border-[#AAFF01]/40 hover:shadow-[0_0_30px_rgba(170,255,1,0.1)] cursor-pointer transition-all text-left"
+                className="rounded-xl border border-border bg-card p-6 hover:border-primary/40 hover:shadow-[0_0_30px_rgba(170,255,1,0.08)] cursor-pointer transition-all text-left flex flex-col"
               >
-                <div className="w-14 h-14 rounded-xl mb-4 flex items-center justify-center bg-[#AAFF01]/10">
-                  <Icon className="w-7 h-7 text-[#AAFF01]" />
+                <div className="bg-primary/10 rounded-lg p-3 w-10 h-10 flex items-center justify-center mb-4 flex-shrink-0">
+                  <Icon className="w-5 h-5 text-primary" />
                 </div>
 
-                <h3 className="text-lg text-white mb-2">{service.title}</h3>
-                <p className="text-[#A0A0A0] text-xs mb-4 leading-relaxed">{service.description}</p>
+                <h3 className="text-sm font-medium text-white mb-1">{service.title}</h3>
+                <p className="text-xs text-muted-foreground mb-4 leading-relaxed">{service.description}</p>
 
                 {service.metrics && (
                   <div className="grid grid-cols-2 gap-2 mb-4">
                     {service.metrics.map((metric, i) => (
-                      <div key={i} className="bg-[#202020] rounded-lg p-2">
+                      <div key={i} className="bg-card-surface rounded-lg p-2">
                         <div className="text-sm text-white">{metric.value}</div>
-                        <div className="text-xs text-[#A0A0A0]">{metric.label}</div>
+                        <div className="text-xs text-muted-foreground">{metric.label}</div>
                       </div>
                     ))}
                   </div>
                 )}
 
                 <div className="flex items-center justify-between mt-auto">
-                  <span className="text-xs px-3 py-1 rounded-lg bg-[#AAFF01]/10 text-[#AAFF01] border border-[#AAFF01]/20">
+                  <span className="text-xs px-3 py-1 rounded-lg bg-primary/10 text-primary border border-primary/20">
                     Aktif
                   </span>
-                  <span className="text-[#AAFF01] text-sm">→</span>
+                  <span className="text-primary text-sm">→</span>
                 </div>
               </button>
             );
