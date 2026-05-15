@@ -1,6 +1,8 @@
 import { Transform } from "class-transformer";
-import { IsDateString, IsEnum, IsOptional, IsString, IsUUID, MaxLength, MinLength } from "class-validator";
+import { IsBoolean, IsDateString, IsEnum, IsOptional, IsString, IsUUID, MaxLength, MinLength } from "class-validator";
 import {
+  MetaAdsApprovalStatus,
+  MetaAdsApprovalType,
   Priority,
   TaskEnvironment,
   TaskSeverity,
@@ -43,6 +45,26 @@ function normalizeOptionalPriority(value: unknown): unknown {
   }
 
   return normalized.toUpperCase();
+}
+
+function normalizeOptionalBoolean(value: unknown): unknown {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "true" || normalized === "1") {
+    return true;
+  }
+  if (normalized === "false" || normalized === "0") {
+    return false;
+  }
+
+  return undefined;
 }
 
 export class TaskQueryDto {
@@ -95,6 +117,21 @@ export class TaskQueryDto {
   @Transform(({ value }) => normalizeOptionalTaskStatus(value))
   @IsEnum(TaskEnvironment)
   environment?: TaskEnvironment;
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalBoolean(value))
+  @IsBoolean()
+  approvalRequired?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalTaskStatus(value))
+  @IsEnum(MetaAdsApprovalStatus)
+  approvalStatus?: MetaAdsApprovalStatus;
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalTaskStatus(value))
+  @IsEnum(MetaAdsApprovalType)
+  approvalType?: MetaAdsApprovalType;
 
   @IsOptional()
   @Transform(({ value }) => normalizeOptionalString(value))

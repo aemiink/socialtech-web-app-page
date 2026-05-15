@@ -1,6 +1,11 @@
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { extractApiErrorMessage } from "../adminUsers/adminUsersUtils";
 import type {
+  AdminMetaAdsSyncLogItem,
+  AdminMetaAdsSyncLogsResponse,
+  AdminMetaAdsClientListItem,
+  AdminMetaAdsClientListResponse,
+  AdminClientMetaAdsConnection,
   BackendPurchasedServiceKey,
   BackendPurchasedServiceStatus,
   ClientProfile,
@@ -11,8 +16,18 @@ import type {
   ClientSummaryRecentProject,
   ClientSummaryRecentTask,
   ClientSummaryResponse,
+  MetaAdsConnectionStatus,
+  MetaAdsReportAcknowledgementStatus,
+  MetaAdsReportItem,
+  MetaAdsReportsResponse,
+  MetaAdsReportStatus,
+  MetaAdsReportType,
+  MetaAdsSyncStatus,
+  MetaAdsSyncResponse,
+  MetaAdsSummaryResponse,
   PurchasedServiceStatus,
   ServiceKey,
+  TestMetaAdsConnectionResponse,
 } from "./clientsTypes";
 
 export { extractApiErrorMessage };
@@ -304,6 +319,46 @@ export function getClientStatusBadgeClass(status: string | null | undefined): st
   return "border-white/[0.12] bg-white/[0.08] text-[#E5E5E5]";
 }
 
+export function getMetaAdsConnectionStatusLabel(status: MetaAdsConnectionStatus): string {
+  if (status === "CONNECTED") {
+    return "Connected";
+  }
+
+  if (status === "PENDING") {
+    return "Pending";
+  }
+
+  if (status === "ERROR") {
+    return "Error";
+  }
+
+  if (status === "DISCONNECTED") {
+    return "Disconnected";
+  }
+
+  return "Not Connected";
+}
+
+export function getMetaAdsConnectionStatusBadgeClass(status: MetaAdsConnectionStatus): string {
+  if (status === "CONNECTED") {
+    return "bg-[#AAFF01] text-[#131313]";
+  }
+
+  if (status === "PENDING") {
+    return "bg-amber-500/20 text-amber-300";
+  }
+
+  if (status === "ERROR") {
+    return "bg-red-600 text-white";
+  }
+
+  if (status === "DISCONNECTED") {
+    return "border-white/[0.12] bg-white/[0.04] text-[#A0A0A0]";
+  }
+
+  return "border-white/[0.12] bg-white/[0.04] text-[#A0A0A0]";
+}
+
 export function getServiceLabel(serviceKey: string | null | undefined): string {
   const normalizedServiceKey = normalizeToUiServiceKey(serviceKey);
   const service = SERVICE_CATALOG.find((item) => item.key === normalizedServiceKey);
@@ -346,6 +401,210 @@ export function normalizeToUiServiceKey(value: unknown): ServiceKey | null {
 
 export function getClientPurchasedServices(client: ClientProfile): ClientPurchasedService[] {
   return client.purchasedServices ?? [];
+}
+
+export function normalizeAdminMetaAdsConnectionResponse(
+  response: unknown,
+): AdminClientMetaAdsConnection {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  if (!isRecord(candidate)) {
+    throw new Error("Meta Ads connection response could not be parsed.");
+  }
+
+  const statusValue = normalizeMetaAdsConnectionStatus(candidate.connectionStatus);
+  const ids = isRecord(candidate.ids) ? candidate.ids : {};
+  const settings = isRecord(candidate.settings) ? candidate.settings : {};
+  const credential = isRecord(candidate.credential) ? candidate.credential : {};
+
+  return {
+    clientProfileId: typeof candidate.clientProfileId === "string" ? candidate.clientProfileId : "",
+    connectionStatus: statusValue,
+    hasActiveService: typeof candidate.hasActiveService === "boolean" ? candidate.hasActiveService : false,
+    ids: {
+      businessId: isStringOrNull(ids.businessId) ? ids.businessId : null,
+      adAccountId: isStringOrNull(ids.adAccountId) ? ids.adAccountId : null,
+      pixelId: isStringOrNull(ids.pixelId) ? ids.pixelId : null,
+      instagramAccountId: isStringOrNull(ids.instagramAccountId) ? ids.instagramAccountId : null,
+      facebookPageId: isStringOrNull(ids.facebookPageId) ? ids.facebookPageId : null,
+    },
+    settings: {
+      currency: isStringOrNull(settings.currency) ? settings.currency : null,
+      timezone: isStringOrNull(settings.timezone) ? settings.timezone : null,
+    },
+    lastSyncAt: isStringOrNull(candidate.lastSyncAt) ? candidate.lastSyncAt : null,
+    syncError: isStringOrNull(candidate.syncError) ? candidate.syncError : null,
+    credential: {
+      hasToken: typeof credential.hasToken === "boolean" ? credential.hasToken : false,
+      tokenLastUpdatedAt: isStringOrNull(credential.tokenLastUpdatedAt)
+        ? credential.tokenLastUpdatedAt
+        : null,
+      tokenExpiresAt: isStringOrNull(credential.tokenExpiresAt) ? credential.tokenExpiresAt : null,
+      grantedScopes: Array.isArray(credential.grantedScopes)
+        ? credential.grantedScopes.filter((item): item is string => typeof item === "string")
+        : [],
+    },
+  };
+}
+
+export function normalizeTestMetaAdsConnectionResponse(
+  response: unknown,
+): TestMetaAdsConnectionResponse {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  if (!isRecord(candidate)) {
+    throw new Error("Meta Ads test connection response could not be parsed.");
+  }
+
+  const connection = normalizeAdminMetaAdsConnectionResponse(candidate.connection);
+  return {
+    success: true,
+    checkedAt: typeof candidate.checkedAt === "string" ? candidate.checkedAt : "",
+    connection,
+    account: {
+      adAccountId: readString(candidate.account, "adAccountId"),
+      currency: readNullableString(candidate.account, "currency"),
+      timezone: readNullableString(candidate.account, "timezone"),
+    },
+    grantedScopes: Array.isArray(candidate.grantedScopes)
+      ? candidate.grantedScopes.filter((item): item is string => typeof item === "string")
+      : [],
+  };
+}
+
+export function normalizeMetaAdsSummaryResponse(response: unknown): MetaAdsSummaryResponse {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  const dateRange = isRecord(candidate) && isRecord(candidate.dateRange) ? candidate.dateRange : {};
+  const roasValue = isRecord(candidate) ? candidate.roas : undefined;
+
+  return {
+    spend: readNumber(isRecord(candidate) ? candidate.spend : undefined, 0),
+    impressions: Math.trunc(readNumber(isRecord(candidate) ? candidate.impressions : undefined, 0)),
+    reach: Math.trunc(readNumber(isRecord(candidate) ? candidate.reach : undefined, 0)),
+    clicks: Math.trunc(readNumber(isRecord(candidate) ? candidate.clicks : undefined, 0)),
+    ctr: readNumber(isRecord(candidate) ? candidate.ctr : undefined, 0),
+    cpc: readNumber(isRecord(candidate) ? candidate.cpc : undefined, 0),
+    cpm: readNumber(isRecord(candidate) ? candidate.cpm : undefined, 0),
+    frequency: readNumber(isRecord(candidate) ? candidate.frequency : undefined, 0),
+    results: Math.trunc(readNumber(isRecord(candidate) ? candidate.results : undefined, 0)),
+    costPerResult: readNumber(isRecord(candidate) ? candidate.costPerResult : undefined, 0),
+    roas: typeof roasValue === "number" && Number.isFinite(roasValue) ? roasValue : null,
+    dateRange: {
+      since: typeof dateRange.since === "string" ? dateRange.since : "",
+      until: typeof dateRange.until === "string" ? dateRange.until : "",
+    },
+    lastSyncAt:
+      isRecord(candidate) && isStringOrNull(candidate.lastSyncAt) ? candidate.lastSyncAt : null,
+  };
+}
+
+export function normalizeMetaAdsSyncResponse(response: unknown): MetaAdsSyncResponse {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  const dateRange = isRecord(candidate) && isRecord(candidate.dateRange) ? candidate.dateRange : {};
+  const inserted = isRecord(candidate) && isRecord(candidate.inserted) ? candidate.inserted : {};
+
+  return {
+    success: true,
+    syncedAt: isRecord(candidate) && typeof candidate.syncedAt === "string" ? candidate.syncedAt : "",
+    dateRange: {
+      since: typeof dateRange.since === "string" ? dateRange.since : "",
+      until: typeof dateRange.until === "string" ? dateRange.until : "",
+    },
+    inserted: {
+      account: readNumber(inserted.account, 0),
+      campaigns: readNumber(inserted.campaigns, 0),
+      total: readNumber(inserted.total, 0),
+    },
+    connectionStatus:
+      isRecord(candidate) && candidate.connectionStatus
+        ? normalizeMetaAdsConnectionStatus(candidate.connectionStatus)
+        : "NOT_CONNECTED",
+    lastSyncAt:
+      isRecord(candidate) && isStringOrNull(candidate.lastSyncAt) ? candidate.lastSyncAt : null,
+    syncStatus:
+      isRecord(candidate) && candidate.syncStatus
+        ? normalizeMetaAdsSyncStatus(candidate.syncStatus)
+        : "SUCCESS",
+    skippedReason:
+      isRecord(candidate) && isStringOrNull(candidate.skippedReason) ? candidate.skippedReason : null,
+  };
+}
+
+export function normalizeAdminMetaAdsClientListResponse(
+  response: unknown,
+): AdminMetaAdsClientListResponse {
+  const candidate = isRecord(response) && "data" in response && isRecord(response.data)
+    ? response.data
+    : response;
+  const rowsSource = isRecord(candidate) ? candidate.data : undefined;
+  const dateRangeSource = isRecord(candidate) && isRecord(candidate.dateRange) ? candidate.dateRange : {};
+  const metaSource = isRecord(candidate) && isRecord(candidate.meta) ? candidate.meta : {};
+
+  return {
+    data: Array.isArray(rowsSource)
+      ? rowsSource.map((row) => normalizeAdminMetaAdsClientListItem(row)).filter(isDefined)
+      : [],
+    dateRange: {
+      since: typeof dateRangeSource.since === "string" ? dateRangeSource.since : "",
+      until: typeof dateRangeSource.until === "string" ? dateRangeSource.until : "",
+    },
+    meta: {
+      total: readNumber(metaSource.total, 0),
+      connected: readNumber(metaSource.connected, 0),
+      error: readNumber(metaSource.error, 0),
+      pendingApprovals: readNumber(metaSource.pendingApprovals, 0),
+    },
+  };
+}
+
+export function normalizeAdminMetaAdsSyncLogsResponse(
+  response: unknown,
+): AdminMetaAdsSyncLogsResponse {
+  const candidate = isRecord(response) && "data" in response && isRecord(response.data)
+    ? response.data
+    : response;
+  const rowsSource = isRecord(candidate) ? candidate.data : undefined;
+  const metaSource = isRecord(candidate) && isRecord(candidate.meta) ? candidate.meta : {};
+
+  return {
+    data: Array.isArray(rowsSource)
+      ? rowsSource.map((row) => normalizeAdminMetaAdsSyncLogItem(row)).filter(isDefined)
+      : [],
+    meta: {
+      total: readNumber(metaSource.total, 0),
+      failed: readNumber(metaSource.failed, 0),
+      running: readNumber(metaSource.running, 0),
+      skipped: readNumber(metaSource.skipped, 0),
+    },
+  };
+}
+
+export function normalizeMetaAdsReportsResponse(response: unknown): MetaAdsReportsResponse {
+  const candidate = isRecord(response) && "data" in response && isRecord(response.data)
+    ? response.data
+    : response;
+  const rowsSource = isRecord(candidate) ? candidate.data : undefined;
+  const metaSource = isRecord(candidate) && isRecord(candidate.meta) ? candidate.meta : {};
+
+  return {
+    data: Array.isArray(rowsSource)
+      ? rowsSource.map((row) => normalizeMetaAdsReportItem(row)).filter(isDefined)
+      : [],
+    meta: {
+      total: readNumber(metaSource.total, 0),
+      draft: readNumber(metaSource.draft, 0),
+      published: readNumber(metaSource.published, 0),
+      clientVisible: readNumber(metaSource.clientVisible, 0),
+    },
+  };
+}
+
+export function normalizeMetaAdsReportItemResponse(response: unknown): MetaAdsReportItem {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  const parsed = normalizeMetaAdsReportItem(candidate);
+  if (!parsed) {
+    throw new Error("Meta Ads report response could not be parsed.");
+  }
+
+  return parsed;
 }
 
 export function getActivePurchasedServices(client: ClientProfile): ClientPurchasedService[] {
@@ -668,6 +927,177 @@ function normalizeClientSummaryMeta(value: unknown): ClientSummaryResponse["meta
   };
 }
 
+function normalizeAdminMetaAdsClientListItem(value: unknown): AdminMetaAdsClientListItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const client = isRecord(value.client) ? value.client : {};
+  const ids = isRecord(value.ids) ? value.ids : {};
+  const settings = isRecord(value.settings) ? value.settings : {};
+  const spendSummary = isRecord(value.spendSummary) ? value.spendSummary : {};
+  const actionContext = isRecord(value.actionContext) ? value.actionContext : {};
+  const assignedEmployeesSource = Array.isArray(value.assignedEmployees) ? value.assignedEmployees : [];
+
+  if (
+    typeof client.id !== "string" ||
+    typeof client.slug !== "string" ||
+    typeof client.companyName !== "string"
+  ) {
+    return null;
+  }
+
+  const assignedEmployees = assignedEmployeesSource
+    .map((item) => {
+      if (!isRecord(item)) {
+        return null;
+      }
+
+      if (
+        typeof item.userId !== "string" ||
+        typeof item.email !== "string" ||
+        typeof item.role !== "string" ||
+        typeof item.scope !== "string"
+      ) {
+        return null;
+      }
+
+      return {
+        userId: item.userId,
+        email: item.email,
+        displayName: isStringOrNull(item.displayName) ? item.displayName : null,
+        role: item.role,
+        scope: item.scope,
+      };
+    })
+    .filter(isDefined);
+
+  return {
+    client: {
+      id: client.id,
+      slug: client.slug,
+      companyName: client.companyName,
+      status: normalizeClientStatus(client.status),
+    },
+    serviceStatus: normalizeMetaAdsServiceStatus(value.serviceStatus),
+    connectionStatus: normalizeMetaAdsConnectionStatus(value.connectionStatus),
+    hasToken: typeof value.hasToken === "boolean" ? value.hasToken : false,
+    ids: {
+      businessId: isStringOrNull(ids.businessId) ? ids.businessId : null,
+      adAccountId: isStringOrNull(ids.adAccountId) ? ids.adAccountId : null,
+      pixelId: isStringOrNull(ids.pixelId) ? ids.pixelId : null,
+      instagramAccountId: isStringOrNull(ids.instagramAccountId) ? ids.instagramAccountId : null,
+      facebookPageId: isStringOrNull(ids.facebookPageId) ? ids.facebookPageId : null,
+    },
+    settings: {
+      currency: isStringOrNull(settings.currency) ? settings.currency : null,
+      timezone: isStringOrNull(settings.timezone) ? settings.timezone : null,
+    },
+    lastSyncAt: isStringOrNull(value.lastSyncAt) ? value.lastSyncAt : null,
+    syncError: isStringOrNull(value.syncError) ? value.syncError : null,
+    spendSummary: {
+      spend: readNumber(spendSummary.spend, 0),
+      impressions: readNumber(spendSummary.impressions, 0),
+      clicks: readNumber(spendSummary.clicks, 0),
+      results: readNumber(spendSummary.results, 0),
+      roas:
+        typeof spendSummary.roas === "number" && Number.isFinite(spendSummary.roas)
+          ? spendSummary.roas
+          : null,
+    },
+    pendingApprovals: readNumber(value.pendingApprovals, 0),
+    assignedEmployees,
+    actionContext: {
+      metaAdsProjectId: isStringOrNull(actionContext.metaAdsProjectId)
+        ? actionContext.metaAdsProjectId
+        : null,
+    },
+  };
+}
+
+function normalizeAdminMetaAdsSyncLogItem(value: unknown): AdminMetaAdsSyncLogItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (
+    typeof value.id !== "string" ||
+    typeof value.clientProfileId !== "string" ||
+    typeof value.clientCompanyName !== "string" ||
+    typeof value.startedAt !== "string" ||
+    typeof value.createdAt !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    clientProfileId: value.clientProfileId,
+    clientCompanyName: value.clientCompanyName,
+    adAccountId: isStringOrNull(value.adAccountId) ? value.adAccountId : null,
+    status: normalizeMetaAdsSyncStatus(value.status),
+    startedAt: value.startedAt,
+    finishedAt: isStringOrNull(value.finishedAt) ? value.finishedAt : null,
+    durationMs: typeof value.durationMs === "number" && Number.isFinite(value.durationMs)
+      ? value.durationMs
+      : null,
+    errorCode: isStringOrNull(value.errorCode) ? value.errorCode : null,
+    errorMessage: isStringOrNull(value.errorMessage) ? value.errorMessage : null,
+    recordsFetched: typeof value.recordsFetched === "number" && Number.isFinite(value.recordsFetched)
+      ? Math.trunc(value.recordsFetched)
+      : null,
+    apiCallCount: typeof value.apiCallCount === "number" && Number.isFinite(value.apiCallCount)
+      ? Math.trunc(value.apiCallCount)
+      : null,
+    createdAt: value.createdAt,
+  };
+}
+
+function normalizeMetaAdsReportItem(value: unknown): MetaAdsReportItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (
+    typeof value.id !== "string" ||
+    typeof value.clientProfileId !== "string" ||
+    typeof value.periodStart !== "string" ||
+    typeof value.periodEnd !== "string" ||
+    typeof value.createdAt !== "string" ||
+    typeof value.updatedAt !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    clientProfileId: value.clientProfileId,
+    projectId: isStringOrNull(value.projectId) ? value.projectId : null,
+    projectName: isStringOrNull(value.projectName) ? value.projectName : null,
+    periodStart: value.periodStart,
+    periodEnd: value.periodEnd,
+    type: normalizeMetaAdsReportType(value.type),
+    status: normalizeMetaAdsReportStatus(value.status),
+    summary: isStringOrNull(value.summary) ? value.summary : null,
+    metricsSnapshot: isRecord(value.metricsSnapshot)
+      ? value.metricsSnapshot
+      : value.metricsSnapshot === null
+        ? null
+        : null,
+    clientVisible: typeof value.clientVisible === "boolean" ? value.clientVisible : false,
+    publishedAt: isStringOrNull(value.publishedAt) ? value.publishedAt : null,
+    acknowledgementRequestedAt:
+      isStringOrNull(value.acknowledgementRequestedAt) ? value.acknowledgementRequestedAt : null,
+    acknowledgedAt: isStringOrNull(value.acknowledgedAt) ? value.acknowledgedAt : null,
+    acknowledgementStatus: normalizeMetaAdsReportAcknowledgementStatus(value.acknowledgementStatus),
+    acknowledgementTaskId: isStringOrNull(value.acknowledgementTaskId) ? value.acknowledgementTaskId : null,
+    acknowledgementTaskUpdatedAt:
+      isStringOrNull(value.acknowledgementTaskUpdatedAt) ? value.acknowledgementTaskUpdatedAt : null,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+  };
+}
+
 function isDefined<T>(value: T | null | undefined): value is T {
   return value !== null && value !== undefined;
 }
@@ -805,6 +1235,121 @@ function normalizePurchasedServiceStatus(value: unknown): PurchasedServiceStatus
   }
 
   return "ACTIVE";
+}
+
+function normalizeMetaAdsServiceStatus(value: unknown): PurchasedServiceStatus {
+  if (isPurchasedServiceStatus(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toUpperCase();
+    if (normalized === "PAUSED") {
+      return "PAUSED";
+    }
+    if (normalized === "INACTIVE" || normalized === "CANCELED") {
+      return "INACTIVE";
+    }
+  }
+
+  return "INACTIVE";
+}
+
+function normalizeClientStatus(value: unknown): ClientStatus {
+  if (value === "ACTIVE" || value === "INACTIVE" || value === "SUSPENDED") {
+    return value;
+  }
+
+  return "INACTIVE";
+}
+
+function normalizeMetaAdsConnectionStatus(value: unknown): MetaAdsConnectionStatus {
+  if (value === "CONNECTED") {
+    return "CONNECTED";
+  }
+
+  if (value === "PENDING") {
+    return "PENDING";
+  }
+
+  if (value === "ERROR") {
+    return "ERROR";
+  }
+
+  if (value === "DISCONNECTED") {
+    return "DISCONNECTED";
+  }
+
+  return "NOT_CONNECTED";
+}
+
+function normalizeMetaAdsSyncStatus(value: unknown): MetaAdsSyncStatus {
+  if (
+    value === "RUNNING" ||
+    value === "SUCCESS" ||
+    value === "FAILED" ||
+    value === "PARTIAL" ||
+    value === "SKIPPED"
+  ) {
+    return value;
+  }
+
+  return "SUCCESS";
+}
+
+function normalizeMetaAdsReportType(value: unknown): MetaAdsReportType {
+  if (
+    value === "WEEKLY" ||
+    value === "MONTHLY" ||
+    value === "CAMPAIGN_PERFORMANCE" ||
+    value === "CREATIVE_PERFORMANCE" ||
+    value === "BUDGET_RECOMMENDATION"
+  ) {
+    return value;
+  }
+
+  return "WEEKLY";
+}
+
+function normalizeMetaAdsReportStatus(value: unknown): MetaAdsReportStatus {
+  if (value === "DRAFT" || value === "PUBLISHED" || value === "ARCHIVED") {
+    return value;
+  }
+
+  return "DRAFT";
+}
+
+function normalizeMetaAdsReportAcknowledgementStatus(
+  value: unknown,
+): MetaAdsReportAcknowledgementStatus {
+  if (
+    value === "NOT_REQUESTED" ||
+    value === "PENDING" ||
+    value === "ACKNOWLEDGED" ||
+    value === "CHANGES_REQUESTED"
+  ) {
+    return value;
+  }
+
+  return "NOT_REQUESTED";
+}
+
+function readString(value: unknown, key: string): string {
+  if (!isRecord(value)) {
+    return "";
+  }
+
+  const target = value[key];
+  return typeof target === "string" ? target : "";
+}
+
+function readNullableString(value: unknown, key: string): string | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const target = value[key];
+  return typeof target === "string" ? target : null;
 }
 
 function isStringOrNull(value: unknown): value is string | null {

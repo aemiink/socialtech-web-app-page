@@ -14,7 +14,7 @@ import {
   Youtube,
 } from "lucide-react";
 
-import logoImage from "../../../assets/28d6c1698c390e901d670fea04f3d952314f5313.png";
+import logoImage from "../../../assets/branding/yatay-logo.svg";
 import shopifyIcon from "../../../assets/cc24a5c5ac0319bdeacf0c74b1781b13e57edb85.png";
 import wooIcon from "../../../assets/f16185c3fccdbc09b48f3936735bf25fbd2b91a2.png";
 import wordpressIcon from "../../../assets/a56dc130860c00dd18ef049f57bc6aed87db0f63.png";

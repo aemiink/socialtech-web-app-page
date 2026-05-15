@@ -1,84 +1,20 @@
+import type { ComponentType } from "react";
 import { createBrowserRouter, Navigate } from "react-router";
-import { RootLayout } from "./components/RootLayout";
-import { Login } from "./pages/Login";
-import { Dashboard } from "./pages/Dashboard";
-import { Clients } from "./pages/Clients";
-import { ClientDetail } from "./pages/ClientDetail";
-import { CrmLeads } from "./pages/CrmLeads";
-import { CrmLeadDetail } from "./pages/CrmLeadDetail";
-import { Services } from "./pages/Services";
-import { ServiceDetail } from "./pages/ServiceDetail";
-import { Projects } from "./pages/Projects";
-import { ProjectDetail } from "./pages/ProjectDetail";
-import { Tasks } from "./pages/Tasks";
-import { TaskDetail } from "./pages/TaskDetail";
-import { Approvals } from "./pages/Approvals";
-import { Campaigns } from "./pages/Campaigns";
-import { Contents } from "./pages/Contents";
-import { Reports } from "./pages/Reports";
-import { ReportDetail } from "./pages/ReportDetail";
-import { Meetings } from "./pages/Meetings";
-import { Employees } from "./pages/Employees";
-import { EmployeeAssignments } from "./pages/EmployeeAssignments";
-import { EmployeeDetail } from "./pages/EmployeeDetail";
-import { AuditLogs } from "./pages/AuditLogs";
-import { Finance } from "./pages/Finance";
-import { Automations } from "./pages/Automations";
-import { Settings } from "./pages/Settings";
 
-import { EmployeeLayout } from "./employee/EmployeeLayout";
-import { EmployeeDashboard } from "./employee/dashboards/EmployeeDashboard";
-import { Gorevlerim } from "./employee/pages/Gorevlerim";
-import { Musterilerim } from "./employee/pages/Musterilerim";
-import { Takvim } from "./employee/pages/Takvim";
-import { Bildirimler } from "./employee/pages/Bildirimler";
-import { Dosyalar } from "./employee/pages/Dosyalar";
-import { Ayarlar } from "./employee/pages/Ayarlar";
-import { Projeler as EmployeeProjeler } from "./employee/pages/Projeler";
-import { Onaylar } from "./employee/pages/Onaylar";
-import { Teslimatlar } from "./employee/pages/Teslimatlar";
-import { Toplantilar } from "./employee/pages/Toplantilar";
-import { RaporTakibi } from "./employee/pages/RaporTakibi";
-import { Kampanyalar as EmployeeKampanyalar } from "./employee/pages/Kampanyalar";
-import { Optimizasyonlar } from "./employee/pages/Optimizasyonlar";
-import { KreatifTalepleri } from "./employee/pages/KreatifTalepleri";
-import { PixelTracking } from "./employee/pages/PixelTracking";
-import { RaporNotlari } from "./employee/pages/RaporNotlari";
-import { IcerikTakvimi } from "./employee/pages/IcerikTakvimi";
-import { Captionlar } from "./employee/pages/Captionlar";
-import { OnayBekleyenler } from "./employee/pages/OnayBekleyenler";
-import { YayinAkisi } from "./employee/pages/YayinAkisi";
-import { DmYorumlar } from "./employee/pages/DmYorumlar";
-import { TrendNotlari } from "./employee/pages/TrendNotlari";
-import { Kreatifler } from "./employee/pages/Kreatifler";
-import { UITasarimlar } from "./employee/pages/UITasarimlar";
-import { Revizyonlar } from "./employee/pages/Revizyonlar";
-import { TeslimDosyalari } from "./employee/pages/TeslimDosyalari";
-import { MarkaDosyalari } from "./employee/pages/MarkaDosyalari";
-import { Sprintler } from "./employee/pages/Sprintler";
-import { Frontend } from "./employee/pages/Frontend";
-import { BackendAPI } from "./employee/pages/BackendAPI";
-import { Buglar } from "./employee/pages/Buglar";
-import { TestYayin } from "./employee/pages/TestYayin";
-import { DestekTalepleri } from "./employee/pages/DestekTalepleri";
-import { AcikIsler } from "./employee/pages/AcikIsler";
-import { CozulenIsler } from "./employee/pages/CozulenIsler";
-import { Bakim } from "./employee/pages/Bakim";
-import { Guvenlik } from "./employee/pages/Guvenlik";
-import { Yedekleme } from "./employee/pages/Yedekleme";
-import { Guncellemeler } from "./employee/pages/Guncellemeler";
-import { SEOAudit } from "./employee/pages/SEOAudit";
-import { TeknikHatalar } from "./employee/pages/TeknikHatalar";
-import { AnahtarKelimeler } from "./employee/pages/AnahtarKelimeler";
-import { SayfaHizi } from "./employee/pages/SayfaHizi";
-import { IndexDurumu } from "./employee/pages/IndexDurumu";
-import { SearchConsole } from "./employee/pages/SearchConsole";
-import { AksiyonPlani } from "./employee/pages/AksiyonPlani";
-import { CrmLeadlerim } from "./employee/pages/CrmLeadlerim";
-import { CrmLeadDetail as EmployeeCrmLeadDetail } from "./employee/pages/CrmLeadDetail";
-import { BugunkuTakipler } from "./employee/pages/BugunkuTakipler";
-import { ProjectManagerClientDetail } from "./employee/pages/ProjectManagerClientDetail";
-import { ProjectManagerServiceWorkspace } from "./employee/pages/ProjectManagerServiceWorkspace";
+type LazyModule = Record<string, unknown>;
+
+function lazyComponent(loader: () => Promise<LazyModule>, exportName: string) {
+  return async () => {
+    const module = await loader();
+    const component = module[exportName];
+
+    if (!component || typeof component !== "function") {
+      throw new Error(`Route export '${exportName}' not found`);
+    }
+
+    return { Component: component as ComponentType };
+  };
+}
 
 function LoginRedirect() {
   return <Navigate to="/login" replace />;
@@ -87,37 +23,38 @@ function LoginRedirect() {
 export const router = createBrowserRouter([
   {
     path: "/login",
-    Component: Login,
+    lazy: lazyComponent(() => import("./pages/Login"), "Login"),
   },
   {
     path: "/",
-    Component: RootLayout,
+    lazy: lazyComponent(() => import("./components/RootLayout"), "RootLayout"),
     children: [
-      { index: true, Component: Dashboard },
-      { path: "musteriler", Component: Clients },
-      { path: "musteriler/:id", Component: ClientDetail },
-      { path: "crm", Component: CrmLeads },
-      { path: "crm/:id", Component: CrmLeadDetail },
-      { path: "hizmetler", Component: Services },
-      { path: "hizmetler/:id", Component: ServiceDetail },
-      { path: "projeler", Component: Projects },
-      { path: "projeler/:id", Component: ProjectDetail },
-      { path: "dosyalar", Component: Dosyalar },
-      { path: "gorevler", Component: Tasks },
-      { path: "gorevler/:id", Component: TaskDetail },
-      { path: "onaylar", Component: Approvals },
-      { path: "kampanyalar", Component: Campaigns },
-      { path: "icerikler", Component: Contents },
-      { path: "raporlar", Component: Reports },
-      { path: "raporlar/:id", Component: ReportDetail },
-      { path: "toplantilar", Component: Meetings },
-      { path: "calisanlar", Component: Employees },
-      { path: "calisanlar/atamalar", Component: EmployeeAssignments },
-      { path: "calisanlar/:id", Component: EmployeeDetail },
-      { path: "audit-loglari", Component: AuditLogs },
-      { path: "finans", Component: Finance },
-      { path: "otomasyonlar", Component: Automations },
-      { path: "ayarlar", Component: Settings },
+      { index: true, lazy: lazyComponent(() => import("./pages/Dashboard"), "Dashboard") },
+      { path: "musteriler", lazy: lazyComponent(() => import("./pages/Clients"), "Clients") },
+      { path: "musteriler/:id", lazy: lazyComponent(() => import("./pages/ClientDetail"), "ClientDetail") },
+      { path: "crm", lazy: lazyComponent(() => import("./pages/CrmLeads"), "CrmLeads") },
+      { path: "crm/:id", lazy: lazyComponent(() => import("./pages/CrmLeadDetail"), "CrmLeadDetail") },
+      { path: "hizmetler", lazy: lazyComponent(() => import("./pages/Services"), "Services") },
+      { path: "hizmetler/:id", lazy: lazyComponent(() => import("./pages/ServiceDetail"), "ServiceDetail") },
+      { path: "projeler", lazy: lazyComponent(() => import("./pages/Projects"), "Projects") },
+      { path: "projeler/:id", lazy: lazyComponent(() => import("./pages/ProjectDetail"), "ProjectDetail") },
+      { path: "dosyalar", lazy: lazyComponent(() => import("./employee/pages/Dosyalar"), "Dosyalar") },
+      { path: "gorevler", lazy: lazyComponent(() => import("./pages/Tasks"), "Tasks") },
+      { path: "gorevler/:id", lazy: lazyComponent(() => import("./pages/TaskDetail"), "TaskDetail") },
+      { path: "onaylar", lazy: lazyComponent(() => import("./pages/Approvals"), "Approvals") },
+      { path: "kampanyalar", lazy: lazyComponent(() => import("./pages/Campaigns"), "Campaigns") },
+      { path: "meta-ads", lazy: lazyComponent(() => import("./pages/MetaAdsAdmin"), "MetaAdsAdmin") },
+      { path: "icerikler", lazy: lazyComponent(() => import("./pages/Contents"), "Contents") },
+      { path: "raporlar", lazy: lazyComponent(() => import("./pages/Reports"), "Reports") },
+      { path: "raporlar/:id", lazy: lazyComponent(() => import("./pages/ReportDetail"), "ReportDetail") },
+      { path: "toplantilar", lazy: lazyComponent(() => import("./pages/Meetings"), "Meetings") },
+      { path: "calisanlar", lazy: lazyComponent(() => import("./pages/Employees"), "Employees") },
+      { path: "calisanlar/atamalar", lazy: lazyComponent(() => import("./pages/EmployeeAssignments"), "EmployeeAssignments") },
+      { path: "calisanlar/:id", lazy: lazyComponent(() => import("./pages/EmployeeDetail"), "EmployeeDetail") },
+      { path: "audit-loglari", lazy: lazyComponent(() => import("./pages/AuditLogs"), "AuditLogs") },
+      { path: "finans", lazy: lazyComponent(() => import("./pages/Finance"), "Finance") },
+      { path: "otomasyonlar", lazy: lazyComponent(() => import("./pages/Automations"), "Automations") },
+      { path: "ayarlar", lazy: lazyComponent(() => import("./pages/Settings"), "Settings") },
     ],
   },
   {
@@ -126,63 +63,64 @@ export const router = createBrowserRouter([
   },
   {
     path: "/employee",
-    Component: EmployeeLayout,
+    lazy: lazyComponent(() => import("./employee/EmployeeLayout"), "EmployeeLayout"),
     children: [
       { index: true, element: <Navigate to="dashboard" replace /> },
-      { path: "dashboard", Component: EmployeeDashboard },
-      { path: "crm/leads", Component: CrmLeadlerim },
-      { path: "crm/leads/:id", Component: EmployeeCrmLeadDetail },
-      { path: "crm/follow-ups", Component: BugunkuTakipler },
-      { path: "gorevlerim", Component: Gorevlerim },
-      { path: "gorevlerim/:id", Component: TaskDetail },
-      { path: "musterilerim", Component: Musterilerim },
-      { path: "project-manager/clients/:clientId", Component: ProjectManagerClientDetail },
-      { path: "project-manager/clients/:clientId/services/:serviceKey", Component: ProjectManagerServiceWorkspace },
-      { path: "takvim", Component: Takvim },
-      { path: "bildirimler", Component: Bildirimler },
-      { path: "dosyalar", Component: Dosyalar },
-      { path: "ayarlar", Component: Ayarlar },
-      { path: "projeler", Component: EmployeeProjeler },
-      { path: "projeler/:id", Component: ProjectDetail },
-      { path: "onaylar", Component: Onaylar },
-      { path: "teslimatlar", Component: Teslimatlar },
-      { path: "toplantilar", Component: Toplantilar },
-      { path: "rapor-takibi", Component: RaporTakibi },
-      { path: "kampanyalar", Component: EmployeeKampanyalar },
-      { path: "optimizasyonlar", Component: Optimizasyonlar },
-      { path: "kreatif-talepleri", Component: KreatifTalepleri },
-      { path: "pixel-tracking", Component: PixelTracking },
-      { path: "rapor-notlari", Component: RaporNotlari },
-      { path: "icerik-takvimi", Component: IcerikTakvimi },
-      { path: "captionlar", Component: Captionlar },
-      { path: "onay-bekleyenler", Component: OnayBekleyenler },
-      { path: "yayin-akisi", Component: YayinAkisi },
-      { path: "dm-yorumlar", Component: DmYorumlar },
-      { path: "trend-notlari", Component: TrendNotlari },
-      { path: "kreatifler", Component: Kreatifler },
-      { path: "ui-tasarimlar", Component: UITasarimlar },
-      { path: "revizyonlar", Component: Revizyonlar },
-      { path: "teslim-dosyalari", Component: TeslimDosyalari },
-      { path: "marka-dosyalari", Component: MarkaDosyalari },
-      { path: "sprintler", Component: Sprintler },
-      { path: "frontend", Component: Frontend },
-      { path: "backend-api", Component: BackendAPI },
-      { path: "buglar", Component: Buglar },
-      { path: "test-yayin", Component: TestYayin },
-      { path: "destek-talepleri", Component: DestekTalepleri },
-      { path: "acik-isler", Component: AcikIsler },
-      { path: "cozulen-isler", Component: CozulenIsler },
-      { path: "bakim", Component: Bakim },
-      { path: "guvenlik", Component: Guvenlik },
-      { path: "yedekleme", Component: Yedekleme },
-      { path: "guncellemeler", Component: Guncellemeler },
-      { path: "seo-audit", Component: SEOAudit },
-      { path: "teknik-hatalar", Component: TeknikHatalar },
-      { path: "anahtar-kelimeler", Component: AnahtarKelimeler },
-      { path: "sayfa-hizi", Component: SayfaHizi },
-      { path: "index-durumu", Component: IndexDurumu },
-      { path: "search-console", Component: SearchConsole },
-      { path: "aksiyon-plani", Component: AksiyonPlani },
+      { path: "dashboard", lazy: lazyComponent(() => import("./employee/dashboards/EmployeeDashboard"), "EmployeeDashboard") },
+      { path: "crm/leads", lazy: lazyComponent(() => import("./employee/pages/CrmLeadlerim"), "CrmLeadlerim") },
+      { path: "crm/leads/:id", lazy: lazyComponent(() => import("./employee/pages/CrmLeadDetail"), "CrmLeadDetail") },
+      { path: "crm/follow-ups", lazy: lazyComponent(() => import("./employee/pages/BugunkuTakipler"), "BugunkuTakipler") },
+      { path: "gorevlerim", lazy: lazyComponent(() => import("./employee/pages/Gorevlerim"), "Gorevlerim") },
+      { path: "meta-ads", lazy: lazyComponent(() => import("./employee/pages/MetaAdsCalismaAlani"), "MetaAdsCalismaAlani") },
+      { path: "gorevlerim/:id", lazy: lazyComponent(() => import("./pages/TaskDetail"), "TaskDetail") },
+      { path: "musterilerim", lazy: lazyComponent(() => import("./employee/pages/Musterilerim"), "Musterilerim") },
+      { path: "project-manager/clients/:clientId", lazy: lazyComponent(() => import("./employee/pages/ProjectManagerClientDetail"), "ProjectManagerClientDetail") },
+      { path: "project-manager/clients/:clientId/services/:serviceKey", lazy: lazyComponent(() => import("./employee/pages/ProjectManagerServiceWorkspace"), "ProjectManagerServiceWorkspace") },
+      { path: "takvim", lazy: lazyComponent(() => import("./employee/pages/Takvim"), "Takvim") },
+      { path: "bildirimler", lazy: lazyComponent(() => import("./employee/pages/Bildirimler"), "Bildirimler") },
+      { path: "dosyalar", lazy: lazyComponent(() => import("./employee/pages/Dosyalar"), "Dosyalar") },
+      { path: "ayarlar", lazy: lazyComponent(() => import("./employee/pages/Ayarlar"), "Ayarlar") },
+      { path: "projeler", lazy: lazyComponent(() => import("./employee/pages/Projeler"), "Projeler") },
+      { path: "projeler/:id", lazy: lazyComponent(() => import("./pages/ProjectDetail"), "ProjectDetail") },
+      { path: "onaylar", lazy: lazyComponent(() => import("./employee/pages/Onaylar"), "Onaylar") },
+      { path: "teslimatlar", lazy: lazyComponent(() => import("./employee/pages/Teslimatlar"), "Teslimatlar") },
+      { path: "toplantilar", lazy: lazyComponent(() => import("./employee/pages/Toplantilar"), "Toplantilar") },
+      { path: "rapor-takibi", lazy: lazyComponent(() => import("./employee/pages/RaporTakibi"), "RaporTakibi") },
+      { path: "kampanyalar", lazy: lazyComponent(() => import("./employee/pages/Kampanyalar"), "Kampanyalar") },
+      { path: "optimizasyonlar", lazy: lazyComponent(() => import("./employee/pages/Optimizasyonlar"), "Optimizasyonlar") },
+      { path: "kreatif-talepleri", lazy: lazyComponent(() => import("./employee/pages/KreatifTalepleri"), "KreatifTalepleri") },
+      { path: "pixel-tracking", lazy: lazyComponent(() => import("./employee/pages/PixelTracking"), "PixelTracking") },
+      { path: "rapor-notlari", lazy: lazyComponent(() => import("./employee/pages/RaporNotlari"), "RaporNotlari") },
+      { path: "icerik-takvimi", lazy: lazyComponent(() => import("./employee/pages/IcerikTakvimi"), "IcerikTakvimi") },
+      { path: "captionlar", lazy: lazyComponent(() => import("./employee/pages/Captionlar"), "Captionlar") },
+      { path: "onay-bekleyenler", lazy: lazyComponent(() => import("./employee/pages/OnayBekleyenler"), "OnayBekleyenler") },
+      { path: "yayin-akisi", lazy: lazyComponent(() => import("./employee/pages/YayinAkisi"), "YayinAkisi") },
+      { path: "dm-yorumlar", lazy: lazyComponent(() => import("./employee/pages/DmYorumlar"), "DmYorumlar") },
+      { path: "trend-notlari", lazy: lazyComponent(() => import("./employee/pages/TrendNotlari"), "TrendNotlari") },
+      { path: "kreatifler", lazy: lazyComponent(() => import("./employee/pages/Kreatifler"), "Kreatifler") },
+      { path: "ui-tasarimlar", lazy: lazyComponent(() => import("./employee/pages/UITasarimlar"), "UITasarimlar") },
+      { path: "revizyonlar", lazy: lazyComponent(() => import("./employee/pages/Revizyonlar"), "Revizyonlar") },
+      { path: "teslim-dosyalari", lazy: lazyComponent(() => import("./employee/pages/TeslimDosyalari"), "TeslimDosyalari") },
+      { path: "marka-dosyalari", lazy: lazyComponent(() => import("./employee/pages/MarkaDosyalari"), "MarkaDosyalari") },
+      { path: "sprintler", lazy: lazyComponent(() => import("./employee/pages/Sprintler"), "Sprintler") },
+      { path: "frontend", lazy: lazyComponent(() => import("./employee/pages/Frontend"), "Frontend") },
+      { path: "backend-api", lazy: lazyComponent(() => import("./employee/pages/BackendAPI"), "BackendAPI") },
+      { path: "buglar", lazy: lazyComponent(() => import("./employee/pages/Buglar"), "Buglar") },
+      { path: "test-yayin", lazy: lazyComponent(() => import("./employee/pages/TestYayin"), "TestYayin") },
+      { path: "destek-talepleri", lazy: lazyComponent(() => import("./employee/pages/DestekTalepleri"), "DestekTalepleri") },
+      { path: "acik-isler", lazy: lazyComponent(() => import("./employee/pages/AcikIsler"), "AcikIsler") },
+      { path: "cozulen-isler", lazy: lazyComponent(() => import("./employee/pages/CozulenIsler"), "CozulenIsler") },
+      { path: "bakim", lazy: lazyComponent(() => import("./employee/pages/Bakim"), "Bakim") },
+      { path: "guvenlik", lazy: lazyComponent(() => import("./employee/pages/Guvenlik"), "Guvenlik") },
+      { path: "yedekleme", lazy: lazyComponent(() => import("./employee/pages/Yedekleme"), "Yedekleme") },
+      { path: "guncellemeler", lazy: lazyComponent(() => import("./employee/pages/Guncellemeler"), "Guncellemeler") },
+      { path: "seo-audit", lazy: lazyComponent(() => import("./employee/pages/SEOAudit"), "SEOAudit") },
+      { path: "teknik-hatalar", lazy: lazyComponent(() => import("./employee/pages/TeknikHatalar"), "TeknikHatalar") },
+      { path: "anahtar-kelimeler", lazy: lazyComponent(() => import("./employee/pages/AnahtarKelimeler"), "AnahtarKelimeler") },
+      { path: "sayfa-hizi", lazy: lazyComponent(() => import("./employee/pages/SayfaHizi"), "SayfaHizi") },
+      { path: "index-durumu", lazy: lazyComponent(() => import("./employee/pages/IndexDurumu"), "IndexDurumu") },
+      { path: "search-console", lazy: lazyComponent(() => import("./employee/pages/SearchConsole"), "SearchConsole") },
+      { path: "aksiyon-plani", lazy: lazyComponent(() => import("./employee/pages/AksiyonPlani"), "AksiyonPlani") },
     ],
   },
 ]);

@@ -19,6 +19,18 @@ export type TaskWorkstream =
   | "UI_INTEGRATION";
 export type TaskSeverity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 export type TaskEnvironment = "DEVELOPMENT" | "STAGING" | "PRODUCTION";
+export type TaskApprovalType =
+  | "META_ADS_CAMPAIGN_APPROVAL"
+  | "META_ADS_CREATIVE_APPROVAL"
+  | "META_ADS_BUDGET_CHANGE_APPROVAL"
+  | "META_ADS_REPORT_ACKNOWLEDGEMENT"
+  | "META_ADS_STRATEGY_APPROVAL";
+export type TaskApprovalStatus =
+  | "PENDING"
+  | "APPROVED"
+  | "CHANGES_REQUESTED"
+  | "REJECTED"
+  | "ACKNOWLEDGED";
 
 export type TaskProjectSummary = {
   id: string;
@@ -76,6 +88,16 @@ export type Task = {
   codePreparedAt?: string | null;
   assigneeUserId: string | null;
   dueDate: string | null;
+  approvalRequired?: boolean;
+  approvalType?: TaskApprovalType | null;
+  approvalStatus?: TaskApprovalStatus | null;
+  approvalResponseNote?: string | null;
+  approvalRequestedAt?: string | null;
+  approvalRespondedAt?: string | null;
+  referenceProjectFileId?: string | null;
+  campaignRef?: string | null;
+  adSetRef?: string | null;
+  adRef?: string | null;
   createdAt: string;
   updatedAt: string;
   project: TaskProjectSummary | null;
@@ -156,6 +178,16 @@ export type CreateTaskRequest = {
   assigneeUserId?: string | null;
   sprintId?: string | null;
   dueDate?: string | null;
+  approvalRequired?: boolean;
+  approvalType?: TaskApprovalType | null;
+  approvalStatus?: TaskApprovalStatus | null;
+  approvalResponseNote?: string | null;
+  approvalRequestedAt?: string | null;
+  approvalRespondedAt?: string | null;
+  referenceProjectFileId?: string | null;
+  campaignRef?: string | null;
+  adSetRef?: string | null;
+  adRef?: string | null;
 };
 
 export type UpdateTaskRequest = Partial<CreateTaskRequest>;

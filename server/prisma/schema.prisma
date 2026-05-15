@@ -60,6 +60,43 @@ enum PurchasedServiceStatus {
   INACTIVE
 }
 
+enum MetaAdsConnectionStatus {
+  NOT_CONNECTED
+  PENDING
+  CONNECTED
+  ERROR
+  DISCONNECTED
+}
+
+enum MetaAdsInsightLevel {
+  ACCOUNT
+  CAMPAIGN
+  ADSET
+  AD
+}
+
+enum MetaAdsSyncStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+  PARTIAL
+  SKIPPED
+}
+
+enum MetaAdsReportType {
+  WEEKLY
+  MONTHLY
+  CAMPAIGN_PERFORMANCE
+  CREATIVE_PERFORMANCE
+  BUDGET_RECOMMENDATION
+}
+
+enum MetaAdsReportStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
 enum EmployeeClientAssignmentScope {
   PROJECT
   PERFORMANCE
@@ -127,6 +164,22 @@ enum TaskEnvironment {
   DEVELOPMENT
   STAGING
   PRODUCTION
+}
+
+enum MetaAdsApprovalType {
+  META_ADS_CAMPAIGN_APPROVAL
+  META_ADS_CREATIVE_APPROVAL
+  META_ADS_BUDGET_CHANGE_APPROVAL
+  META_ADS_REPORT_ACKNOWLEDGEMENT
+  META_ADS_STRATEGY_APPROVAL
+}
+
+enum MetaAdsApprovalStatus {
+  PENDING
+  APPROVED
+  CHANGES_REQUESTED
+  REJECTED
+  ACKNOWLEDGED
 }
 
 enum DeliverySprintStatus {
@@ -294,9 +347,11 @@ model User {
   employeeClientAssignments EmployeeClientAssignment[] @relation("EmployeeClientAssignments")
   assignedTasks             Task[]                     @relation("TaskAssignee")
   codePreparedTasks         Task[]                     @relation("TaskCodePreparedBy")
+  taskApprovalActions       Task[]                     @relation("TaskApprovalResponder")
   completedTaskTodos        TaskTodo[]                 @relation("TaskTodoCompletedBy")
   taskWorkNotes             TaskWorkNote[]             @relation("TaskWorkNoteAuthor")
   uploadedProjectFiles      ProjectFile[]              @relation("ProjectFileUploadedBy")
+  projectFileApprovalActions ProjectFile[]             @relation("ProjectFileApprovalResponder")
   createdProjectFileFolders ProjectFileFolder[]        @relation("ProjectFileFolderCreatedBy")
   assignedProjectFileFolders ProjectFileFolderAssignment[] @relation("ProjectFileFolderAssignedUser")
   projectFileShareLinks     ProjectFileShareLink[]     @relation("ProjectFileShareLinkCreatedBy")
@@ -313,6 +368,9 @@ model User {
   releaseApprovalActions    DeliveryRelease[]          @relation("DeliveryReleaseApprovalActor")
   triggeredCrmLeadScans     CrmLeadScanLog[]           @relation("CrmLeadScanTriggeredBy")
   auditLogs                 AuditLog[]                 @relation("AuditActor")
+  createdMetaAdsReports     MetaAdsReport[]            @relation("MetaAdsReportCreatedBy")
+  publishedMetaAdsReports   MetaAdsReport[]            @relation("MetaAdsReportPublishedBy")
+  acknowledgedMetaAdsReports MetaAdsReport[]           @relation("MetaAdsReportAcknowledgedBy")
 
   @@index([accountType, role])
   @@index([accountType, status])
@@ -347,11 +405,145 @@ model ClientProfile {
   users               User[]
   employeeAssignments EmployeeClientAssignment[]
   purchasedServices   ClientPurchasedService[]
+  metaAdsConfig       ClientMetaAdsConfig?
+  metaAdsCredential   ClientMetaAdsCredential?
+  metaAdsInsights     MetaAdsDailyInsight[]
+  metaAdsSyncLogs     MetaAdsSyncLog[]
+  metaAdsReports      MetaAdsReport[]
   projects            Project[]
   files               ProjectFile[]
   convertedCrmLeads   CrmLead[]                  @relation("CrmLeadConvertedClient")
 
   @@index([status])
+}
+
+model ClientMetaAdsConfig {
+  id                 String                  @id @default(uuid()) @db.Uuid
+  clientProfileId    String                  @unique @db.Uuid
+  businessId         String?
+  adAccountId        String?
+  pixelId            String?
+  instagramAccountId String?
+  facebookPageId     String?
+  currency           String?
+  timezone           String?
+  connectionStatus   MetaAdsConnectionStatus @default(NOT_CONNECTED)
+  lastSyncAt         DateTime?
+  syncError          String?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@index([connectionStatus])
+  @@index([lastSyncAt])
+}
+
+model ClientMetaAdsCredential {
+  id              String    @id @default(uuid()) @db.Uuid
+  clientProfileId String    @unique @db.Uuid
+  accessTokenEnc  String?
+  tokenHash       String?
+  tokenExpiresAt  DateTime?
+  grantedScopes   String[]  @default([])
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@index([tokenHash])
+  @@index([tokenExpiresAt])
+}
+
+model MetaAdsDailyInsight {
+  id             String               @id @default(uuid()) @db.Uuid
+  clientProfileId String              @db.Uuid
+  adAccountId    String
+  date           DateTime
+  level          MetaAdsInsightLevel
+  entityId       String?
+  entityName     String?
+  spend          Decimal?
+  impressions    Int?
+  reach          Int?
+  clicks         Int?
+  ctr            Decimal?
+  cpc            Decimal?
+  cpm            Decimal?
+  frequency      Decimal?
+  results        Int?
+  costPerResult  Decimal?
+  purchaseValue  Decimal?
+  roas           Decimal?
+  raw            Json?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@index([clientProfileId, date])
+  @@index([clientProfileId, level, date])
+  @@index([clientProfileId, adAccountId, level, date])
+  @@index([adAccountId, date])
+}
+
+model MetaAdsSyncLog {
+  id              String            @id @default(uuid()) @db.Uuid
+  clientProfileId String            @db.Uuid
+  adAccountId     String?
+  status          MetaAdsSyncStatus
+  startedAt       DateTime
+  finishedAt      DateTime?
+  errorCode       String?
+  errorMessage    String?
+  recordsFetched  Int?
+  apiCallCount    Int?
+  createdAt       DateTime          @default(now())
+
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@index([clientProfileId, createdAt])
+  @@index([status, createdAt])
+  @@index([clientProfileId, status, createdAt])
+}
+
+model MetaAdsReport {
+  id                        String               @id @default(uuid()) @db.Uuid
+  clientProfileId           String               @db.Uuid
+  projectId                 String?              @db.Uuid
+  periodStart               DateTime
+  periodEnd                 DateTime
+  type                      MetaAdsReportType
+  status                    MetaAdsReportStatus  @default(DRAFT)
+  summary                   String?
+  metricsSnapshot           Json?
+  createdByUserId           String?              @db.Uuid
+  publishedByUserId         String?              @db.Uuid
+  clientVisible             Boolean              @default(false)
+  publishedAt               DateTime?
+  acknowledgementRequestedAt DateTime?
+  acknowledgedAt            DateTime?
+  acknowledgedByUserId      String?              @db.Uuid
+  acknowledgementTaskId     String?              @db.Uuid
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
+
+  clientProfile   ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  project         Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdBy       User?         @relation("MetaAdsReportCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  publishedBy     User?         @relation("MetaAdsReportPublishedBy", fields: [publishedByUserId], references: [id], onDelete: SetNull)
+  acknowledgedBy  User?         @relation("MetaAdsReportAcknowledgedBy", fields: [acknowledgedByUserId], references: [id], onDelete: SetNull)
+  acknowledgementTask Task?     @relation("MetaAdsReportAcknowledgementTask", fields: [acknowledgementTaskId], references: [id], onDelete: SetNull)
+
+  @@index([clientProfileId, createdAt])
+  @@index([clientProfileId, status, createdAt])
+  @@index([clientProfileId, type, periodStart, periodEnd])
+  @@index([clientVisible, status, createdAt])
+  @@index([projectId])
+  @@index([createdByUserId])
+  @@index([publishedByUserId])
+  @@index([acknowledgedByUserId])
+  @@index([acknowledgementTaskId])
 }
 
 model ClientPurchasedService {
@@ -394,6 +586,7 @@ model Project {
   repository       ProjectRepository?
   files            ProjectFile[]
   fileFolders      ProjectFileFolder[]
+  metaAdsReports   MetaAdsReport[]
   workspaceSections WebAppWorkspaceSection[]
   workspaceMessages WebAppWorkspaceMessage[]
   workspaceRevisions WebAppWorkspaceRevision[]
@@ -429,6 +622,18 @@ model Task {
   codePreparedByUserId String?          @db.Uuid
   assigneeUserId       String?          @db.Uuid
   dueDate              DateTime?
+  approvalRequired     Boolean          @default(false)
+  approvalType         MetaAdsApprovalType?
+  approvalStatus       MetaAdsApprovalStatus?
+  approvalResponseNote String?
+  approvalRequestedAt  DateTime?
+  approvalRespondedAt  DateTime?
+  approvalRespondedByUserId String?     @db.Uuid
+  approvalContext      Json?
+  referenceProjectFileId String?        @db.Uuid
+  campaignRef          String?
+  adSetRef             String?
+  adRef                String?
   createdAt            DateTime         @default(now())
   updatedAt            DateTime         @updatedAt
 
@@ -436,6 +641,9 @@ model Task {
   sprint         DeliverySprint? @relation(fields: [sprintId], references: [id], onDelete: SetNull)
   assignee       User?           @relation("TaskAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
   codePreparedBy User?           @relation("TaskCodePreparedBy", fields: [codePreparedByUserId], references: [id], onDelete: SetNull)
+  approvalRespondedBy User?      @relation("TaskApprovalResponder", fields: [approvalRespondedByUserId], references: [id], onDelete: SetNull)
+  referenceProjectFile ProjectFile? @relation("TaskReferenceProjectFile", fields: [referenceProjectFileId], references: [id], onDelete: SetNull)
+  metaAdsReportAcknowledgements MetaAdsReport[] @relation("MetaAdsReportAcknowledgementTask")
   todos          TaskTodo[]
   workNotes      TaskWorkNote[]
   workspaceRevisions WebAppWorkspaceRevision[]
@@ -450,6 +658,11 @@ model Task {
   @@index([workstream])
   @@index([severity])
   @@index([environment])
+  @@index([approvalRequired])
+  @@index([approvalType])
+  @@index([approvalStatus])
+  @@index([approvalRespondedByUserId])
+  @@index([referenceProjectFileId])
   @@index([code])
   @@index([branchName])
 }
@@ -544,6 +757,17 @@ model ProjectFile {
   bytes            Int
   mimeType         String
   originalFileName String
+  approvalRequired Boolean               @default(false)
+  approvalType     MetaAdsApprovalType?
+  approvalStatus   MetaAdsApprovalStatus?
+  approvalResponseNote String?
+  approvalRequestedAt DateTime?
+  approvalRespondedAt DateTime?
+  approvalRespondedByUserId String?      @db.Uuid
+  campaignRef      String?
+  adSetRef         String?
+  adRef            String?
+  performanceSummary Json?
   uploadedByUserId String                @db.Uuid
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
@@ -552,6 +776,8 @@ model ProjectFile {
   folder     ProjectFileFolder?     @relation(fields: [folderId], references: [id], onDelete: SetNull)
   clientProfile ClientProfile       @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
   uploader   User                   @relation("ProjectFileUploadedBy", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+  approvalRespondedBy User?         @relation("ProjectFileApprovalResponder", fields: [approvalRespondedByUserId], references: [id], onDelete: SetNull)
+  approvalTasks Task[]              @relation("TaskReferenceProjectFile")
   shareLinks ProjectFileShareLink[]
   workspaceRevisions WebAppWorkspaceRevision[]
 
@@ -562,6 +788,10 @@ model ProjectFile {
   @@index([serviceKey])
   @@index([category])
   @@index([visibility])
+  @@index([approvalRequired])
+  @@index([approvalType])
+  @@index([approvalStatus])
+  @@index([approvalRespondedByUserId])
   @@index([uploadedByUserId])
   @@unique([projectId, publicId])
 }

@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
+import { ScheduleModule } from "@nestjs/schedule";
 import { AdminAssignmentsModule } from "./admin-assignments/admin-assignments.module";
 import { AdminAuditLogsModule } from "./admin-audit-logs/admin-audit-logs.module";
 import { AdminClientsModule } from "./admin-clients/admin-clients.module";
@@ -13,6 +14,7 @@ import { DeliveryModule } from "./delivery/delivery.module";
 import { CrmModule } from "./crm/crm.module";
 import { HealthModule } from "./health/health.module";
 import { GithubModule } from "./integrations/github/github.module";
+import { MetaAdsModule } from "./meta-ads/meta-ads.module";
 import { ProjectFilesModule } from "./project-files/project-files.module";
 import { ProjectsModule } from "./projects/projects.module";
 import { TasksModule } from "./tasks/tasks.module";
@@ -30,6 +32,7 @@ import { WebAppWorkspaceModule } from "./web-app-workspace/web-app-workspace.mod
         abortEarly: false,
       },
     }),
+    ScheduleModule.forRoot(),
     DatabaseModule,
     HealthModule,
     AuthModule,
@@ -37,6 +40,7 @@ import { WebAppWorkspaceModule } from "./web-app-workspace/web-app-workspace.mod
     ClientsModule,
     CrmModule,
     GithubModule,
+    MetaAdsModule,
     ProjectFilesModule,
     DeliveryModule,
     AdminSummaryModule,

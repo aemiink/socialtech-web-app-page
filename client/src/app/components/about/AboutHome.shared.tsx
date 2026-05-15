@@ -29,7 +29,7 @@ import {
   Youtube,
 } from "lucide-react";
 
-import logoImage from "../../../assets/28d6c1698c390e901d670fea04f3d952314f5313.png";
+import logoImage from "../../../assets/branding/yatay-logo.svg";
 import manifestoIllustration from "../../../assets/2451c6f130ea0918f38f6002b1e6ebfc1c2f99df.webp";
 import manifestoPanelIcon from "../../../assets/dff7469f9313f17f27e9efb8174ceb54235acb08.png";
 import manifestoMetrics from "../../../assets/cbe607eb3f54ad7b61aafcae8659f361cfea1078.png";

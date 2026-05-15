@@ -4,10 +4,30 @@ export type ProjectFile = {
   category: string;
   visibility: "INTERNAL" | "CLIENT_VISIBLE";
   title: string;
+  description?: string | null;
   secureUrl: string;
   originalFileName: string;
   bytes: number;
   mimeType: string;
+  approvalRequired?: boolean;
+  approvalType?:
+    | "META_ADS_CAMPAIGN_APPROVAL"
+    | "META_ADS_CREATIVE_APPROVAL"
+    | "META_ADS_BUDGET_CHANGE_APPROVAL"
+    | "META_ADS_REPORT_ACKNOWLEDGEMENT"
+    | "META_ADS_STRATEGY_APPROVAL"
+    | null;
+  approvalStatus?:
+    | "PENDING"
+    | "APPROVED"
+    | "CHANGES_REQUESTED"
+    | "REJECTED"
+    | "ACKNOWLEDGED"
+    | null;
+  approvalResponseNote?: string | null;
+  campaignRef?: string | null;
+  adSetRef?: string | null;
+  adRef?: string | null;
   createdAt: string;
 };
 
@@ -22,4 +42,3 @@ export type ProjectFilesResponse = {
     hasPreviousPage: boolean;
   };
 };
-

@@ -45,9 +45,11 @@ const mockUseGetProjectFileFoldersQuery = vi.fn();
 const mockUseGetProjectFileFolderAssigneesQuery = vi.fn();
 const mockUseGetProjectFilesQuery = vi.fn();
 const mockUseGetProjectWorkspaceSnapshotQuery = vi.fn();
+const mockUseGetProjectAssigneeCandidatesQuery = vi.fn();
 const mockUseCreateProjectWorkspaceSectionMutation = vi.fn();
 const mockUseCreateProjectWorkspaceItemMutation = vi.fn();
 const mockUseGetProjectWorkspaceRevisionsQuery = vi.fn();
+const mockUseCreateProjectWorkspaceRevisionMutation = vi.fn();
 const mockUseUpdateProjectWorkspaceRevisionStatusMutation = vi.fn();
 const mockUseGetProjectWorkspaceReportsQuery = vi.fn();
 const mockUseCreateProjectWorkspaceReportMutation = vi.fn();
@@ -102,10 +104,13 @@ vi.mock("../../features/projects/projectsApi", () => ({
     mockUseGetProjectFilesQuery(query, options),
   useGetProjectWorkspaceSnapshotQuery: (query: unknown, options?: unknown) =>
     mockUseGetProjectWorkspaceSnapshotQuery(query, options),
+  useGetProjectAssigneeCandidatesQuery: (projectId: string, options?: unknown) =>
+    mockUseGetProjectAssigneeCandidatesQuery(projectId, options),
   useCreateProjectWorkspaceSectionMutation: () => mockUseCreateProjectWorkspaceSectionMutation(),
   useCreateProjectWorkspaceItemMutation: () => mockUseCreateProjectWorkspaceItemMutation(),
   useGetProjectWorkspaceRevisionsQuery: (query: unknown, options?: unknown) =>
     mockUseGetProjectWorkspaceRevisionsQuery(query, options),
+  useCreateProjectWorkspaceRevisionMutation: () => mockUseCreateProjectWorkspaceRevisionMutation(),
   useUpdateProjectWorkspaceRevisionStatusMutation: () =>
     mockUseUpdateProjectWorkspaceRevisionStatusMutation(),
   useGetProjectWorkspaceReportsQuery: (query: unknown, options?: unknown) =>
@@ -201,9 +206,11 @@ function setupQueryState(overrides: Partial<ProjectQueryResult> = {}) {
   mockUseGetProjectFileFolderAssigneesQuery.mockReturnValue({ data: [] });
   mockUseGetProjectFilesQuery.mockReturnValue({ data: { data: [] }, isFetching: false });
   mockUseGetProjectWorkspaceSnapshotQuery.mockReturnValue({ data: undefined, isFetching: false });
+  mockUseGetProjectAssigneeCandidatesQuery.mockReturnValue({ data: [] });
   mockUseCreateProjectWorkspaceSectionMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
   mockUseCreateProjectWorkspaceItemMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
   mockUseGetProjectWorkspaceRevisionsQuery.mockReturnValue({ data: [] });
+  mockUseCreateProjectWorkspaceRevisionMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
   mockUseUpdateProjectWorkspaceRevisionStatusMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
   mockUseGetProjectWorkspaceReportsQuery.mockReturnValue({ data: [] });
   mockUseCreateProjectWorkspaceReportMutation.mockReturnValue([vi.fn(), { isLoading: false }]);

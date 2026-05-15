@@ -182,3 +182,291 @@ export type ClientSummaryResponse = {
     generatedAt: string;
   };
 };
+
+export type MetaAdsConnectionStatus =
+  | "NOT_CONNECTED"
+  | "PENDING"
+  | "CONNECTED"
+  | "ERROR"
+  | "DISCONNECTED";
+
+export type MetaAdsSyncStatus =
+  | "RUNNING"
+  | "SUCCESS"
+  | "FAILED"
+  | "PARTIAL"
+  | "SKIPPED";
+
+export type AdminClientMetaAdsConnection = {
+  clientProfileId: string;
+  connectionStatus: MetaAdsConnectionStatus;
+  hasActiveService: boolean;
+  ids: {
+    businessId: string | null;
+    adAccountId: string | null;
+    pixelId: string | null;
+    instagramAccountId: string | null;
+    facebookPageId: string | null;
+  };
+  settings: {
+    currency: string | null;
+    timezone: string | null;
+  };
+  lastSyncAt: string | null;
+  syncError: string | null;
+  credential: {
+    hasToken: boolean;
+    tokenLastUpdatedAt: string | null;
+    tokenExpiresAt: string | null;
+    grantedScopes: string[];
+  };
+};
+
+export type ConnectManualMetaAdsRequest = {
+  accessToken: string;
+  businessId?: string;
+  adAccountId?: string;
+  pixelId?: string;
+  instagramAccountId?: string;
+  facebookPageId?: string;
+  currency?: string;
+  timezone?: string;
+  tokenExpiresAt?: string;
+  grantedScopes?: string[];
+};
+
+export type TestMetaAdsConnectionRequest = {
+  accessToken?: string;
+  adAccountId?: string;
+  requiredScopes?: string[];
+};
+
+export type TestMetaAdsConnectionResponse = {
+  success: true;
+  checkedAt: string;
+  connection: AdminClientMetaAdsConnection;
+  account: {
+    adAccountId: string;
+    currency: string | null;
+    timezone: string | null;
+  };
+  grantedScopes: string[];
+};
+
+export type MetaAdsSummaryResponse = {
+  spend: number;
+  impressions: number;
+  reach: number;
+  clicks: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  frequency: number;
+  results: number;
+  costPerResult: number;
+  roas: number | null;
+  dateRange: {
+    since: string;
+    until: string;
+  };
+  lastSyncAt: string | null;
+};
+
+export type MetaAdsDateRangeQuery = {
+  since?: string;
+  until?: string;
+};
+
+export type UpdateAdminClientMetaAdsConfigRequest = {
+  businessId?: string | null;
+  adAccountId?: string | null;
+  pixelId?: string | null;
+  instagramAccountId?: string | null;
+  facebookPageId?: string | null;
+  currency?: string | null;
+  timezone?: string | null;
+  connectionStatus?: MetaAdsConnectionStatus;
+  lastSyncAt?: string | null;
+  syncError?: string | null;
+};
+
+export type MetaAdsSyncResponse = {
+  success: true;
+  syncedAt: string;
+  dateRange: {
+    since: string;
+    until: string;
+  };
+  inserted: {
+    account: number;
+    campaigns: number;
+    total: number;
+  };
+  connectionStatus: MetaAdsConnectionStatus;
+  lastSyncAt: string | null;
+  syncStatus: MetaAdsSyncStatus;
+  skippedReason: string | null;
+};
+
+export type AdminMetaAdsClientListItem = {
+  client: {
+    id: string;
+    slug: string;
+    companyName: string;
+    status: ClientStatus;
+  };
+  serviceStatus: PurchasedServiceStatus;
+  connectionStatus: MetaAdsConnectionStatus;
+  hasToken: boolean;
+  ids: {
+    businessId: string | null;
+    adAccountId: string | null;
+    pixelId: string | null;
+    instagramAccountId: string | null;
+    facebookPageId: string | null;
+  };
+  settings: {
+    currency: string | null;
+    timezone: string | null;
+  };
+  lastSyncAt: string | null;
+  syncError: string | null;
+  spendSummary: {
+    spend: number;
+    impressions: number;
+    clicks: number;
+    results: number;
+    roas: number | null;
+  };
+  pendingApprovals: number;
+  assignedEmployees: Array<{
+    userId: string;
+    email: string;
+    displayName: string | null;
+    role: string;
+    scope: string;
+  }>;
+  actionContext: {
+    metaAdsProjectId: string | null;
+  };
+};
+
+export type AdminMetaAdsClientListResponse = {
+  data: AdminMetaAdsClientListItem[];
+  dateRange: {
+    since: string;
+    until: string;
+  };
+  meta: {
+    total: number;
+    connected: number;
+    error: number;
+    pendingApprovals: number;
+  };
+};
+
+export type AdminMetaAdsSyncLogItem = {
+  id: string;
+  clientProfileId: string;
+  clientCompanyName: string;
+  adAccountId: string | null;
+  status: MetaAdsSyncStatus;
+  startedAt: string;
+  finishedAt: string | null;
+  durationMs: number | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  recordsFetched: number | null;
+  apiCallCount: number | null;
+  createdAt: string;
+};
+
+export type AdminMetaAdsSyncLogsResponse = {
+  data: AdminMetaAdsSyncLogItem[];
+  meta: {
+    total: number;
+    failed: number;
+    running: number;
+    skipped: number;
+  };
+};
+
+export type AdminMetaAdsSyncLogsQuery = {
+  clientProfileId?: string;
+  status?: MetaAdsSyncStatus;
+  failedOnly?: boolean;
+  limit?: number;
+};
+
+export type MetaAdsReportType =
+  | "WEEKLY"
+  | "MONTHLY"
+  | "CAMPAIGN_PERFORMANCE"
+  | "CREATIVE_PERFORMANCE"
+  | "BUDGET_RECOMMENDATION";
+
+export type MetaAdsReportStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
+
+export type MetaAdsReportAcknowledgementStatus =
+  | "NOT_REQUESTED"
+  | "PENDING"
+  | "ACKNOWLEDGED"
+  | "CHANGES_REQUESTED";
+
+export type MetaAdsReportItem = {
+  id: string;
+  clientProfileId: string;
+  projectId: string | null;
+  projectName: string | null;
+  periodStart: string;
+  periodEnd: string;
+  type: MetaAdsReportType;
+  status: MetaAdsReportStatus;
+  summary: string | null;
+  metricsSnapshot: Record<string, unknown> | null;
+  clientVisible: boolean;
+  publishedAt: string | null;
+  acknowledgementRequestedAt: string | null;
+  acknowledgedAt: string | null;
+  acknowledgementStatus: MetaAdsReportAcknowledgementStatus;
+  acknowledgementTaskId: string | null;
+  acknowledgementTaskUpdatedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MetaAdsReportsResponse = {
+  data: MetaAdsReportItem[];
+  meta: {
+    total: number;
+    draft: number;
+    published: number;
+    clientVisible: number;
+  };
+};
+
+export type MetaAdsReportsQuery = {
+  status?: MetaAdsReportStatus;
+  type?: MetaAdsReportType;
+  clientVisible?: boolean;
+  limit?: number;
+};
+
+export type CreateMetaAdsReportRequest = {
+  projectId?: string;
+  periodStart: string;
+  periodEnd: string;
+  type: MetaAdsReportType;
+  summary?: string;
+  metricsSnapshot?: Record<string, unknown>;
+  clientVisible?: boolean;
+  requestAcknowledgement?: boolean;
+};
+
+export type UpdateMetaAdsReportRequest = {
+  status?: MetaAdsReportStatus;
+  summary?: string;
+  metricsSnapshot?: Record<string, unknown>;
+  clientVisible?: boolean;
+  requestAcknowledgement?: boolean;
+};

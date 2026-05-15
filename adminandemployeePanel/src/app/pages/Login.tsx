@@ -22,6 +22,7 @@ import { selectCurrentUser, selectIsAuthenticated } from "../features/auth/authS
 import { useLoginMutation, useLogoutMutation } from "../features/auth/authApi";
 import type { AccountType, UserRole } from "../features/auth/authTypes";
 import { getBackendRoleLabel } from "../features/auth/roleMapping";
+import yatayLogo from "../../assets/branding/yatay-logo.svg";
 
 type LoginAccountType = Exclude<AccountType, "CLIENT">;
 
@@ -175,9 +176,7 @@ export function Login() {
       <div className="w-full max-w-6xl grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
         <section className="hidden lg:flex rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-8 flex-col justify-between shadow-[0_0_40px_rgba(170,255,1,0.06)]">
           <div>
-            <div className="mb-8 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-[#AAFF01] text-xl font-semibold text-[#131313]">
-              ST
-            </div>
+            <img alt="Social Tech" className="mb-8 h-11 w-auto object-contain" src={yatayLogo} />
             <Badge className="mb-5 border-[#AAFF01]/20 bg-[#AAFF01]/10 text-[#AAFF01]">
               Güvenli panel erişimi
             </Badge>
@@ -207,9 +206,7 @@ export function Login() {
         <Card className="border-white/[0.08] bg-[#1A1A1A] p-5 shadow-[0_0_40px_rgba(170,255,1,0.06)] sm:p-8">
           <div className="mb-7">
             <div className="mb-5 flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#AAFF01] text-base font-semibold text-[#131313]">
-                ST
-              </div>
+              <img alt="Social Tech" className="h-10 w-auto object-contain" src={yatayLogo} />
               <div>
                 <h1 className="text-2xl font-semibold">Social Tech Panel Girişi</h1>
                 <p className="text-sm text-[#A0A0A0]">

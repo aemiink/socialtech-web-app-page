@@ -30,6 +30,39 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) {
+            return undefined
+          }
+
+          if (id.includes('recharts')) {
+            return 'vendor-recharts'
+          }
+
+          if (id.includes('@radix-ui')) {
+            return 'vendor-radix'
+          }
+
+          if (id.includes('@reduxjs/toolkit') || id.includes('react-redux')) {
+            return 'vendor-redux'
+          }
+
+          if (id.includes('react-router')) {
+            return 'vendor-router'
+          }
+
+          if (id.includes('lucide-react')) {
+            return 'vendor-icons'
+          }
+
+          return 'vendor-core'
+        },
+      },
+    },
+  },
 
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],

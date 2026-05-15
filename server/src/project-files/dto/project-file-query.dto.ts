@@ -1,6 +1,11 @@
 import { Transform } from "class-transformer";
-import { IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, Min } from "class-validator";
-import { ProjectFileCategory, ProjectFileVisibility } from "@prisma/client";
+import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, Min } from "class-validator";
+import {
+  MetaAdsApprovalStatus,
+  MetaAdsApprovalType,
+  ProjectFileCategory,
+  ProjectFileVisibility,
+} from "@prisma/client";
 
 function trimString(value: unknown): unknown {
   return typeof value === "string" ? value.trim() : value;
@@ -14,6 +19,23 @@ function toInt(value: unknown): number | undefined {
   return Number.isNaN(parsed) ? undefined : parsed;
 }
 
+function toOptionalBoolean(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "true" || normalized === "1") {
+    return true;
+  }
+  if (normalized === "false" || normalized === "0") {
+    return false;
+  }
+  return undefined;
+}
+
 export class ProjectFileQueryDto {
   @IsOptional()
   @IsEnum(ProjectFileCategory)
@@ -22,6 +44,19 @@ export class ProjectFileQueryDto {
   @IsOptional()
   @IsEnum(ProjectFileVisibility)
   visibility?: ProjectFileVisibility;
+
+  @IsOptional()
+  @Transform(({ value }) => toOptionalBoolean(value))
+  @IsBoolean()
+  approvalRequired?: boolean;
+
+  @IsOptional()
+  @IsEnum(MetaAdsApprovalStatus)
+  approvalStatus?: MetaAdsApprovalStatus;
+
+  @IsOptional()
+  @IsEnum(MetaAdsApprovalType)
+  approvalType?: MetaAdsApprovalType;
 
   @IsOptional()
   @Transform(({ value }) => trimString(value))

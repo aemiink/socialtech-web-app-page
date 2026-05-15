@@ -23,6 +23,14 @@ export const envValidationSchema = Joi.object({
   GITHUB_API_BASE_URL: Joi.string().uri().default("https://api.github.com"),
   GITHUB_GLOBAL_TOKEN: Joi.string().min(1).optional(),
   GITHUB_TOKEN_ENCRYPTION_KEY: Joi.string().min(32).optional(),
+  META_GRAPH_API_VERSION: Joi.string()
+    .pattern(/^v\d+\.\d+$/)
+    .default("v22.0"),
+  META_TOKEN_ENCRYPTION_KEY: Joi.string().min(32).optional(),
+  META_APP_ID: Joi.string().min(1).optional(),
+  META_APP_SECRET: Joi.string().min(1).optional(),
+  META_REDIRECT_URI: Joi.string().uri().optional(),
+  META_ADS_SYNC_TTL_MINUTES: Joi.number().integer().min(1).max(1440).default(30),
   CLOUDINARY_CLOUD_NAME: Joi.string().min(1).optional(),
   CLOUDINARY_API_KEY: Joi.string().min(1).optional(),
   CLOUDINARY_API_SECRET: Joi.string().min(1).optional(),

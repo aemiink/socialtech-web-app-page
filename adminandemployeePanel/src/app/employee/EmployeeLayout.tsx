@@ -3,7 +3,7 @@ import {
   LayoutDashboard, CheckSquare, Users, Calendar, Bell, Folder, Settings,
   FileText, ThumbsUp, UserCheck, FolderKanban, TrendingUp, Zap, Image,
   MessageSquare, BookOpen, Code, Bug, Rocket, Headphones, Wrench, Shield,
-  Search as SearchIcon, BarChart, Globe, Search, Plus, LogOut, LucideIcon,
+  Search as SearchIcon, BarChart, Globe, Search, Plus, LogOut, LucideIcon, Megaphone,
   PhoneCall
 } from "lucide-react";
 import { Input } from "../components/ui/input";
@@ -20,6 +20,7 @@ import {
   selectIsBootstrapping,
 } from "../features/auth/authSelectors";
 import { EmployeePanelRole, getBackendRoleLabel, getUserDisplayName, getUserInitials } from "../features/auth/roleMapping";
+import yatayLogo from "../../assets/branding/yatay-logo.svg";
 
 type SidebarItem = {
   path: string;
@@ -42,6 +43,7 @@ const roleMenus: Record<EmployeePanelRole, SidebarItem[]> = {
   ],
   "performance-specialist": [
     { path: "/employee/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { path: "/employee/meta-ads", label: "Meta Ads Workspace", icon: Megaphone },
     { path: "/employee/gorevlerim", label: "Görevlerim", icon: CheckSquare },
     { path: "/employee/kampanyalar", label: "Kampanyalar", icon: TrendingUp },
     { path: "/employee/optimizasyonlar", label: "Optimizasyonlar", icon: Zap },
@@ -56,6 +58,7 @@ const roleMenus: Record<EmployeePanelRole, SidebarItem[]> = {
   ],
   "social-media-specialist": [
     { path: "/employee/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { path: "/employee/meta-ads", label: "Meta Ads Workspace", icon: Megaphone },
     { path: "/employee/gorevlerim", label: "Görevlerim", icon: CheckSquare },
     { path: "/employee/icerik-takvimi", label: "İçerik Takvimi", icon: Calendar },
     { path: "/employee/captionlar", label: "Captionlar", icon: FileText },
@@ -71,6 +74,7 @@ const roleMenus: Record<EmployeePanelRole, SidebarItem[]> = {
   ],
   designer: [
     { path: "/employee/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { path: "/employee/meta-ads", label: "Meta Ads Workspace", icon: Megaphone },
     { path: "/employee/gorevlerim", label: "Görevlerim", icon: CheckSquare },
     { path: "/employee/kreatifler", label: "Kreatifler", icon: Image },
     { path: "/employee/ui-tasarimlar", label: "UI Tasarımlar", icon: LayoutDashboard },
@@ -198,7 +202,7 @@ export function EmployeeLayout() {
       {/* Sidebar */}
       <aside className="w-64 bg-[#131313] border-r border-white/[0.08] flex flex-col">
         <div className="p-6 border-b border-white/[0.08]">
-          <h1 className="text-xl font-semibold">Social Tech</h1>
+          <img alt="Social Tech" className="h-8 w-auto object-contain" src={yatayLogo} />
           <p className="text-sm text-[#A0A0A0] mt-1">Çalışan Paneli</p>
         </div>
 
