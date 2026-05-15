@@ -20,6 +20,7 @@ import {
   selectIsBootstrapping,
 } from "../features/auth/authSelectors";
 import { EmployeePanelRole, getBackendRoleLabel, getUserDisplayName, getUserInitials } from "../features/auth/roleMapping";
+import yatayLogo from "../../assets/branding/yatay-logo.svg";
 
 type SidebarItem = {
   path: string;
@@ -201,7 +202,7 @@ export function EmployeeLayout() {
       {/* Sidebar */}
       <aside className="w-64 bg-[#131313] border-r border-white/[0.06] flex flex-col">
         <div className="p-6 border-b border-white/[0.06]">
-          <h1 className="text-xl font-semibold">Social Tech</h1>
+          <img alt="Social Tech" className="h-8 w-auto object-contain" src={yatayLogo} />
           <p className="text-sm text-[#A0A0A0] mt-1">Çalışan Paneli</p>
         </div>
 

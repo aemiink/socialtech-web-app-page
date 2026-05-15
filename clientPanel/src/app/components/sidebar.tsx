@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useState } from 'react';
+import yatayLogo from '../../assets/branding/yatay-logo.svg';
+import dikeyLogo from '../../assets/branding/dikey-logo.svg';
 
 interface SidebarProps {
   currentPage: string;
@@ -199,12 +201,7 @@ export function Sidebar({ currentPage, onPageChange, selectedService, onBackToSe
       )}>
         {!isCollapsed ? (
           <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-[#AAFF01] flex items-center justify-center">
-                <span className="text-black font-semibold">ST</span>
-              </div>
-              <span className="text-xl text-white font-medium">Social Tech</span>
-            </div>
+            <img alt="Social Tech" className="h-10 w-auto max-w-[170px] object-contain" src={yatayLogo} />
             {selectedService && (
               <div>
                 <div className="text-xs text-[#A0A0A0] mb-1">Aktif Servis</div>
@@ -222,9 +219,7 @@ export function Sidebar({ currentPage, onPageChange, selectedService, onBackToSe
             )}
           </div>
         ) : (
-          <div className="w-8 h-8 rounded-lg bg-[#AAFF01] flex items-center justify-center">
-            <span className="text-black font-semibold">ST</span>
-          </div>
+          <img alt="Social Tech" className="h-10 w-auto object-contain" src={dikeyLogo} />
         )}
       </div>
 

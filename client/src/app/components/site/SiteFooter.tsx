@@ -2,7 +2,7 @@ import { CalendarDays, Facebook, Instagram, Linkedin, Mail, MessageCircle, Packa
 import { Link, useLocation } from "react-router";
 import type { ReactNode } from "react";
 
-import logoImage from "../../../assets/28d6c1698c390e901d670fea04f3d952314f5313.png";
+import logoImage from "../../../assets/branding/yatay-logo.svg";
 import ActionButton from "./ActionButton";
 import { getFooterLinkTarget } from "./footerLinks";
 
