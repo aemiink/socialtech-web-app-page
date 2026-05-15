@@ -2276,3 +2276,18 @@ Affected files:
 - `PROJECT_CONTEXT.md`
 - `REPO_MAP.md`
 - `ROAD_MAP.md`
+## 2026-05-15 — UI Design Token Normalization & Active Nav Convention Change
+
+**Decision:** Standardize design tokens across all three panels (Admin, Employee, Client Portal) and shift active nav item style from full neon fill to ghost tint.
+
+**Changes:**
+- `--destructive`: unified to `#ef4444` (was `#d4183d` in admin, `#ff4444` in client)
+- `--border` opacity: unified to `0.08` (was `0.06` in admin)
+- `--secondary` / `--muted`: unified to `#202020` (was `#2A2A2A` in client)
+- `--font-weight-medium`: unified to `500` (was `600` in client)
+- `--card-surface: #1C1C1C` added to admin theme
+- Active nav item pattern changed from `bg-[#AAFF01] text-[#131313]` (full solid fill) to `bg-primary/10 text-primary` (ghost tint) — consistent with existing client portal sidebar pattern, user confirmed preference
+
+**Rationale:** Ghost tint active state is visually lighter, aligns all three panels, and matches the pattern the client portal already used. Full-fill was high contrast but inconsistent.
+
+**Affected files:** `adminandemployeePanel/src/styles/theme.css`, `clientPanel/src/styles/theme.css`, `RootLayout.tsx`, `EmployeeLayout.tsx`

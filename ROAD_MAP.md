@@ -295,3 +295,4 @@ None identified.
 - [ ] Advanced employee routing/notification system
 - [ ] Service-specific domain modules for ads/social/SEO/support
 - [ ] Assignment-scoped assignee candidates refinements
+- [ ] Mobile app: Admin + Employee sidebar hamburger menu / drawer (deferred to mobile app phase)

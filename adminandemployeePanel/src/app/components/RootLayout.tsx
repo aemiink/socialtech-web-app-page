@@ -17,6 +17,7 @@ import {
   selectIsBootstrapping,
 } from "../features/auth/authSelectors";
 import { getUserDisplayName, getUserInitials } from "../features/auth/roleMapping";
+import yatayLogo from "../../assets/branding/yatay-logo.svg";
 
 const menuItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -86,11 +87,11 @@ export function RootLayout() {
   };
 
   return (
-    <div className="flex h-screen bg-[#131313] text-white">
+    <div className="flex h-screen overflow-hidden bg-[#131313] text-white">
       {/* Sidebar */}
-      <aside className="w-64 bg-[#131313] border-r border-white/[0.06] flex flex-col">
-        <div className="p-6 border-b border-white/[0.06]">
-          <h1 className="text-xl font-semibold">Social Tech</h1>
+      <aside className="w-64 bg-[#131313] border-r border-white/[0.08] flex flex-col">
+        <div className="p-6 border-b border-white/[0.08]">
+          <img alt="Social Tech" className="h-8 w-auto object-contain" src={yatayLogo} />
           <p className="text-sm text-[#A0A0A0] mt-1">Admin Panel</p>
         </div>
 
@@ -102,9 +103,9 @@ export function RootLayout() {
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl mb-1 transition-all ${
+                className={`flex items-center gap-3 px-3 py-2 rounded-xl mb-1 transition-all ${
                   isMenuItemActive(item.path, location.pathname)
-                    ? "bg-[#AAFF01] text-[#131313] shadow-[0_0_20px_rgba(170,255,1,0.3)]"
+                    ? "bg-primary/10 text-primary"
                     : "text-[#A0A0A0] hover:text-white hover:bg-[#1A1A1A]"
                 }`}
               >
@@ -119,7 +120,7 @@ export function RootLayout() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Topbar */}
-        <header className="h-16 bg-[#131313] border-b border-white/[0.06] flex items-center justify-between px-6">
+        <header className="h-14 bg-[#131313] border-b border-white/[0.08] flex items-center justify-between px-6">
           <div className="flex items-center gap-4 flex-1 max-w-2xl">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A0A0A0]" />
@@ -152,7 +153,7 @@ export function RootLayout() {
               Çıkış
             </Button>
 
-            <div className="flex items-center gap-3 pl-4 border-l border-white/[0.06]">
+            <div className="flex items-center gap-3 pl-4 border-l border-white/[0.08]">
               <div className="text-right">
                 <p className="text-sm">{displayName}</p>
                 <p className="text-xs text-[#A0A0A0]">Yönetici</p>
@@ -165,7 +166,7 @@ export function RootLayout() {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-auto bg-[#131313] p-6">
+        <main className="flex-1 overflow-auto bg-[#131313] p-4 md:p-6">
           <Outlet />
         </main>
       </div>

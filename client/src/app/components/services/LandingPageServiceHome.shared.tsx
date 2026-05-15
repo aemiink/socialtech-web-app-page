@@ -13,7 +13,7 @@ import {
   Youtube,
 } from "lucide-react";
 
-import logoImage from "../../../assets/28d6c1698c390e901d670fea04f3d952314f5313.png";
+import logoImage from "../../../assets/branding/yatay-logo.svg";
 import photoshopIcon from "../../../assets/a3de08031b9f85a9f9727b45980157fd6355c073.png";
 import illustratorIcon from "../../../assets/58f77f624371049002598eeb7cdd1d1f5d7a23d1.png";
 import designIcon from "../../../assets/a40fe3d757147e38682e79fcea9f480b98b0e79a.png";

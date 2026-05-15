@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import ActionButton from "./ActionButton";
 
-import logoImage from "../../../assets/28d6c1698c390e901d670fea04f3d952314f5313.png";
+import logoImage from "../../../assets/branding/yatay-logo.svg";
 
 type ServiceMenuGroup = {
   id: string;

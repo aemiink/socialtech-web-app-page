@@ -26,7 +26,7 @@ import PackageFeatureBullet from "../site/PackageFeatureBullet";
 import PaymentLogos from "../site/PaymentLogos";
 import { getFooterLinkTarget } from "../site/footerLinks";
 
-import logoImage from "../../../assets/28d6c1698c390e901d670fea04f3d952314f5313.png";
+import logoImage from "../../../assets/branding/yatay-logo.svg";
 import projectInstagramStory from "../../../assets/f4ec847bb1ec1b27fd4a2842a4e930bd1bc501ab.webp";
 import projectWebLanding from "../../../assets/a9d5346d10fbc3273e93e817ca98937f4bf09d7a.webp";
 import projectInstagramPosts from "../../../assets/90f28dbedc4eb333bc83f5943cd6c1ef73617d87.webp";

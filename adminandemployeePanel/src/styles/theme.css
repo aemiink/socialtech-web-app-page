@@ -16,10 +16,11 @@
   --muted-foreground: #A0A0A0;
   --accent: #AAFF01;
   --accent-foreground: #131313;
-  --destructive: #d4183d;
+  --card-surface: #1C1C1C;
+  --destructive: #ef4444;
   --destructive-foreground: #ffffff;
-  --border: rgba(255, 255, 255, 0.06);
-  --input: rgba(255, 255, 255, 0.06);
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.08);
   --input-background: #1A1A1A;
   --switch-background: #202020;
   --font-weight-medium: 500;
@@ -37,7 +38,7 @@
   --sidebar-primary-foreground: #131313;
   --sidebar-accent: #202020;
   --sidebar-accent-foreground: #FFFFFF;
-  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar-border: rgba(255, 255, 255, 0.08);
   --sidebar-ring: #AAFF01;
 }
 
@@ -46,6 +47,7 @@
   --foreground: #FFFFFF;
   --card: #1A1A1A;
   --card-foreground: #FFFFFF;
+  --card-surface: #1C1C1C;
   --popover: #202020;
   --popover-foreground: #FFFFFF;
   --primary: #AAFF01;
@@ -56,10 +58,10 @@
   --muted-foreground: #A0A0A0;
   --accent: #AAFF01;
   --accent-foreground: #131313;
-  --destructive: #d4183d;
+  --destructive: #ef4444;
   --destructive-foreground: #ffffff;
-  --border: rgba(255, 255, 255, 0.06);
-  --input: rgba(255, 255, 255, 0.06);
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.08);
   --ring: #AAFF01;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
@@ -74,7 +76,7 @@
   --sidebar-primary-foreground: #131313;
   --sidebar-accent: #202020;
   --sidebar-accent-foreground: #FFFFFF;
-  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar-border: rgba(255, 255, 255, 0.08);
   --sidebar-ring: #AAFF01;
 }
 
@@ -83,6 +85,7 @@
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-card-surface: var(--card-surface);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);

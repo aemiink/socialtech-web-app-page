@@ -29,7 +29,7 @@ import ActionButton from "../site/ActionButton";
 import HeroBackdrop from "../site/HeroBackdrop";
 import { getFooterLinkTarget } from "../site/footerLinks";
 
-import logoImage from "../../../assets/28d6c1698c390e901d670fea04f3d952314f5313.png";
+import logoImage from "../../../assets/branding/yatay-logo.svg";
 import careerWomanImage from "../../../assets/991188e8e509b67c1ff6ac7a5eaf1b433f87e95e.webp";
 import careerManImage from "../../../assets/74b30c061ad09e20c8b32c6622fe5bba17d10ca1.webp";
 import caseMarketplaceImage from "../../../assets/2a4556d55251a48bc607f0696b65efb4a8117133.webp";
