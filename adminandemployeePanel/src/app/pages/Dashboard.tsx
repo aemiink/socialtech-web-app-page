@@ -146,7 +146,7 @@ export function Dashboard() {
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
         {kpis.map((kpi) => {
           const Icon = kpi.icon;
           return (
@@ -163,7 +163,7 @@ export function Dashboard() {
         })}
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:gap-4">
         <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
           <h3 className="mb-4 text-lg font-semibold text-white">Proje Durumu</h3>
           <div className="space-y-3 text-sm">

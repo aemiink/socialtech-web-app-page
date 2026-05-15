@@ -192,8 +192,8 @@ export function Sidebar({ currentPage, onPageChange, selectedService, onBackToSe
 
   return (
     <div className={cn(
-      "h-screen bg-[#131313] border-r border-white/[0.08] flex flex-col transition-all duration-300",
-      isCollapsed ? "w-20" : "w-64"
+      "h-screen bg-[#131313] border-r border-white/[0.08] flex flex-col transition-all duration-200",
+      isCollapsed ? "w-16" : "w-64"
     )}>
       <div className={cn(
         "p-6 border-b border-white/[0.08]",
@@ -225,8 +225,8 @@ export function Sidebar({ currentPage, onPageChange, selectedService, onBackToSe
 
       <button
         onClick={() => setIsCollapsed(!isCollapsed)}
-        className="absolute left-[240px] top-6 w-6 h-6 bg-[#1A1A1A] border border-white/[0.08] rounded-full flex items-center justify-center text-white hover:bg-[#AAFF01] hover:text-black transition-all z-10"
-        style={{ left: isCollapsed ? '68px' : '240px' }}
+        className="absolute top-6 w-6 h-6 bg-[#1A1A1A] border border-white/[0.08] rounded-full flex items-center justify-center text-white hover:bg-[#AAFF01] hover:text-black transition-all z-10"
+        style={{ left: isCollapsed ? '52px' : '240px' }}
       >
         {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
       </button>
@@ -240,7 +240,7 @@ export function Sidebar({ currentPage, onPageChange, selectedService, onBackToSe
               key={item.id}
               onClick={() => onPageChange(item.id)}
               className={cn(
-                "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all",
+                "w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-all",
                 isActive
                   ? "bg-[#AAFF01]/10 text-[#AAFF01] shadow-[0_0_20px_rgba(170,255,1,0.15)]"
                   : "text-[#A0A0A0] hover:bg-white/[0.05] hover:text-white",
@@ -266,7 +266,7 @@ export function Sidebar({ currentPage, onPageChange, selectedService, onBackToSe
               key={item.id}
               onClick={() => onPageChange(item.id)}
               className={cn(
-                "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all",
+                "w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-all",
                 isActive
                   ? "bg-[#AAFF01]/10 text-[#AAFF01] shadow-[0_0_20px_rgba(170,255,1,0.15)]"
                   : "text-[#A0A0A0] hover:bg-white/[0.05] hover:text-white",
@@ -285,7 +285,7 @@ export function Sidebar({ currentPage, onPageChange, selectedService, onBackToSe
         <button
           onClick={onLogout}
           className={cn(
-            "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-[#A0A0A0] hover:bg-white/[0.05] hover:text-white transition-all",
+            "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-[#A0A0A0] hover:bg-white/[0.05] hover:text-white transition-all",
             isCollapsed && "justify-center"
           )}
           title={isCollapsed ? "Çıkış Yap" : undefined}

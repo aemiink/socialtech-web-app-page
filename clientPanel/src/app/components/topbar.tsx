@@ -26,7 +26,7 @@ const serviceLabels: Record<string, string> = {
 
 export function Topbar({ selectedService, clientName, companyName, initials, onLogout }: TopbarProps) {
   return (
-    <div className="h-20 bg-[#131313] border-b border-white/[0.08] px-8 flex items-center justify-between">
+    <div className="h-14 bg-[#131313] border-b border-border px-6 flex items-center justify-between">
       <div className="flex items-center gap-4">
         <div>
           <h1 className="text-white text-xl">

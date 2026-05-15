@@ -477,7 +477,7 @@ Demo seed baseline (fresh reset):
 
 - UI language is Turkish (labels, page names, variable names in Turkish)
 - Brand color: `#AAFF01` (neon green) on dark `#131313` background
-- Active nav item: `bg-[#AAFF01] text-[#131313]`
+- Active nav item: `bg-primary/10 text-primary` (ghost tint — consistent across all panels)
 - Muted text: `#A0A0A0`
 - Card backgrounds: `#1A1A1A`
 - All components use shadcn-style Radix UI primitives from `src/app/components/ui/`
