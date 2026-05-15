@@ -1,9 +1,10 @@
+import { useState } from "react";
 import { Outlet, Link, useLocation, Navigate, useNavigate } from "react-router";
 import {
   LayoutDashboard, CheckSquare, Users, Calendar, Bell, Folder, Settings,
   FileText, ThumbsUp, UserCheck, FolderKanban, TrendingUp, Zap, Image,
   MessageSquare, BookOpen, Code, Bug, Rocket, Headphones, Wrench, Shield,
-  Search as SearchIcon, BarChart, Globe, Search, Plus, LogOut, LucideIcon, Megaphone,
+  Search as SearchIcon, BarChart, Globe, Search, Plus, LogOut, LucideIcon, Megaphone, ChevronLeft, ChevronRight,
   PhoneCall
 } from "lucide-react";
 import { Input } from "../components/ui/input";
@@ -21,6 +22,7 @@ import {
 } from "../features/auth/authSelectors";
 import { EmployeePanelRole, getBackendRoleLabel, getUserDisplayName, getUserInitials } from "../features/auth/roleMapping";
 import yatayLogo from "../../assets/branding/yatay-logo.svg";
+import dikeyLogo from "../../assets/branding/dikey-logo.svg";
 
 type SidebarItem = {
   path: string;
@@ -146,6 +148,7 @@ const roleMenus: Record<EmployeePanelRole, SidebarItem[]> = {
 };
 
 export function EmployeeLayout() {
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const dispatch = useAppDispatch();
   const location = useLocation();
   const navigate = useNavigate();
@@ -200,13 +203,33 @@ export function EmployeeLayout() {
   return (
     <div className="flex h-screen overflow-hidden bg-[#131313] text-white">
       {/* Sidebar */}
-      <aside className="w-64 bg-[#131313] border-r border-white/[0.08] flex flex-col">
-        <div className="p-6 border-b border-white/[0.08]">
-          <img alt="Social Tech" className="h-8 w-auto object-contain" src={yatayLogo} />
-          <p className="text-sm text-[#A0A0A0] mt-1">Çalışan Paneli</p>
+      <aside
+        className={`relative bg-[#131313] border-r border-white/[0.08] flex flex-col transition-all duration-200 ${
+          isSidebarCollapsed ? "w-16" : "w-64"
+        }`}
+      >
+        <div
+          className={`p-6 border-b border-white/[0.08] ${
+            isSidebarCollapsed ? "flex items-center justify-center" : ""
+          }`}
+        >
+          <img
+            alt="Social Tech"
+            className="h-8 w-auto object-contain"
+            src={isSidebarCollapsed ? dikeyLogo : yatayLogo}
+          />
+          {!isSidebarCollapsed ? <p className="text-sm text-[#A0A0A0] mt-1">Çalışan Paneli</p> : null}
         </div>
 
-        <nav className="flex-1 overflow-y-auto p-4">
+        <button
+          onClick={() => setIsSidebarCollapsed((current) => !current)}
+          className="absolute -right-3 top-5 z-20 h-6 w-6 rounded-full border border-white/[0.08] bg-[#1A1A1A] text-white transition-all hover:bg-[#AAFF01] hover:text-black flex items-center justify-center"
+          aria-label={isSidebarCollapsed ? "Sidebar genişlet" : "Sidebar daralt"}
+        >
+          {isSidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+        </button>
+
+        <nav className="flex-1 overflow-y-auto p-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
@@ -215,14 +238,15 @@ export function EmployeeLayout() {
               <Link
                 key={`${item.path}-${item.label}`}
                 to={item.path}
-                className={`flex items-center gap-3 px-3 py-2 rounded-xl mb-1 transition-all ${
+                className={`flex items-center gap-3 py-2 rounded-xl mb-1 transition-all ${
                   isActive
                     ? "bg-primary/10 text-primary"
                     : "text-[#A0A0A0] hover:text-white hover:bg-[#1A1A1A]"
-                }`}
+                } ${isSidebarCollapsed ? "justify-center px-2" : "px-3"}`}
+                title={isSidebarCollapsed ? item.label : undefined}
               >
                 <Icon className="w-5 h-5" />
-                <span className="text-sm">{item.label}</span>
+                {!isSidebarCollapsed ? <span className="text-sm">{item.label}</span> : null}
               </Link>
             );
           })}

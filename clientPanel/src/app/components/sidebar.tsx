@@ -192,7 +192,7 @@ export function Sidebar({ currentPage, onPageChange, selectedService, onBackToSe
 
   return (
     <div className={cn(
-      "h-screen bg-[#131313] border-r border-white/[0.08] flex flex-col transition-all duration-200",
+      "relative h-screen bg-[#131313] border-r border-white/[0.08] flex flex-col transition-all duration-200",
       isCollapsed ? "w-16" : "w-64"
     )}>
       <div className={cn(
@@ -225,13 +225,13 @@ export function Sidebar({ currentPage, onPageChange, selectedService, onBackToSe
 
       <button
         onClick={() => setIsCollapsed(!isCollapsed)}
-        className="absolute top-6 w-6 h-6 bg-[#1A1A1A] border border-white/[0.08] rounded-full flex items-center justify-center text-white hover:bg-[#AAFF01] hover:text-black transition-all z-10"
-        style={{ left: isCollapsed ? '52px' : '240px' }}
+        className="absolute -right-3 top-6 h-6 w-6 bg-[#1A1A1A] border border-white/[0.08] rounded-full flex items-center justify-center text-white hover:bg-[#AAFF01] hover:text-black transition-all z-20"
+        aria-label={isCollapsed ? "Sidebar genişlet" : "Sidebar daralt"}
       >
         {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
       </button>
 
-      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+      <nav className="flex-1 p-4 space-y-1 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         {serviceSpecificItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentPage === item.id;

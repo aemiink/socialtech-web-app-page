@@ -360,7 +360,7 @@ export function ClientPortalApp() {
   }
 
   return (
-    <div className="size-full flex bg-[#131313]">
+    <div className="flex h-screen overflow-hidden bg-[#131313]">
       <Sidebar
         currentPage={currentPage}
         onPageChange={handlePageChange}
