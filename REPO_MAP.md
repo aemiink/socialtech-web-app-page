@@ -42,6 +42,8 @@ Location: `adminandemployeePanel/`
   - `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
   - `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`
   - `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
+  - `adminandemployeePanel/src/app/features/googleAds/googleAdsApi.ts`
+  - `adminandemployeePanel/src/app/features/googleAds/googleAdsTypes.ts`
   - `adminandemployeePanel/src/app/features/metaAds/metaAdsApi.ts`
   - `adminandemployeePanel/src/app/features/metaAds/metaAdsTypes.ts`
   - `adminandemployeePanel/src/app/features/projects/projectsApi.ts`
@@ -90,6 +92,7 @@ Location: `adminandemployeePanel/`
 - Developer employee shared UI:
   - `adminandemployeePanel/src/app/employee/components/DeveloperTasksPage.tsx`
   - `adminandemployeePanel/src/app/employee/components/MetaAdsWorkspace.tsx`
+  - `adminandemployeePanel/src/app/employee/components/GoogleAdsWorkspace.tsx`
 - Employee CRM pages:
   - `adminandemployeePanel/src/app/employee/pages/CrmLeadlerim.tsx`
   - `adminandemployeePanel/src/app/employee/pages/CrmLeadDetail.tsx`
@@ -107,12 +110,14 @@ Location: `adminandemployeePanel/`
 - Employee page tests:
   - `adminandemployeePanel/src/app/employee/pages/__tests__/Musterilerim.test.tsx`
   - `adminandemployeePanel/src/app/employee/pages/__tests__/MetaAdsWorkspace.test.tsx`
+  - `adminandemployeePanel/src/app/employee/pages/__tests__/GoogleAdsWorkspace.test.tsx`
   - `adminandemployeePanel/src/app/employee/pages/__tests__/CrmLeadDetail.test.tsx`
   - `adminandemployeePanel/src/app/employee/pages/__tests__/DeveloperTaskPages.test.tsx`
   - `adminandemployeePanel/src/app/employee/pages/__tests__/ProjectManagerServiceWorkspace.test.tsx`
   - `adminandemployeePanel/src/app/employee/pages/__tests__/Sprintler.test.tsx`
   - `adminandemployeePanel/src/app/employee/pages/__tests__/TestYayin.test.tsx`
   - `adminandemployeePanel/src/app/employee/__tests__/EmployeeLayout.crm.test.tsx`
+  - `adminandemployeePanel/src/app/employee/__tests__/EmployeeLayout.google-ads.test.tsx`
 - Employee dashboards: `adminandemployeePanel/src/app/employee/dashboards/`
 - Employee dashboard tests:
   - `adminandemployeePanel/src/app/employee/dashboards/__tests__/DeveloperDashboard.test.tsx`
@@ -1044,3 +1049,207 @@ The `client/` directory is the public/marketing Social Tech website, not the Cli
   - `manualChunks` vendor split
 - `adminandemployeePanel/src/app/employee/pages/__tests__/MetaAdsWorkspace.test.tsx`
   - role-based view visibility assertions (`social` vs `performance`)
+
+## Update - 2026-05-16 (Google Ads Faz 3)
+
+- Backend Google Ads reporting dosya seti genişletildi:
+  - `server/src/google-ads/google-ads.controller.ts`
+  - `server/src/google-ads/google-ads.service.ts`
+  - `server/src/google-ads/google-ads-api.service.ts`
+  - `server/src/google-ads/dto/google-ads-date-range-query.dto.ts`
+  - `server/src/google-ads/dto/google-ads-campaigns-query.dto.ts`
+  - `server/src/google-ads/dto/google-ads-insights-query.dto.ts`
+- Prisma tarafı:
+  - `server/prisma/schema.prisma` (`GoogleAdsInsightLevel`, `GoogleAdsDailyInsight`)
+  - `server/prisma/migrations/20260516020000_add_google_ads_reporting_snapshot/migration.sql`
+- Client portal Google Ads feature surface:
+  - `clientPanel/src/app/features/googleAds/googleAdsTypes.ts`
+  - `clientPanel/src/app/features/googleAds/googleAdsApi.ts`
+  - `clientPanel/src/app/pages/services/google-ads-dashboard.tsx`
+  - `clientPanel/src/app/pages/__tests__/google-ads-dashboard.test.tsx`
+- Admin panel client detail Google Ads summary integration:
+  - `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`
+  - `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
+  - `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
+  - `adminandemployeePanel/src/app/pages/ClientDetail.tsx`
+  - `adminandemployeePanel/src/app/pages/__tests__/ClientDetail.test.tsx`
+
+## Update - 2026-05-16 (Google Ads Faz 4)
+
+- Backend Google Ads own-client endpoint genişlemesi:
+  - `server/src/google-ads/google-ads.controller.ts`
+    - `GET /api/v1/clients/me/google-ads/ad-groups`
+    - `GET /api/v1/clients/me/google-ads/ads`
+    - `GET /api/v1/clients/me/google-ads/keywords`
+    - `GET /api/v1/clients/me/google-ads/conversions`
+    - `GET /api/v1/clients/me/google-ads/search-terms`
+  - `server/src/google-ads/google-ads.service.ts`
+    - ad-group/ad/keyword/conversion/search-term aggregation response builder’ları
+    - `GoogleAdsDailyInsight.raw` parse helper genişletmesi
+  - `server/src/google-ads/google-ads-api.service.ts`
+    - mock snapshot raw payload enrichment (`keywordText`, `matchType`, `searchTerm`, `conversionAction`, `finalUrl`, `adType`)
+- Client portal Google Ads feature surface genişletmesi:
+  - `clientPanel/src/app/features/googleAds/googleAdsTypes.ts`
+    - ad-group/ad/keyword/conversion/search-term response tipleri
+  - `clientPanel/src/app/features/googleAds/googleAdsApi.ts`
+    - own-client endpoint hook’ları:
+      - `useGetOwnGoogleAdsAdGroupsQuery`
+      - `useGetOwnGoogleAdsAdsQuery`
+      - `useGetOwnGoogleAdsKeywordsQuery`
+      - `useGetOwnGoogleAdsConversionsQuery`
+      - `useGetOwnGoogleAdsSearchTermsQuery`
+  - `clientPanel/src/app/pages/services/google-ads-dashboard.tsx`
+    - FAZ-04 10-tab dashboard yapısı
+    - tab-bazlı query gating + loading/error/empty states
+    - approvals/tasks entegrasyonu
+  - `clientPanel/src/app/pages/__tests__/google-ads-dashboard.test.tsx`
+    - tab switching + new endpoint render + approvals senaryoları
+
+## Update - 2026-05-16 (Google Ads Faz 5)
+
+- Backend Google Ads admin global yönetim yüzeyi:
+  - `server/src/google-ads/google-ads.controller.ts`
+    - `GET /api/v1/admin/google-ads/clients`
+    - admin sync endpoint permission ayrımı (`googleAds.sync.run.any`)
+  - `server/src/google-ads/google-ads.service.ts`
+    - admin global Google Ads client list aggregation (summary + approvals + assignments)
+    - reporting/sync permission assert yardımcıları
+  - `server/prisma/seed.ts`
+    - `googleAds.reporting.read.any`
+    - `googleAds.sync.run.any`
+    - `googleAds.approvals.manage.any`
+  - `server/test/google-ads-authz.e2e-spec.ts`
+    - global list endpoint admin erişimi + non-admin red coverage
+- Admin panel Google Ads FAZ-05 sayfa katmanı:
+  - `adminandemployeePanel/src/app/pages/GoogleAdsAdmin.tsx`
+  - `adminandemployeePanel/src/app/pages/__tests__/GoogleAdsAdmin.test.tsx`
+  - `adminandemployeePanel/src/app/routes.tsx` (`/google-ads` route)
+  - `adminandemployeePanel/src/app/components/RootLayout.tsx` (sidebar menu item)
+- Clients feature contract genişletmesi:
+  - `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`
+    - `AdminGoogleAdsClientListResponse`
+    - `GoogleAdsSyncResponse`
+  - `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
+    - Google Ads global list + sync response normalizerları
+  - `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
+    - `useGetAdminGoogleAdsClientsQuery`
+    - `useSyncAdminClientGoogleAdsMutation`
+    - Google Ads global list cache tag invalidationları
+
+## Update - 2026-05-16 (Google Ads Faz 6)
+
+- Backend Google Ads assigned employee scope genişletmesi:
+  - `server/src/google-ads/google-ads.controller.ts`
+    - `GET /api/v1/google-ads/clients/:clientId/keywords`
+    - `GET /api/v1/google-ads/clients/:clientId/conversions`
+    - `GET /api/v1/google-ads/clients/:clientId/search-terms`
+    - assigned reporting/sync permission decorator ayrımı
+  - `server/src/google-ads/google-ads.service.ts`
+    - assigned reporting permission assert ayrımı
+    - `getAssignedClientKeywords`, `getAssignedClientConversions`, `getAssignedClientSearchTerms`
+    - assigned sync permission assert ayrımı
+  - `server/prisma/seed.ts`
+    - Google Ads FAZ-06 assigned permission slugları + role mapping güncellemeleri
+  - `server/test/google-ads-authz.e2e-spec.ts`
+    - assigned keywords/conversions/search-terms + assigned sync e2e coverage
+- Employee panel Google Ads workspace katmanı:
+  - `adminandemployeePanel/src/app/features/googleAds/googleAdsTypes.ts`
+  - `adminandemployeePanel/src/app/features/googleAds/googleAdsApi.ts`
+  - `adminandemployeePanel/src/app/employee/components/GoogleAdsWorkspace.tsx`
+  - `adminandemployeePanel/src/app/employee/pages/GoogleAdsCalismaAlani.tsx`
+  - `adminandemployeePanel/src/app/routes.tsx` (`/employee/google-ads` route)
+  - `adminandemployeePanel/src/app/employee/EmployeeLayout.tsx` (PM/Performance/Designer menu entry)
+  - `adminandemployeePanel/src/app/employee/pages/__tests__/GoogleAdsWorkspace.test.tsx`
+  - `adminandemployeePanel/src/app/employee/__tests__/EmployeeLayout.google-ads.test.tsx`
+
+## Update - 2026-05-16 (Google Ads Faz 7)
+
+- Backend approval enum + task approval flow genişletmesi:
+  - `server/prisma/schema.prisma`
+    - `MetaAdsApprovalType` enumuna Google Ads approval tipleri eklendi
+  - `server/prisma/migrations/20260516030000_add_google_ads_approval_types/migration.sql`
+    - Postgres enum `ALTER TYPE ... ADD VALUE` migration
+  - `server/src/tasks/tasks.service.ts`
+    - service-aware approval create permission guard (`metaAds` / `googleAds`)
+    - client approval response scope: Meta Ads + Google Ads
+    - rejection/changes requested -> otomatik revision task (service-aware açıklama)
+  - `server/test/google-ads-authz.e2e-spec.ts`
+    - Google Ads approval create (campaign/budget/report ack)
+    - client approve/revise/acknowledge lifecycle
+    - admin/employee status visibility
+    - cross-client approval response deny
+    - internal creative visibility guard
+
+- Client panel Google Ads approval collaboration:
+  - `clientPanel/src/app/pages/services/google-ads-dashboard.tsx`
+    - pending approvals + history render
+    - approve/revise/acknowledge mutation actions
+    - creative preview (ADS_CREATIVE client-visible files)
+  - `clientPanel/src/app/features/tasks/tasksTypes.ts`
+  - `clientPanel/src/app/features/tasks/tasksUtils.ts`
+  - `clientPanel/src/app/features/projectFiles/projectFilesTypes.ts`
+    - Google Ads approval enum tipleri ile type/normalizer genişletmeleri
+  - `clientPanel/src/app/pages/__tests__/google-ads-dashboard.test.tsx`
+    - approvals render + approve/ack action testleri
+
+- Employee panel Google Ads workspace approval UX:
+  - `adminandemployeePanel/src/app/employee/components/GoogleAdsWorkspace.tsx`
+    - approval type selector
+    - report acknowledgement request action
+    - approval status/rejection note visibility
+  - `adminandemployeePanel/src/app/features/tasks/tasksTypes.ts`
+    - Google Ads approval type union genişletmesi
+  - `adminandemployeePanel/src/app/employee/pages/__tests__/GoogleAdsWorkspace.test.tsx`
+    - approval type/status/note ve report-ack action coverage
+
+## Update - 2026-05-16 (Google Ads Faz 8)
+
+- Backend sync automation + observability genişletmesi:
+  - `server/prisma/schema.prisma`
+    - `GoogleAdsSyncStatus` enumu
+    - `GoogleAdsSyncLog` modeli + `ClientProfile` relation
+  - `server/prisma/migrations/20260516040000_add_google_ads_sync_logs/migration.sql`
+  - `server/src/google-ads/dto/google-ads-sync-logs-query.dto.ts`
+  - `server/src/google-ads/google-ads.controller.ts`
+    - `GET /api/v1/admin/google-ads/sync-logs`
+    - `POST /api/v1/admin/clients/:clientId/google-ads/sync/retry`
+    - `POST /api/v1/clients/me/google-ads/sync`
+  - `server/src/google-ads/google-ads.service.ts`
+    - sync lifecycle loglama (`RUNNING/SUCCESS/FAILED/PARTIAL/SKIPPED`)
+    - own/assigned/admin trigger ayrımı
+    - TTL skip + rate-limit safe behavior
+    - expanded error normalization catalog
+    - own-client safe error response contract
+  - `server/test/google-ads-authz.e2e-spec.ts`
+    - sync logs/retry/ttl-skip/safe-error/normalize-code e2e coverage
+
+- Admin panel Google Ads FAZ-08 yüzeyi:
+  - `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`
+    - `GoogleAdsSyncStatus`, `AdminGoogleAdsSyncLogsResponse`, `AdminGoogleAdsSyncLogsQuery`
+  - `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
+    - Google Ads sync-log normalizerları
+  - `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
+    - `useGetAdminGoogleAdsSyncLogsQuery`
+    - `useRetryAdminClientGoogleAdsSyncMutation`
+  - `adminandemployeePanel/src/app/pages/GoogleAdsAdmin.tsx`
+    - sync logs tablosu
+    - API status badge
+    - failed sync müşteriler + retry aksiyonu
+    - son başarılı sync görünürlüğü
+  - `adminandemployeePanel/src/app/pages/__tests__/GoogleAdsAdmin.test.tsx`
+    - sync logs render + retry testleri
+
+- Client panel Google Ads FAZ-08 refresh/safe-state:
+  - `clientPanel/src/app/features/googleAds/googleAdsTypes.ts`
+    - `GoogleAdsSyncStatus`, `GoogleAdsSyncResponse`
+  - `clientPanel/src/app/features/googleAds/googleAdsApi.ts`
+    - `syncOwnGoogleAds` mutation + response normalizer
+  - `clientPanel/src/app/pages/services/google-ads-dashboard.tsx`
+    - manual refresh butonu
+    - cooldown/rate-limit disabled state
+    - success/warning/error sync feedback
+    - client-safe hata mesajları
+  - `clientPanel/src/app/pages/__tests__/google-ads-dashboard.test.tsx`
+    - refresh action
+    - rate-limited disabled state
+    - safe error rendering

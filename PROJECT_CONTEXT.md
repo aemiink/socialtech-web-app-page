@@ -54,6 +54,7 @@ Role-based sidebar. Common pages: Dashboard, Gorevlerim, Musterilerim, Takvim, B
 `CRM_SPECIALIST` employees receive CRM Leadleri and Bugünkü Takipler routes and only see assigned CRM leads.
 `DEVELOPER` employees now use API-driven Dashboard, Frontend, Backend/API, Buglar, Revizyonlar, Sprintler, Test & Yayın, and Projeler pages backed by delivery/task/repository endpoints.
 `SOCIAL_MEDIA_SPECIALIST`, `PERFORMANCE_SPECIALIST`, and `DESIGNER` now have an assigned-scope Meta Ads employee workspace (`/employee/meta-ads`) and role-specific workspace sections/actions via `MetaAdsWorkspace`.
+`PROJECT_MANAGER`, `PERFORMANCE_SPECIALIST`, and `DESIGNER` now also have an assigned-scope Google Ads employee workspace (`/employee/google-ads`) via `GoogleAdsWorkspace`.
 
 ### Client Portal
 Separate Vite + React SPA at `clientPanel/`. It is a customer-facing visibility panel, not a public SaaS product.
@@ -1195,3 +1196,266 @@ Latest reported checks: `adminandemployeePanel npm run check`, `clientPanel npm 
 ### Known Risks / Notes
 - Backend Meta Ads e2e suite’i bu checkpointte local test DB runtime erişimi olmadığı için çalıştırılamadı (`Schema engine error`).
 - Admin/Employee build çıktısında bir adet >500k app chunk uyarısı sürüyor; route-level lazy migration ayrı bir follow-up olarak planlanmalı.
+
+## 2026-05-16 Update - Google Ads Faz 3 Reporting Sync
+
+- Backend Google Ads reporting snapshot katmanı eklendi:
+  - `GoogleAdsInsightLevel` enumu (`ACCOUNT`, `CAMPAIGN`, `AD_GROUP`, `AD`)
+  - `GoogleAdsDailyInsight` modeli (costMicros + performans metrikleri + raw payload)
+- Google Ads reporting endpointleri aktif:
+  - Admin:
+    - `GET /api/v1/admin/clients/:clientId/google-ads/summary`
+    - `GET /api/v1/admin/clients/:clientId/google-ads/campaigns`
+    - `GET /api/v1/admin/clients/:clientId/google-ads/ad-groups`
+    - `GET /api/v1/admin/clients/:clientId/google-ads/ads`
+    - `GET /api/v1/admin/clients/:clientId/google-ads/insights`
+    - `POST /api/v1/admin/clients/:clientId/google-ads/sync`
+  - Assigned employee:
+    - `GET /api/v1/google-ads/clients/:clientId/summary`
+    - `GET /api/v1/google-ads/clients/:clientId/campaigns`
+    - `GET /api/v1/google-ads/clients/:clientId/ad-groups`
+    - `GET /api/v1/google-ads/clients/:clientId/ads`
+    - `GET /api/v1/google-ads/clients/:clientId/insights`
+    - `POST /api/v1/google-ads/clients/:clientId/sync`
+  - Own client:
+    - `GET /api/v1/clients/me/google-ads/summary`
+    - `GET /api/v1/clients/me/google-ads/campaigns`
+    - `GET /api/v1/clients/me/google-ads/insights`
+- Sync davranışı:
+  - manual sync snapshot yazıyor (range bazlı delete+insert)
+  - assigned on-demand sync TTL: `GOOGLE_ADS_SYNC_TTL_MINUTES` (default 30)
+  - sync/connection hataları normalize ediliyor; own client tarafında güvenli hata metni kullanılıyor.
+- External Google Ads çağrıları faz geçişinde mock-first:
+  - `GOOGLE_ADS_REPORTING_MOCK` / `GOOGLE_ADS_TEST_CONNECTION_MOCK`
+  - e2e senaryolarında provider override ile deterministik mock snapshot kullanılıyor.
+- Frontend entegrasyonu:
+  - `clientPanel` Google Ads dashboard artık gerçek summary + campaigns endpointleriyle render ediyor.
+  - `adminandemployeePanel` `ClientDetail` Google Ads bölümünde minimal performans özeti (cost/clicks/conversions/CTR vb.) gösteriliyor.
+
+## 2026-05-16 Update - Google Ads Faz 4 Client Panel Tabs
+
+- Own-client Google Ads endpoint surface genişletildi:
+  - `GET /api/v1/clients/me/google-ads/ad-groups`
+  - `GET /api/v1/clients/me/google-ads/ads`
+  - `GET /api/v1/clients/me/google-ads/keywords`
+  - `GET /api/v1/clients/me/google-ads/conversions`
+  - `GET /api/v1/clients/me/google-ads/search-terms`
+- Backend service katmanı `GoogleAdsDailyInsight` + `raw` payload üzerinden entity-level özet response üretir:
+  - ad group summary
+  - ad summary
+  - keyword summary
+  - conversion-action summary
+  - search-term summary
+- Mock snapshot payload (`GoogleAdsApiService`) keyword/search-term/conversion-action/meta alanlarıyla zenginleştirildi; sync sonrası yeni sekmeler API data ile dolabilir.
+- Client panel Google Ads dashboard FAZ-04 sekme yapısına taşındı:
+  - Genel Bakış
+  - Kampanyalar
+  - Reklam Grupları
+  - Reklamlar
+  - Anahtar Kelimeler
+  - Dönüşümler
+  - Arama Terimleri
+  - Raporlar
+  - Ajans Notları
+  - Onaylar
+- UI state contract:
+  - tab-bazlı loading/error/empty
+  - connection not configured short-circuit
+  - last sync görünürlüğü
+  - “Veriler Google Ads API üzerinden alınmıştır” bilgilendirmesi
+  - mock fallback kaldırılmış API-first render
+- Client panel test kapsamı güncellendi (`google-ads-dashboard.test.tsx`):
+  - summary render
+  - connection missing
+  - ad-group / keyword tab render
+  - error state
+  - tab switching query gating
+  - approvals tab pending task render
+
+## 2026-05-16 Update - Google Ads Faz 5 Admin Global Panel
+
+### Backend
+- Admin global Google Ads liste endpointi eklendi:
+  - `GET /api/v1/admin/google-ads/clients`
+- Endpoint response contract’i FAZ-05 yönetim ihtiyaçlarını kapsar:
+  - service status
+  - connection status
+  - account alanları (`customerId`, `managerCustomerId`, `descriptiveName`, `currencyCode`, `timeZone`)
+  - cost/conversion summary (`GoogleAdsDailyInsight` account-level agregasyonu)
+  - `lastSyncAt`, `syncError`
+  - pending approvals toplamı (task + delivery release pending kaynakları)
+  - assigned employees görünürlüğü
+  - action context (`googleAdsProjectId`)
+- Google Ads permission sözlüğü genişletildi:
+  - `googleAds.reporting.read.any`
+  - `googleAds.sync.run.any`
+  - `googleAds.approvals.manage.any`
+- Admin sync endpoint permission’i `googleAds.sync.run.any` olarak ayrıştırıldı.
+
+### Admin Panel
+- Yeni global admin route/sayfa eklendi:
+  - `/google-ads` (`GoogleAdsAdmin`)
+- Sidebar menüsüne `Google Ads` girişi eklendi.
+- Sayfa capability seti:
+  - global client list (loading/error/empty/success)
+  - permission-aware aksiyon disable/tooltip davranışı
+  - config edit modal
+  - test connection
+  - manual sync
+  - disconnect
+  - approval request create
+  - assigned employee + pending approvals görünürlüğü
+
+### Testing
+- Backend authz/e2e genişletmesi:
+  - admin global list endpoint response coverage
+  - non-admin global list erişim reddi
+- Frontend test kapsamı:
+  - `GoogleAdsAdmin` sayfası için loading/error/empty/success
+  - config/test/sync/onay aksiyonları
+  - permission disable state doğrulamaları
+
+## 2026-05-16 Update - Google Ads Faz 6 Employee Workspaces
+
+### Backend
+- Assigned Google Ads endpoint permission ayrımı FAZ-06 scope’una göre güncellendi:
+  - reporting endpointleri `googleAds.reporting.read.assigned`
+  - assigned sync endpointi `googleAds.sync.read.assigned`
+- Yeni assigned reporting endpointleri eklendi:
+  - `GET /api/v1/google-ads/clients/:clientId/keywords`
+  - `GET /api/v1/google-ads/clients/:clientId/conversions`
+  - `GET /api/v1/google-ads/clients/:clientId/search-terms`
+- Permission sözlüğü genişletildi:
+  - `googleAds.reporting.read.assigned`
+  - `googleAds.notes.manage.assigned`
+  - `googleAds.approvals.create.assigned`
+  - `googleAds.sync.read.assigned`
+  - `googleAds.recommendations.manage.assigned`
+- Role permission mapping güncellendi:
+  - `PROJECT_MANAGER`, `PERFORMANCE_SPECIALIST`, `DESIGNER` için Google Ads assigned permission seti seed’e işlendi.
+
+### Employee Panel
+- Yeni employee workspace route/sayfa eklendi:
+  - `/employee/google-ads` (`GoogleAdsCalismaAlani`)
+- Yeni generic component:
+  - `adminandemployeePanel/src/app/employee/components/GoogleAdsWorkspace.tsx`
+- Role-aware workspace davranışı:
+  - Performance Specialist: metrics/optimization/keywords/search terms/recommendation aksiyonları
+  - Project Manager: project-task-messages odaklı service workspace
+  - Designer: creative/design approval + asset upload entry
+- Sidebar role menülerine `Google Ads Workspace` girişi eklendi:
+  - Project Manager
+  - Performance Specialist
+  - Designer
+
+### Testing
+- Backend authz/e2e genişletmesi:
+  - assigned keywords/conversions/search-terms endpoint coverage
+  - assigned sync endpoint coverage
+- Frontend test kapsamı:
+  - `GoogleAdsWorkspace.test.tsx` (role/permission/scope senaryoları)
+  - `EmployeeLayout.google-ads.test.tsx` (role bazlı menü görünürlüğü)
+
+## 2026-05-16 Update - Google Ads Faz 7 Approval + Creative Collaboration
+
+### Backend
+- Task approval enum sözleşmesi Google Ads tipleri ile genişletildi (`MetaAdsApprovalType` içinde):
+  - `GOOGLE_ADS_CAMPAIGN_APPROVAL`
+  - `GOOGLE_ADS_BUDGET_CHANGE_APPROVAL`
+  - `GOOGLE_ADS_REPORT_ACKNOWLEDGEMENT`
+  - `GOOGLE_ADS_STRATEGY_APPROVAL`
+  - `GOOGLE_ADS_CREATIVE_APPROVAL`
+  - `GOOGLE_ADS_KEYWORD_PLAN_APPROVAL`
+- Task service approval guard service-aware hale getirildi:
+  - Meta Ads: `metaAds.approvals.create.assigned`
+  - Google Ads: `googleAds.approvals.create.assigned`
+- Client approval response scope’u Google Ads projelerini de kapsar.
+- Client `CHANGES_REQUESTED/REJECTED` yanıtlarında otomatik revision task flow’u Google Ads için de çalışır.
+
+### Client Panel
+- `google-ads-dashboard` approvals tabı FAZ-07 kapsamına taşındı:
+  - pending approvals card/list
+  - approve / revise / acknowledge aksiyonları (`updateClientTaskApproval`)
+  - approval history
+  - creative preview (`ADS_CREATIVE`, client-visible project files)
+- Google Ads approval enum tipleri task ve project-file type sözleşmelerine eklendi.
+
+### Employee Panel
+- `GoogleAdsWorkspace` approvals view geliştirmeleri:
+  - approval type selector
+  - report acknowledgement request aksiyonu
+  - approval status + rejection note görünürlüğü
+
+### Testing
+- Backend (`google-ads-authz.e2e-spec.ts`) FAZ-07 coverage:
+  - campaign/budget/report approval create
+  - client approve/revise/acknowledge
+  - admin/employee status visibility
+  - cross-client response deny
+  - internal creative visibility guard
+- Frontend:
+  - `clientPanel/src/app/pages/__tests__/google-ads-dashboard.test.tsx`
+  - `adminandemployeePanel/src/app/employee/pages/__tests__/GoogleAdsWorkspace.test.tsx`
+
+## 2026-05-16 Update - Google Ads Faz 8 Sync Automation Hardening
+
+### Backend
+- Prisma sync observability modeli eklendi:
+  - `GoogleAdsSyncStatus` enumu (`RUNNING/SUCCESS/FAILED/PARTIAL/SKIPPED`)
+  - `GoogleAdsSyncLog` modeli (`clientProfileId`, `customerId`, `managerCustomerId`, status, start/finish, errorCode/errorMessage, records/apiCallCount)
+- Yeni admin + own sync endpointleri:
+  - `GET /api/v1/admin/google-ads/sync-logs`
+  - `POST /api/v1/admin/clients/:clientId/google-ads/sync/retry`
+  - `POST /api/v1/clients/me/google-ads/sync`
+- `GoogleAdsService` sync pipeline hardening:
+  - sync başlangıcında `RUNNING` log create
+  - TTL skip durumunda `SKIPPED` log (`SYNC_TTL_ACTIVE`)
+  - success/partial durumunda records/api-call metrikleri ile finalize
+  - failure durumunda normalize edilmiş `errorCode` ve admin-safe mesajla `FAILED` log
+- Error normalization catalog genişletildi:
+  - `TOKEN_EXPIRED`
+  - `DEVELOPER_TOKEN_MISSING`
+  - `PERMISSION_DENIED`
+  - `CUSTOMER_NOT_ENABLED`
+  - `INVALID_CUSTOMER_ID`
+  - `MANAGER_ACCESS_MISSING`
+  - `RATE_LIMIT`
+  - `GAQL_QUERY_ERROR`
+  - `UNKNOWN_API_ERROR`
+- Own-client response sanitization:
+  - client konfigürasyonunda `syncError` her durumda güvenli metne normalize edilir.
+  - own sync exception body teknik detay döndürmez (`Bağlantı problemi var, ekibimiz ilgileniyor.`).
+
+### Admin Panel
+- `GoogleAdsAdmin` sayfası FAZ-08 observability katmanına genişletildi:
+  - Sync log tablosu (`status`, `startedAt`, `duration`, `records`, `apiCallCount`, `errorReason`)
+  - API health badge (`Sağlıklı/Uyarı/Rate-Limited/Bekleniyor`)
+  - failed sync müşterileri + retry aksiyonu
+  - son deneme / son başarılı sync görünürlüğü
+- Clients RTK Query genişletmeleri:
+  - `useGetAdminGoogleAdsSyncLogsQuery`
+  - `useRetryAdminClientGoogleAdsSyncMutation`
+
+### Client Panel
+- `google-ads-dashboard` refresh akışı FAZ-08 davranışına taşındı:
+  - own sync mutation ile manuel refresh
+  - 30 dakika cooldown (rate-limit safe) + disabled refresh butonu
+  - `SKIPPED` yanıtında warning feedback
+  - success/error feedback kutuları
+  - teknik hata detayı göstermeyen client-safe metinler
+
+### Testing
+- Backend e2e genişletmesi (`google-ads-authz.e2e-spec.ts`):
+  - admin sync logs endpoint
+  - retry endpoint
+  - own sync TTL skip (`SKIPPED`)
+  - error normalization code mapping (token/permission/invalid customer/gaql)
+  - own-client safe error response doğrulaması
+- Frontend test genişletmesi:
+  - `clientPanel/src/app/pages/__tests__/google-ads-dashboard.test.tsx`
+    - refresh action
+    - rate-limited refresh disabled state
+    - client-safe error render
+  - `adminandemployeePanel/src/app/pages/__tests__/GoogleAdsAdmin.test.tsx`
+    - sync logs render
+    - retry action
