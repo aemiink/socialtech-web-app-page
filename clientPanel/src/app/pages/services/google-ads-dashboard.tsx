@@ -1,345 +1,1163 @@
-import { MousePointerClick, DollarSign, Users, Target, Search, TrendingUp, CheckCircle, XCircle, AlertCircle, FileText } from 'lucide-react';
-import { AutomationPreview } from '../../components/automation-preview';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { useMemo, useState, type ReactNode } from "react";
+import {
+  AlertCircle,
+  CheckCircle,
+  Clock,
+  DollarSign,
+  MousePointerClick,
+  RefreshCw,
+  Target,
+  TrendingUp,
+  XCircle,
+} from "lucide-react";
+import { AutomationPreview } from "../../components/automation-preview";
+import {
+  useGetOwnGoogleAdsAdGroupsQuery,
+  useGetOwnGoogleAdsAdsQuery,
+  useGetOwnGoogleAdsCampaignsQuery,
+  useGetOwnGoogleAdsConfigQuery,
+  useGetOwnGoogleAdsConversionsQuery,
+  useGetOwnGoogleAdsKeywordsQuery,
+  useGetOwnGoogleAdsSearchTermsQuery,
+  useGetOwnGoogleAdsSummaryQuery,
+  useSyncOwnGoogleAdsMutation,
+} from "../../features/googleAds/googleAdsApi";
+import type {
+  GoogleAdsAd,
+  GoogleAdsAdGroup,
+  GoogleAdsCampaign,
+  GoogleAdsConnectionStatus,
+  GoogleAdsConversion,
+  GoogleAdsKeyword,
+  GoogleAdsSearchTerm,
+} from "../../features/googleAds/googleAdsTypes";
+import { useGetClientProjectFilesQuery } from "../../features/projectFiles/projectFilesApi";
+import type { ProjectFile } from "../../features/projectFiles/projectFilesTypes";
+import { useGetClientTasksQuery, useUpdateClientTaskApprovalMutation } from "../../features/tasks/tasksApi";
+import type { ClientTask, ClientTaskMetaAdsApprovalStatus } from "../../features/tasks/tasksTypes";
 
-const stats = [
-  { title: 'Arama CTR', value: '4.2%', change: '+1.8%', icon: MousePointerClick, color: 'green' },
-  { title: 'CPA', value: '₺135', change: '-15%', icon: DollarSign, color: 'green' },
-  { title: 'Dönüşümler', value: '89', change: '+22%', icon: Users, color: 'green' },
-  { title: 'CPC', value: '₺3.20', change: '-8%', icon: Target, color: 'green' },
-  { title: 'Harcama', value: '₺12K', change: '+10%', icon: TrendingUp, color: 'blue' },
+type GoogleAdsTabId =
+  | "overview"
+  | "campaigns"
+  | "ad-groups"
+  | "ads"
+  | "keywords"
+  | "conversions"
+  | "search-terms"
+  | "reports"
+  | "agency-notes"
+  | "approvals";
+
+const GOOGLE_ADS_TABS: Array<{ id: GoogleAdsTabId; label: string }> = [
+  { id: "overview", label: "Genel Bakış" },
+  { id: "campaigns", label: "Kampanyalar" },
+  { id: "ad-groups", label: "Reklam Grupları" },
+  { id: "ads", label: "Reklamlar" },
+  { id: "keywords", label: "Anahtar Kelimeler" },
+  { id: "conversions", label: "Dönüşümler" },
+  { id: "search-terms", label: "Arama Terimleri" },
+  { id: "reports", label: "Raporlar" },
+  { id: "agency-notes", label: "Ajans Notları" },
+  { id: "approvals", label: "Onaylar" },
 ];
 
-const campaigns = [
-  {
-    name: 'Search - Brand Keywords',
-    budget: '₺4,500',
-    conversions: 42,
-    cpa: '₺107',
-    ctr: '5.8%',
-    status: 'Excellent',
-    statusColor: 'green'
-  },
-  {
-    name: 'Search - Generic Keywords',
-    budget: '₺5,200',
-    conversions: 35,
-    cpa: '₺148',
-    ctr: '3.4%',
-    status: 'Optimizing',
-    statusColor: 'blue'
-  },
-  {
-    name: 'Performance Max',
-    budget: '₺2,300',
-    conversions: 12,
-    cpa: '₺192',
-    ctr: '2.1%',
-    status: 'Testing',
-    statusColor: 'blue'
-  },
-];
-
-const keywordPerformance = [
-  { keyword: 'premium web tasarım', intent: 'Commercial', cpc: '₺4.20', conversions: 18, status: 'Active' },
-  { keyword: 'kurumsal web sitesi fiyat', intent: 'Transactional', cpc: '₺5.80', conversions: 24, status: 'Active' },
-  { keyword: 'web tasarım ajansı', intent: 'Informational', cpc: '₺2.40', conversions: 8, status: 'Active' },
-  { keyword: 'seo uyumlu web tasarım', intent: 'Commercial', cpc: '₺3.90', conversions: 15, status: 'Active' },
-  { keyword: 'ucuz web tasarım', intent: 'Transactional', cpc: '₺1.80', conversions: 2, status: 'Paused' },
-];
-
-const negativeKeywords = [
-  'ücretsiz web sitesi',
-  'bedava web tasarım',
-  'kendi kendine yapma',
-  'hazır şablon',
-];
-
-const adCopyTests = [
-  { variant: 'Headline A: Premium Web Tasarım Ajansı', ctr: '5.2%', status: 'Winner', impressions: '12.4K' },
-  { variant: 'Headline B: SEO Uyumlu Web Tasarım', ctr: '4.8%', status: 'Testing', impressions: '9.8K' },
-];
-
-const conversionTracking = [
-  { metric: 'GA4 Kurulumu', status: 'active', value: 'Aktif' },
-  { metric: 'Conversion Tag', status: 'active', value: 'Çalışıyor' },
-  { metric: 'Lead Form Takibi', status: 'active', value: 'Çalışıyor' },
-  { metric: 'Call Tracking', status: 'inactive', value: 'Pasif' },
-];
-
-const clientActions = [
-  { action: 'Landing page önerilerini incele', priority: 'medium', dueDate: '29 Nis' },
-  { action: 'Yeni ad copy varyantlarını onayla', priority: 'high', dueDate: '28 Nis' },
-];
-
-const chartData = [
-  { date: '21 Nis', conversions: 10 },
-  { date: '22 Nis', conversions: 14 },
-  { date: '23 Nis', conversions: 11 },
-  { date: '24 Nis', conversions: 16 },
-  { date: '25 Nis', conversions: 13 },
-  { date: '26 Nis', conversions: 15 },
-  { date: '27 Nis', conversions: 12 },
-];
+const GOOGLE_ADS_SERVICE_ID = "google-ads";
+const GOOGLE_ADS_APPROVAL_TYPE_LABELS: Record<string, string> = {
+  GOOGLE_ADS_CAMPAIGN_APPROVAL: "Campaign Launch",
+  GOOGLE_ADS_BUDGET_CHANGE_APPROVAL: "Budget Change",
+  GOOGLE_ADS_REPORT_ACKNOWLEDGEMENT: "Report Acknowledgement",
+  GOOGLE_ADS_STRATEGY_APPROVAL: "Strategy Approval",
+  GOOGLE_ADS_CREATIVE_APPROVAL: "Creative Approval",
+  GOOGLE_ADS_KEYWORD_PLAN_APPROVAL: "Keyword Plan",
+};
 
 export function GoogleAdsDashboard() {
+  const [activeTab, setActiveTab] = useState<GoogleAdsTabId>("overview");
+  const [approvalDecisionNotes, setApprovalDecisionNotes] = useState<Record<string, string>>({});
+  const [activeApprovalTaskId, setActiveApprovalTaskId] = useState<string | null>(null);
+  const [syncFeedback, setSyncFeedback] = useState<{
+    type: "success" | "warning" | "error";
+    text: string;
+  } | null>(null);
+  const [approvalFeedback, setApprovalFeedback] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+
+  const { data: config, isLoading, isError } = useGetOwnGoogleAdsConfigQuery();
+  const connectionStatus = config?.connectionStatus ?? "NOT_CONNECTED";
+  const statusCopy = getClientConnectionCopy(connectionStatus, isError);
+  const shouldSkipReportingQueries = statusCopy.kind !== "connected";
+
+  const {
+    data: summary,
+    isLoading: isSummaryLoading,
+    isError: isSummaryError,
+  } = useGetOwnGoogleAdsSummaryQuery(undefined, {
+    skip: shouldSkipReportingQueries || activeTab !== "overview",
+  });
+
+  const {
+    data: campaigns,
+    isLoading: isCampaignsLoading,
+    isError: isCampaignsError,
+  } = useGetOwnGoogleAdsCampaignsQuery(
+    { limit: 20 },
+    { skip: shouldSkipReportingQueries || (activeTab !== "overview" && activeTab !== "campaigns") },
+  );
+
+  const {
+    data: adGroups,
+    isLoading: isAdGroupsLoading,
+    isError: isAdGroupsError,
+  } = useGetOwnGoogleAdsAdGroupsQuery(
+    { limit: 50 },
+    { skip: shouldSkipReportingQueries || activeTab !== "ad-groups" },
+  );
+
+  const {
+    data: ads,
+    isLoading: isAdsLoading,
+    isError: isAdsError,
+  } = useGetOwnGoogleAdsAdsQuery(
+    { limit: 50 },
+    { skip: shouldSkipReportingQueries || activeTab !== "ads" },
+  );
+
+  const {
+    data: keywords,
+    isLoading: isKeywordsLoading,
+    isError: isKeywordsError,
+  } = useGetOwnGoogleAdsKeywordsQuery(
+    { limit: 50 },
+    { skip: shouldSkipReportingQueries || activeTab !== "keywords" },
+  );
+
+  const {
+    data: conversions,
+    isLoading: isConversionsLoading,
+    isError: isConversionsError,
+  } = useGetOwnGoogleAdsConversionsQuery(
+    { limit: 50 },
+    { skip: shouldSkipReportingQueries || activeTab !== "conversions" },
+  );
+
+  const {
+    data: searchTerms,
+    isLoading: isSearchTermsLoading,
+    isError: isSearchTermsError,
+  } = useGetOwnGoogleAdsSearchTermsQuery(
+    { limit: 50 },
+    { skip: shouldSkipReportingQueries || activeTab !== "search-terms" },
+  );
+
+  const {
+    data: notesTasksResponse,
+    isLoading: isNotesLoading,
+    isError: isNotesError,
+  } = useGetClientTasksQuery(undefined, {
+    skip: shouldSkipReportingQueries || activeTab !== "agency-notes",
+  });
+
+  const {
+    data: approvalsTasksResponse,
+    isLoading: isApprovalsLoading,
+    isError: isApprovalsError,
+    refetch: refetchApprovals,
+  } = useGetClientTasksQuery(
+    { approvalRequired: true },
+    { skip: shouldSkipReportingQueries || activeTab !== "approvals" },
+  );
+
+  const [updateClientTaskApproval, { isLoading: isUpdatingApproval }] =
+    useUpdateClientTaskApprovalMutation();
+  const [syncOwnGoogleAds, { isLoading: isOwnSyncing }] = useSyncOwnGoogleAdsMutation();
+
+  const agencyNotes = useMemo(
+    () =>
+      (notesTasksResponse ?? [])
+        .filter(
+          (task) =>
+            task.projectServiceId === GOOGLE_ADS_SERVICE_ID &&
+            !task.approvalRequired,
+        )
+        .sort((left, right) => {
+          const leftDate = left.updatedAt ? new Date(left.updatedAt).getTime() : 0;
+          const rightDate = right.updatedAt ? new Date(right.updatedAt).getTime() : 0;
+          return rightDate - leftDate;
+        })
+        .slice(0, 12),
+    [notesTasksResponse],
+  );
+
+  const googleAdsApprovalTasks = useMemo(
+    () =>
+      (approvalsTasksResponse ?? []).filter(
+        (task) =>
+          task.projectServiceId === GOOGLE_ADS_SERVICE_ID &&
+          task.approvalRequired,
+      ),
+    [approvalsTasksResponse],
+  );
+
+  const pendingApprovalTasks = useMemo(
+    () =>
+      googleAdsApprovalTasks
+        .filter((task) => task.approvalStatus === "PENDING")
+        .slice(0, 12),
+    [googleAdsApprovalTasks],
+  );
+
+  const approvalHistoryTasks = useMemo(
+    () =>
+      googleAdsApprovalTasks
+        .filter((task) => task.approvalStatus && task.approvalStatus !== "PENDING")
+        .slice(0, 12),
+    [googleAdsApprovalTasks],
+  );
+
+  const approvalProjectId =
+    pendingApprovalTasks[0]?.projectId ??
+    approvalHistoryTasks[0]?.projectId ??
+    googleAdsApprovalTasks[0]?.projectId ??
+    null;
+
+  const {
+    data: approvalCreativeFilesResponse,
+    isLoading: isCreativeFilesLoading,
+    isError: isCreativeFilesError,
+  } = useGetClientProjectFilesQuery(
+    {
+      projectId: approvalProjectId ?? "",
+      category: "ADS_CREATIVE",
+      approvalRequired: true,
+    },
+    { skip: shouldSkipReportingQueries || activeTab !== "approvals" || !approvalProjectId },
+  );
+
+  const pendingCreativeFiles = useMemo(
+    () =>
+      (approvalCreativeFilesResponse?.data ?? [])
+        .filter((file) => file.approvalStatus === "PENDING")
+        .slice(0, 8),
+    [approvalCreativeFilesResponse?.data],
+  );
+
+  if (isLoading) {
+    return (
+      <div className="p-8 space-y-6">
+        <PageHeader />
+        <StateCard message="Google Ads bağlantı durumu yükleniyor..." />
+      </div>
+    );
+  }
+
+  if (statusCopy.kind !== "connected") {
+    return (
+      <div className="p-8 space-y-6">
+        <PageHeader />
+        <StatusCard status={statusCopy} />
+        <div className="bg-[#1A1A1A] rounded-2xl p-4 border border-white/[0.08] text-sm text-[#A0A0A0]">
+          Son senkron:{" "}
+          <span className="text-white">
+            {formatDateTime(config?.lastSyncAt) ?? "Henüz senkron yok"}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  const summaryCards = [
+    {
+      label: "Toplam Harcama",
+      value: summary ? formatCurrency(summary.cost) : "—",
+      Icon: DollarSign,
+    },
+    {
+      label: "CTR",
+      value: summary ? `%${summary.ctr.toFixed(2)}` : "—",
+      Icon: MousePointerClick,
+    },
+    {
+      label: "Tıklamalar",
+      value: summary ? formatInteger(summary.clicks) : "—",
+      Icon: TrendingUp,
+    },
+    {
+      label: "Dönüşümler",
+      value: summary ? summary.conversions.toFixed(2) : "—",
+      Icon: Target,
+    },
+  ];
+
+  const lastSyncAt =
+    summary?.lastSyncAt ??
+    campaigns?.lastSyncAt ??
+    adGroups?.lastSyncAt ??
+    ads?.lastSyncAt ??
+    keywords?.lastSyncAt ??
+    conversions?.lastSyncAt ??
+    searchTerms?.lastSyncAt ??
+    config?.lastSyncAt ??
+    null;
+
+  const syncCooldown = useMemo(() => {
+    if (!lastSyncAt) {
+      return { isRateLimited: false, remainingMinutes: 0 };
+    }
+
+    const parsedDate = new Date(lastSyncAt);
+    if (Number.isNaN(parsedDate.getTime())) {
+      return { isRateLimited: false, remainingMinutes: 0 };
+    }
+
+    const cooldownMinutes = 30;
+    const elapsedMs = Date.now() - parsedDate.getTime();
+    const cooldownMs = cooldownMinutes * 60 * 1000;
+    if (!Number.isFinite(elapsedMs) || elapsedMs >= cooldownMs || elapsedMs < 0) {
+      return { isRateLimited: false, remainingMinutes: 0 };
+    }
+
+    return {
+      isRateLimited: true,
+      remainingMinutes: Math.max(Math.ceil((cooldownMs - elapsedMs) / (60 * 1000)), 1),
+    };
+  }, [lastSyncAt]);
+  const isRefreshDisabled = isOwnSyncing || syncCooldown.isRateLimited;
+  const refreshButtonLabel = isOwnSyncing
+    ? "Güncelleniyor..."
+    : syncCooldown.isRateLimited
+      ? `Yenile (${syncCooldown.remainingMinutes} dk)`
+      : "Veriyi Yenile";
+
+  async function handleDashboardRefresh() {
+    if (syncCooldown.isRateLimited || isOwnSyncing) {
+      return;
+    }
+
+    try {
+      setSyncFeedback(null);
+      const response = await syncOwnGoogleAds().unwrap();
+
+      if (response.syncStatus === "SKIPPED") {
+        setSyncFeedback({
+          type: "warning",
+          text: response.skippedReason ?? "Veri yenileme kısa süreliğine rate-limit nedeniyle beklemede.",
+        });
+        return;
+      }
+
+      setSyncFeedback({
+        type: "success",
+        text: "Google Ads verileri güncellendi.",
+      });
+    } catch {
+      setSyncFeedback({
+        type: "error",
+        text: "Bağlantı problemi var, ekibimiz ilgileniyor.",
+      });
+    }
+  }
+
+  async function handleApprovalDecision(
+    task: ClientTask,
+    approvalStatus: ClientTaskMetaAdsApprovalStatus,
+  ) {
+    if (isUpdatingApproval) {
+      return;
+    }
+
+    const note = approvalDecisionNotes[task.id]?.trim();
+    const requiresNote =
+      approvalStatus === "CHANGES_REQUESTED" || approvalStatus === "REJECTED";
+
+    if (requiresNote && (!note || note.length < 2)) {
+      setApprovalFeedback({
+        type: "error",
+        text: "Revizyon veya red yanıtı için en az 2 karakter not girin.",
+      });
+      return;
+    }
+
+    try {
+      setActiveApprovalTaskId(task.id);
+      setApprovalFeedback(null);
+      await updateClientTaskApproval({
+        taskId: task.id,
+        body: {
+          approvalStatus,
+          approvalResponseNote: note || undefined,
+        },
+      }).unwrap();
+
+      await refetchApprovals();
+      setApprovalDecisionNotes((prev) => ({ ...prev, [task.id]: "" }));
+      setApprovalFeedback({
+        type: "success",
+        text:
+          approvalStatus === "APPROVED"
+            ? "Onay cevabınız kaydedildi."
+            : approvalStatus === "ACKNOWLEDGED"
+              ? "Rapor onayı (okudum) kaydedildi."
+              : "Revizyon talebiniz kaydedildi.",
+      });
+    } catch {
+      setApprovalFeedback({
+        type: "error",
+        text: "Onay aksiyonu kaydedilemedi. Lütfen tekrar deneyin.",
+      });
+    } finally {
+      setActiveApprovalTaskId(null);
+    }
+  }
+
   return (
     <div className="p-8 space-y-6">
-      <div>
-        <h1 className="text-3xl text-white mb-2">Google Ads</h1>
-        <p className="text-[#A0A0A0]">Arama, Display ve Performance Max kampanyaları</p>
+      <PageHeader />
+
+      <StatusCard status={statusCopy} />
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-[#A0A0A0]">
+          Son güncelleme:{" "}
+          <span className="text-white">{formatDateTime(lastSyncAt) ?? "Henüz senkron yok"}</span>
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            void handleDashboardRefresh();
+          }}
+          disabled={isRefreshDisabled}
+          className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
+            isRefreshDisabled
+              ? "cursor-not-allowed border-white/[0.12] bg-white/[0.04] text-[#7A7A7A]"
+              : "border-[#AAFF01]/25 bg-[#AAFF01]/10 text-[#AAFF01] hover:bg-[#AAFF01]/20"
+          }`}
+        >
+          <RefreshCw className={`h-4 w-4 ${isOwnSyncing ? "animate-spin" : ""}`} />
+          {refreshButtonLabel}
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        {stats.map((stat, i) => {
-          const colorMap = {
-            green: { bg: 'bg-[#AAFF01]/10', text: 'text-[#AAFF01]' },
-            blue: { bg: 'bg-[#00D4FF]/10', text: 'text-[#00D4FF]' },
-          };
-          const colors = colorMap[stat.color as keyof typeof colorMap];
+      {syncCooldown.isRateLimited ? (
+        <div className="rounded-2xl border border-[#FFA726]/25 bg-[#FFA726]/10 p-4 text-sm text-[#FFD7A3]">
+          Rate limit güvenliği nedeniyle yeni yenileme için yaklaşık {syncCooldown.remainingMinutes} dk bekleyin.
+        </div>
+      ) : null}
 
-          return (
-            <div key={i} className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
-              <div className="flex items-start justify-between mb-4">
-                <span className="text-[#A0A0A0] text-sm">{stat.title}</span>
-                <div className={`w-10 h-10 rounded-xl ${colors.bg} flex items-center justify-center`}>
-                  <stat.icon className={`w-5 h-5 ${colors.text}`} />
-                </div>
-              </div>
-              <div className={`text-3xl ${colors.text} mb-1`}>{stat.value}</div>
-              <div className="text-sm text-[#A0A0A0]">{stat.change} bu hafta</div>
-            </div>
-          );
-        })}
-      </div>
+      {syncFeedback ? (
+        <div
+          className={`rounded-2xl border p-4 text-sm ${
+            syncFeedback.type === "success"
+              ? "border-[#AAFF01]/25 bg-[#AAFF01]/10 text-[#D7FFC2]"
+              : syncFeedback.type === "warning"
+                ? "border-[#FFA726]/25 bg-[#FFA726]/10 text-[#FFD7A3]"
+                : "border-red-500/30 bg-red-500/10 text-red-200"
+          }`}
+        >
+          {syncFeedback.text}
+        </div>
+      ) : null}
 
-      <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
-        <h2 className="text-xl text-white mb-4">Kampanya Genel Bakışı</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {campaigns.map((campaign, i) => {
-            const statusColors = {
-              green: 'bg-[#AAFF01]/10 text-[#AAFF01] border-[#AAFF01]/20',
-              blue: 'bg-[#00D4FF]/10 text-[#00D4FF] border-[#00D4FF]/20',
-            };
-            return (
-              <div key={i} className="bg-[#202020] rounded-xl p-4 border border-white/[0.08]">
-                <div className="flex items-start justify-between mb-3">
-                  <h3 className="text-white font-medium">{campaign.name}</h3>
-                  <span className={`text-xs px-2 py-1 rounded border ${statusColors[campaign.statusColor as keyof typeof statusColors]}`}>
-                    {campaign.status}
-                  </span>
-                </div>
-                <div className="mb-3">
-                  <span className="text-[#A0A0A0] text-sm">Bütçe: {campaign.budget}</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="bg-[#131313] rounded-lg p-2">
-                    <div className="text-sm text-white">{campaign.conversions}</div>
-                    <div className="text-xs text-[#A0A0A0]">Dönüşüm</div>
-                  </div>
-                  <div className="bg-[#131313] rounded-lg p-2">
-                    <div className="text-sm text-white">{campaign.cpa}</div>
-                    <div className="text-xs text-[#A0A0A0]">CPA</div>
-                  </div>
-                  <div className="bg-[#131313] rounded-lg p-2">
-                    <div className="text-sm text-[#AAFF01]">{campaign.ctr}</div>
-                    <div className="text-xs text-[#A0A0A0]">CTR</div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+      {config?.syncError ? (
+        <div className="bg-[#FFA726]/10 rounded-2xl p-4 border border-[#FFA726]/25 text-sm text-[#FFD7A3]">
+          Son veri güncellemesi tamamlanamadı. Ekibimiz bağlantıyı kontrol ediyor.
+        </div>
+      ) : null}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-[#1A1A1A] rounded-2xl p-4 border border-white/[0.08] text-sm text-[#A0A0A0]">
+          Son senkron: <span className="text-white">{formatDateTime(lastSyncAt) ?? "Henüz senkron yok"}</span>
+        </div>
+        <div className="bg-[#1A1A1A] rounded-2xl p-4 border border-white/[0.08] text-sm text-[#A0A0A0]">
+          Hesap: <span className="text-white">{config?.descriptiveName ?? config?.customerId ?? "Henüz tanımlanmadı"}</span>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
-          <h2 className="text-xl text-white mb-4">Anahtar Kelime Performansı</h2>
-          <div className="space-y-2">
-            {keywordPerformance.map((kw, i) => (
-              <div key={i} className="bg-[#202020] rounded-xl p-4 border border-white/[0.08]">
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <Search className="w-4 h-4 text-[#7B61FF]" />
-                    <h3 className="text-white text-sm">{kw.keyword}</h3>
-                  </div>
-                  <span className={`text-xs px-2 py-0.5 rounded ${
-                    kw.status === 'Active'
-                      ? 'bg-[#AAFF01]/10 text-[#AAFF01]'
-                      : 'bg-[#A0A0A0]/10 text-[#A0A0A0]'
-                  }`}>
-                    {kw.status}
-                  </span>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <div className="text-xs text-[#A0A0A0]">Intent</div>
-                    <div className="text-sm text-white">{kw.intent}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-[#A0A0A0]">CPC</div>
-                    <div className="text-sm text-white">{kw.cpc}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-[#A0A0A0]">Dönüşüm</div>
-                    <div className="text-sm text-[#AAFF01]">{kw.conversions}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
-          <h2 className="text-xl text-white mb-4">Dönüşüm Trendi</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <AreaChart data={chartData}>
-              <defs>
-                <linearGradient id="colorConversions" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#00D4FF" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="#00D4FF" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" />
-              <XAxis dataKey="date" stroke="#A0A0A0" fontSize={12} />
-              <YAxis stroke="#A0A0A0" fontSize={12} />
-              <Tooltip
-                contentStyle={{ backgroundColor: '#1A1A1A', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px' }}
-                labelStyle={{ color: '#A0A0A0' }}
-              />
-              <Area type="monotone" dataKey="conversions" stroke="#00D4FF" fillOpacity={1} fill="url(#colorConversions)" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+      <div className="bg-[#AAFF01]/10 rounded-2xl p-4 border border-[#AAFF01]/25 text-sm text-[#D7FFC2]">
+        Veriler Google Ads API üzerinden alınmıştır.
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
-          <h2 className="text-xl text-white mb-4">Negatif Kelime Güncellemeleri</h2>
-          <p className="text-sm text-[#A0A0A0] mb-4">Temizlenen arama terimleri</p>
-          <div className="flex flex-wrap gap-2">
-            {negativeKeywords.map((kw, i) => (
-              <div key={i} className="flex items-center gap-2 bg-[#202020] rounded-lg px-3 py-2 border border-white/[0.08]">
-                <XCircle className="w-4 h-4 text-[#ff4444]" />
-                <span className="text-white text-sm">{kw}</span>
+      <div className="flex flex-wrap gap-2">
+        {GOOGLE_ADS_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setActiveTab(tab.id)}
+            className={`rounded-lg px-3 py-2 text-sm border transition-colors ${
+              activeTab === tab.id
+                ? "bg-[#AAFF01]/10 border-[#AAFF01]/25 text-[#AAFF01]"
+                : "bg-[#1A1A1A] border-white/[0.08] text-[#A0A0A0] hover:text-white"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "overview" ? (
+        <>
+          {(isSummaryLoading || isCampaignsLoading) ? (
+            <StateCard message="Google Ads raporu güncelleniyor..." />
+          ) : null}
+
+          {(isSummaryError || isCampaignsError) ? (
+            <StateCard
+              message="Rapor verileri alınamadı. Lütfen daha sonra tekrar deneyin."
+              tone="error"
+            />
+          ) : null}
+
+          {!isSummaryLoading && !isSummaryError && !summary ? (
+            <StateCard message="Seçili tarih aralığı için özet rapor verisi bulunamadı." />
+          ) : null}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {summaryCards.map((card) => (
+              <div key={card.label} className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
+                <div className="flex items-start justify-between mb-4">
+                  <span className="text-[#A0A0A0] text-sm">{card.label}</span>
+                  <div className="w-10 h-10 rounded-xl bg-[#AAFF01]/10 flex items-center justify-center">
+                    <card.Icon className="w-5 h-5 text-[#AAFF01]" />
+                  </div>
+                </div>
+                <div className="text-2xl text-white">{card.value}</div>
               </div>
             ))}
           </div>
-        </div>
 
-        <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
-          <h2 className="text-xl text-white mb-4">Ad Copy A/B Testi</h2>
+          <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
+            <h2 className="text-xl text-white mb-4">Kampanya Genel Bakışı</h2>
+            {campaigns && campaigns.data.length > 0 ? (
+              <div className="space-y-3">
+                {campaigns.data.map((campaign) => (
+                  <CampaignRow key={campaign.id} campaign={campaign} />
+                ))}
+              </div>
+            ) : (
+              <div className="text-sm text-[#A0A0A0]">Kampanya verisi henüz bulunamadı.</div>
+            )}
+          </div>
+        </>
+      ) : null}
+
+      {activeTab === "campaigns" ? (
+        <DataSection
+          isLoading={isCampaignsLoading}
+          isError={isCampaignsError}
+          isEmpty={!campaigns || campaigns.data.length === 0}
+          loadingMessage="Kampanya verileri yükleniyor..."
+          errorMessage="Kampanya verileri alınamadı."
+          emptyMessage="Kampanya verisi bulunamadı."
+        >
           <div className="space-y-3">
-            {adCopyTests.map((test, i) => (
-              <div key={i} className="bg-[#202020] rounded-xl p-4 border border-white/[0.08]">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-[#7B61FF]" />
-                    <h3 className="text-white text-sm">{test.variant}</h3>
-                  </div>
-                  <span className={`text-xs px-2 py-1 rounded ${
-                    test.status === 'Winner'
-                      ? 'bg-[#AAFF01]/10 text-[#AAFF01] border border-[#AAFF01]/20'
-                      : 'bg-[#00D4FF]/10 text-[#00D4FF] border border-[#00D4FF]/20'
-                  }`}>
-                    {test.status}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="bg-[#131313] rounded-lg p-2">
-                    <div className="text-sm text-[#AAFF01]">{test.ctr}</div>
-                    <div className="text-xs text-[#A0A0A0]">CTR</div>
-                  </div>
-                  <div className="bg-[#131313] rounded-lg p-2">
-                    <div className="text-sm text-white">{test.impressions}</div>
-                    <div className="text-xs text-[#A0A0A0]">Gösterim</div>
-                  </div>
-                </div>
+            {campaigns?.data.map((campaign) => (
+              <CampaignRow key={campaign.id} campaign={campaign} />
+            ))}
+          </div>
+        </DataSection>
+      ) : null}
+
+      {activeTab === "ad-groups" ? (
+        <DataSection
+          isLoading={isAdGroupsLoading}
+          isError={isAdGroupsError}
+          isEmpty={!adGroups || adGroups.data.length === 0}
+          loadingMessage="Reklam grubu verileri yükleniyor..."
+          errorMessage="Reklam grubu verileri alınamadı."
+          emptyMessage="Reklam grubu verisi bulunamadı."
+        >
+          <div className="space-y-3">
+            {adGroups?.data.map((adGroup) => (
+              <AdGroupRow key={adGroup.id} adGroup={adGroup} />
+            ))}
+          </div>
+        </DataSection>
+      ) : null}
+
+      {activeTab === "ads" ? (
+        <DataSection
+          isLoading={isAdsLoading}
+          isError={isAdsError}
+          isEmpty={!ads || ads.data.length === 0}
+          loadingMessage="Reklam verileri yükleniyor..."
+          errorMessage="Reklam verileri alınamadı."
+          emptyMessage="Reklam verisi bulunamadı."
+        >
+          <div className="space-y-3">
+            {ads?.data.map((ad) => (
+              <AdRow key={ad.id} ad={ad} />
+            ))}
+          </div>
+        </DataSection>
+      ) : null}
+
+      {activeTab === "keywords" ? (
+        <DataSection
+          isLoading={isKeywordsLoading}
+          isError={isKeywordsError}
+          isEmpty={!keywords || keywords.data.length === 0}
+          loadingMessage="Anahtar kelime verileri yükleniyor..."
+          errorMessage="Anahtar kelime verileri alınamadı."
+          emptyMessage="Anahtar kelime verisi bulunamadı."
+        >
+          <div className="space-y-3">
+            {keywords?.data.map((keyword) => (
+              <KeywordRow key={keyword.id} keyword={keyword} />
+            ))}
+          </div>
+        </DataSection>
+      ) : null}
+
+      {activeTab === "conversions" ? (
+        <DataSection
+          isLoading={isConversionsLoading}
+          isError={isConversionsError}
+          isEmpty={!conversions || conversions.data.length === 0}
+          loadingMessage="Dönüşüm verileri yükleniyor..."
+          errorMessage="Dönüşüm verileri alınamadı."
+          emptyMessage="Dönüşüm verisi bulunamadı."
+        >
+          <div className="space-y-3">
+            {conversions?.data.map((conversion) => (
+              <ConversionRow key={conversion.id} conversion={conversion} />
+            ))}
+          </div>
+        </DataSection>
+      ) : null}
+
+      {activeTab === "search-terms" ? (
+        <DataSection
+          isLoading={isSearchTermsLoading}
+          isError={isSearchTermsError}
+          isEmpty={!searchTerms || searchTerms.data.length === 0}
+          loadingMessage="Arama terimi verileri yükleniyor..."
+          errorMessage="Arama terimi verileri alınamadı."
+          emptyMessage="Arama terimi verisi bulunamadı."
+        >
+          <div className="space-y-3">
+            {searchTerms?.data.map((searchTerm) => (
+              <SearchTermRow key={searchTerm.id} searchTerm={searchTerm} />
+            ))}
+          </div>
+        </DataSection>
+      ) : null}
+
+      {activeTab === "reports" ? (
+        <StateCard message="Google Ads rapor sekmesi mevcut reporting/export katmanına bağlanmaya hazır. Yayınlanan raporlar bu alanda listelenecek." />
+      ) : null}
+
+      {activeTab === "agency-notes" ? (
+        <DataSection
+          isLoading={isNotesLoading}
+          isError={isNotesError}
+          isEmpty={agencyNotes.length === 0}
+          loadingMessage="Ajans notları yükleniyor..."
+          errorMessage="Ajans notları alınamadı."
+          emptyMessage="Ajans notu bulunamadı."
+        >
+          <div className="space-y-3">
+            {agencyNotes.map((task) => (
+              <TaskNoteRow key={task.id} task={task} />
+            ))}
+          </div>
+        </DataSection>
+      ) : null}
+
+      {activeTab === "approvals" ? (
+        <GoogleAdsApprovalsPanel
+          pendingTasks={pendingApprovalTasks}
+          historyTasks={approvalHistoryTasks}
+          creativeFiles={pendingCreativeFiles}
+          loading={isApprovalsLoading || isCreativeFilesLoading}
+          isError={isApprovalsError || isCreativeFilesError}
+          activeTaskId={activeApprovalTaskId}
+          isActionLoading={isUpdatingApproval}
+          decisionNotes={approvalDecisionNotes}
+          feedback={approvalFeedback}
+          onChangeDecisionNote={(taskId, note) =>
+            setApprovalDecisionNotes((prev) => ({ ...prev, [taskId]: note }))
+          }
+          onDecision={handleApprovalDecision}
+        />
+      ) : null}
+
+      <AutomationPreview />
+    </div>
+  );
+}
+
+function PageHeader() {
+  return (
+    <div>
+      <h1 className="text-3xl text-white mb-2">Google Ads</h1>
+      <p className="text-[#A0A0A0]">Arama, Display ve Performance Max görünürlüğü</p>
+    </div>
+  );
+}
+
+function DataSection({
+  isLoading,
+  isError,
+  isEmpty,
+  loadingMessage,
+  errorMessage,
+  emptyMessage,
+  children,
+}: {
+  isLoading: boolean;
+  isError: boolean;
+  isEmpty: boolean;
+  loadingMessage: string;
+  errorMessage: string;
+  emptyMessage: string;
+  children: ReactNode;
+}) {
+  if (isLoading) {
+    return <StateCard message={loadingMessage} />;
+  }
+
+  if (isError) {
+    return <StateCard message={errorMessage} tone="error" />;
+  }
+
+  if (isEmpty) {
+    return <StateCard message={emptyMessage} />;
+  }
+
+  return <div className="space-y-3">{children}</div>;
+}
+
+function CampaignRow({ campaign }: { campaign: GoogleAdsCampaign }) {
+  return (
+    <div className="grid grid-cols-1 gap-2 rounded-xl border border-white/[0.06] bg-[#1A1A1A] p-4 md:grid-cols-6 md:items-center">
+      <div>
+        <div className="text-white text-sm">{campaign.name}</div>
+        <div className="text-xs text-[#A0A0A0]">{campaign.channelType}</div>
+      </div>
+      <div className="text-sm text-white">{formatCurrency(campaign.cost)}</div>
+      <div className="text-sm text-white">{formatInteger(campaign.clicks)} tıklama</div>
+      <div className="text-sm text-white">{campaign.conversions.toFixed(2)} dönüşüm</div>
+      <div className="text-sm text-white">CTR %{campaign.ctr.toFixed(2)}</div>
+      <div className="text-xs text-[#A0A0A0] text-left md:text-right">{campaign.status}</div>
+    </div>
+  );
+}
+
+function AdGroupRow({ adGroup }: { adGroup: GoogleAdsAdGroup }) {
+  return (
+    <div className="grid grid-cols-1 gap-2 rounded-xl border border-white/[0.06] bg-[#1A1A1A] p-4 md:grid-cols-6 md:items-center">
+      <div>
+        <div className="text-white text-sm">{adGroup.adGroupName}</div>
+        <div className="text-xs text-[#A0A0A0]">{adGroup.campaignName}</div>
+      </div>
+      <div className="text-sm text-white">{formatCurrency(adGroup.cost)}</div>
+      <div className="text-sm text-white">{formatInteger(adGroup.clicks)} tıklama</div>
+      <div className="text-sm text-white">{adGroup.conversions.toFixed(2)} dönüşüm</div>
+      <div className="text-sm text-white">CTR %{adGroup.ctr.toFixed(2)}</div>
+      <div className="text-xs text-[#A0A0A0] text-left md:text-right">{adGroup.status}</div>
+    </div>
+  );
+}
+
+function AdRow({ ad }: { ad: GoogleAdsAd }) {
+  return (
+    <div className="grid grid-cols-1 gap-2 rounded-xl border border-white/[0.06] bg-[#1A1A1A] p-4 md:grid-cols-6 md:items-center">
+      <div>
+        <div className="text-white text-sm">{ad.adName}</div>
+        <div className="text-xs text-[#A0A0A0]">{ad.campaignName} / {ad.adGroupName}</div>
+      </div>
+      <div className="text-sm text-white">{ad.adType}</div>
+      <div className="text-sm text-white">{formatCurrency(ad.cost)}</div>
+      <div className="text-sm text-white">{formatInteger(ad.clicks)} tıklama</div>
+      <div className="text-sm text-white">{ad.conversions.toFixed(2)} dönüşüm</div>
+      <div className="text-xs text-[#A0A0A0] text-left md:text-right">{ad.status}</div>
+    </div>
+  );
+}
+
+function KeywordRow({ keyword }: { keyword: GoogleAdsKeyword }) {
+  return (
+    <div className="grid grid-cols-1 gap-2 rounded-xl border border-white/[0.06] bg-[#1A1A1A] p-4 md:grid-cols-7 md:items-center">
+      <div>
+        <div className="text-white text-sm">{keyword.keywordText}</div>
+        <div className="text-xs text-[#A0A0A0]">{keyword.campaignName} / {keyword.adGroupName}</div>
+      </div>
+      <div className="text-sm text-white">{keyword.matchType}</div>
+      <div className="text-sm text-white">{formatCurrency(keyword.cost)}</div>
+      <div className="text-sm text-white">{formatInteger(keyword.clicks)} tıklama</div>
+      <div className="text-sm text-white">{keyword.conversions.toFixed(2)} dönüşüm</div>
+      <div className="text-sm text-white">CTR %{keyword.ctr.toFixed(2)}</div>
+      <div className="text-xs text-[#A0A0A0] text-left md:text-right">{keyword.status}</div>
+    </div>
+  );
+}
+
+function ConversionRow({ conversion }: { conversion: GoogleAdsConversion }) {
+  return (
+    <div className="grid grid-cols-1 gap-2 rounded-xl border border-white/[0.06] bg-[#1A1A1A] p-4 md:grid-cols-5 md:items-center">
+      <div>
+        <div className="text-white text-sm">{conversion.conversionAction}</div>
+      </div>
+      <div className="text-sm text-white">{conversion.conversions.toFixed(2)} dönüşüm</div>
+      <div className="text-sm text-white">{conversion.conversionValue === null ? "—" : formatCurrency(conversion.conversionValue)}</div>
+      <div className="text-sm text-white">{conversion.costPerConversion === null ? "—" : formatCurrency(conversion.costPerConversion)}</div>
+      <div className="text-sm text-white">%{conversion.conversionRate.toFixed(2)}</div>
+    </div>
+  );
+}
+
+function SearchTermRow({ searchTerm }: { searchTerm: GoogleAdsSearchTerm }) {
+  return (
+    <div className="grid grid-cols-1 gap-2 rounded-xl border border-white/[0.06] bg-[#1A1A1A] p-4 md:grid-cols-6 md:items-center">
+      <div>
+        <div className="text-white text-sm">{searchTerm.searchTerm}</div>
+        <div className="text-xs text-[#A0A0A0]">{searchTerm.campaignName} / {searchTerm.adGroupName}</div>
+      </div>
+      <div className="text-sm text-white">{searchTerm.keywordText ?? "—"}</div>
+      <div className="text-sm text-white">{formatCurrency(searchTerm.cost)}</div>
+      <div className="text-sm text-white">{formatInteger(searchTerm.clicks)} tıklama</div>
+      <div className="text-sm text-white">{searchTerm.conversions.toFixed(2)} dönüşüm</div>
+      <div className="text-sm text-white">CTR %{searchTerm.ctr.toFixed(2)}</div>
+    </div>
+  );
+}
+
+function TaskNoteRow({ task }: { task: ClientTask }) {
+  return (
+    <div className="rounded-xl border border-white/[0.06] bg-[#1A1A1A] p-4">
+      <div className="text-white text-sm">{task.title}</div>
+      <div className="text-xs text-[#A0A0A0] mt-1">{task.description ?? "Detay eklenmemiş."}</div>
+      <div className="text-xs text-[#A0A0A0] mt-2">{formatDateTime(task.updatedAt) ?? "Güncelleme tarihi yok"}</div>
+    </div>
+  );
+}
+
+function GoogleAdsApprovalsPanel({
+  pendingTasks,
+  historyTasks,
+  creativeFiles,
+  loading,
+  isError,
+  activeTaskId,
+  isActionLoading,
+  decisionNotes,
+  feedback,
+  onChangeDecisionNote,
+  onDecision,
+}: {
+  pendingTasks: ClientTask[];
+  historyTasks: ClientTask[];
+  creativeFiles: ProjectFile[];
+  loading: boolean;
+  isError: boolean;
+  activeTaskId: string | null;
+  isActionLoading: boolean;
+  decisionNotes: Record<string, string>;
+  feedback: { type: "success" | "error"; text: string } | null;
+  onChangeDecisionNote: (taskId: string, note: string) => void;
+  onDecision: (task: ClientTask, approvalStatus: ClientTaskMetaAdsApprovalStatus) => Promise<void>;
+}) {
+  if (loading) {
+    return <StateCard message="Onay bekleyen talepler yükleniyor..." />;
+  }
+
+  if (isError) {
+    return <StateCard message="Onay talepleri alınamadı." tone="error" />;
+  }
+
+  if (pendingTasks.length === 0 && historyTasks.length === 0 && creativeFiles.length === 0) {
+    return <StateCard message="Onay bekleyen talep bulunmuyor." />;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-[#AAFF01]/20 bg-[#AAFF01]/10 p-4 text-sm text-[#D7FFC2]">
+        Bekleyen Google Ads onayı: {pendingTasks.length}
+      </div>
+
+      {feedback ? (
+        <div
+          className={`rounded-xl border p-3 text-sm ${
+            feedback.type === "success"
+              ? "border-[#AAFF01]/25 bg-[#AAFF01]/10 text-[#D7FFC2]"
+              : "border-red-500/30 bg-red-500/10 text-red-200"
+          }`}
+        >
+          {feedback.text}
+        </div>
+      ) : null}
+
+      {creativeFiles.length > 0 ? (
+        <div className="space-y-2">
+          <p className="text-sm text-white">Creative Preview</p>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {creativeFiles.map((file) => (
+              <div key={file.id} className="rounded-xl border border-white/[0.08] bg-[#1A1A1A] p-3">
+                <p className="text-sm text-white">{file.title}</p>
+                <p className="mt-1 text-xs text-[#A0A0A0]">{file.originalFileName}</p>
+                {file.mimeType.startsWith("image/") ? (
+                  <img src={file.secureUrl} alt={file.title} className="mt-2 h-40 w-full rounded-lg object-cover" />
+                ) : file.mimeType.startsWith("video/") ? (
+                  <video className="mt-2 h-40 w-full rounded-lg object-cover" controls src={file.secureUrl} />
+                ) : (
+                  <a
+                    href={file.secureUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 inline-flex text-xs text-[#AAFF01] underline"
+                  >
+                    Dosyayı aç
+                  </a>
+                )}
               </div>
             ))}
           </div>
         </div>
-      </div>
+      ) : null}
 
-      <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
-        <h2 className="text-xl text-white mb-4">Dönüşüm Takibi</h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {conversionTracking.map((item, i) => (
-            <div key={i} className="bg-[#202020] rounded-xl p-4 border border-white/[0.08]">
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                  item.status === 'active' ? 'bg-[#AAFF01]/10' : 'bg-[#A0A0A0]/10'
-                }`}>
-                  {item.status === 'active' ? (
-                    <CheckCircle className="w-5 h-5 text-[#AAFF01]" />
-                  ) : (
-                    <XCircle className="w-5 h-5 text-[#A0A0A0]" />
-                  )}
-                </div>
-                <div>
-                  <div className="text-[#A0A0A0] text-xs mb-1">{item.metric}</div>
-                  <div className="text-white text-sm">{item.value}</div>
-                </div>
-              </div>
+      {pendingTasks.map((task) => {
+        const decisionNote = decisionNotes[task.id] ?? "";
+        const requiresRevisionNote = decisionNote.trim().length < 2;
+        const isReportAcknowledgement =
+          task.approvalType === "GOOGLE_ADS_REPORT_ACKNOWLEDGEMENT";
+
+        return (
+          <div key={task.id} className="rounded-xl border border-white/[0.08] bg-[#1A1A1A] p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm text-white">{task.title}</p>
+              <span className="text-xs text-[#D7FFC2]">
+                {getGoogleAdsApprovalStatusLabel(task.approvalStatus ?? "PENDING")}
+              </span>
+            </div>
+            {task.approvalType ? (
+              <p className="mt-1 text-xs text-[#A0A0A0]">
+                Onay tipi: {getGoogleAdsApprovalTypeLabel(task.approvalType)}
+              </p>
+            ) : null}
+            {task.description ? <p className="mt-2 text-xs text-[#CFCFCF]">{task.description}</p> : null}
+
+            <textarea
+              className="mt-3 min-h-20 w-full rounded-xl border border-white/[0.08] bg-[#151515] p-3 text-sm text-white outline-none focus:border-[#AAFF01]/40"
+              placeholder="Revizyon notu (revizyon/red için en az 2 karakter)"
+              value={decisionNote}
+              onChange={(event) => onChangeDecisionNote(task.id, event.target.value)}
+            />
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="rounded-lg border border-[#AAFF01]/25 bg-[#AAFF01]/10 px-3 py-2 text-xs text-[#D7FFC2] hover:bg-[#AAFF01]/15 disabled:opacity-60"
+                disabled={isActionLoading}
+                onClick={() =>
+                  void onDecision(task, isReportAcknowledgement ? "ACKNOWLEDGED" : "APPROVED")
+                }
+              >
+                {activeTaskId === task.id
+                  ? "Kaydediliyor..."
+                  : isReportAcknowledgement
+                    ? "Okudum"
+                    : "Onayla"}
+              </button>
+              <button
+                type="button"
+                className="rounded-lg border border-white/[0.16] bg-transparent px-3 py-2 text-xs text-[#E5E5E5] hover:border-white/[0.28] disabled:opacity-50"
+                disabled={isActionLoading || requiresRevisionNote}
+                onClick={() => void onDecision(task, "CHANGES_REQUESTED")}
+              >
+                Revizyon İste
+              </button>
+            </div>
+          </div>
+        );
+      })}
+
+      {historyTasks.length > 0 ? (
+        <div className="space-y-2">
+          <p className="text-sm text-white">Onay Geçmişi</p>
+          {historyTasks.map((task) => (
+            <div key={task.id} className="rounded-xl border border-white/[0.08] bg-[#171717] p-3 text-xs text-[#A0A0A0]">
+              <p className="text-sm text-white">{task.title}</p>
+              <p>Durum: {getGoogleAdsApprovalStatusLabel(task.approvalStatus ?? "PENDING")}</p>
+              {task.approvalType ? <p>Tip: {getGoogleAdsApprovalTypeLabel(task.approvalType)}</p> : null}
+              {task.approvalResponseNote ? <p>Not: {task.approvalResponseNote}</p> : null}
+              {task.approvalRespondedAt ? <p>Tarih: {formatDateTime(task.approvalRespondedAt)}</p> : null}
             </div>
           ))}
         </div>
-      </div>
+      ) : null}
+    </div>
+  );
+}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-gradient-to-br from-[#AAFF01]/5 to-[#7B61FF]/5 rounded-2xl p-6 border border-[#AAFF01]/20">
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#AAFF01]/20 flex items-center justify-center flex-shrink-0">
-              <Search className="w-5 h-5 text-[#AAFF01]" />
-            </div>
-            <div>
-              <h2 className="text-xl text-white mb-2">Ajans Yorumu</h2>
-              <p className="text-[#A0A0A0] text-sm mb-4">
-                Bu hafta Google Search kampanyalarımız mükemmel sonuçlar verdi. Brand keyword'ler %5.8 CTR ile
-                beklentilerin üzerinde. CPA'yı %15 düşürmeyi başardık.
-              </p>
-              <p className="text-[#A0A0A0] text-sm mb-4">
-                Generic keyword testinde bazı terimleri negatif kelime listesine ekledik. Bu sayede alakasız tıklamaları
-                elediğimiz için dönüşüm kalitesi arttı. Önümüzdeki hafta Performance Max kampanyasına bütçe artışı planlıyoruz.
-              </p>
-              <div className="flex items-center gap-2 text-sm text-[#AAFF01] mb-4">
-                <CheckCircle className="w-4 h-4" />
-                <span>Tüm conversion tracking çalışıyor • CPA hedefin altında</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-[#A0A0A0]">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#AAFF01] to-[#7B61FF]"></div>
-                <span>Burak Aydın - Google Ads Uzmanı</span>
-                <span className="ml-auto">27 Nisan 2026</span>
-              </div>
-            </div>
-          </div>
-        </div>
+function getGoogleAdsApprovalTypeLabel(approvalType: string): string {
+  return (
+    GOOGLE_ADS_APPROVAL_TYPE_LABELS[approvalType] ??
+    approvalType.replace("GOOGLE_ADS_", "").replace(/_/g, " ")
+  );
+}
 
-        <div className="space-y-6">
-          <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
-            <h2 className="text-xl text-white mb-4">Müşteri Aksiyonları</h2>
-            <div className="space-y-3">
-              {clientActions.map((item, i) => {
-                const priorityColors = {
-                  high: 'bg-[#ff4444]/10 text-[#ff4444]',
-                  medium: 'bg-[#FFA726]/10 text-[#FFA726]',
-                };
-                return (
-                  <div key={i} className="bg-[#202020] rounded-xl p-4 border border-white/[0.08]">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className={`text-xs px-2 py-1 rounded ${priorityColors[item.priority as keyof typeof priorityColors]}`}>
-                        {item.priority === 'high' ? 'Acil' : 'Orta'}
-                      </span>
-                      <span className="text-xs text-[#A0A0A0]">{item.dueDate}</span>
-                    </div>
-                    <p className="text-white text-sm">{item.action}</p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+function getGoogleAdsApprovalStatusLabel(
+  approvalStatus: ClientTaskMetaAdsApprovalStatus,
+): string {
+  if (approvalStatus === "PENDING") {
+    return "Aksiyon Bekleniyor";
+  }
+  if (approvalStatus === "APPROVED") {
+    return "Onaylandı";
+  }
+  if (approvalStatus === "ACKNOWLEDGED") {
+    return "Okundu";
+  }
+  if (approvalStatus === "CHANGES_REQUESTED") {
+    return "Revizyon İstendi";
+  }
+  if (approvalStatus === "REJECTED") {
+    return "Reddedildi";
+  }
+  return approvalStatus;
+}
 
-          <AutomationPreview />
+function StateCard({
+  message,
+  tone = "default",
+}: {
+  message: string;
+  tone?: "default" | "error";
+}) {
+  return (
+    <div
+      className={`rounded-2xl p-4 border text-sm ${
+        tone === "error"
+          ? "bg-red-500/10 border-red-500/30 text-red-200"
+          : "bg-[#1A1A1A] border-white/[0.08] text-[#A0A0A0]"
+      }`}
+    >
+      {message}
+    </div>
+  );
+}
+
+function formatDateTime(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null;
+  }
+
+  return parsedDate.toLocaleString("tr-TR");
+}
+
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat("tr-TR", {
+    style: "currency",
+    currency: "TRY",
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function formatInteger(value: number): string {
+  return new Intl.NumberFormat("tr-TR", {
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function getClientConnectionCopy(
+  connectionStatus: GoogleAdsConnectionStatus,
+  hasQueryError: boolean,
+): {
+  kind: "connected" | "pending" | "issue";
+  title: string;
+  description: string;
+} {
+  if (hasQueryError) {
+    return {
+      kind: "issue",
+      title: "Bağlantıda sorun var",
+      description: "Bağlantıda sorun var, ekibimiz ilgileniyor.",
+    };
+  }
+
+  if (connectionStatus === "CONNECTED") {
+    return {
+      kind: "connected",
+      title: "Bağlantı aktif",
+      description: "Google Ads bağlantısı aktif.",
+    };
+  }
+
+  if (connectionStatus === "PENDING") {
+    return {
+      kind: "pending",
+      title: "Veriler hazırlanıyor",
+      description: "Veriler hazırlanıyor, kısa süre içinde dashboard güncellenecek.",
+    };
+  }
+
+  if (connectionStatus === "NOT_CONNECTED") {
+    return {
+      kind: "issue",
+      title: "Google Ads bağlantısı bekleniyor",
+      description: "Google Ads hesabı henüz bağlanmamış görünüyor.",
+    };
+  }
+
+  if (connectionStatus === "DISCONNECTED") {
+    return {
+      kind: "issue",
+      title: "Bağlantı durduruldu",
+      description: "Google Ads bağlantısı şu anda kapalı. Ekibimiz yeniden bağlanma sürecini yönetiyor.",
+    };
+  }
+
+  return {
+    kind: "issue",
+    title: "Bağlantıda sorun var",
+    description: "Bağlantıda sorun var, ekibimiz ilgileniyor.",
+  };
+}
+
+function StatusCard({
+  status,
+}: {
+  status: {
+    kind: "connected" | "pending" | "issue";
+    title: string;
+    description: string;
+  };
+}) {
+  const palette =
+    status.kind === "connected"
+      ? {
+          container: "bg-[#AAFF01]/10 border-[#AAFF01]/25",
+          text: "text-[#D7FFC2]",
+          Icon: CheckCircle,
+          icon: "text-[#AAFF01]",
+        }
+      : status.kind === "pending"
+        ? {
+            container: "bg-[#00D4FF]/10 border-[#00D4FF]/25",
+            text: "text-[#A7ECFF]",
+            Icon: Clock,
+            icon: "text-[#00D4FF]",
+          }
+        : {
+            container: "bg-[#FF5252]/10 border-[#FF5252]/25",
+            text: "text-[#FFC7C7]",
+            Icon: status.title === "Google Ads bağlantısı bekleniyor" ? AlertCircle : XCircle,
+            icon: "text-[#FF6E6E]",
+          };
+
+  return (
+    <div className={`rounded-2xl p-6 border ${palette.container}`}>
+      <div className="flex items-start gap-3">
+        <palette.Icon className={`w-5 h-5 mt-0.5 ${palette.icon}`} />
+        <div>
+          <h2 className="text-xl text-white mb-2">{status.title}</h2>
+          <p className={`text-sm ${palette.text}`}>{status.description}</p>
         </div>
       </div>
     </div>

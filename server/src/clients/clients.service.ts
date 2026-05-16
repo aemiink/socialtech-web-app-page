@@ -28,6 +28,18 @@ const clientReadSelect = {
     },
     orderBy: [{ serviceKey: "asc" }, { id: "asc" }],
   },
+  googleAdsConfig: {
+    select: {
+      customerId: true,
+      managerCustomerId: true,
+      descriptiveName: true,
+      currencyCode: true,
+      timeZone: true,
+      connectionStatus: true,
+      lastSyncAt: true,
+      syncError: true,
+    },
+  },
 } satisfies Prisma.ClientProfileSelect;
 
 type ClientReadModel = Prisma.ClientProfileGetPayload<{ select: typeof clientReadSelect }>;
@@ -53,6 +65,7 @@ type ClientSummaryResponse = {
     createdAt: Date;
     updatedAt: Date;
     purchasedServices: ClientReadModel["purchasedServices"];
+    googleAdsConfig: ClientReadModel["googleAdsConfig"];
   };
   projects: {
     total: number;
@@ -304,6 +317,7 @@ export class ClientsService {
         createdAt: clientProfile.createdAt,
         updatedAt: clientProfile.updatedAt,
         purchasedServices: clientProfile.purchasedServices,
+        googleAdsConfig: clientProfile.googleAdsConfig,
       },
       projects: {
         total: projectTotal,

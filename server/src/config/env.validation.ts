@@ -31,6 +31,18 @@ export const envValidationSchema = Joi.object({
   META_APP_SECRET: Joi.string().min(1).optional(),
   META_REDIRECT_URI: Joi.string().uri().optional(),
   META_ADS_SYNC_TTL_MINUTES: Joi.number().integer().min(1).max(1440).default(30),
+  GOOGLE_ADS_DEVELOPER_TOKEN: Joi.string().min(1).optional().allow(""),
+  GOOGLE_ADS_CLIENT_ID: Joi.string().min(1).optional().allow(""),
+  GOOGLE_ADS_CLIENT_SECRET: Joi.string().min(1).optional().allow(""),
+  GOOGLE_ADS_REDIRECT_URI: Joi.string().uri().optional().allow(""),
+  GOOGLE_ADS_TOKEN_ENCRYPTION_KEY: Joi.string().min(32).optional().allow(""),
+  GOOGLE_ADS_TEST_CONNECTION_MOCK: Joi.string().valid("true", "false").default("true"),
+  GOOGLE_ADS_REPORTING_MOCK: Joi.string().valid("true", "false").default("true"),
+  GOOGLE_ADS_SYNC_TTL_MINUTES: Joi.number().integer().min(1).max(1440).default(30),
+  GOOGLE_ADS_LOGIN_CUSTOMER_ID: Joi.string()
+    .pattern(/^(\d{10}|\d{3}-\d{3}-\d{4})$/)
+    .optional()
+    .allow(""),
   CLOUDINARY_CLOUD_NAME: Joi.string().min(1).optional(),
   CLOUDINARY_API_KEY: Joi.string().min(1).optional(),
   CLOUDINARY_API_SECRET: Joi.string().min(1).optional(),

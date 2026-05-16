@@ -1,6 +1,12 @@
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { extractApiErrorMessage } from "../adminUsers/adminUsersUtils";
 import type {
+  AdminClientGoogleAdsConnection,
+  AdminClientGoogleAdsConfig,
+  AdminGoogleAdsClientListItem,
+  AdminGoogleAdsClientListResponse,
+  AdminGoogleAdsSyncLogItem,
+  AdminGoogleAdsSyncLogsResponse,
   AdminMetaAdsSyncLogItem,
   AdminMetaAdsSyncLogsResponse,
   AdminMetaAdsClientListItem,
@@ -16,6 +22,11 @@ import type {
   ClientSummaryRecentProject,
   ClientSummaryRecentTask,
   ClientSummaryResponse,
+  GoogleAdsConnectionStatus,
+  GoogleAdsConfigPayload,
+  GoogleAdsSyncStatus,
+  GoogleAdsSyncResponse,
+  GoogleAdsSummaryResponse,
   MetaAdsConnectionStatus,
   MetaAdsReportAcknowledgementStatus,
   MetaAdsReportItem,
@@ -27,6 +38,7 @@ import type {
   MetaAdsSummaryResponse,
   PurchasedServiceStatus,
   ServiceKey,
+  TestGoogleAdsConnectionResponse,
   TestMetaAdsConnectionResponse,
 } from "./clientsTypes";
 
@@ -359,6 +371,46 @@ export function getMetaAdsConnectionStatusBadgeClass(status: MetaAdsConnectionSt
   return "border-white/[0.12] bg-white/[0.04] text-[#A0A0A0]";
 }
 
+export function getGoogleAdsConnectionStatusLabel(status: GoogleAdsConnectionStatus): string {
+  if (status === "CONNECTED") {
+    return "Connected";
+  }
+
+  if (status === "PENDING") {
+    return "Pending";
+  }
+
+  if (status === "ERROR") {
+    return "Error";
+  }
+
+  if (status === "DISCONNECTED") {
+    return "Disconnected";
+  }
+
+  return "Not Connected";
+}
+
+export function getGoogleAdsConnectionStatusBadgeClass(status: GoogleAdsConnectionStatus): string {
+  if (status === "CONNECTED") {
+    return "bg-[#AAFF01] text-[#131313]";
+  }
+
+  if (status === "PENDING") {
+    return "bg-amber-500/20 text-amber-300";
+  }
+
+  if (status === "ERROR") {
+    return "bg-red-600 text-white";
+  }
+
+  if (status === "DISCONNECTED") {
+    return "border-white/[0.12] bg-white/[0.04] text-[#A0A0A0]";
+  }
+
+  return "border-white/[0.12] bg-white/[0.04] text-[#A0A0A0]";
+}
+
 export function getServiceLabel(serviceKey: string | null | undefined): string {
   const normalizedServiceKey = normalizeToUiServiceKey(serviceKey);
   const service = SERVICE_CATALOG.find((item) => item.key === normalizedServiceKey);
@@ -446,6 +498,161 @@ export function normalizeAdminMetaAdsConnectionResponse(
   };
 }
 
+export function normalizeAdminGoogleAdsConfigResponse(response: unknown): AdminClientGoogleAdsConfig {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  if (!isRecord(candidate)) {
+    throw new Error("Google Ads config response could not be parsed.");
+  }
+
+  const account =
+    isRecord(candidate.account)
+      ? candidate.account
+      : candidate;
+
+  return {
+    clientProfileId: typeof candidate.clientProfileId === "string" ? candidate.clientProfileId : "",
+    customerId: isStringOrNull(account.customerId) ? account.customerId : null,
+    managerCustomerId: isStringOrNull(account.managerCustomerId) ? account.managerCustomerId : null,
+    descriptiveName: isStringOrNull(account.descriptiveName) ? account.descriptiveName : null,
+    currencyCode: isStringOrNull(account.currencyCode) ? account.currencyCode : null,
+    timeZone: isStringOrNull(account.timeZone) ? account.timeZone : null,
+    connectionStatus: normalizeGoogleAdsConnectionStatus(candidate.connectionStatus),
+    lastSyncAt: isStringOrNull(candidate.lastSyncAt) ? candidate.lastSyncAt : null,
+    syncError: isStringOrNull(candidate.syncError) ? candidate.syncError : null,
+  };
+}
+
+export function normalizeAdminGoogleAdsConnectionResponse(
+  response: unknown,
+): AdminClientGoogleAdsConnection {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  if (!isRecord(candidate)) {
+    throw new Error("Google Ads connection response could not be parsed.");
+  }
+
+  const account = isRecord(candidate.account) ? candidate.account : candidate;
+  const credential = isRecord(candidate.credential) ? candidate.credential : {};
+
+  return {
+    clientProfileId: typeof candidate.clientProfileId === "string" ? candidate.clientProfileId : "",
+    connectionStatus: normalizeGoogleAdsConnectionStatus(candidate.connectionStatus),
+    hasActiveService: readBoolean(candidate.hasActiveService, false),
+    account: {
+      customerId: isStringOrNull(account.customerId) ? account.customerId : null,
+      managerCustomerId: isStringOrNull(account.managerCustomerId)
+        ? account.managerCustomerId
+        : null,
+      descriptiveName: isStringOrNull(account.descriptiveName) ? account.descriptiveName : null,
+      currencyCode: isStringOrNull(account.currencyCode) ? account.currencyCode : null,
+      timeZone: isStringOrNull(account.timeZone) ? account.timeZone : null,
+    },
+    lastSyncAt: isStringOrNull(candidate.lastSyncAt) ? candidate.lastSyncAt : null,
+    syncError: isStringOrNull(candidate.syncError) ? candidate.syncError : null,
+    credential: {
+      hasRefreshToken: readBoolean(credential.hasRefreshToken, false),
+      tokenLastUpdatedAt: isStringOrNull(credential.tokenLastUpdatedAt)
+        ? credential.tokenLastUpdatedAt
+        : null,
+      tokenExpiresAt: isStringOrNull(credential.tokenExpiresAt) ? credential.tokenExpiresAt : null,
+      grantedScopes: Array.isArray(credential.grantedScopes)
+        ? credential.grantedScopes.filter((item): item is string => typeof item === "string")
+        : [],
+    },
+  };
+}
+
+export function normalizeTestGoogleAdsConnectionResponse(
+  response: unknown,
+): TestGoogleAdsConnectionResponse {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  if (!isRecord(candidate)) {
+    throw new Error("Google Ads test connection response could not be parsed.");
+  }
+
+  const connection = normalizeAdminGoogleAdsConnectionResponse(candidate.connection);
+  const account = isRecord(candidate.account) ? candidate.account : {};
+
+  return {
+    success: true,
+    checkedAt: typeof candidate.checkedAt === "string" ? candidate.checkedAt : "",
+    connection,
+    account: {
+      customerId: readString(account, "customerId"),
+      managerCustomerId: readNullableString(account, "managerCustomerId"),
+      descriptiveName: readNullableString(account, "descriptiveName"),
+      currencyCode: readNullableString(account, "currencyCode"),
+      timeZone: readNullableString(account, "timeZone"),
+    },
+    grantedScopes: Array.isArray(candidate.grantedScopes)
+      ? candidate.grantedScopes.filter((item): item is string => typeof item === "string")
+      : [],
+  };
+}
+
+export function normalizeGoogleAdsSummaryResponse(response: unknown): GoogleAdsSummaryResponse {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  const dateRange = isRecord(candidate) && isRecord(candidate.dateRange) ? candidate.dateRange : {};
+  const conversionValue = isRecord(candidate) ? candidate.conversionValue : undefined;
+  const costPerConversion = isRecord(candidate) ? candidate.costPerConversion : undefined;
+
+  return {
+    cost: readNumber(isRecord(candidate) ? candidate.cost : undefined, 0),
+    impressions: Math.trunc(readNumber(isRecord(candidate) ? candidate.impressions : undefined, 0)),
+    clicks: Math.trunc(readNumber(isRecord(candidate) ? candidate.clicks : undefined, 0)),
+    conversions: readNumber(isRecord(candidate) ? candidate.conversions : undefined, 0),
+    conversionValue:
+      typeof conversionValue === "number" && Number.isFinite(conversionValue)
+        ? conversionValue
+        : null,
+    ctr: readNumber(isRecord(candidate) ? candidate.ctr : undefined, 0),
+    averageCpc: readNumber(isRecord(candidate) ? candidate.averageCpc : undefined, 0),
+    costPerConversion:
+      typeof costPerConversion === "number" && Number.isFinite(costPerConversion)
+        ? costPerConversion
+        : null,
+    dateRange: {
+      since: typeof dateRange.since === "string" ? dateRange.since : "",
+      until: typeof dateRange.until === "string" ? dateRange.until : "",
+    },
+    lastSyncAt:
+      isRecord(candidate) && isStringOrNull(candidate.lastSyncAt) ? candidate.lastSyncAt : null,
+  };
+}
+
+export function normalizeGoogleAdsSyncResponse(response: unknown): GoogleAdsSyncResponse {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  const dateRange = isRecord(candidate) && isRecord(candidate.dateRange) ? candidate.dateRange : {};
+  const inserted = isRecord(candidate) && isRecord(candidate.inserted) ? candidate.inserted : {};
+
+  return {
+    success: true,
+    syncedAt: isRecord(candidate) && typeof candidate.syncedAt === "string" ? candidate.syncedAt : "",
+    dateRange: {
+      since: typeof dateRange.since === "string" ? dateRange.since : "",
+      until: typeof dateRange.until === "string" ? dateRange.until : "",
+    },
+    inserted: {
+      account: readNumber(inserted.account, 0),
+      campaigns: readNumber(inserted.campaigns, 0),
+      adGroups: readNumber(inserted.adGroups, 0),
+      ads: readNumber(inserted.ads, 0),
+      total: readNumber(inserted.total, 0),
+    },
+    connectionStatus:
+      isRecord(candidate) && candidate.connectionStatus
+        ? normalizeGoogleAdsConnectionStatus(candidate.connectionStatus)
+        : "NOT_CONNECTED",
+    lastSyncAt:
+      isRecord(candidate) && isStringOrNull(candidate.lastSyncAt) ? candidate.lastSyncAt : null,
+    syncStatus:
+      isRecord(candidate) && candidate.syncStatus
+        ? normalizeGoogleAdsSyncStatus(candidate.syncStatus)
+        : "SUCCESS",
+    skippedReason:
+      isRecord(candidate) && isStringOrNull(candidate.skippedReason) ? candidate.skippedReason : null,
+  };
+}
+
 export function normalizeTestMetaAdsConnectionResponse(
   response: unknown,
 ): TestMetaAdsConnectionResponse {
@@ -525,6 +732,55 @@ export function normalizeMetaAdsSyncResponse(response: unknown): MetaAdsSyncResp
         : "SUCCESS",
     skippedReason:
       isRecord(candidate) && isStringOrNull(candidate.skippedReason) ? candidate.skippedReason : null,
+  };
+}
+
+export function normalizeAdminGoogleAdsClientListResponse(
+  response: unknown,
+): AdminGoogleAdsClientListResponse {
+  const candidate = isRecord(response) && "data" in response && isRecord(response.data)
+    ? response.data
+    : response;
+  const rowsSource = isRecord(candidate) ? candidate.data : undefined;
+  const dateRangeSource = isRecord(candidate) && isRecord(candidate.dateRange) ? candidate.dateRange : {};
+  const metaSource = isRecord(candidate) && isRecord(candidate.meta) ? candidate.meta : {};
+
+  return {
+    data: Array.isArray(rowsSource)
+      ? rowsSource.map((row) => normalizeAdminGoogleAdsClientListItem(row)).filter(isDefined)
+      : [],
+    dateRange: {
+      since: typeof dateRangeSource.since === "string" ? dateRangeSource.since : "",
+      until: typeof dateRangeSource.until === "string" ? dateRangeSource.until : "",
+    },
+    meta: {
+      total: readNumber(metaSource.total, 0),
+      connected: readNumber(metaSource.connected, 0),
+      error: readNumber(metaSource.error, 0),
+      pendingApprovals: readNumber(metaSource.pendingApprovals, 0),
+    },
+  };
+}
+
+export function normalizeAdminGoogleAdsSyncLogsResponse(
+  response: unknown,
+): AdminGoogleAdsSyncLogsResponse {
+  const candidate = isRecord(response) && "data" in response && isRecord(response.data)
+    ? response.data
+    : response;
+  const rowsSource = isRecord(candidate) ? candidate.data : undefined;
+  const metaSource = isRecord(candidate) && isRecord(candidate.meta) ? candidate.meta : {};
+
+  return {
+    data: Array.isArray(rowsSource)
+      ? rowsSource.map((row) => normalizeAdminGoogleAdsSyncLogItem(row)).filter(isDefined)
+      : [],
+    meta: {
+      total: readNumber(metaSource.total, 0),
+      failed: readNumber(metaSource.failed, 0),
+      running: readNumber(metaSource.running, 0),
+      skipped: readNumber(metaSource.skipped, 0),
+    },
   };
 }
 
@@ -927,6 +1183,91 @@ function normalizeClientSummaryMeta(value: unknown): ClientSummaryResponse["meta
   };
 }
 
+function normalizeAdminGoogleAdsClientListItem(value: unknown): AdminGoogleAdsClientListItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const client = isRecord(value.client) ? value.client : {};
+  const account = isRecord(value.account) ? value.account : {};
+  const summary = isRecord(value.summary) ? value.summary : {};
+  const actionContext = isRecord(value.actionContext) ? value.actionContext : {};
+  const assignedEmployeesSource = Array.isArray(value.assignedEmployees) ? value.assignedEmployees : [];
+
+  if (
+    typeof client.id !== "string" ||
+    typeof client.slug !== "string" ||
+    typeof client.companyName !== "string"
+  ) {
+    return null;
+  }
+
+  const assignedEmployees = assignedEmployeesSource
+    .map((item) => {
+      if (!isRecord(item)) {
+        return null;
+      }
+
+      if (
+        typeof item.userId !== "string" ||
+        typeof item.email !== "string" ||
+        typeof item.role !== "string" ||
+        typeof item.scope !== "string"
+      ) {
+        return null;
+      }
+
+      return {
+        userId: item.userId,
+        email: item.email,
+        displayName: isStringOrNull(item.displayName) ? item.displayName : null,
+        role: item.role,
+        scope: item.scope,
+      };
+    })
+    .filter(isDefined);
+
+  const conversionValue = summary.conversionValue;
+
+  return {
+    client: {
+      id: client.id,
+      slug: client.slug,
+      companyName: client.companyName,
+      status: normalizeClientStatus(client.status),
+    },
+    serviceStatus: normalizeMetaAdsServiceStatus(value.serviceStatus),
+    connectionStatus: normalizeGoogleAdsConnectionStatus(value.connectionStatus),
+    hasRefreshToken: typeof value.hasRefreshToken === "boolean" ? value.hasRefreshToken : false,
+    account: {
+      customerId: isStringOrNull(account.customerId) ? account.customerId : null,
+      managerCustomerId: isStringOrNull(account.managerCustomerId) ? account.managerCustomerId : null,
+      descriptiveName: isStringOrNull(account.descriptiveName) ? account.descriptiveName : null,
+      currencyCode: isStringOrNull(account.currencyCode) ? account.currencyCode : null,
+      timeZone: isStringOrNull(account.timeZone) ? account.timeZone : null,
+    },
+    lastSyncAt: isStringOrNull(value.lastSyncAt) ? value.lastSyncAt : null,
+    syncError: isStringOrNull(value.syncError) ? value.syncError : null,
+    summary: {
+      cost: readNumber(summary.cost, 0),
+      impressions: readNumber(summary.impressions, 0),
+      clicks: readNumber(summary.clicks, 0),
+      conversions: readNumber(summary.conversions, 0),
+      conversionValue:
+        typeof conversionValue === "number" && Number.isFinite(conversionValue)
+          ? conversionValue
+          : null,
+    },
+    pendingApprovals: readNumber(value.pendingApprovals, 0),
+    assignedEmployees,
+    actionContext: {
+      googleAdsProjectId: isStringOrNull(actionContext.googleAdsProjectId)
+        ? actionContext.googleAdsProjectId
+        : null,
+    },
+  };
+}
+
 function normalizeAdminMetaAdsClientListItem(value: unknown): AdminMetaAdsClientListItem | null {
   if (!isRecord(value)) {
     return null;
@@ -1053,6 +1394,45 @@ function normalizeAdminMetaAdsSyncLogItem(value: unknown): AdminMetaAdsSyncLogIt
   };
 }
 
+function normalizeAdminGoogleAdsSyncLogItem(value: unknown): AdminGoogleAdsSyncLogItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (
+    typeof value.id !== "string" ||
+    typeof value.clientProfileId !== "string" ||
+    typeof value.clientCompanyName !== "string" ||
+    typeof value.startedAt !== "string" ||
+    typeof value.createdAt !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    clientProfileId: value.clientProfileId,
+    clientCompanyName: value.clientCompanyName,
+    customerId: isStringOrNull(value.customerId) ? value.customerId : null,
+    managerCustomerId: isStringOrNull(value.managerCustomerId) ? value.managerCustomerId : null,
+    status: normalizeGoogleAdsSyncStatus(value.status),
+    startedAt: value.startedAt,
+    finishedAt: isStringOrNull(value.finishedAt) ? value.finishedAt : null,
+    durationMs: typeof value.durationMs === "number" && Number.isFinite(value.durationMs)
+      ? value.durationMs
+      : null,
+    errorCode: isStringOrNull(value.errorCode) ? value.errorCode : null,
+    errorMessage: isStringOrNull(value.errorMessage) ? value.errorMessage : null,
+    recordsFetched: typeof value.recordsFetched === "number" && Number.isFinite(value.recordsFetched)
+      ? Math.trunc(value.recordsFetched)
+      : null,
+    apiCallCount: typeof value.apiCallCount === "number" && Number.isFinite(value.apiCallCount)
+      ? Math.trunc(value.apiCallCount)
+      : null,
+    createdAt: value.createdAt,
+  };
+}
+
 function normalizeMetaAdsReportItem(value: unknown): MetaAdsReportItem | null {
   if (!isRecord(value)) {
     return null;
@@ -1143,12 +1523,22 @@ function normalizeClientProfile(value: unknown): ClientProfile | null {
   }
 
   if (!isRecord(value) || !("purchasedServices" in value)) {
+    if ("googleAdsConfig" in value) {
+      return {
+        ...value,
+        googleAdsConfig: normalizeGoogleAdsConfigPayload(value.googleAdsConfig),
+      };
+    }
+
     return value;
   }
 
   return {
     ...value,
     purchasedServices: normalizePurchasedServices(value.purchasedServices),
+    googleAdsConfig: "googleAdsConfig" in value
+      ? normalizeGoogleAdsConfigPayload(value.googleAdsConfig)
+      : undefined,
   };
 }
 
@@ -1204,6 +1594,49 @@ function normalizePurchasedService(value: unknown): ClientPurchasedService | nul
     createdAt: isStringOrNull(value.createdAt) ? value.createdAt : undefined,
     updatedAt: isStringOrNull(value.updatedAt) ? value.updatedAt : undefined,
   };
+}
+
+function normalizeGoogleAdsConfigPayload(value: unknown): GoogleAdsConfigPayload | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const customerId = readOptionalString(value, "customerId");
+  const managerCustomerId = readOptionalString(value, "managerCustomerId");
+  const descriptiveName = readOptionalString(value, "descriptiveName");
+  const currencyCode = readOptionalString(value, "currencyCode");
+  const timeZone = readOptionalString(value, "timeZone");
+  const connectionStatus = "connectionStatus" in value
+    ? normalizeGoogleAdsConnectionStatus(value.connectionStatus)
+    : undefined;
+
+  const normalizedPayload: GoogleAdsConfigPayload = {};
+
+  if (customerId) {
+    normalizedPayload.customerId = customerId;
+  }
+
+  if (managerCustomerId) {
+    normalizedPayload.managerCustomerId = managerCustomerId;
+  }
+
+  if (descriptiveName) {
+    normalizedPayload.descriptiveName = descriptiveName;
+  }
+
+  if (currencyCode) {
+    normalizedPayload.currencyCode = currencyCode;
+  }
+
+  if (timeZone) {
+    normalizedPayload.timeZone = timeZone;
+  }
+
+  if (connectionStatus) {
+    normalizedPayload.connectionStatus = connectionStatus;
+  }
+
+  return Object.keys(normalizedPayload).length > 0 ? normalizedPayload : undefined;
 }
 
 function isServiceKey(value: unknown): value is ServiceKey {
@@ -1283,7 +1716,41 @@ function normalizeMetaAdsConnectionStatus(value: unknown): MetaAdsConnectionStat
   return "NOT_CONNECTED";
 }
 
+function normalizeGoogleAdsConnectionStatus(value: unknown): GoogleAdsConnectionStatus {
+  if (value === "CONNECTED") {
+    return "CONNECTED";
+  }
+
+  if (value === "PENDING") {
+    return "PENDING";
+  }
+
+  if (value === "ERROR") {
+    return "ERROR";
+  }
+
+  if (value === "DISCONNECTED") {
+    return "DISCONNECTED";
+  }
+
+  return "NOT_CONNECTED";
+}
+
 function normalizeMetaAdsSyncStatus(value: unknown): MetaAdsSyncStatus {
+  if (
+    value === "RUNNING" ||
+    value === "SUCCESS" ||
+    value === "FAILED" ||
+    value === "PARTIAL" ||
+    value === "SKIPPED"
+  ) {
+    return value;
+  }
+
+  return "SUCCESS";
+}
+
+function normalizeGoogleAdsSyncStatus(value: unknown): GoogleAdsSyncStatus {
   if (
     value === "RUNNING" ||
     value === "SUCCESS" ||
@@ -1350,6 +1817,15 @@ function readNullableString(value: unknown, key: string): string | null {
 
   const target = value[key];
   return typeof target === "string" ? target : null;
+}
+
+function readOptionalString(value: unknown, key: string): string | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const target = value[key];
+  return typeof target === "string" ? target : undefined;
 }
 
 function isStringOrNull(value: unknown): value is string | null {

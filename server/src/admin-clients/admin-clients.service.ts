@@ -8,6 +8,7 @@ import {
 import {
   AccountType,
   ClientStatus,
+  GoogleAdsConnectionStatus,
   Prisma,
   PurchasedServiceKey,
   PurchasedServiceStatus,
@@ -23,6 +24,7 @@ import {
 import { AuthService } from "../auth/auth.service";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { PrismaService } from "../database/prisma.service";
+import { AdminClientGoogleAdsConfigDto } from "./dto/admin-client-google-ads-config.dto";
 import { AdminClientOwnerDto, AdminClientOwnerMode } from "./dto/admin-client-owner.dto";
 import { AdminClientPurchasedServiceDto } from "./dto/admin-client-purchased-service.dto";
 import { CreateAdminClientDto } from "./dto/create-admin-client.dto";
@@ -54,6 +56,17 @@ const purchasedServiceReadSelect = {
   updatedAt: true,
 } satisfies Prisma.ClientPurchasedServiceSelect;
 
+const googleAdsConfigReadSelect = {
+  customerId: true,
+  managerCustomerId: true,
+  descriptiveName: true,
+  currencyCode: true,
+  timeZone: true,
+  connectionStatus: true,
+  lastSyncAt: true,
+  syncError: true,
+} satisfies Prisma.ClientGoogleAdsConfigSelect;
+
 const adminClientReadSelect = {
   id: true,
   slug: true,
@@ -74,6 +87,9 @@ const adminClientReadSelect = {
     select: purchasedServiceReadSelect,
     orderBy: [{ serviceKey: "asc" }, { id: "asc" }],
   },
+  googleAdsConfig: {
+    select: googleAdsConfigReadSelect,
+  },
 } satisfies Prisma.ClientProfileSelect;
 
 type ClientOwnerReadModel = Prisma.UserGetPayload<{
@@ -86,6 +102,10 @@ type AdminClientReadModel = Prisma.ClientProfileGetPayload<{
 
 type PurchasedServiceReadModel = Prisma.ClientPurchasedServiceGetPayload<{
   select: typeof purchasedServiceReadSelect;
+}>;
+
+type GoogleAdsConfigReadModel = Prisma.ClientGoogleAdsConfigGetPayload<{
+  select: typeof googleAdsConfigReadSelect;
 }>;
 
 type AdminClientOwnerResponse = {
@@ -110,6 +130,17 @@ type AdminClientPurchasedServiceResponse = {
   updatedAt: Date;
 };
 
+type AdminClientGoogleAdsConfigResponse = {
+  customerId: string | null;
+  managerCustomerId: string | null;
+  descriptiveName: string | null;
+  currencyCode: string | null;
+  timeZone: string | null;
+  connectionStatus: GoogleAdsConnectionStatus;
+  lastSyncAt: Date | null;
+  syncError: string | null;
+};
+
 type AdminClientResponse = {
   id: string;
   slug: string;
@@ -122,6 +153,16 @@ type AdminClientResponse = {
   updatedAt: Date;
   owner: AdminClientOwnerResponse | null;
   purchasedServices: AdminClientPurchasedServiceResponse[];
+  googleAdsConfig: AdminClientGoogleAdsConfigResponse | null;
+};
+
+type AdminClientGoogleAdsConfigPatchData = {
+  customerId?: string | null;
+  managerCustomerId?: string | null;
+  descriptiveName?: string | null;
+  currencyCode?: string | null;
+  timeZone?: string | null;
+  connectionStatus?: GoogleAdsConnectionStatus;
 };
 
 type ClientAuditMetadataOptions = {
@@ -173,6 +214,12 @@ export class AdminClientsService {
           select: adminClientReadSelect,
         });
 
+        if (dto.googleAdsConfig !== undefined) {
+          await this.upsertGoogleAdsConfig(tx, clientProfile.id, dto.googleAdsConfig);
+        }
+
+        const clientProfileForAudit = await this.getClientProfileOrFail(clientProfile.id, tx);
+
         await this.recordAdminClientAudit(
           tx,
           currentUser,
@@ -181,8 +228,8 @@ export class AdminClientsService {
           this.buildAuditMetadata({
             actorUserId: currentUser.id,
             targetClientProfileId: clientProfile.id,
-            changedFields: this.getCreatedClientChangedFields(clientProfile),
-            nextState: this.toClientAuditState(clientProfile),
+            changedFields: this.getCreatedClientChangedFields(clientProfileForAudit),
+            nextState: this.toClientAuditState(clientProfileForAudit),
           }),
           auditRequestContext,
         );
@@ -248,6 +295,10 @@ export class AdminClientsService {
 
         if (dto.purchasedServices !== undefined) {
           await this.replacePurchasedServices(tx, clientProfileId, dto.purchasedServices);
+        }
+
+        if (dto.googleAdsConfig !== undefined) {
+          await this.upsertGoogleAdsConfig(tx, clientProfileId, dto.googleAdsConfig);
         }
 
         const clientProfile = await this.getClientProfileOrFail(clientProfileId, tx);
@@ -636,6 +687,50 @@ export class AdminClientsService {
     }
   }
 
+  private async upsertGoogleAdsConfig(
+    tx: Prisma.TransactionClient,
+    clientProfileId: string,
+    googleAdsConfig: AdminClientGoogleAdsConfigDto,
+  ): Promise<void> {
+    const patchData = this.buildGoogleAdsConfigPatchData(googleAdsConfig);
+
+    await tx.clientGoogleAdsConfig.upsert({
+      where: { clientProfileId },
+      update: patchData,
+      create: {
+        clientProfileId,
+        ...patchData,
+      },
+    });
+  }
+
+  private buildGoogleAdsConfigPatchData(
+    googleAdsConfig: AdminClientGoogleAdsConfigDto,
+  ): AdminClientGoogleAdsConfigPatchData {
+    const patchData: AdminClientGoogleAdsConfigPatchData = {};
+
+    if (googleAdsConfig.customerId !== undefined) {
+      patchData.customerId = googleAdsConfig.customerId;
+    }
+    if (googleAdsConfig.managerCustomerId !== undefined) {
+      patchData.managerCustomerId = googleAdsConfig.managerCustomerId;
+    }
+    if (googleAdsConfig.descriptiveName !== undefined) {
+      patchData.descriptiveName = googleAdsConfig.descriptiveName;
+    }
+    if (googleAdsConfig.currencyCode !== undefined) {
+      patchData.currencyCode = googleAdsConfig.currencyCode;
+    }
+    if (googleAdsConfig.timeZone !== undefined) {
+      patchData.timeZone = googleAdsConfig.timeZone;
+    }
+    if (googleAdsConfig.connectionStatus !== undefined) {
+      patchData.connectionStatus = googleAdsConfig.connectionStatus;
+    }
+
+    return patchData;
+  }
+
   private async recordOwnerAudit(
     tx: Prisma.TransactionClient,
     currentUser: AuthenticatedUser,
@@ -702,6 +797,7 @@ export class AdminClientsService {
       contactEmail: client.contactEmail,
       status: client.status,
       purchasedServices: this.toPurchasedServicesAuditState(client.purchasedServices),
+      googleAdsConfig: this.toGoogleAdsConfigAuditState(client.googleAdsConfig),
     } satisfies Prisma.InputJsonObject;
   }
 
@@ -716,6 +812,25 @@ export class AdminClientsService {
     }));
   }
 
+  private toGoogleAdsConfigAuditState(
+    googleAdsConfig: AdminClientReadModel["googleAdsConfig"],
+  ): Prisma.InputJsonObject | null {
+    if (!googleAdsConfig) {
+      return null;
+    }
+
+    return {
+      customerId: googleAdsConfig.customerId,
+      managerCustomerId: googleAdsConfig.managerCustomerId,
+      descriptiveName: googleAdsConfig.descriptiveName,
+      currencyCode: googleAdsConfig.currencyCode,
+      timeZone: googleAdsConfig.timeZone,
+      connectionStatus: googleAdsConfig.connectionStatus,
+      lastSyncAt: googleAdsConfig.lastSyncAt?.toISOString() ?? null,
+      syncError: googleAdsConfig.syncError,
+    } satisfies Prisma.InputJsonObject;
+  }
+
   private getCreatedClientChangedFields(client: AdminClientReadModel): string[] {
     return [
       "slug",
@@ -724,6 +839,7 @@ export class AdminClientsService {
       ...(client.contactEmail === null ? [] : ["contactEmail"]),
       "status",
       ...(client.purchasedServices.length === 0 ? [] : ["purchasedServices"]),
+      ...(client.googleAdsConfig === null ? [] : ["googleAdsConfig"]),
     ];
   }
 
@@ -754,6 +870,10 @@ export class AdminClientsService {
       changedFields.push("purchasedServices");
     }
 
+    if (!this.areGoogleAdsConfigEqual(previousClient, updatedClient)) {
+      changedFields.push("googleAdsConfig");
+    }
+
     return changedFields;
   }
 
@@ -764,6 +884,16 @@ export class AdminClientsService {
     return (
       JSON.stringify(this.toPurchasedServicesAuditState(previousClient.purchasedServices)) ===
       JSON.stringify(this.toPurchasedServicesAuditState(updatedClient.purchasedServices))
+    );
+  }
+
+  private areGoogleAdsConfigEqual(
+    previousClient: AdminClientReadModel,
+    updatedClient: AdminClientReadModel,
+  ): boolean {
+    return (
+      JSON.stringify(this.toGoogleAdsConfigAuditState(previousClient.googleAdsConfig)) ===
+      JSON.stringify(this.toGoogleAdsConfigAuditState(updatedClient.googleAdsConfig))
     );
   }
 
@@ -784,10 +914,11 @@ export class AdminClientsService {
       dto.slug === undefined &&
       dto.contactEmail === undefined &&
       dto.status === undefined &&
-      dto.purchasedServices === undefined
+      dto.purchasedServices === undefined &&
+      dto.googleAdsConfig === undefined
     ) {
       throw new BadRequestException(
-        "Provide name, slug, contactEmail, status, and/or purchasedServices to update a client.",
+        "Provide name, slug, contactEmail, status, purchasedServices, and/or googleAdsConfig to update a client.",
       );
     }
   }
@@ -966,6 +1097,7 @@ export class AdminClientsService {
       purchasedServices: client.purchasedServices.map((service) =>
         this.toPurchasedServiceResponse(service),
       ),
+      googleAdsConfig: this.toGoogleAdsConfigResponse(client.googleAdsConfig),
     };
   }
 
@@ -1030,6 +1162,25 @@ export class AdminClientsService {
       endedAt: purchasedService.endedAt,
       createdAt: purchasedService.createdAt,
       updatedAt: purchasedService.updatedAt,
+    };
+  }
+
+  private toGoogleAdsConfigResponse(
+    googleAdsConfig: GoogleAdsConfigReadModel | null,
+  ): AdminClientGoogleAdsConfigResponse | null {
+    if (!googleAdsConfig) {
+      return null;
+    }
+
+    return {
+      customerId: googleAdsConfig.customerId,
+      managerCustomerId: googleAdsConfig.managerCustomerId,
+      descriptiveName: googleAdsConfig.descriptiveName,
+      currencyCode: googleAdsConfig.currencyCode,
+      timeZone: googleAdsConfig.timeZone,
+      connectionStatus: googleAdsConfig.connectionStatus,
+      lastSyncAt: googleAdsConfig.lastSyncAt,
+      syncError: googleAdsConfig.syncError,
     };
   }
 }

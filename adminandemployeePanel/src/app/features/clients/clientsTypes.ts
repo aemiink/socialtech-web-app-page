@@ -54,6 +54,7 @@ export type ClientProfile = {
   createdAt: string;
   updatedAt: string;
   purchasedServices?: ClientPurchasedService[];
+  googleAdsConfig?: GoogleAdsConfigPayload;
 };
 
 export type ClientsSortBy = "createdAt" | "updatedAt" | "name" | "slug" | "status";
@@ -82,11 +83,234 @@ export type ClientsListResponse = {
   meta: ClientsListMeta;
 };
 
+export type GoogleAdsConnectionStatus =
+  | "NOT_CONNECTED"
+  | "PENDING"
+  | "CONNECTED"
+  | "ERROR"
+  | "DISCONNECTED";
+
+export type GoogleAdsSyncStatus =
+  | "RUNNING"
+  | "SUCCESS"
+  | "FAILED"
+  | "PARTIAL"
+  | "SKIPPED";
+
+export type GoogleAdsConfigPayload = {
+  customerId?: string;
+  managerCustomerId?: string;
+  descriptiveName?: string;
+  currencyCode?: string;
+  timeZone?: string;
+  connectionStatus?: GoogleAdsConnectionStatus;
+};
+
+export type AdminClientGoogleAdsConfig = {
+  clientProfileId: string;
+  customerId: string | null;
+  managerCustomerId: string | null;
+  descriptiveName: string | null;
+  currencyCode: string | null;
+  timeZone: string | null;
+  connectionStatus: GoogleAdsConnectionStatus;
+  lastSyncAt: string | null;
+  syncError: string | null;
+};
+
+export type AdminClientGoogleAdsConnection = {
+  clientProfileId: string;
+  connectionStatus: GoogleAdsConnectionStatus;
+  hasActiveService: boolean;
+  account: {
+    customerId: string | null;
+    managerCustomerId: string | null;
+    descriptiveName: string | null;
+    currencyCode: string | null;
+    timeZone: string | null;
+  };
+  lastSyncAt: string | null;
+  syncError: string | null;
+  credential: {
+    hasRefreshToken: boolean;
+    tokenLastUpdatedAt: string | null;
+    tokenExpiresAt: string | null;
+    grantedScopes: string[];
+  };
+};
+
+export type UpdateAdminClientGoogleAdsConfigRequest = {
+  customerId?: string | null;
+  managerCustomerId?: string | null;
+  descriptiveName?: string | null;
+  currencyCode?: string | null;
+  timeZone?: string | null;
+  connectionStatus?: GoogleAdsConnectionStatus;
+};
+
+export type ConnectManualGoogleAdsRequest = {
+  refreshToken: string;
+  accessToken?: string;
+  customerId?: string;
+  managerCustomerId?: string;
+  descriptiveName?: string;
+  currencyCode?: string;
+  timeZone?: string;
+  tokenExpiresAt?: string;
+  grantedScopes?: string[];
+};
+
+export type TestGoogleAdsConnectionRequest = {
+  refreshToken?: string;
+  accessToken?: string;
+  customerId?: string;
+  managerCustomerId?: string;
+  requiredScopes?: string[];
+};
+
+export type TestGoogleAdsConnectionResponse = {
+  success: true;
+  checkedAt: string;
+  connection: AdminClientGoogleAdsConnection;
+  account: {
+    customerId: string;
+    managerCustomerId: string | null;
+    descriptiveName: string | null;
+    currencyCode: string | null;
+    timeZone: string | null;
+  };
+  grantedScopes: string[];
+};
+
+export type GoogleAdsSummaryResponse = {
+  cost: number;
+  impressions: number;
+  clicks: number;
+  conversions: number;
+  conversionValue: number | null;
+  ctr: number;
+  averageCpc: number;
+  costPerConversion: number | null;
+  dateRange: {
+    since: string;
+    until: string;
+  };
+  lastSyncAt: string | null;
+};
+
+export type GoogleAdsSyncResponse = {
+  success: true;
+  syncedAt: string;
+  dateRange: {
+    since: string;
+    until: string;
+  };
+  inserted: {
+    account: number;
+    campaigns: number;
+    adGroups: number;
+    ads: number;
+    total: number;
+  };
+  connectionStatus: GoogleAdsConnectionStatus;
+  lastSyncAt: string | null;
+  syncStatus: GoogleAdsSyncStatus;
+  skippedReason: string | null;
+};
+
+export type AdminGoogleAdsClientListItem = {
+  client: {
+    id: string;
+    slug: string;
+    companyName: string;
+    status: ClientStatus;
+  };
+  serviceStatus: PurchasedServiceStatus;
+  connectionStatus: GoogleAdsConnectionStatus;
+  hasRefreshToken: boolean;
+  account: {
+    customerId: string | null;
+    managerCustomerId: string | null;
+    descriptiveName: string | null;
+    currencyCode: string | null;
+    timeZone: string | null;
+  };
+  lastSyncAt: string | null;
+  syncError: string | null;
+  summary: {
+    cost: number;
+    impressions: number;
+    clicks: number;
+    conversions: number;
+    conversionValue: number | null;
+  };
+  pendingApprovals: number;
+  assignedEmployees: Array<{
+    userId: string;
+    email: string;
+    displayName: string | null;
+    role: string;
+    scope: string;
+  }>;
+  actionContext: {
+    googleAdsProjectId: string | null;
+  };
+};
+
+export type AdminGoogleAdsClientListResponse = {
+  data: AdminGoogleAdsClientListItem[];
+  dateRange: {
+    since: string;
+    until: string;
+  };
+  meta: {
+    total: number;
+    connected: number;
+    error: number;
+    pendingApprovals: number;
+  };
+};
+
+export type AdminGoogleAdsSyncLogItem = {
+  id: string;
+  clientProfileId: string;
+  clientCompanyName: string;
+  customerId: string | null;
+  managerCustomerId: string | null;
+  status: GoogleAdsSyncStatus;
+  startedAt: string;
+  finishedAt: string | null;
+  durationMs: number | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  recordsFetched: number | null;
+  apiCallCount: number | null;
+  createdAt: string;
+};
+
+export type AdminGoogleAdsSyncLogsResponse = {
+  data: AdminGoogleAdsSyncLogItem[];
+  meta: {
+    total: number;
+    failed: number;
+    running: number;
+    skipped: number;
+  };
+};
+
+export type AdminGoogleAdsSyncLogsQuery = {
+  clientProfileId?: string;
+  status?: GoogleAdsSyncStatus;
+  failedOnly?: boolean;
+  limit?: number;
+};
+
 export type CreateAdminClientRequest = {
   name: string;
   slug?: string;
   status?: ClientStatus;
   purchasedServices: ServiceKey[];
+  googleAdsConfig?: GoogleAdsConfigPayload;
 };
 
 export type UpdateAdminClientRequest = {
@@ -94,6 +318,7 @@ export type UpdateAdminClientRequest = {
   slug?: string;
   status?: ClientStatus;
   purchasedServices?: ServiceKey[];
+  googleAdsConfig?: GoogleAdsConfigPayload;
 };
 
 export type CreateClientOwnerRequest = {

@@ -18,6 +18,11 @@ import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { useGetAdminAssignmentsQuery } from "../features/adminAssignments/adminAssignmentsApi";
 import {
+  useConnectAdminClientGoogleAdsManualMutation,
+  useDisconnectAdminClientGoogleAdsMutation,
+  useGetAdminClientGoogleAdsConnectionQuery,
+  useGetAdminClientGoogleAdsConfigQuery,
+  useGetAdminClientGoogleAdsSummaryQuery,
   useConnectAdminClientMetaAdsManualMutation,
   useDisconnectAdminClientMetaAdsMutation,
   useGetAdminClientMetaAdsConnectionQuery,
@@ -25,11 +30,14 @@ import {
   useGetClientSummaryQuery,
   useResetClientOwnerPasswordMutation,
   useSyncAdminClientMetaAdsMutation,
+  useTestAdminClientGoogleAdsConnectionMutation,
   useTestAdminClientMetaAdsConnectionMutation,
+  useUpdateAdminClientGoogleAdsConfigMutation,
 } from "../features/clients/clientsApi";
 import type {
   ClientSummaryRecentProject,
   ClientSummaryRecentTask,
+  GoogleAdsConnectionStatus,
 } from "../features/clients/clientsTypes";
 import { validatePassword, validatePasswordConfirmation } from "../features/adminUsers/adminUsersUtils";
 import {
@@ -39,6 +47,8 @@ import {
   getClientPriorityBadgeClass,
   getClientPriorityLabel,
   getClientProjectStatusBadgeClass,
+  getGoogleAdsConnectionStatusBadgeClass,
+  getGoogleAdsConnectionStatusLabel,
   getMetaAdsConnectionStatusBadgeClass,
   getMetaAdsConnectionStatusLabel,
   getClientProjectStatusLabel,
@@ -50,6 +60,32 @@ import {
   isUuid,
 } from "../features/clients/clientsUtils";
 
+const GOOGLE_ADS_CONNECTION_STATUS_OPTIONS: GoogleAdsConnectionStatus[] = [
+  "NOT_CONNECTED",
+  "PENDING",
+  "CONNECTED",
+  "ERROR",
+  "DISCONNECTED",
+];
+
+type GoogleAdsConfigFormState = {
+  customerId: string;
+  managerCustomerId: string;
+  descriptiveName: string;
+  currencyCode: string;
+  timeZone: string;
+  connectionStatus: GoogleAdsConnectionStatus;
+};
+
+const initialGoogleAdsConfigForm: GoogleAdsConfigFormState = {
+  customerId: "",
+  managerCustomerId: "",
+  descriptiveName: "",
+  currencyCode: "",
+  timeZone: "",
+  connectionStatus: "NOT_CONNECTED",
+};
+
 export function ClientDetail() {
   const { id } = useParams();
   const clientProfileId = typeof id === "string" && isUuid(id) ? id : null;
@@ -60,8 +96,24 @@ export function ClientDetail() {
   const [metaAccessToken, setMetaAccessToken] = useState("");
   const [metaAdAccountId, setMetaAdAccountId] = useState("");
   const [metaConnectionFeedback, setMetaConnectionFeedback] = useState<string | null>(null);
+  const [googleRefreshToken, setGoogleRefreshToken] = useState("");
+  const [googleAccessToken, setGoogleAccessToken] = useState("");
+  const [googleConnectionFeedback, setGoogleConnectionFeedback] = useState<string | null>(null);
+  const [isGoogleAdsEditMode, setIsGoogleAdsEditMode] = useState(false);
+  const [googleAdsFeedback, setGoogleAdsFeedback] = useState<string | null>(null);
+  const [googleAdsForm, setGoogleAdsForm] = useState<GoogleAdsConfigFormState>(
+    initialGoogleAdsConfigForm,
+  );
   const [resetClientOwnerPassword, { isLoading: isResettingOwnerPassword }] =
     useResetClientOwnerPasswordMutation();
+  const [updateGoogleAdsConfig, { isLoading: isGoogleAdsUpdating }] =
+    useUpdateAdminClientGoogleAdsConfigMutation();
+  const [connectGoogleAdsManual, { isLoading: isGoogleAdsConnecting }] =
+    useConnectAdminClientGoogleAdsManualMutation();
+  const [testGoogleAdsConnection, { isLoading: isGoogleAdsTesting }] =
+    useTestAdminClientGoogleAdsConnectionMutation();
+  const [disconnectGoogleAds, { isLoading: isGoogleAdsDisconnecting }] =
+    useDisconnectAdminClientGoogleAdsMutation();
   const [connectMetaAdsManual, { isLoading: isMetaConnecting }] =
     useConnectAdminClientMetaAdsManualMutation();
   const [testMetaAdsConnection, { isLoading: isMetaTesting }] =
@@ -88,6 +140,33 @@ export function ClientDetail() {
     { clientProfileId: clientProfileId ?? "", isActive: true },
     { skip: !isValidId },
   );
+  const {
+    data: googleAdsConfig,
+    error: googleAdsConfigError,
+    isFetching: isGoogleAdsConfigFetching,
+    isLoading: isGoogleAdsConfigLoading,
+    refetch: refetchGoogleAdsConfig,
+  } = useGetAdminClientGoogleAdsConfigQuery(clientProfileId ?? "", {
+    skip: !isValidId,
+  });
+  const {
+    data: googleAdsConnection,
+    error: googleAdsConnectionError,
+    isFetching: isGoogleAdsConnectionFetching,
+    isLoading: isGoogleAdsConnectionLoading,
+    refetch: refetchGoogleAdsConnection,
+  } = useGetAdminClientGoogleAdsConnectionQuery(clientProfileId ?? "", {
+    skip: !isValidId,
+  });
+  const {
+    data: googleAdsSummary,
+    error: googleAdsSummaryError,
+    isFetching: isGoogleAdsSummaryFetching,
+    isLoading: isGoogleAdsSummaryLoading,
+    refetch: refetchGoogleAdsSummary,
+  } = useGetAdminClientGoogleAdsSummaryQuery(clientProfileId ?? "", {
+    skip: !isValidId,
+  });
   const {
     data: metaAdsConnection,
     error: metaAdsConnectionError,
@@ -116,6 +195,34 @@ export function ClientDetail() {
       currentValue.trim().length > 0 ? currentValue : metaAdsConnection.ids.adAccountId ?? "",
     );
   }, [metaAdsConnection?.ids.adAccountId]);
+
+  useEffect(() => {
+    if (isGoogleAdsEditMode) {
+      return;
+    }
+
+    if (!googleAdsConfig) {
+      setGoogleAdsForm(initialGoogleAdsConfigForm);
+      return;
+    }
+
+    setGoogleAdsForm({
+      customerId: googleAdsConfig.customerId ?? "",
+      managerCustomerId: googleAdsConfig.managerCustomerId ?? "",
+      descriptiveName: googleAdsConfig.descriptiveName ?? "",
+      currencyCode: googleAdsConfig.currencyCode ?? "",
+      timeZone: googleAdsConfig.timeZone ?? "",
+      connectionStatus: googleAdsConfig.connectionStatus,
+    });
+  }, [googleAdsConfig, isGoogleAdsEditMode]);
+
+  useEffect(() => {
+    setIsGoogleAdsEditMode(false);
+    setGoogleAdsFeedback(null);
+    setGoogleConnectionFeedback(null);
+    setGoogleRefreshToken("");
+    setGoogleAccessToken("");
+  }, [clientProfileId]);
 
   if (!isValidId) {
     return (
@@ -175,8 +282,174 @@ export function ClientDetail() {
   }
 
   const { client, projects, tasks } = summary;
+  const hasGoogleAdsConfigError = Boolean(googleAdsConfigError);
+  const hasGoogleAdsConnectionError = Boolean(googleAdsConnectionError);
+  const hasGoogleAdsSummaryError = Boolean(googleAdsSummaryError);
   const hasMetaConnectionError = Boolean(metaAdsConnectionError);
   const hasMetaSummaryError = Boolean(metaAdsSummaryError);
+  const googleAdsStatusForBadge =
+    googleAdsConnection?.connectionStatus ??
+    googleAdsConfig?.connectionStatus ??
+    googleAdsForm.connectionStatus;
+
+  const handleGoogleAdsEditOpen = () => {
+    setGoogleAdsFeedback(null);
+    setIsGoogleAdsEditMode(true);
+  };
+
+  const handleGoogleAdsEditCancel = () => {
+    setGoogleAdsFeedback(null);
+    setIsGoogleAdsEditMode(false);
+    if (googleAdsConfig) {
+      setGoogleAdsForm({
+        customerId: googleAdsConfig.customerId ?? "",
+        managerCustomerId: googleAdsConfig.managerCustomerId ?? "",
+        descriptiveName: googleAdsConfig.descriptiveName ?? "",
+        currencyCode: googleAdsConfig.currencyCode ?? "",
+        timeZone: googleAdsConfig.timeZone ?? "",
+        connectionStatus: googleAdsConfig.connectionStatus,
+      });
+    } else {
+      setGoogleAdsForm(initialGoogleAdsConfigForm);
+    }
+  };
+
+  const handleGoogleAdsConfigSave = async () => {
+    if (!clientProfileId) {
+      return;
+    }
+
+    setGoogleAdsFeedback(null);
+
+    try {
+      await updateGoogleAdsConfig({
+        clientId: clientProfileId,
+        body: {
+          customerId: normalizeOptionalText(googleAdsForm.customerId),
+          managerCustomerId: normalizeOptionalText(googleAdsForm.managerCustomerId),
+          descriptiveName: normalizeOptionalText(googleAdsForm.descriptiveName),
+          currencyCode: normalizeOptionalText(googleAdsForm.currencyCode)?.toUpperCase() ?? null,
+          timeZone: normalizeOptionalText(googleAdsForm.timeZone),
+          connectionStatus: googleAdsForm.connectionStatus,
+        },
+      }).unwrap();
+      setGoogleAdsFeedback("Google Ads konfigürasyonu güncellendi.");
+      setIsGoogleAdsEditMode(false);
+      await refetchGoogleAdsConfig();
+    } catch (mutationError) {
+      setGoogleAdsFeedback(
+        extractApiErrorMessage(mutationError, "Google Ads konfigürasyonu güncellenemedi."),
+      );
+    }
+  };
+
+  const handleManualGoogleAdsConnect = async () => {
+    if (!clientProfileId) {
+      return;
+    }
+
+    const trimmedRefreshToken = googleRefreshToken.trim();
+    if (!trimmedRefreshToken) {
+      setGoogleConnectionFeedback("Manual bağlantı için refresh token gereklidir.");
+      return;
+    }
+
+    setGoogleConnectionFeedback(null);
+
+    try {
+      await connectGoogleAdsManual({
+        clientId: clientProfileId,
+        body: {
+          refreshToken: trimmedRefreshToken,
+          ...(googleAccessToken.trim() ? { accessToken: googleAccessToken.trim() } : {}),
+          ...(googleAdsForm.customerId.trim() ? { customerId: googleAdsForm.customerId.trim() } : {}),
+          ...(googleAdsForm.managerCustomerId.trim()
+            ? { managerCustomerId: googleAdsForm.managerCustomerId.trim() }
+            : {}),
+          ...(googleAdsForm.descriptiveName.trim()
+            ? { descriptiveName: googleAdsForm.descriptiveName.trim() }
+            : {}),
+          ...(googleAdsForm.currencyCode.trim()
+            ? { currencyCode: googleAdsForm.currencyCode.trim().toUpperCase() }
+            : {}),
+          ...(googleAdsForm.timeZone.trim() ? { timeZone: googleAdsForm.timeZone.trim() } : {}),
+        },
+      }).unwrap();
+
+      setGoogleRefreshToken("");
+      setGoogleAccessToken("");
+      setGoogleConnectionFeedback("Google Ads bağlantı bilgileri kaydedildi.");
+      await Promise.all([
+        refetchGoogleAdsConnection(),
+        refetchGoogleAdsConfig(),
+        refetchGoogleAdsSummary(),
+      ]);
+    } catch (mutationError) {
+      setGoogleConnectionFeedback(
+        extractApiErrorMessage(mutationError, "Google Ads bağlantısı kaydedilemedi."),
+      );
+    }
+  };
+
+  const handleGoogleAdsConnectionTest = async () => {
+    if (!clientProfileId) {
+      return;
+    }
+
+    setGoogleConnectionFeedback(null);
+
+    try {
+      await testGoogleAdsConnection({
+        clientId: clientProfileId,
+        body: {
+          ...(googleRefreshToken.trim() ? { refreshToken: googleRefreshToken.trim() } : {}),
+          ...(googleAccessToken.trim() ? { accessToken: googleAccessToken.trim() } : {}),
+          ...(googleAdsForm.customerId.trim() ? { customerId: googleAdsForm.customerId.trim() } : {}),
+          ...(googleAdsForm.managerCustomerId.trim()
+            ? { managerCustomerId: googleAdsForm.managerCustomerId.trim() }
+            : {}),
+          requiredScopes: ["https://www.googleapis.com/auth/adwords"],
+        },
+      }).unwrap();
+
+      setGoogleRefreshToken("");
+      setGoogleAccessToken("");
+      setGoogleConnectionFeedback("Google Ads bağlantı testi başarılı.");
+      await Promise.all([
+        refetchGoogleAdsConnection(),
+        refetchGoogleAdsConfig(),
+        refetchGoogleAdsSummary(),
+      ]);
+    } catch (mutationError) {
+      setGoogleConnectionFeedback(
+        extractApiErrorMessage(mutationError, "Google Ads bağlantı testi başarısız."),
+      );
+    }
+  };
+
+  const handleGoogleAdsDisconnect = async () => {
+    if (!clientProfileId) {
+      return;
+    }
+
+    setGoogleConnectionFeedback(null);
+
+    try {
+      await disconnectGoogleAds({ clientId: clientProfileId }).unwrap();
+      setGoogleRefreshToken("");
+      setGoogleAccessToken("");
+      setGoogleConnectionFeedback("Google Ads bağlantısı kesildi.");
+      await Promise.all([
+        refetchGoogleAdsConnection(),
+        refetchGoogleAdsConfig(),
+        refetchGoogleAdsSummary(),
+      ]);
+    } catch (mutationError) {
+      setGoogleConnectionFeedback(
+        extractApiErrorMessage(mutationError, "Google Ads bağlantısı kesilemedi."),
+      );
+    }
+  };
 
   const handleManualMetaConnect = async () => {
     if (!clientProfileId) {
@@ -351,6 +624,332 @@ export function ClientDetail() {
           <DetailRow label="Oluşturulma tarihi" value={formatClientDateTime(client.createdAt)} />
           <DetailRow label="Son güncelleme" value={formatClientDateTime(client.updatedAt)} />
         </div>
+      </Card>
+
+      <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-white">Google Ads Konfigürasyonu</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            {isGoogleAdsConfigFetching && (
+              <span className="text-xs text-[#d2ff8a]">Google Ads config güncelleniyor...</span>
+            )}
+            {isGoogleAdsConnectionFetching && (
+              <span className="text-xs text-[#d2ff8a]">Google Ads bağlantı özeti güncelleniyor...</span>
+            )}
+            {isGoogleAdsSummaryFetching && (
+              <span className="text-xs text-[#d2ff8a]">Google Ads performans özeti güncelleniyor...</span>
+            )}
+            <Badge className={getGoogleAdsConnectionStatusBadgeClass(googleAdsStatusForBadge)}>
+              {getGoogleAdsConnectionStatusLabel(googleAdsStatusForBadge)}
+            </Badge>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => {
+                void Promise.all([
+                  refetchGoogleAdsConfig(),
+                  refetchGoogleAdsConnection(),
+                  refetchGoogleAdsSummary(),
+                ]);
+              }}
+            >
+              <RefreshCw className="h-4 w-4" />
+              Yenile
+            </Button>
+            {!isGoogleAdsEditMode ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleGoogleAdsEditOpen}
+                disabled={isGoogleAdsConfigLoading}
+              >
+                Config düzenle
+              </Button>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGoogleAdsEditCancel}
+                  disabled={isGoogleAdsUpdating}
+                >
+                  Vazgeç
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
+                  onClick={() => void handleGoogleAdsConfigSave()}
+                  disabled={isGoogleAdsUpdating}
+                >
+                  {isGoogleAdsUpdating ? "Kaydediliyor..." : "Kaydet"}
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {isGoogleAdsConfigLoading ? (
+          <p className="text-sm text-[#A0A0A0]">Google Ads konfigürasyonu yükleniyor...</p>
+        ) : null}
+        {isGoogleAdsConnectionLoading ? (
+          <p className="text-sm text-[#A0A0A0]">Google Ads bağlantı özeti yükleniyor...</p>
+        ) : null}
+        {isGoogleAdsSummaryLoading ? (
+          <p className="text-sm text-[#A0A0A0]">Google Ads performans özeti yükleniyor...</p>
+        ) : null}
+        {hasGoogleAdsConfigError ? (
+          <p className="text-sm text-red-300">
+            {extractApiErrorMessage(googleAdsConfigError, "Google Ads konfigürasyonu alınamadı.")}
+          </p>
+        ) : null}
+        {hasGoogleAdsConnectionError ? (
+          <p className="text-sm text-red-300">
+            {extractApiErrorMessage(googleAdsConnectionError, "Google Ads bağlantı özeti alınamadı.")}
+          </p>
+        ) : null}
+        {hasGoogleAdsSummaryError ? (
+          <p className="text-sm text-red-300">
+            {extractApiErrorMessage(googleAdsSummaryError, "Google Ads performans özeti alınamadı.")}
+          </p>
+        ) : null}
+
+        {isGoogleAdsEditMode ? (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-xs text-[#A0A0A0]" htmlFor="google-ads-customer-id">
+                Customer ID
+              </label>
+              <Input
+                id="google-ads-customer-id"
+                value={googleAdsForm.customerId}
+                onChange={(event) =>
+                  setGoogleAdsForm((prev) => ({ ...prev, customerId: event.target.value }))
+                }
+                className="border-white/[0.12] bg-black/20 text-white placeholder:text-[#7A7A7A]"
+                placeholder="1234567890"
+                disabled={isGoogleAdsUpdating}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs text-[#A0A0A0]" htmlFor="google-ads-manager-customer-id">
+                Manager Customer ID
+              </label>
+              <Input
+                id="google-ads-manager-customer-id"
+                value={googleAdsForm.managerCustomerId}
+                onChange={(event) =>
+                  setGoogleAdsForm((prev) => ({ ...prev, managerCustomerId: event.target.value }))
+                }
+                className="border-white/[0.12] bg-black/20 text-white placeholder:text-[#7A7A7A]"
+                placeholder="0987654321"
+                disabled={isGoogleAdsUpdating}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs text-[#A0A0A0]" htmlFor="google-ads-descriptive-name">
+                Account Name
+              </label>
+              <Input
+                id="google-ads-descriptive-name"
+                value={googleAdsForm.descriptiveName}
+                onChange={(event) =>
+                  setGoogleAdsForm((prev) => ({ ...prev, descriptiveName: event.target.value }))
+                }
+                className="border-white/[0.12] bg-black/20 text-white placeholder:text-[#7A7A7A]"
+                placeholder="Acme Google Ads"
+                disabled={isGoogleAdsUpdating}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs text-[#A0A0A0]" htmlFor="google-ads-time-zone">
+                Timezone
+              </label>
+              <Input
+                id="google-ads-time-zone"
+                value={googleAdsForm.timeZone}
+                onChange={(event) =>
+                  setGoogleAdsForm((prev) => ({ ...prev, timeZone: event.target.value }))
+                }
+                className="border-white/[0.12] bg-black/20 text-white placeholder:text-[#7A7A7A]"
+                placeholder="Europe/Istanbul"
+                disabled={isGoogleAdsUpdating}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs text-[#A0A0A0]" htmlFor="google-ads-currency-code">
+                Currency
+              </label>
+              <Input
+                id="google-ads-currency-code"
+                value={googleAdsForm.currencyCode}
+                onChange={(event) =>
+                  setGoogleAdsForm((prev) => ({ ...prev, currencyCode: event.target.value }))
+                }
+                className="border-white/[0.12] bg-black/20 text-white placeholder:text-[#7A7A7A]"
+                placeholder="TRY"
+                disabled={isGoogleAdsUpdating}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs text-[#A0A0A0]" htmlFor="google-ads-connection-status">
+                Connection Status
+              </label>
+              <select
+                id="google-ads-connection-status"
+                aria-label="Google Ads Connection Status"
+                value={googleAdsForm.connectionStatus}
+                onChange={(event) =>
+                  setGoogleAdsForm((prev) => ({
+                    ...prev,
+                    connectionStatus: event.target.value as GoogleAdsConnectionStatus,
+                  }))
+                }
+                disabled={isGoogleAdsUpdating}
+                className="h-10 w-full rounded-md border border-white/[0.12] bg-black/20 px-3 text-sm text-white outline-none transition-colors hover:border-white/[0.2] focus:border-[#AAFF01]/50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {GOOGLE_ADS_CONNECTION_STATUS_OPTIONS.map((status) => (
+                  <option key={status} value={status}>
+                    {getGoogleAdsConnectionStatusLabel(status)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <DetailRow label="Connection Status" value={getGoogleAdsConnectionStatusLabel(googleAdsStatusForBadge)} />
+            <DetailRow label="Customer ID" value={googleAdsConfig?.customerId ?? "—"} mono />
+            <DetailRow
+              label="Manager Customer ID"
+              value={googleAdsConfig?.managerCustomerId ?? "—"}
+              mono
+            />
+            <DetailRow label="Currency" value={googleAdsConfig?.currencyCode ?? "—"} />
+            <DetailRow label="Timezone" value={googleAdsConfig?.timeZone ?? "—"} />
+            <DetailRow label="Last Sync" value={formatClientDateTime(googleAdsConfig?.lastSyncAt ?? null)} />
+            <DetailRow label="Sync Error" value={googleAdsConfig?.syncError ?? "—"} />
+            <DetailRow label="Account Name" value={googleAdsConfig?.descriptiveName ?? "—"} />
+          </div>
+        )}
+
+        {googleAdsConnection ? (
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+            <DetailRow
+              label="Aktif Purchased Service"
+              value={googleAdsConnection.hasActiveService ? "Evet" : "Hayır"}
+            />
+            <DetailRow
+              label="Token Durumu"
+              value={googleAdsConnection.credential.hasRefreshToken ? "Kayıtlı" : "Kayıtlı değil"}
+            />
+            <DetailRow
+              label="Son Token Güncellemesi"
+              value={formatClientDateTime(googleAdsConnection.credential.tokenLastUpdatedAt)}
+            />
+            <DetailRow
+              label="Token Bitiş Zamanı"
+              value={formatClientDateTime(googleAdsConnection.credential.tokenExpiresAt)}
+            />
+            <DetailRow
+              label="Granted Scopes"
+              value={googleAdsConnection.credential.grantedScopes.join(", ") || "—"}
+            />
+            <DetailRow label="Sync Hata Özeti" value={googleAdsConnection.syncError ?? "—"} />
+          </div>
+        ) : null}
+
+        {googleAdsSummary ? (
+          <div className="mt-4 rounded-xl border border-white/[0.08] bg-black/20 p-4">
+            <h3 className="mb-3 text-sm font-medium text-white">Google Ads Performans Özeti</h3>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <DetailRow label="Toplam Harcama" value={formatCurrencyTry(googleAdsSummary.cost)} />
+              <DetailRow label="Impressions" value={formatInteger(googleAdsSummary.impressions)} />
+              <DetailRow label="Clicks" value={formatInteger(googleAdsSummary.clicks)} />
+              <DetailRow label="Conversions" value={googleAdsSummary.conversions.toFixed(2)} />
+              <DetailRow label="CTR" value={`%${googleAdsSummary.ctr.toFixed(2)}`} />
+              <DetailRow label="Average CPC" value={formatCurrencyTry(googleAdsSummary.averageCpc)} />
+              <DetailRow
+                label="Cost / Conversion"
+                value={
+                  googleAdsSummary.costPerConversion === null
+                    ? "—"
+                    : formatCurrencyTry(googleAdsSummary.costPerConversion)
+                }
+              />
+              <DetailRow
+                label="Conversion Value"
+                value={
+                  googleAdsSummary.conversionValue === null
+                    ? "—"
+                    : formatCurrencyTry(googleAdsSummary.conversionValue)
+                }
+              />
+            </div>
+          </div>
+        ) : null}
+
+        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
+          <Input
+            type="password"
+            value={googleRefreshToken}
+            onChange={(event) => setGoogleRefreshToken(event.target.value)}
+            className="border-white/[0.12] bg-black/20 text-white placeholder:text-[#7A7A7A]"
+            placeholder="Yeni refresh token (write-only)"
+            autoComplete="off"
+          />
+          <Input
+            type="password"
+            value={googleAccessToken}
+            onChange={(event) => setGoogleAccessToken(event.target.value)}
+            className="border-white/[0.12] bg-black/20 text-white placeholder:text-[#7A7A7A]"
+            placeholder="Opsiyonel access token (write-only)"
+            autoComplete="off"
+          />
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button
+            type="button"
+            className="gap-2"
+            onClick={handleManualGoogleAdsConnect}
+            disabled={isGoogleAdsConnecting || isGoogleAdsTesting || isGoogleAdsDisconnecting}
+          >
+            <PlugZap className="h-4 w-4" />
+            {isGoogleAdsConnecting ? "Kaydediliyor..." : "Token Güncelle / Manual Connect"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-2"
+            onClick={handleGoogleAdsConnectionTest}
+            disabled={isGoogleAdsConnecting || isGoogleAdsTesting || isGoogleAdsDisconnecting}
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            {isGoogleAdsTesting ? "Test Ediliyor..." : "Google Ads Bağlantısını Test Et"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-2 border-red-500/30 text-red-200 hover:bg-red-500/10"
+            onClick={handleGoogleAdsDisconnect}
+            disabled={isGoogleAdsConnecting || isGoogleAdsTesting || isGoogleAdsDisconnecting}
+          >
+            <Link2Off className="h-4 w-4" />
+            {isGoogleAdsDisconnecting ? "Kesiliyor..." : "Bağlantıyı Kes"}
+          </Button>
+        </div>
+
+        {googleAdsFeedback ? (
+          <p className="mt-3 text-sm text-[#d8ff8f]">{googleAdsFeedback}</p>
+        ) : null}
+        {googleConnectionFeedback ? (
+          <p className="mt-2 text-sm text-[#d8ff8f]">{googleConnectionFeedback}</p>
+        ) : null}
       </Card>
 
       <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
@@ -797,4 +1396,23 @@ function EmptyState({ children }: { children: ReactNode }) {
       {children}
     </div>
   );
+}
+
+function normalizeOptionalText(value: string): string | null {
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function formatCurrencyTry(value: number): string {
+  return new Intl.NumberFormat("tr-TR", {
+    style: "currency",
+    currency: "TRY",
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function formatInteger(value: number): string {
+  return new Intl.NumberFormat("tr-TR", {
+    maximumFractionDigits: 0,
+  }).format(value);
 }

@@ -692,6 +692,27 @@ describe("Clients", () => {
     expect(createAdminClient).not.toHaveBeenCalled();
   });
 
+  it("shows Google Ads config fields only when Google ADS service is selected", () => {
+    renderClients();
+    const createDialog = openCreateDialog();
+
+    expect(within(createDialog).queryByLabelText("Customer ID")).not.toBeInTheDocument();
+    expect(within(createDialog).queryByLabelText("Manager Customer ID")).not.toBeInTheDocument();
+    expect(within(createDialog).queryByLabelText("Account Name")).not.toBeInTheDocument();
+    expect(within(createDialog).queryByLabelText("Timezone")).not.toBeInTheDocument();
+    expect(within(createDialog).queryByLabelText("Currency")).not.toBeInTheDocument();
+    expect(within(createDialog).queryByLabelText("Connection Status")).not.toBeInTheDocument();
+
+    fireEvent.click(within(createDialog).getByLabelText("Google ADS"));
+
+    expect(within(createDialog).getByLabelText("Customer ID")).toBeInTheDocument();
+    expect(within(createDialog).getByLabelText("Manager Customer ID")).toBeInTheDocument();
+    expect(within(createDialog).getByLabelText("Account Name")).toBeInTheDocument();
+    expect(within(createDialog).getByLabelText("Timezone")).toBeInTheDocument();
+    expect(within(createDialog).getByLabelText("Currency")).toBeInTheDocument();
+    expect(within(createDialog).getByLabelText("Connection Status")).toBeInTheDocument();
+  });
+
   it("shows a searchable owner picker for LINK_EXISTING", () => {
     renderClients();
     const dialog = openCreateDialog();
@@ -865,6 +886,54 @@ describe("Clients", () => {
     expect(await screen.findByText("Müşteri başarıyla oluşturuldu.")).toBeInTheDocument();
   });
 
+  it("includes googleAdsConfig in create payload when Google ADS service is selected", async () => {
+    const { createAdminClient } = setupMutationState();
+
+    renderClients();
+    const dialog = openCreateDialog();
+
+    fireEvent.change(within(dialog).getByLabelText("Müşteri Adı"), {
+      target: { value: "Google Client" },
+    });
+    fireEvent.click(within(dialog).getByLabelText("Google ADS"));
+    fireEvent.change(within(dialog).getByLabelText("Customer ID"), {
+      target: { value: "1234567890" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Manager Customer ID"), {
+      target: { value: "0987654321" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Account Name"), {
+      target: { value: "Google Primary" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Timezone"), {
+      target: { value: "Europe/Istanbul" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Currency"), {
+      target: { value: "try" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Connection Status"), {
+      target: { value: "CONNECTED" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Müşteri Oluştur" }));
+
+    await waitFor(() => {
+      expect(createAdminClient).toHaveBeenCalledTimes(1);
+    });
+    expect(createAdminClient.mock.calls[0][0]).toEqual({
+      name: "Google Client",
+      status: "ACTIVE",
+      purchasedServices: ["google-ads"],
+      googleAdsConfig: {
+        customerId: "1234567890",
+        managerCustomerId: "0987654321",
+        descriptiveName: "Google Primary",
+        currencyCode: "TRY",
+        timeZone: "Europe/Istanbul",
+        connectionStatus: "CONNECTED",
+      },
+    });
+  });
+
   it("submits create client and owner payloads, then shows success", async () => {
     const { createAdminClient, createOrLinkClientOwner } = setupMutationState();
 
@@ -975,6 +1044,56 @@ describe("Clients", () => {
       },
     });
     expect(await screen.findByText("Müşteri bilgileri güncellendi.")).toBeInTheDocument();
+  });
+
+  it("includes googleAdsConfig in edit payload when Google ADS service is selected", async () => {
+    const { updateAdminClient } = setupMutationState();
+
+    renderClients();
+    fireEvent.click(screen.getByRole("button", { name: "Düzenle" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Müşteri Güncelle" });
+    fireEvent.click(within(dialog).getByLabelText("Google ADS"));
+    fireEvent.change(within(dialog).getByLabelText("Customer ID"), {
+      target: { value: "1111111111" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Manager Customer ID"), {
+      target: { value: "2222222222" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Account Name"), {
+      target: { value: "Edit Account" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Timezone"), {
+      target: { value: "Europe/Berlin" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Currency"), {
+      target: { value: "eur" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Connection Status"), {
+      target: { value: "PENDING" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Değişiklikleri Kaydet" }));
+
+    await waitFor(() => {
+      expect(updateAdminClient).toHaveBeenCalledTimes(1);
+    });
+    expect(updateAdminClient.mock.calls[0][0]).toEqual({
+      id: client.id,
+      body: {
+        name: "Acme E-ticaret",
+        slug: "acme-e-ticaret",
+        status: "INACTIVE",
+        purchasedServices: ["growth-hub", "meta-ads", "google-ads"],
+        googleAdsConfig: {
+          customerId: "1111111111",
+          managerCustomerId: "2222222222",
+          descriptiveName: "Edit Account",
+          currencyCode: "EUR",
+          timeZone: "Europe/Berlin",
+          connectionStatus: "PENDING",
+        },
+      },
+    });
   });
 
   it("confirms activate and deactivate actions", async () => {

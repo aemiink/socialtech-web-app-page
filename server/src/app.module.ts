@@ -13,6 +13,7 @@ import { DatabaseModule } from "./database/database.module";
 import { DeliveryModule } from "./delivery/delivery.module";
 import { CrmModule } from "./crm/crm.module";
 import { HealthModule } from "./health/health.module";
+import { GoogleAdsModule } from "./google-ads/google-ads.module";
 import { GithubModule } from "./integrations/github/github.module";
 import { MetaAdsModule } from "./meta-ads/meta-ads.module";
 import { ProjectFilesModule } from "./project-files/project-files.module";
@@ -40,6 +41,7 @@ import { WebAppWorkspaceModule } from "./web-app-workspace/web-app-workspace.mod
     ClientsModule,
     CrmModule,
     GithubModule,
+    GoogleAdsModule,
     MetaAdsModule,
     ProjectFilesModule,
     DeliveryModule,

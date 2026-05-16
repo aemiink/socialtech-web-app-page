@@ -5,8 +5,11 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
+  AdminClientGoogleAdsConnection,
+  AdminClientGoogleAdsConfig,
   AdminClientMetaAdsConnection,
   ClientSummaryResponse,
+  GoogleAdsSummaryResponse,
   MetaAdsSummaryResponse,
 } from "../../features/clients/clientsTypes";
 import { ClientDetail } from "../ClientDetail";
@@ -32,6 +35,22 @@ type MetaAdsConnectionQueryResult = {
   refetch: () => void;
 };
 
+type GoogleAdsConfigQueryResult = {
+  data?: AdminClientGoogleAdsConfig;
+  error?: unknown;
+  isLoading: boolean;
+  isFetching: boolean;
+  refetch: () => void;
+};
+
+type GoogleAdsConnectionQueryResult = {
+  data?: AdminClientGoogleAdsConnection;
+  error?: unknown;
+  isLoading: boolean;
+  isFetching: boolean;
+  refetch: () => void;
+};
+
 type ClientSummaryWithSensitiveFields = ClientSummaryResponse & {
   passwordHash: string;
   resetToken: string;
@@ -43,10 +62,21 @@ const mockUseGetClientSummaryQuery = vi.fn<
   (id: string, options: QueryOptions) => ClientSummaryQueryResult
 >();
 const mockUseGetAdminAssignmentsQuery = vi.fn();
+const mockUseGetAdminClientGoogleAdsConfigQuery = vi.fn<
+  (id: string, options: QueryOptions) => GoogleAdsConfigQueryResult
+>();
+const mockUseGetAdminClientGoogleAdsConnectionQuery = vi.fn<
+  (id: string, options: QueryOptions) => GoogleAdsConnectionQueryResult
+>();
+const mockUseGetAdminClientGoogleAdsSummaryQuery = vi.fn();
 const mockUseGetAdminClientMetaAdsConnectionQuery = vi.fn<
   (id: string, options: QueryOptions) => MetaAdsConnectionQueryResult
 >();
 const mockUseGetAdminClientMetaAdsSummaryQuery = vi.fn();
+const mockUseUpdateAdminClientGoogleAdsConfigMutation = vi.fn();
+const mockUseConnectAdminClientGoogleAdsManualMutation = vi.fn();
+const mockUseTestAdminClientGoogleAdsConnectionMutation = vi.fn();
+const mockUseDisconnectAdminClientGoogleAdsMutation = vi.fn();
 const mockUseConnectAdminClientMetaAdsManualMutation = vi.fn();
 const mockUseTestAdminClientMetaAdsConnectionMutation = vi.fn();
 const mockUseSyncAdminClientMetaAdsMutation = vi.fn();
@@ -56,10 +86,24 @@ const mockUseResetClientOwnerPasswordMutation = vi.fn();
 vi.mock("../../features/clients/clientsApi", () => ({
   useGetClientSummaryQuery: (id: string, options: QueryOptions) =>
     mockUseGetClientSummaryQuery(id, options),
+  useGetAdminClientGoogleAdsConfigQuery: (id: string, options: QueryOptions) =>
+    mockUseGetAdminClientGoogleAdsConfigQuery(id, options),
+  useGetAdminClientGoogleAdsConnectionQuery: (id: string, options: QueryOptions) =>
+    mockUseGetAdminClientGoogleAdsConnectionQuery(id, options),
+  useGetAdminClientGoogleAdsSummaryQuery: (...args: unknown[]) =>
+    mockUseGetAdminClientGoogleAdsSummaryQuery(...args),
+  useConnectAdminClientGoogleAdsManualMutation: () =>
+    mockUseConnectAdminClientGoogleAdsManualMutation(),
+  useTestAdminClientGoogleAdsConnectionMutation: () =>
+    mockUseTestAdminClientGoogleAdsConnectionMutation(),
+  useDisconnectAdminClientGoogleAdsMutation: () =>
+    mockUseDisconnectAdminClientGoogleAdsMutation(),
   useGetAdminClientMetaAdsConnectionQuery: (id: string, options: QueryOptions) =>
     mockUseGetAdminClientMetaAdsConnectionQuery(id, options),
   useGetAdminClientMetaAdsSummaryQuery: (...args: unknown[]) =>
     mockUseGetAdminClientMetaAdsSummaryQuery(...args),
+  useUpdateAdminClientGoogleAdsConfigMutation: () =>
+    mockUseUpdateAdminClientGoogleAdsConfigMutation(),
   useConnectAdminClientMetaAdsManualMutation: () =>
     mockUseConnectAdminClientMetaAdsManualMutation(),
   useTestAdminClientMetaAdsConnectionMutation: () =>
@@ -172,6 +216,55 @@ const metaAdsSummary: MetaAdsSummaryResponse = {
   lastSyncAt: "2026-05-09T10:00:00.000Z",
 };
 
+const googleAdsConfigSummary: AdminClientGoogleAdsConfig = {
+  clientProfileId,
+  customerId: "1234567890",
+  managerCustomerId: "0987654321",
+  descriptiveName: "Acme Ads",
+  currencyCode: "TRY",
+  timeZone: "Europe/Istanbul",
+  connectionStatus: "CONNECTED",
+  lastSyncAt: "2026-05-10T12:00:00.000Z",
+  syncError: null,
+};
+
+const googleAdsConnectionSummary: AdminClientGoogleAdsConnection = {
+  clientProfileId,
+  connectionStatus: "CONNECTED",
+  hasActiveService: true,
+  account: {
+    customerId: "1234567890",
+    managerCustomerId: "0987654321",
+    descriptiveName: "Acme Ads",
+    currencyCode: "TRY",
+    timeZone: "Europe/Istanbul",
+  },
+  lastSyncAt: "2026-05-10T12:00:00.000Z",
+  syncError: null,
+  credential: {
+    hasRefreshToken: true,
+    tokenLastUpdatedAt: "2026-05-10T11:30:00.000Z",
+    tokenExpiresAt: "2026-06-10T11:30:00.000Z",
+    grantedScopes: ["https://www.googleapis.com/auth/adwords"],
+  },
+};
+
+const googleAdsSummary: GoogleAdsSummaryResponse = {
+  cost: 1200,
+  impressions: 45000,
+  clicks: 2400,
+  conversions: 132,
+  conversionValue: 5200,
+  ctr: 5.33,
+  averageCpc: 0.5,
+  costPerConversion: 9.09,
+  dateRange: {
+    since: "2026-05-01",
+    until: "2026-05-10",
+  },
+  lastSyncAt: "2026-05-10T12:00:00.000Z",
+};
+
 function setupSummaryState(overrides: Partial<ClientSummaryQueryResult> = {}) {
   mockUseGetClientSummaryQuery.mockReturnValue({
     data: clientSummary,
@@ -187,6 +280,48 @@ function setupSummaryState(overrides: Partial<ClientSummaryQueryResult> = {}) {
 function setupMetaAdsConnectionState(overrides: Partial<MetaAdsConnectionQueryResult> = {}) {
   mockUseGetAdminClientMetaAdsConnectionQuery.mockReturnValue({
     data: metaAdsConnectionSummary,
+    error: undefined,
+    isLoading: false,
+    isFetching: false,
+    refetch: vi.fn(),
+    ...overrides,
+  });
+}
+
+function setupGoogleAdsConfigState(overrides: Partial<GoogleAdsConfigQueryResult> = {}) {
+  mockUseGetAdminClientGoogleAdsConfigQuery.mockReturnValue({
+    data: googleAdsConfigSummary,
+    error: undefined,
+    isLoading: false,
+    isFetching: false,
+    refetch: vi.fn(),
+    ...overrides,
+  });
+}
+
+function setupGoogleAdsConnectionState(
+  overrides: Partial<GoogleAdsConnectionQueryResult> = {},
+) {
+  mockUseGetAdminClientGoogleAdsConnectionQuery.mockReturnValue({
+    data: googleAdsConnectionSummary,
+    error: undefined,
+    isLoading: false,
+    isFetching: false,
+    refetch: vi.fn(),
+    ...overrides,
+  });
+}
+
+function setupGoogleAdsSummaryState(
+  overrides: Partial<{
+    data: GoogleAdsSummaryResponse | undefined;
+    error: unknown;
+    isLoading: boolean;
+    isFetching: boolean;
+  }> = {},
+) {
+  mockUseGetAdminClientGoogleAdsSummaryQuery.mockReturnValue({
+    data: googleAdsSummary,
     error: undefined,
     isLoading: false,
     isFetching: false,
@@ -227,8 +362,15 @@ describe("ClientDetail", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setupSummaryState();
+    setupGoogleAdsConfigState();
+    setupGoogleAdsConnectionState();
+    setupGoogleAdsSummaryState();
     setupMetaAdsConnectionState();
     setupMetaAdsSummaryState();
+    mockUseUpdateAdminClientGoogleAdsConfigMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
+    mockUseConnectAdminClientGoogleAdsManualMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
+    mockUseTestAdminClientGoogleAdsConnectionMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
+    mockUseDisconnectAdminClientGoogleAdsMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseConnectAdminClientMetaAdsManualMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseTestAdminClientMetaAdsConnectionMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseSyncAdminClientMetaAdsMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
@@ -246,6 +388,7 @@ describe("ClientDetail", () => {
 
     expect(screen.getByText("Geçersiz müşteri kimliği.")).toBeInTheDocument();
     expect(mockUseGetClientSummaryQuery).toHaveBeenCalledWith("", { skip: true });
+    expect(mockUseGetAdminClientGoogleAdsConfigQuery).toHaveBeenCalledWith("", { skip: true });
   });
 
   it("shows loading state while summary is loading", () => {
@@ -286,13 +429,23 @@ describe("ClientDetail", () => {
     renderClientDetail();
 
     expect(mockUseGetClientSummaryQuery).toHaveBeenCalledWith(clientProfileId, { skip: false });
+    expect(mockUseGetAdminClientGoogleAdsConfigQuery).toHaveBeenCalledWith(clientProfileId, {
+      skip: false,
+    });
+    expect(mockUseUpdateAdminClientGoogleAdsConfigMutation).toHaveBeenCalled();
     expect(screen.getByRole("heading", { name: "Acme E-ticaret" })).toBeInTheDocument();
     expect(screen.getAllByText("acme-e-ticaret").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Aktif").length).toBeGreaterThan(0);
     expect(screen.getByText(clientProfileId)).toBeInTheDocument();
     expect(screen.getByText("Müşteri Portal Şifre Sıfırlama")).toBeInTheDocument();
+    expect(screen.getByText("Google Ads Konfigürasyonu")).toBeInTheDocument();
+    expect(screen.getByText("Config düzenle")).toBeInTheDocument();
+    expect(screen.getByText("Customer ID")).toBeInTheDocument();
+    expect(screen.getAllByText("Token Güncelle / Manual Connect").length).toBeGreaterThan(0);
+    expect(screen.getByText("Google Ads Performans Özeti")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Yeni refresh token (write-only)")).toBeInTheDocument();
     expect(screen.getByText("Meta Ads Bağlantı Yönetimi")).toBeInTheDocument();
-    expect(screen.getByText("Token Durumu")).toBeInTheDocument();
+    expect(screen.getAllByText("Token Durumu").length).toBeGreaterThan(0);
   });
 
   it("renders project and task counts", () => {
@@ -305,6 +458,16 @@ describe("ClientDetail", () => {
     expect(screen.getByText("Planlandı")).toBeInTheDocument();
     expect(screen.getByText("Bloke")).toBeInTheDocument();
     expect(screen.getByText("10")).toBeInTheDocument();
+  });
+
+  it("renders Google Ads config values in the detail card", () => {
+    renderClientDetail();
+
+    expect(screen.getByText("Google Ads Konfigürasyonu")).toBeInTheDocument();
+    expect(screen.getByText("1234567890")).toBeInTheDocument();
+    expect(screen.getByText("0987654321")).toBeInTheDocument();
+    expect(screen.getByText("Europe/Istanbul")).toBeInTheDocument();
+    expect(screen.getByText("TRY")).toBeInTheDocument();
   });
 
   it("renders recent projects and tasks with links", () => {

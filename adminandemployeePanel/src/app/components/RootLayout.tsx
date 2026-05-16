@@ -32,6 +32,7 @@ const menuItems = [
   { path: "/onaylar", label: "Onaylar", icon: ThumbsUp },
   { path: "/kampanyalar", label: "Kampanyalar", icon: Megaphone },
   { path: "/meta-ads", label: "Meta Ads", icon: Megaphone },
+  { path: "/google-ads", label: "Google Ads", icon: Megaphone },
   { path: "/icerikler", label: "İçerikler", icon: FileText },
   { path: "/raporlar", label: "Raporlar", icon: BarChart3 },
   { path: "/toplantilar", label: "Toplantılar", icon: Calendar },

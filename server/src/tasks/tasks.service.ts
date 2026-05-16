@@ -206,6 +206,7 @@ const TASK_UPDATE_ASSIGNED_PERMISSION = "tasks.update.assigned";
 const TASK_UPDATE_OWN_FALLBACK_PERMISSION = "tasks.update.own";
 const APPROVAL_RESPOND_OWN_PERMISSION = "approvals.respond.own";
 const META_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION = "metaAds.approvals.create.assigned";
+const GOOGLE_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION = "googleAds.approvals.create.assigned";
 
 @Injectable()
 export class TasksService {
@@ -269,7 +270,7 @@ export class TasksService {
     await this.assertAssigneeIsValidForProject(dto.assigneeUserId, project.clientProfileId);
     await this.assertSprintBelongsToProject(dto.sprintId, project.id);
     await this.assertReferenceProjectFileBelongsToProject(dto.referenceProjectFileId, project.id);
-    this.assertCanCreateMetaAdsApprovalTask(currentUser, project, dto);
+    this.assertCanCreateServiceApprovalTask(currentUser, project, dto);
     const generatedCode = dto.code?.trim() || (await this.generateTaskCode(dto.type ?? TaskType.FEATURE));
     const approvalStatus =
       dto.approvalStatus ?? (dto.approvalRequired ? MetaAdsApprovalStatus.PENDING : null);
@@ -783,12 +784,19 @@ export class TasksService {
         approvalStatus: MetaAdsApprovalStatus.PENDING,
         project: {
           clientProfileId,
-          serviceKey: PurchasedServiceKey.META_ADS,
+          serviceKey: {
+            in: [PurchasedServiceKey.META_ADS, PurchasedServiceKey.GOOGLE_ADS],
+          },
         },
       },
       select: {
         id: true,
         projectId: true,
+        project: {
+          select: {
+            serviceKey: true,
+          },
+        },
         title: true,
         priority: true,
         workstream: true,
@@ -820,8 +828,11 @@ export class TasksService {
         await tx.task.create({
           data: {
             projectId: task.projectId,
-            title: this.buildMetaAdsRevisionTaskTitle(task.title),
-            description: this.buildMetaAdsRevisionTaskDescription(dto.approvalResponseNote),
+            title: this.buildApprovalRevisionTaskTitle(task.project.serviceKey, task.title),
+            description: this.buildApprovalRevisionTaskDescription(
+              task.project.serviceKey,
+              dto.approvalResponseNote,
+            ),
             status: TaskStatus.TODO,
             priority: task.priority,
             type: TaskType.REVISION,
@@ -1415,12 +1426,12 @@ export class TasksService {
     this.assertHasPermission(currentUser, TASK_ASSIGN_ASSIGNED_PERMISSION);
   }
 
-  private assertCanCreateMetaAdsApprovalTask(
+  private assertCanCreateServiceApprovalTask(
     currentUser: AuthenticatedUser,
     project: ProjectAssignmentContext,
     dto: CreateTaskDto,
   ): void {
-    if (project.serviceKey !== PurchasedServiceKey.META_ADS || !dto.approvalRequired) {
+    if (!dto.approvalRequired) {
       return;
     }
 
@@ -1428,9 +1439,14 @@ export class TasksService {
       return;
     }
 
-    if (!currentUser.permissions.includes(META_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION)) {
+    const requiredPermission = this.getApprovalCreatePermissionByService(project.serviceKey);
+    if (!requiredPermission) {
+      return;
+    }
+
+    if (!currentUser.permissions.includes(requiredPermission)) {
       throw new ForbiddenException(
-        `Missing required permission: ${META_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION}.`,
+        `Missing required permission: ${requiredPermission}.`,
       );
     }
   }
@@ -1612,22 +1628,54 @@ export class TasksService {
     return currentUser.clientProfileId;
   }
 
-  private buildMetaAdsRevisionTaskTitle(sourceTitle: string): string {
+  private buildApprovalRevisionTaskTitle(
+    serviceKey: PurchasedServiceKey | null,
+    sourceTitle: string,
+  ): string {
+    const servicePrefix = this.getApprovalRevisionServicePrefix(serviceKey);
     const normalized = sourceTitle.trim();
     if (!normalized) {
-      return "Meta Ads Revizyon Takibi";
+      return `${servicePrefix} Revizyon Takibi`;
     }
 
     return `Revizyon: ${normalized}`;
   }
 
-  private buildMetaAdsRevisionTaskDescription(approvalResponseNote: string | null | undefined): string {
+  private buildApprovalRevisionTaskDescription(
+    serviceKey: PurchasedServiceKey | null,
+    approvalResponseNote: string | null | undefined,
+  ): string {
     const note = approvalResponseNote?.trim();
     if (note && note.length > 0) {
       return `Müşteri revizyon notu: ${note}`;
     }
 
-    return "Müşteri revizyon talebi sonrası otomatik oluşturulan takip görevi.";
+    const servicePrefix = this.getApprovalRevisionServicePrefix(serviceKey);
+    return `Müşteri revizyon talebi sonrası ${servicePrefix} için otomatik oluşturulan takip görevi.`;
+  }
+
+  private getApprovalRevisionServicePrefix(
+    serviceKey: PurchasedServiceKey | null,
+  ): "Meta Ads" | "Google Ads" {
+    if (serviceKey === PurchasedServiceKey.GOOGLE_ADS) {
+      return "Google Ads";
+    }
+
+    return "Meta Ads";
+  }
+
+  private getApprovalCreatePermissionByService(
+    serviceKey: PurchasedServiceKey | null,
+  ): string | null {
+    if (serviceKey === PurchasedServiceKey.META_ADS) {
+      return META_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION;
+    }
+
+    if (serviceKey === PurchasedServiceKey.GOOGLE_ADS) {
+      return GOOGLE_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION;
+    }
+
+    return null;
   }
 
   private assertCanRespondOwnApprovals(currentUser: AuthenticatedUser): void {

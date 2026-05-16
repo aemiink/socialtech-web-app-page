@@ -13,6 +13,7 @@ import {
   ValidateNested,
 } from "class-validator";
 import { ClientStatus } from "@prisma/client";
+import { AdminClientGoogleAdsConfigDto } from "./admin-client-google-ads-config.dto";
 import { AdminClientPurchasedServiceDto } from "./admin-client-purchased-service.dto";
 
 const CLIENT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -86,4 +87,9 @@ export class UpdateAdminClientDto {
   @ValidateNested({ each: true })
   @Type(() => AdminClientPurchasedServiceDto)
   purchasedServices?: AdminClientPurchasedServiceDto[];
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AdminClientGoogleAdsConfigDto)
+  googleAdsConfig?: AdminClientGoogleAdsConfigDto;
 }

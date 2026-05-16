@@ -1,7 +1,15 @@
 import { baseApi } from "../../services/baseApi";
 import type {
+  AdminClientGoogleAdsConnection,
+  AdminClientGoogleAdsConfig,
+  AdminGoogleAdsClientListResponse,
+  AdminGoogleAdsSyncLogsQuery,
+  AdminGoogleAdsSyncLogsResponse,
+  GoogleAdsSyncResponse,
+  GoogleAdsSummaryResponse,
   AdminMetaAdsSyncLogsQuery,
   AdminMetaAdsSyncLogsResponse,
+  ConnectManualGoogleAdsRequest,
   CreateMetaAdsReportRequest,
   AdminMetaAdsClientListResponse,
   AdminClientMetaAdsConnection,
@@ -19,13 +27,22 @@ import type {
   CreateOrLinkClientOwnerRequest,
   MetaAdsSummaryResponse,
   ResetClientOwnerPasswordRequest,
+  TestGoogleAdsConnectionRequest,
+  TestGoogleAdsConnectionResponse,
   TestMetaAdsConnectionRequest,
   TestMetaAdsConnectionResponse,
+  UpdateAdminClientGoogleAdsConfigRequest,
   UpdateMetaAdsReportRequest,
   UpdateAdminClientMetaAdsConfigRequest,
   UpdateAdminClientRequest,
 } from "./clientsTypes";
 import {
+  normalizeAdminGoogleAdsClientListResponse,
+  normalizeAdminGoogleAdsSyncLogsResponse,
+  normalizeAdminGoogleAdsConnectionResponse,
+  normalizeAdminGoogleAdsConfigResponse,
+  normalizeGoogleAdsSyncResponse,
+  normalizeGoogleAdsSummaryResponse,
   normalizeAdminMetaAdsClientListResponse,
   normalizeAdminMetaAdsSyncLogsResponse,
   normalizeClientResponse,
@@ -36,12 +53,17 @@ import {
   normalizeMetaAdsReportsResponse,
   normalizeMetaAdsReportItemResponse,
   normalizeMetaAdsSummaryResponse,
+  normalizeTestGoogleAdsConnectionResponse,
   normalizeTestMetaAdsConnectionResponse,
   toBackendServiceKey,
 } from "./clientsUtils";
 
 const CLIENTS_LIST_ID = "LIST";
 const CLIENT_SUMMARY_ID_PREFIX = "SUMMARY";
+const CLIENT_GOOGLE_ADS_CONFIG_ID_PREFIX = "GOOGLE_ADS_CONFIG";
+const CLIENT_GOOGLE_ADS_CONNECTION_ID_PREFIX = "GOOGLE_ADS_CONNECTION";
+const CLIENT_GOOGLE_ADS_GLOBAL_LIST_ID = "GOOGLE_ADS_GLOBAL_LIST";
+const CLIENT_GOOGLE_ADS_SYNC_LOGS_LIST_ID = "GOOGLE_ADS_SYNC_LOGS_LIST";
 const CLIENT_META_ADS_CONNECTION_ID_PREFIX = "META_ADS_CONNECTION";
 const CLIENT_META_ADS_GLOBAL_LIST_ID = "META_ADS_GLOBAL_LIST";
 const CLIENT_META_ADS_SYNC_LOGS_LIST_ID = "META_ADS_SYNC_LOGS_LIST";
@@ -85,6 +107,169 @@ export const clientsApi = baseApi.injectEndpoints({
       transformResponse: (response: unknown) => normalizeClientSummaryResponse(response),
       providesTags: (_result, _error, id) => [
         { type: "Clients", id: getClientSummaryTagId(id) },
+      ],
+    }),
+    getAdminClientGoogleAdsConfig: builder.query<AdminClientGoogleAdsConfig, string>({
+      query: (clientId) => ({
+        url: `/admin/clients/${clientId}/google-ads/config`,
+        method: "GET",
+      }),
+      transformResponse: (response: unknown) => normalizeAdminGoogleAdsConfigResponse(response),
+      providesTags: (_result, _error, clientId) => [
+        { type: "Clients", id: getClientGoogleAdsConfigTagId(clientId) },
+      ],
+    }),
+    updateAdminClientGoogleAdsConfig: builder.mutation<
+      AdminClientGoogleAdsConfig,
+      { clientId: string; body: UpdateAdminClientGoogleAdsConfigRequest }
+    >({
+      query: ({ clientId, body }) => ({
+        url: `/admin/clients/${clientId}/google-ads/config`,
+        method: "PATCH",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeAdminGoogleAdsConfigResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        ...getAdminClientMutationInvalidations(clientId),
+        { type: "Clients", id: getClientGoogleAdsConfigTagId(clientId) },
+        { type: "Clients", id: CLIENT_GOOGLE_ADS_GLOBAL_LIST_ID },
+      ],
+    }),
+    getAdminClientGoogleAdsConnection: builder.query<AdminClientGoogleAdsConnection, string>({
+      query: (clientId) => ({
+        url: `/admin/clients/${clientId}/google-ads/connection`,
+        method: "GET",
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeAdminGoogleAdsConnectionResponse(response),
+      providesTags: (_result, _error, clientId) => [
+        { type: "Clients", id: getClientGoogleAdsConnectionTagId(clientId) },
+      ],
+    }),
+    getAdminClientGoogleAdsSummary: builder.query<GoogleAdsSummaryResponse, string>({
+      query: (clientId) => ({
+        url: `/admin/clients/${clientId}/google-ads/summary`,
+        method: "GET",
+      }),
+      transformResponse: (response: unknown) => normalizeGoogleAdsSummaryResponse(response),
+      providesTags: (_result, _error, clientId) => [
+        { type: "Clients", id: getClientGoogleAdsConnectionTagId(clientId) },
+      ],
+    }),
+    getAdminGoogleAdsClients: builder.query<
+      AdminGoogleAdsClientListResponse,
+      MetaAdsDateRangeQuery | void
+    >({
+      query: (query) => ({
+        url: "/admin/google-ads/clients",
+        method: "GET",
+        params: serializeMetaAdsDateRangeQuery(query),
+      }),
+      transformResponse: (response: unknown) => normalizeAdminGoogleAdsClientListResponse(response),
+      providesTags: (result) => [
+        { type: "Clients", id: CLIENT_GOOGLE_ADS_GLOBAL_LIST_ID },
+        ...(result
+          ? result.data.map((item) => ({
+              type: "Clients" as const,
+              id: getClientGoogleAdsConnectionTagId(item.client.id),
+            }))
+          : []),
+      ],
+    }),
+    getAdminGoogleAdsSyncLogs: builder.query<
+      AdminGoogleAdsSyncLogsResponse,
+      AdminGoogleAdsSyncLogsQuery | void
+    >({
+      query: (query) => ({
+        url: "/admin/google-ads/sync-logs",
+        method: "GET",
+        params: serializeMetaAdsSyncLogsQuery(query),
+      }),
+      transformResponse: (response: unknown) => normalizeAdminGoogleAdsSyncLogsResponse(response),
+      providesTags: [{ type: "Clients", id: CLIENT_GOOGLE_ADS_SYNC_LOGS_LIST_ID }],
+    }),
+    connectAdminClientGoogleAdsManual: builder.mutation<
+      AdminClientGoogleAdsConnection,
+      { clientId: string; body: ConnectManualGoogleAdsRequest }
+    >({
+      query: ({ clientId, body }) => ({
+        url: `/admin/clients/${clientId}/google-ads/connect/manual`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeAdminGoogleAdsConnectionResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        ...getAdminClientMutationInvalidations(clientId),
+        { type: "Clients", id: getClientGoogleAdsConnectionTagId(clientId) },
+        { type: "Clients", id: CLIENT_GOOGLE_ADS_GLOBAL_LIST_ID },
+        { type: "Clients", id: CLIENT_GOOGLE_ADS_SYNC_LOGS_LIST_ID },
+      ],
+    }),
+    retryAdminClientGoogleAdsSync: builder.mutation<
+      GoogleAdsSyncResponse,
+      { clientId: string; query?: MetaAdsDateRangeQuery }
+    >({
+      query: ({ clientId, query }) => ({
+        url: `/admin/clients/${clientId}/google-ads/sync/retry`,
+        method: "POST",
+        params: serializeMetaAdsDateRangeQuery(query),
+      }),
+      transformResponse: (response: unknown) => normalizeGoogleAdsSyncResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        ...getAdminClientMutationInvalidations(clientId),
+        { type: "Clients", id: getClientGoogleAdsConnectionTagId(clientId) },
+        { type: "Clients", id: CLIENT_GOOGLE_ADS_GLOBAL_LIST_ID },
+        { type: "Clients", id: CLIENT_GOOGLE_ADS_SYNC_LOGS_LIST_ID },
+      ],
+    }),
+    disconnectAdminClientGoogleAds: builder.mutation<
+      AdminClientGoogleAdsConnection,
+      { clientId: string }
+    >({
+      query: ({ clientId }) => ({
+        url: `/admin/clients/${clientId}/google-ads/disconnect`,
+        method: "POST",
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeAdminGoogleAdsConnectionResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        ...getAdminClientMutationInvalidations(clientId),
+        { type: "Clients", id: getClientGoogleAdsConnectionTagId(clientId) },
+        { type: "Clients", id: CLIENT_GOOGLE_ADS_GLOBAL_LIST_ID },
+      ],
+    }),
+    testAdminClientGoogleAdsConnection: builder.mutation<
+      TestGoogleAdsConnectionResponse,
+      { clientId: string; body: TestGoogleAdsConnectionRequest }
+    >({
+      query: ({ clientId, body }) => ({
+        url: `/admin/clients/${clientId}/google-ads/test-connection`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeTestGoogleAdsConnectionResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        ...getAdminClientMutationInvalidations(clientId),
+        { type: "Clients", id: getClientGoogleAdsConnectionTagId(clientId) },
+        { type: "Clients", id: CLIENT_GOOGLE_ADS_GLOBAL_LIST_ID },
+      ],
+    }),
+    syncAdminClientGoogleAds: builder.mutation<
+      GoogleAdsSyncResponse,
+      { clientId: string; query?: MetaAdsDateRangeQuery }
+    >({
+      query: ({ clientId, query }) => ({
+        url: `/admin/clients/${clientId}/google-ads/sync`,
+        method: "POST",
+        params: serializeMetaAdsDateRangeQuery(query),
+      }),
+      transformResponse: (response: unknown) => normalizeGoogleAdsSyncResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        ...getAdminClientMutationInvalidations(clientId),
+        { type: "Clients", id: getClientGoogleAdsConnectionTagId(clientId) },
+        { type: "Clients", id: CLIENT_GOOGLE_ADS_GLOBAL_LIST_ID },
       ],
     }),
     getAdminClientMetaAdsConnection: builder.query<AdminClientMetaAdsConnection, string>({
@@ -346,6 +531,17 @@ export const {
   useGetClientQuery,
   useLazyGetClientQuery,
   useGetClientSummaryQuery,
+  useGetAdminClientGoogleAdsConfigQuery,
+  useGetAdminClientGoogleAdsConnectionQuery,
+  useGetAdminClientGoogleAdsSummaryQuery,
+  useGetAdminGoogleAdsClientsQuery,
+  useGetAdminGoogleAdsSyncLogsQuery,
+  useUpdateAdminClientGoogleAdsConfigMutation,
+  useConnectAdminClientGoogleAdsManualMutation,
+  useDisconnectAdminClientGoogleAdsMutation,
+  useTestAdminClientGoogleAdsConnectionMutation,
+  useSyncAdminClientGoogleAdsMutation,
+  useRetryAdminClientGoogleAdsSyncMutation,
   useGetAdminClientMetaAdsConnectionQuery,
   useGetAdminClientMetaAdsSummaryQuery,
   useGetAdminMetaAdsClientsQuery,
@@ -371,6 +567,14 @@ function getClientSummaryTagId(id: string): string {
   return `${CLIENT_SUMMARY_ID_PREFIX}:${id}`;
 }
 
+function getClientGoogleAdsConfigTagId(id: string): string {
+  return `${CLIENT_GOOGLE_ADS_CONFIG_ID_PREFIX}:${id}`;
+}
+
+function getClientGoogleAdsConnectionTagId(id: string): string {
+  return `${CLIENT_GOOGLE_ADS_CONNECTION_ID_PREFIX}:${id}`;
+}
+
 function getClientMetaAdsConnectionTagId(id: string): string {
   return `${CLIENT_META_ADS_CONNECTION_ID_PREFIX}:${id}`;
 }
@@ -378,9 +582,12 @@ function getClientMetaAdsConnectionTagId(id: string): string {
 function getAdminClientMutationInvalidations(id: string) {
   return [
     { type: "Clients" as const, id: CLIENTS_LIST_ID },
+    { type: "Clients" as const, id: CLIENT_GOOGLE_ADS_GLOBAL_LIST_ID },
     { type: "Clients" as const, id: CLIENT_META_ADS_GLOBAL_LIST_ID },
     { type: "Clients" as const, id },
     { type: "Clients" as const, id: getClientSummaryTagId(id) },
+    { type: "Clients" as const, id: getClientGoogleAdsConfigTagId(id) },
+    { type: "Clients" as const, id: getClientGoogleAdsConnectionTagId(id) },
     { type: "AdminSummary" as const, id: ADMIN_SUMMARY_ID },
     { type: "AuditLogs" as const, id: AUDIT_LOGS_LIST_ID },
   ];
@@ -389,11 +596,14 @@ function getAdminClientMutationInvalidations(id: string) {
 function getAdminClientCreateInvalidations(result: ClientProfile | undefined) {
   return [
     { type: "Clients" as const, id: CLIENTS_LIST_ID },
+    { type: "Clients" as const, id: CLIENT_GOOGLE_ADS_GLOBAL_LIST_ID },
     { type: "Clients" as const, id: CLIENT_META_ADS_GLOBAL_LIST_ID },
     ...(result
       ? [
           { type: "Clients" as const, id: result.id },
           { type: "Clients" as const, id: getClientSummaryTagId(result.id) },
+          { type: "Clients" as const, id: getClientGoogleAdsConfigTagId(result.id) },
+          { type: "Clients" as const, id: getClientGoogleAdsConnectionTagId(result.id) },
         ]
       : []),
     { type: "AdminSummary" as const, id: ADMIN_SUMMARY_ID },
@@ -458,7 +668,7 @@ function serializeMetaAdsDateRangeQuery(
 }
 
 function serializeMetaAdsSyncLogsQuery(
-  query: AdminMetaAdsSyncLogsQuery | void,
+  query: AdminMetaAdsSyncLogsQuery | AdminGoogleAdsSyncLogsQuery | void,
 ): Record<string, string | number | boolean> {
   if (!query) {
     return {};
@@ -525,5 +735,64 @@ function serializeAdminClientMutationBody(
     }));
   }
 
+  if (body.googleAdsConfig !== undefined) {
+    const serializedGoogleAdsConfig = serializeGoogleAdsConfig(body.googleAdsConfig);
+    if (serializedGoogleAdsConfig) {
+      serializedBody.googleAdsConfig = serializedGoogleAdsConfig;
+    } else {
+      delete serializedBody.googleAdsConfig;
+    }
+  }
+
   return serializedBody;
+}
+
+function serializeGoogleAdsConfig(
+  config: CreateAdminClientRequest["googleAdsConfig"] | UpdateAdminClientRequest["googleAdsConfig"],
+): Record<string, unknown> | undefined {
+  if (!config) {
+    return undefined;
+  }
+
+  const serializedConfig: Record<string, unknown> = {};
+
+  const customerId = normalizeOptionalValue(config.customerId);
+  if (customerId) {
+    serializedConfig.customerId = customerId;
+  }
+
+  const managerCustomerId = normalizeOptionalValue(config.managerCustomerId);
+  if (managerCustomerId) {
+    serializedConfig.managerCustomerId = managerCustomerId;
+  }
+
+  const descriptiveName = normalizeOptionalValue(config.descriptiveName);
+  if (descriptiveName) {
+    serializedConfig.descriptiveName = descriptiveName;
+  }
+
+  const currencyCode = normalizeOptionalValue(config.currencyCode);
+  if (currencyCode) {
+    serializedConfig.currencyCode = currencyCode;
+  }
+
+  const timeZone = normalizeOptionalValue(config.timeZone);
+  if (timeZone) {
+    serializedConfig.timeZone = timeZone;
+  }
+
+  if (config.connectionStatus !== undefined) {
+    serializedConfig.connectionStatus = config.connectionStatus;
+  }
+
+  return Object.keys(serializedConfig).length > 0 ? serializedConfig : undefined;
+}
+
+function normalizeOptionalValue(value: string | undefined): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : undefined;
 }

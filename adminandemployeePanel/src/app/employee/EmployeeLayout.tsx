@@ -33,6 +33,7 @@ type SidebarItem = {
 const roleMenus: Record<EmployeePanelRole, SidebarItem[]> = {
   "project-manager": [
     { path: "/employee/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { path: "/employee/google-ads", label: "Google Ads Workspace", icon: BarChart },
     { path: "/employee/musterilerim", label: "Müşterilerim", icon: Users },
     { path: "/employee/projeler", label: "Projeler", icon: FolderKanban },
     { path: "/employee/gorevlerim", label: "Görevler", icon: CheckSquare },
@@ -46,6 +47,7 @@ const roleMenus: Record<EmployeePanelRole, SidebarItem[]> = {
   "performance-specialist": [
     { path: "/employee/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { path: "/employee/meta-ads", label: "Meta Ads Workspace", icon: Megaphone },
+    { path: "/employee/google-ads", label: "Google Ads Workspace", icon: BarChart },
     { path: "/employee/gorevlerim", label: "Görevlerim", icon: CheckSquare },
     { path: "/employee/kampanyalar", label: "Kampanyalar", icon: TrendingUp },
     { path: "/employee/optimizasyonlar", label: "Optimizasyonlar", icon: Zap },
@@ -77,6 +79,7 @@ const roleMenus: Record<EmployeePanelRole, SidebarItem[]> = {
   designer: [
     { path: "/employee/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { path: "/employee/meta-ads", label: "Meta Ads Workspace", icon: Megaphone },
+    { path: "/employee/google-ads", label: "Google Ads Workspace", icon: BarChart },
     { path: "/employee/gorevlerim", label: "Görevlerim", icon: CheckSquare },
     { path: "/employee/kreatifler", label: "Kreatifler", icon: Image },
     { path: "/employee/ui-tasarimlar", label: "UI Tasarımlar", icon: LayoutDashboard },

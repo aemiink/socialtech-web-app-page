@@ -68,6 +68,29 @@ enum MetaAdsConnectionStatus {
   DISCONNECTED
 }
 
+enum GoogleAdsConnectionStatus {
+  NOT_CONNECTED
+  PENDING
+  CONNECTED
+  ERROR
+  DISCONNECTED
+}
+
+enum GoogleAdsInsightLevel {
+  ACCOUNT
+  CAMPAIGN
+  AD_GROUP
+  AD
+}
+
+enum GoogleAdsSyncStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+  PARTIAL
+  SKIPPED
+}
+
 enum MetaAdsInsightLevel {
   ACCOUNT
   CAMPAIGN
@@ -172,6 +195,12 @@ enum MetaAdsApprovalType {
   META_ADS_BUDGET_CHANGE_APPROVAL
   META_ADS_REPORT_ACKNOWLEDGEMENT
   META_ADS_STRATEGY_APPROVAL
+  GOOGLE_ADS_CAMPAIGN_APPROVAL
+  GOOGLE_ADS_BUDGET_CHANGE_APPROVAL
+  GOOGLE_ADS_REPORT_ACKNOWLEDGEMENT
+  GOOGLE_ADS_STRATEGY_APPROVAL
+  GOOGLE_ADS_CREATIVE_APPROVAL
+  GOOGLE_ADS_KEYWORD_PLAN_APPROVAL
 }
 
 enum MetaAdsApprovalStatus {
@@ -407,7 +436,11 @@ model ClientProfile {
   purchasedServices   ClientPurchasedService[]
   metaAdsConfig       ClientMetaAdsConfig?
   metaAdsCredential   ClientMetaAdsCredential?
+  googleAdsConfig     ClientGoogleAdsConfig?
+  googleAdsCredential ClientGoogleAdsCredential?
   metaAdsInsights     MetaAdsDailyInsight[]
+  googleAdsInsights   GoogleAdsDailyInsight[]
+  googleAdsSyncLogs   GoogleAdsSyncLog[]
   metaAdsSyncLogs     MetaAdsSyncLog[]
   metaAdsReports      MetaAdsReport[]
   projects            Project[]
@@ -453,6 +486,94 @@ model ClientMetaAdsCredential {
 
   @@index([tokenHash])
   @@index([tokenExpiresAt])
+}
+
+model ClientGoogleAdsConfig {
+  id                String                    @id @default(uuid()) @db.Uuid
+  clientProfileId   String                    @unique @db.Uuid
+  customerId        String?
+  managerCustomerId String?
+  descriptiveName   String?
+  currencyCode      String?
+  timeZone          String?
+  connectionStatus  GoogleAdsConnectionStatus @default(NOT_CONNECTED)
+  lastSyncAt        DateTime?
+  syncError         String?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@index([connectionStatus])
+  @@index([lastSyncAt])
+}
+
+model ClientGoogleAdsCredential {
+  id              String   @id @default(uuid()) @db.Uuid
+  clientProfileId String   @unique @db.Uuid
+  refreshTokenEnc String?
+  accessTokenEnc  String?
+  tokenHash       String?
+  tokenExpiresAt  DateTime?
+  grantedScopes   String[] @default([])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@index([tokenHash])
+  @@index([tokenExpiresAt])
+}
+
+model GoogleAdsDailyInsight {
+  id                String                @id @default(uuid()) @db.Uuid
+  clientProfileId   String                @db.Uuid
+  customerId        String
+  date              DateTime
+  level             GoogleAdsInsightLevel
+  entityId          String?
+  entityName        String?
+  costMicros        BigInt?
+  impressions       Int?
+  clicks            Int?
+  conversions       Decimal?
+  conversionValue   Decimal?
+  ctr               Decimal?
+  averageCpc        Decimal?
+  costPerConversion Decimal?
+  interactions      Int?
+  raw               Json?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@index([clientProfileId, date])
+  @@index([clientProfileId, level, date])
+  @@index([clientProfileId, customerId, level, date])
+  @@index([customerId, date])
+}
+
+model GoogleAdsSyncLog {
+  id                String               @id @default(uuid()) @db.Uuid
+  clientProfileId   String               @db.Uuid
+  customerId        String?
+  managerCustomerId String?
+  status            GoogleAdsSyncStatus
+  startedAt         DateTime
+  finishedAt        DateTime?
+  errorCode         String?
+  errorMessage      String?
+  recordsFetched    Int?
+  apiCallCount      Int?
+  createdAt         DateTime             @default(now())
+
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@index([clientProfileId, createdAt])
+  @@index([status, createdAt])
+  @@index([clientProfileId, status, createdAt])
 }
 
 model MetaAdsDailyInsight {

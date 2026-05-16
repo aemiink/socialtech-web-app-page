@@ -69,12 +69,15 @@ import type {
   ClientsSortBy,
   ClientsSortOrder,
   CreateAdminClientRequest,
+  GoogleAdsConnectionStatus,
+  GoogleAdsConfigPayload,
   CreateOrLinkClientOwnerRequest,
   ServiceKey,
   UpdateAdminClientRequest,
 } from "../features/clients/clientsTypes";
 import {
   CLIENT_STATUS_OPTIONS,
+  getGoogleAdsConnectionStatusLabel,
   SERVICE_CATALOG,
   extractApiErrorMessage,
   formatClientDate,
@@ -106,6 +109,13 @@ const SEARCH_DEBOUNCE_MS = 275;
 const OWNER_PICKER_LIMIT = 8;
 const EMPLOYEE_PICKER_LIMIT = 8;
 const EXISTING_OWNER_REQUIRED_MESSAGE = "Bağlanacak mevcut portal sahibini seçin.";
+const GOOGLE_ADS_CONNECTION_STATUS_OPTIONS: GoogleAdsConnectionStatus[] = [
+  "NOT_CONNECTED",
+  "PENDING",
+  "CONNECTED",
+  "ERROR",
+  "DISCONNECTED",
+];
 
 type ClientStatusFilter = ClientStatus | "ALL";
 type ClientOwnerMode = "NONE" | "CREATE" | "LINK_EXISTING";
@@ -113,6 +123,15 @@ type PendingClientStatusAction = "activate" | "deactivate";
 type AssignmentFormState = {
   employee: AdminUser | null;
   scope: AdminAssignmentScope;
+};
+
+type ClientGoogleAdsFormState = {
+  customerId: string;
+  managerCustomerId: string;
+  descriptiveName: string;
+  currencyCode: string;
+  timeZone: string;
+  connectionStatus: GoogleAdsConnectionStatus;
 };
 
 type ClientFormState = {
@@ -125,6 +144,7 @@ type ClientFormState = {
   ownerPassword: string;
   existingOwnerUserId: string;
   purchasedServices: ServiceKey[];
+  googleAdsConfig: ClientGoogleAdsFormState;
 };
 
 type ClientFormField = keyof ClientFormState;
@@ -140,6 +160,14 @@ const initialClientForm: ClientFormState = {
   ownerPassword: "",
   existingOwnerUserId: "",
   purchasedServices: [],
+  googleAdsConfig: {
+    customerId: "",
+    managerCustomerId: "",
+    descriptiveName: "",
+    currencyCode: "",
+    timeZone: "",
+    connectionStatus: "NOT_CONNECTED",
+  },
 };
 
 const initialAssignmentForm: AssignmentFormState = {
@@ -317,6 +345,20 @@ export function Clients() {
     setCreateForm((prev) => ({ ...prev, [field]: value }));
   }
 
+  function updateCreateGoogleAdsConfig(
+    field: keyof ClientGoogleAdsFormState,
+    value: ClientGoogleAdsFormState[keyof ClientGoogleAdsFormState],
+  ) {
+    setCreateSubmitError(null);
+    setCreateForm((prev) => ({
+      ...prev,
+      googleAdsConfig: {
+        ...prev.googleAdsConfig,
+        [field]: value,
+      },
+    }));
+  }
+
   function selectCreateExistingOwner(owner: AdminUser) {
     setCreateSubmitError(null);
     setCreateSelectedExistingOwner(owner);
@@ -346,6 +388,24 @@ export function Clients() {
   function updateEditForm(field: ClientFormField, value: ClientFormValue) {
     setEditSubmitError(null);
     setEditForm((prev) => (prev ? { ...prev, [field]: value } : prev));
+  }
+
+  function updateEditGoogleAdsConfig(
+    field: keyof ClientGoogleAdsFormState,
+    value: ClientGoogleAdsFormState[keyof ClientGoogleAdsFormState],
+  ) {
+    setEditSubmitError(null);
+    setEditForm((prev) => (
+      prev
+        ? {
+            ...prev,
+            googleAdsConfig: {
+              ...prev.googleAdsConfig,
+              [field]: value,
+            },
+          }
+        : prev
+    ));
   }
 
   async function handleCreateSubmit(event: FormEvent<HTMLFormElement>) {
@@ -955,6 +1015,7 @@ export function Clients() {
               idPrefix="create-client"
               form={createForm}
               onChange={updateCreateForm}
+              onGoogleAdsChange={updateCreateGoogleAdsConfig}
               disabled={isCreating || isLinkingOwner}
               includeOwnerFields
               canLinkExistingOwner={canReadAdminUsers}
@@ -1012,6 +1073,7 @@ export function Clients() {
                 idPrefix="edit-client"
                 form={editForm}
                 onChange={updateEditForm}
+                onGoogleAdsChange={updateEditGoogleAdsConfig}
                 disabled={isUpdating}
               />
               <DialogFooter>
@@ -1182,6 +1244,7 @@ function ClientFormFields({
   idPrefix,
   form,
   onChange,
+  onGoogleAdsChange,
   disabled,
   includeOwnerFields = false,
   canLinkExistingOwner = true,
@@ -1193,6 +1256,10 @@ function ClientFormFields({
   idPrefix: string;
   form: ClientFormState;
   onChange: (field: ClientFormField, value: ClientFormValue) => void;
+  onGoogleAdsChange: (
+    field: keyof ClientGoogleAdsFormState,
+    value: ClientGoogleAdsFormState[keyof ClientGoogleAdsFormState],
+  ) => void;
   disabled: boolean;
   includeOwnerFields?: boolean;
   canLinkExistingOwner?: boolean;
@@ -1205,6 +1272,7 @@ function ClientFormFields({
     onExistingOwnerSelect ?? ((owner: AdminUser) => onChange("existingOwnerUserId", owner.id));
   const handleExistingOwnerClear =
     onExistingOwnerClear ?? (() => onChange("existingOwnerUserId", ""));
+  const hasGoogleAdsServiceSelected = form.purchasedServices.includes("google-ads");
 
   return (
     <>
@@ -1259,6 +1327,87 @@ function ClientFormFields({
           onChange("purchasedServices", toggleServiceSelection(form.purchasedServices, serviceKey));
         }}
       />
+
+      {hasGoogleAdsServiceSelected && (
+        <fieldset className="space-y-3 rounded-lg border border-white/[0.06] bg-[#202020]/60 p-3">
+          <legend className="px-1 text-sm font-medium text-white">Google Ads Konfigürasyonu</legend>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor={`${idPrefix}-google-ads-customer-id`}>Customer ID</Label>
+              <Input
+                id={`${idPrefix}-google-ads-customer-id`}
+                value={form.googleAdsConfig.customerId}
+                onChange={(event) => onGoogleAdsChange("customerId", event.target.value)}
+                className="border-white/[0.08] bg-[#202020]"
+                placeholder="1234567890"
+                disabled={disabled}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`${idPrefix}-google-ads-manager-customer-id`}>Manager Customer ID</Label>
+              <Input
+                id={`${idPrefix}-google-ads-manager-customer-id`}
+                value={form.googleAdsConfig.managerCustomerId}
+                onChange={(event) => onGoogleAdsChange("managerCustomerId", event.target.value)}
+                className="border-white/[0.08] bg-[#202020]"
+                placeholder="0987654321"
+                disabled={disabled}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`${idPrefix}-google-ads-account-name`}>Account Name</Label>
+              <Input
+                id={`${idPrefix}-google-ads-account-name`}
+                value={form.googleAdsConfig.descriptiveName}
+                onChange={(event) => onGoogleAdsChange("descriptiveName", event.target.value)}
+                className="border-white/[0.08] bg-[#202020]"
+                placeholder="Acme Google Ads"
+                disabled={disabled}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`${idPrefix}-google-ads-timezone`}>Timezone</Label>
+              <Input
+                id={`${idPrefix}-google-ads-timezone`}
+                value={form.googleAdsConfig.timeZone}
+                onChange={(event) => onGoogleAdsChange("timeZone", event.target.value)}
+                className="border-white/[0.08] bg-[#202020]"
+                placeholder="Europe/Istanbul"
+                disabled={disabled}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`${idPrefix}-google-ads-currency`}>Currency</Label>
+              <Input
+                id={`${idPrefix}-google-ads-currency`}
+                value={form.googleAdsConfig.currencyCode}
+                onChange={(event) => onGoogleAdsChange("currencyCode", event.target.value)}
+                className="border-white/[0.08] bg-[#202020]"
+                placeholder="TRY"
+                disabled={disabled}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`${idPrefix}-google-ads-connection-status`}>Connection Status</Label>
+              <SelectControl
+                id={`${idPrefix}-google-ads-connection-status`}
+                ariaLabel="Connection Status"
+                value={form.googleAdsConfig.connectionStatus}
+                onChange={(value) =>
+                  onGoogleAdsChange("connectionStatus", value as GoogleAdsConnectionStatus)
+                }
+                disabled={disabled}
+              >
+                {GOOGLE_ADS_CONNECTION_STATUS_OPTIONS.map((status) => (
+                  <option key={status} value={status}>
+                    {getGoogleAdsConnectionStatusLabel(status)}
+                  </option>
+                ))}
+              </SelectControl>
+            </div>
+          </div>
+        </fieldset>
+      )}
 
       {includeOwnerFields && (
         <>
@@ -1896,9 +2045,16 @@ function buildCreateClientPayload(form: ClientFormState): CreateAdminClientReque
     purchasedServices: form.purchasedServices,
   };
   const slug = normalizeOptionalText(form.slug);
+  const googleAdsConfig = form.purchasedServices.includes("google-ads")
+    ? buildGoogleAdsConfigPayload(form.googleAdsConfig)
+    : undefined;
 
   if (slug) {
     payload.slug = slug;
+  }
+
+  if (googleAdsConfig) {
+    payload.googleAdsConfig = googleAdsConfig;
   }
 
   return payload;
@@ -1911,9 +2067,16 @@ function buildUpdateClientPayload(form: ClientFormState): UpdateAdminClientReque
     purchasedServices: form.purchasedServices,
   };
   const slug = normalizeOptionalText(form.slug);
+  const googleAdsConfig = form.purchasedServices.includes("google-ads")
+    ? buildGoogleAdsConfigPayload(form.googleAdsConfig)
+    : undefined;
 
   if (slug) {
     payload.slug = slug;
+  }
+
+  if (googleAdsConfig) {
+    payload.googleAdsConfig = googleAdsConfig;
   }
 
   return payload;
@@ -1940,12 +2103,22 @@ function buildOwnerPayload(form: ClientFormState): CreateOrLinkClientOwnerReques
 }
 
 function clientToForm(client: ClientProfile): ClientFormState {
+  const googleAdsConfig = client.googleAdsConfig;
+
   return {
     ...initialClientForm,
     name: client.companyName,
     slug: client.slug,
     status: client.status,
     purchasedServices: getActivePurchasedServiceKeys(client),
+    googleAdsConfig: {
+      customerId: googleAdsConfig?.customerId ?? "",
+      managerCustomerId: googleAdsConfig?.managerCustomerId ?? "",
+      descriptiveName: googleAdsConfig?.descriptiveName ?? "",
+      currencyCode: googleAdsConfig?.currencyCode ?? "",
+      timeZone: googleAdsConfig?.timeZone ?? "",
+      connectionStatus: googleAdsConfig?.connectionStatus ?? "NOT_CONNECTED",
+    },
   };
 }
 
@@ -1955,6 +2128,39 @@ function toggleServiceSelection(selectedServices: ServiceKey[], serviceKey: Serv
   }
 
   return [...selectedServices, serviceKey];
+}
+
+function buildGoogleAdsConfigPayload(form: ClientGoogleAdsFormState): GoogleAdsConfigPayload {
+  const payload: GoogleAdsConfigPayload = {
+    connectionStatus: form.connectionStatus,
+  };
+  const customerId = normalizeOptionalText(form.customerId);
+  const managerCustomerId = normalizeOptionalText(form.managerCustomerId);
+  const descriptiveName = normalizeOptionalText(form.descriptiveName);
+  const currencyCode = normalizeOptionalText(form.currencyCode);
+  const timeZone = normalizeOptionalText(form.timeZone);
+
+  if (customerId) {
+    payload.customerId = customerId;
+  }
+
+  if (managerCustomerId) {
+    payload.managerCustomerId = managerCustomerId;
+  }
+
+  if (descriptiveName) {
+    payload.descriptiveName = descriptiveName;
+  }
+
+  if (currencyCode) {
+    payload.currencyCode = currencyCode.toUpperCase();
+  }
+
+  if (timeZone) {
+    payload.timeZone = timeZone;
+  }
+
+  return payload;
 }
 
 function normalizeOptionalText(value: string): string | undefined {
