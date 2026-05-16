@@ -2,151 +2,243 @@
 
 # FAZ 0 — Google Ads Discovery, Official Docs ve Technical Contract
 
+## Durum
+
+- Faz durumu: **Tamamlandı**
+- Tarih: **2026-05-16**
+- Sonuç: **Faz 1 implementation contract hazır**
+
 ## Amaç
 
-Google Ads panelini geliştirmeye başlamadan önce official Google Ads API dokümantasyonuna göre teknik contract’ı netleştirmek.
+Google Ads entegrasyonu için implementation öncesinde, resmi Google Ads API dokümantasyonuna ve mevcut repo mimarisine uyumlu net teknik kararları sabitlemek.
 
-Bu fazda kod yazımı minimum olmalı. Ana hedef:
+Bu fazda kod yazımı yerine contract netliği hedeflendi:
 
-- Google Ads için hangi veriler çekilecek?
-- Hangi Google Ads API servisleri kullanılacak?
-- OAuth 2.0 + developer token + manager account yapısı nasıl kurulacak?
-- Müşteri bazlı Google Ads yapılandırması nasıl tutulacak?
-- Admin, employee ve client hangi veriyi görecek?
-- Mevcut mock tasarım hangi backend contract’a bağlanacak?
+- V1 scope (read-first vs campaign manage) kararı
+- endpoint + field seti
+- access model + auth stratejisi
+- role-scope matrisi
+- Faz 1’e geçiş kriterleri
 
-## Mevcut Repo Bağlamı
+## Mevcut Repo Bağlamı (Doğrulandı)
 
-Mevcut sistemde:
+- `server/` NestJS + Prisma + RBAC.
+- `PurchasedServiceKey.GOOGLE_ADS` enum değeri mevcut (`server/prisma/schema.prisma`).
+- Seed verisinde `GOOGLE_ADS` aktif müşteri örneği mevcut (`nova-performance`).
+- `clientPanel` service selection akışı yalnızca ACTIVE purchased service’leri gösteriyor.
+- `clientPanel/src/app/pages/services/google-ads-dashboard.tsx` hâlen mock/static.
+- `server/src/google-ads/` modülü henüz yok (implementation Faz 1’den itibaren başlayacak).
+- `server/src/meta-ads/` modülü, Google Ads için referans uygulanabilir pattern sağlıyor.
 
-- `server/` NestJS + Prisma + RBAC backend.
-- `adminandemployeePanel/` Admin Panel + Employee Panel.
-- `clientPanel/` müşteri portalı.
-- `ClientPurchasedService` modeli var.
-- Client Portal yalnızca satın alınmış ACTIVE hizmetleri gösteriyor.
-- `Project.serviceKey` var.
-- Google Ads service key mevcut değilse `GOOGLE_ADS` purchased service olarak eklenmeli.
-- Admin/Employee Panel RTK Query mimarisi var.
-- Platform integrations: Meta/TikTok/Amazon Ads roadmap’te planned; Google Ads de aynı integration ailesine eklenecek.
+## İncelenen Resmi Kaynaklar
 
-## İncelenecek Resmi Kaynaklar
+> Not: Aşağıdaki kararlar bu kaynaklarla hizalanmıştır.
 
-Codex implementation öncesinde resmi Google kaynaklarını incele:
+1. [Google Ads API Overview](https://developers.google.com/google-ads/api)
+2. [API Call Structure (`developer-token`, `login-customer-id`)](https://developers.google.com/google-ads/api/docs/concepts/call-structure)
+3. [Understand the Google Ads Access Model](https://developers.google.com/google-ads/api/docs/oauth/access-model)
+4. [OAuth 2.0 Overview](https://developers.google.com/google-ads/api/docs/oauth/overview)
+5. [Multi User Authentication Workflow](https://developers.google.com/google-ads/api/docs/oauth/multi-user-authentication)
+6. [Service Account Workflow](https://developers.google.com/google-ads/api/docs/oauth/service-accounts)
+7. [Developer Token](https://developers.google.com/google-ads/api/docs/get-started/dev-token)
+8. [Access Levels and Permissible Use](https://developers.google.com/google-ads/api/docs/api-policy/access-levels)
+9. [Google Ads Query Language (GAQL)](https://developers.google.com/google-ads/api/docs/query/overview)
+10. [Date Ranges in GAQL](https://developers.google.com/google-ads/api/docs/query/date-ranges)
+11. [Reporting Overview](https://developers.google.com/google-ads/api/docs/reporting/overview)
+12. [Report Streaming (`Search` vs `SearchStream`)](https://developers.google.com/google-ads/api/docs/reporting/streaming)
+13. [Reports/Fields Overview](https://developers.google.com/google-ads/api/fields/v22/overview)
+14. [API Limits and Quotas](https://developers.google.com/google-ads/api/docs/best-practices/quotas)
+15. [Conversion Management Overview](https://developers.google.com/google-ads/api/docs/conversions/overview)
+16. [Manage Offline Conversions (Enhanced Conversions for Leads)](https://developers.google.com/google-ads/api/docs/conversions/upload-clicks)
 
-- Google Ads API Overview
-- OAuth 2.0 for Google Ads API
-- Developer token
-- Manager account / MCC access model
-- Google Ads Query Language, GAQL
-- Campaign, Ad Group, Ad, Asset, Customer, Metrics resources
-- Conversion tracking
-- Offline conversions / Enhanced conversions for leads
-- API quotas, rate limits, error handling
+## V1 Ürün Kapsam Kararı
 
-## Google Ads API Temel Kavramları
+**Google Ads V1 = read-first operations (reporting + visibility).**
 
-Google Ads API çağrıları için şunlar gerekir:
+- V1’de hedef: müşteriye performans görünürlüğü vermek ve operasyon ekibinin panelden izleme/senkron yönetimi yapması.
+- V1’de **campaign create/update/pause** ve keyword mutation kapsam dışı.
+- V1’de kritik kapsam:
+  - account/config görünürlüğü
+  - campaign/ad group/ad/keyword/search term listeleri (read)
+  - summary + timeseries insights
+  - conversion görünürlüğü (read)
+  - connection status + last sync + user-safe error messaging
 
-- Developer token
-- OAuth 2.0 credentials
-- Manager account, çoğu agency yapısında
-- Client customer ID, yani 10 haneli Google Ads müşteri hesabı ID’si
-- Gerekirse login-customer-id header’ı, manager account üzerinden erişim için
+## Google Ads API Contract (V1)
 
-## İncelenecek Google Ads Alanları
+### 1) Çekilecek Kaynaklar ve Servisler
 
-### Customer / Account
+- `GoogleAdsService.Search` / `GoogleAdsService.SearchStream` (GAQL tabanlı ana data çekimi)
+- `CustomerService.ListAccessibleCustomers` (bağlantı/test doğrulama yardımcı çağrısı)
+- `GoogleAdsFieldService` (field metadata doğrulama ve query güvenliği)
+- Offline conversion upload (`ConversionUploadService`) V2 backlog, V1’de read-only hazırlık notu
 
-- customer id
-- descriptive name
-- currency code
-- time zone
-- account status
-- manager account ilişkisi
-- tracking setup
+### 2) Minimum Field Seti
 
-### Campaign
+#### Customer / Account
 
-- campaign id
-- name
-- advertising channel type
-- status
-- serving status
-- bidding strategy
-- budget
-- start date / end date
+- `customer.id`
+- `customer.descriptive_name`
+- `customer.currency_code`
+- `customer.time_zone`
+- `customer.status`
+- `customer.manager`
 
-### Ad Group
+#### Campaign
 
-- ad group id
-- campaign id
-- name
-- status
-- type
-- cpc / bidding fields
+- `campaign.id`
+- `campaign.name`
+- `campaign.advertising_channel_type`
+- `campaign.status`
+- `campaign.serving_status`
+- `campaign.start_date`, `campaign.end_date`
+- `campaign.campaign_budget`
+- `campaign.bidding_strategy_type`
 
-### Ads
+#### Ad Group
 
-- ad id
-- ad group id
-- campaign id
-- status
-- type
-- final urls
-- responsive search ad fields
-- asset references, mümkünse
+- `ad_group.id`
+- `ad_group.name`
+- `ad_group.status`
+- `ad_group.type`
+- `ad_group.cpc_bid_micros` (uygunsa)
+- `ad_group.campaign`
 
-### Metrics
+#### Ads
 
-Minimum V1 metrikleri:
+- `ad_group_ad.ad.id`
+- `ad_group_ad.status`
+- `ad_group_ad.ad.type`
+- `ad_group_ad.ad.final_urls`
+- `ad_group_ad.ad.responsive_search_ad` (varsa)
+- `ad_group_ad.ad.resource_name`
 
-- impressions
-- clicks
-- cost micros
-- conversions
-- conversion value
-- ctr
-- average cpc
-- cost per conversion
-- search impression share, erişilebiliyorsa
-- video views, YouTube campaign varsa
-- interactions
-- engagement rate, campaign type’a göre
+#### Keyword / Search Term (V1 visibility)
 
-## Çıktılar
+- `keyword_view.resource_name`
+- `ad_group_criterion.keyword.text`
+- `ad_group_criterion.keyword.match_type`
+- `search_term_view.search_term`
 
-Bu fazın sonunda şu contract net olmalı:
+> Not: `search_term_view`, resmi dokümana göre Performance Max verisini kapsamaz; PMax için Faz 3+’ta `campaign_search_term_view` eklenir.
 
-- Google Ads için kullanılacak API servisleri.
-- GAQL query contract.
-- Minimum permission/auth stratejisi.
-- Developer token ve OAuth stratejisi.
-- Client create/edit sırasında alınacak Google Ads bilgileri.
-- Client Panel’de korunacak mock tasarım alanlarının API karşılığı.
-- Admin/Employee/Client role-scope matrisi.
+#### Metrics (V1 minimum)
 
-## Codex Görevi
+- `metrics.impressions`
+- `metrics.clicks`
+- `metrics.cost_micros`
+- `metrics.conversions`
+- `metrics.conversions_value`
+- `metrics.ctr`
+- `metrics.average_cpc`
+- `metrics.cost_per_conversion`
+- `metrics.interactions`
+- `metrics.engagement_rate` (channel uygunluğuna göre)
+- `metrics.video_views` (video kampanya varsa)
+- `metrics.search_impression_share` (uygun campaign/report kombinasyonunda)
 
-Aynı repository context’i üzerinden devam et.
+### 3) GAQL Query Standardı
 
-Bu fazda ana hedef kod yazmak değil, Google Ads entegrasyonu için official docs ve mevcut repo mimarisi üzerinden teknik contract çıkarmaktır.
+- Varsayılan pencere: `segments.date DURING LAST_30_DAYS`
+- Trend sorguları: `segments.date` ile günlük seri
+- Karşılaştırma: `LAST_7_DAYS`, `LAST_30_DAYS`, `THIS_MONTH`
+- Tüm sorgular finite date range ile çalıştırılacak.
+- Büyük raporlarda `SearchStream`; küçük/etkileşimli sorgularda `Search`.
+- Query builder/field compatibility kontrolü zorunlu.
 
-Şunları yap:
+### 4) Rate Limit / Quota / Error Stratejisi
 
-1. Mevcut `server/`, `adminandemployeePanel/`, `clientPanel/` yapısını incele.
-2. `ClientPurchasedService`, `Project.serviceKey`, auth/RBAC, RTK Query ve clientPanel service selection akışını kontrol et.
-3. Google Ads için kullanılacak official Google Ads API kaynaklarını incele.
-4. Google Ads için V1 data contract önerisini çıkar.
-5. Admin, employee ve client için role-scope matrisi oluştur.
-6. OAuth/developer token/manager account stratejisini V1 ve V2 olarak ayır.
-7. Faz 1 implementation için net teknik kararları yaz.
-8. Shared memory güncellemesi gerekiyorsa yalnızca ilgili notları ekle.
+- Developer token access level’e göre günlük operasyon limiti uygulanır.
+- `Search` ve `SearchStream` çağrısı başına operasyon maliyeti dikkate alınır.
+- `RESOURCE_EXHAUSTED` ve quota hata kodları normalize edilerek retry/backoff uygulanır.
+- `GoogleAdsFailure` dönen hatalar quota tüketir; bu yüzden fail-fast validation + query daraltma uygulanır.
 
-## Kabul Kriterleri
+## Access Model ve Auth Stratejisi
 
-- Official docs referansları okunmuş ve kararlar netleştirilmiş.
-- V1 read-only reporting mi yoksa campaign management mı yapılacak net.
-- Google Ads panel data contract tanımlı.
-- Developer token + OAuth stratejisi net.
-- Mevcut repo mimarisiyle çelişen karar yok.
-- Final response’ta “Faz 1 için implementation contract hazır mı?” sorusuna net cevap ver.
+### Access Model Kararı
+
+- Agency modelinde manager account (MCC) root olacak.
+- Client customer ID her müşteri config’inde tutulacak.
+- Manager üzerinden erişimde `login-customer-id` header zorunlu kabul edilecek.
+- API çağrılarında customer ID’ler daima tire (`-`) olmadan saklanıp gönderilecek.
+- Google Ads API, read/write ayrımı için ayrı OAuth scope kullanmaz; erişim seviyeleri Google Ads account role + `login-customer-id` ile belirlenir.
+
+### OAuth / Credential Stratejisi (V1 ve V2)
+
+#### V1 (önerilen)
+
+- Admin-managed bağlantı (controlled onboarding).
+- Müşteri bazında config + credential ayrık tutulur (`ClientGoogleAdsConfig`, `ClientGoogleAdsCredential`).
+- `refreshToken` encrypted storage; plain token API response/log içinde yer almaz.
+- OAuth scope: `https://www.googleapis.com/auth/adwords`.
+- Developer token merkezi (env) yönetilir.
+
+#### V2 (hedef)
+
+- Service account workflow’a geçiş (Google’ın güncel önerisiyle hizalı).
+- Manager account altında service account access modeliyle user-refresh-token bağımlılığını azaltma.
+- Gerekirse multi-user OAuth onboarding (self-service) ayrı bir ürün kararıyla açılır.
+
+## Role-Scope Matrisi (Repo RBAC ile hizalı)
+
+| Rol | Google Ads Config | Google Ads Reporting | Google Ads Manage |
+|---|---|---|---|
+| Admin | any read/write | any read | V2’de staged |
+| Project Manager | assigned read | assigned read | V1’de yok |
+| Performance Specialist | assigned read | assigned read | V1’de yok |
+| Designer | assigned limited read (creative context) | assigned limited read | V1’de yok |
+| Client | own readonly summary | own readonly summary | yok |
+
+## Backend Permission Strategy (V1 Baseline)
+
+`server` RBAC tarafında Faz 1/Faz 3 için önerilen minimum slug seti:
+
+- `googleAds.config.read.any`
+- `googleAds.config.manage.any`
+- `googleAds.config.read.assigned`
+- `googleAds.config.read.own`
+- `googleAds.reporting.read.any`
+- `googleAds.reporting.read.assigned`
+- `googleAds.sync.run.any`
+- `googleAds.sync.read.assigned`
+
+Faz 6+ genişleme slugları (employee workspace / approvals):
+
+- `googleAds.notes.manage.assigned`
+- `googleAds.approvals.create.assigned`
+- `googleAds.recommendations.manage.assigned`
+
+## Client Panel Mock -> API Eşleme
+
+`clientPanel/src/app/pages/services/google-ads-dashboard.tsx` içindeki ana bloklar için V1 API karşılığı:
+
+- KPI kartları: account/campaign aggregate metrics
+- Kampanya kartları: campaign + metrics
+- Keyword/search term blokları: `keyword_view` + `search_term_view`
+- Trend chart: `segments.date` serisi
+- Conversion tracking bloğu: conversion action/summary read
+- Client action paneli: Faz 7+ approval/task entegrasyonu
+
+## Faz 1 İçin Net Teknik Kararlar
+
+1. `GOOGLE_ADS` service key mevcut mimariyle devam edecek.
+2. Google Ads domain’i Meta Ads pattern’ine paralel ayrı modül olacak (`server/src/google-ads/`).
+3. V1 read-first gidecek; mutate operasyonları Faz 2+.
+4. Client endpointleri own-scope olacak (`currentUser.clientProfileId` resolve).
+5. Employee görünürlüğü assignment + active purchased service kontrolüyle sınırlandırılacak.
+6. Google Ads API çağrıları için manager account + `login-customer-id` standardı zorunlu olacak.
+7. Query contract GAQL + finite date range + field compatibility kurallarıyla sabitlenecek.
+8. Quota ve rate-limit handling Faz 1’den itibaren normalize error catalog ile başlayacak.
+
+## Faz 1’e Giriş Kriteri (Go/No-Go)
+
+- [x] Official docs alignment tamamlandı.
+- [x] V1 read-first scope net.
+- [x] API resource + field contract net.
+- [x] Access model + OAuth/token stratejisi net.
+- [x] Role-scope matrisi net.
+- [x] Repo mimarisiyle çelişen karar yok.
+
+## Faz 1 için implementation contract hazır mı?
+
+**Evet, hazır.**
