@@ -14,6 +14,23 @@ export type GoogleAdsSyncStatus =
 
 export type GoogleAdsInsightLevel = "ACCOUNT" | "CAMPAIGN" | "AD_GROUP" | "AD";
 
+export type GoogleAdsReportType =
+  | "WEEKLY"
+  | "MONTHLY"
+  | "CAMPAIGN_PERFORMANCE"
+  | "SEARCH_TERMS"
+  | "KEYWORD_PERFORMANCE"
+  | "BUDGET_RECOMMENDATION"
+  | "CONVERSION_TRACKING";
+
+export type GoogleAdsReportStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
+
+export type GoogleAdsReportAcknowledgementStatus =
+  | "NOT_REQUESTED"
+  | "PENDING"
+  | "ACKNOWLEDGED"
+  | "CHANGES_REQUESTED";
+
 export type OwnGoogleAdsConfigResponse = {
   connectionStatus: GoogleAdsConnectionStatus;
   customerId: string | null;
@@ -219,4 +236,36 @@ export type GoogleAdsSyncResponse = {
   lastSyncAt: string | null;
   syncStatus: GoogleAdsSyncStatus;
   skippedReason: string | null;
+};
+
+export type GoogleAdsReportItem = {
+  id: string;
+  clientProfileId: string;
+  projectId: string | null;
+  projectName: string | null;
+  periodStart: string;
+  periodEnd: string;
+  type: GoogleAdsReportType;
+  status: GoogleAdsReportStatus;
+  summary: string | null;
+  metricsSnapshot: Record<string, unknown> | null;
+  clientVisible: boolean;
+  publishedAt: string | null;
+  acknowledgementRequestedAt: string | null;
+  acknowledgedAt: string | null;
+  acknowledgementStatus: GoogleAdsReportAcknowledgementStatus;
+  acknowledgementTaskId: string | null;
+  acknowledgementTaskUpdatedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GoogleAdsReportsResponse = {
+  data: GoogleAdsReportItem[];
+  meta: {
+    total: number;
+    draft: number;
+    published: number;
+    clientVisible: number;
+  };
 };

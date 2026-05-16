@@ -18,6 +18,7 @@ import {
   useGetOwnGoogleAdsConfigQuery,
   useGetOwnGoogleAdsConversionsQuery,
   useGetOwnGoogleAdsKeywordsQuery,
+  useGetOwnGoogleAdsReportsQuery,
   useGetOwnGoogleAdsSearchTermsQuery,
   useGetOwnGoogleAdsSummaryQuery,
   useSyncOwnGoogleAdsMutation,
@@ -29,6 +30,7 @@ import type {
   GoogleAdsConnectionStatus,
   GoogleAdsConversion,
   GoogleAdsKeyword,
+  GoogleAdsReportItem,
   GoogleAdsSearchTerm,
 } from "../../features/googleAds/googleAdsTypes";
 import { useGetClientProjectFilesQuery } from "../../features/projectFiles/projectFilesApi";
@@ -149,6 +151,15 @@ export function GoogleAdsDashboard() {
   } = useGetOwnGoogleAdsSearchTermsQuery(
     { limit: 50 },
     { skip: shouldSkipReportingQueries || activeTab !== "search-terms" },
+  );
+
+  const {
+    data: reportsResponse,
+    isLoading: isReportsLoading,
+    isError: isReportsError,
+  } = useGetOwnGoogleAdsReportsQuery(
+    { limit: 20 },
+    { skip: shouldSkipReportingQueries || activeTab !== "reports" },
   );
 
   const {
@@ -644,7 +655,11 @@ export function GoogleAdsDashboard() {
       ) : null}
 
       {activeTab === "reports" ? (
-        <StateCard message="Google Ads rapor sekmesi mevcut reporting/export katmanına bağlanmaya hazır. Yayınlanan raporlar bu alanda listelenecek." />
+        <GoogleAdsReportsPanel
+          rows={reportsResponse?.data ?? []}
+          loading={isReportsLoading}
+          isError={isReportsError}
+        />
       ) : null}
 
       {activeTab === "agency-notes" ? (
@@ -833,6 +848,50 @@ function TaskNoteRow({ task }: { task: ClientTask }) {
   );
 }
 
+function GoogleAdsReportsPanel({
+  rows,
+  loading,
+  isError,
+}: {
+  rows: GoogleAdsReportItem[];
+  loading: boolean;
+  isError: boolean;
+}) {
+  if (loading) {
+    return <StateCard message="Google Ads raporları yükleniyor..." />;
+  }
+
+  if (isError) {
+    return <StateCard message="Google Ads raporları alınamadı." tone="error" />;
+  }
+
+  if (rows.length === 0) {
+    return <StateCard message="Henüz yayınlanan Google Ads raporu bulunmuyor." />;
+  }
+
+  return (
+    <div className="space-y-3">
+      {rows.map((report) => (
+        <div key={report.id} className="rounded-xl border border-white/[0.06] bg-[#1A1A1A] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-white">{getGoogleAdsReportTypeLabel(report.type)}</p>
+            <span className="text-xs text-[#D7FFC2]">
+              {getGoogleAdsReportStatusLabel(report.status)}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-[#A0A0A0]">
+            Dönem: {formatDateTime(report.periodStart)} - {formatDateTime(report.periodEnd)}
+          </p>
+          {report.summary ? <p className="mt-2 text-xs text-[#CFCFCF]">{report.summary}</p> : null}
+          <p className="mt-2 text-xs text-[#A0A0A0]">
+            Onay: {getGoogleAdsReportAcknowledgementLabel(report.acknowledgementStatus)}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function GoogleAdsApprovalsPanel({
   pendingTasks,
   historyTasks,
@@ -988,6 +1047,62 @@ function GoogleAdsApprovalsPanel({
       ) : null}
     </div>
   );
+}
+
+function getGoogleAdsReportTypeLabel(type: GoogleAdsReportItem["type"]): string {
+  if (type === "WEEKLY") {
+    return "Weekly Google Ads Report";
+  }
+  if (type === "MONTHLY") {
+    return "Monthly Google Ads Report";
+  }
+  if (type === "CAMPAIGN_PERFORMANCE") {
+    return "Campaign Performance Report";
+  }
+  if (type === "SEARCH_TERMS") {
+    return "Search Terms Report";
+  }
+  if (type === "KEYWORD_PERFORMANCE") {
+    return "Keyword Performance Report";
+  }
+  if (type === "BUDGET_RECOMMENDATION") {
+    return "Budget Recommendation Report";
+  }
+  if (type === "CONVERSION_TRACKING") {
+    return "Conversion Tracking Report";
+  }
+  return type;
+}
+
+function getGoogleAdsReportStatusLabel(status: GoogleAdsReportItem["status"]): string {
+  if (status === "DRAFT") {
+    return "Taslak";
+  }
+  if (status === "PUBLISHED") {
+    return "Yayınlandı";
+  }
+  if (status === "ARCHIVED") {
+    return "Arşiv";
+  }
+  return status;
+}
+
+function getGoogleAdsReportAcknowledgementLabel(
+  status: GoogleAdsReportItem["acknowledgementStatus"],
+): string {
+  if (status === "NOT_REQUESTED") {
+    return "Talep yok";
+  }
+  if (status === "PENDING") {
+    return "Bekleniyor";
+  }
+  if (status === "ACKNOWLEDGED") {
+    return "Okundu";
+  }
+  if (status === "CHANGES_REQUESTED") {
+    return "Revizyon istendi";
+  }
+  return status;
 }
 
 function getGoogleAdsApprovalTypeLabel(approvalType: string): string {

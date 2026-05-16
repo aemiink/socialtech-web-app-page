@@ -15,11 +15,14 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { ConnectManualGoogleAdsDto } from "./dto/connect-manual-google-ads.dto";
+import { CreateGoogleAdsReportDto } from "./dto/create-google-ads-report.dto";
 import { GoogleAdsCampaignsQueryDto } from "./dto/google-ads-campaigns-query.dto";
 import { GoogleAdsDateRangeQueryDto } from "./dto/google-ads-date-range-query.dto";
 import { GoogleAdsInsightsQueryDto } from "./dto/google-ads-insights-query.dto";
+import { GoogleAdsReportsQueryDto } from "./dto/google-ads-reports-query.dto";
 import { GoogleAdsSyncLogsQueryDto } from "./dto/google-ads-sync-logs-query.dto";
 import { TestGoogleAdsConnectionDto } from "./dto/test-google-ads-connection.dto";
+import { UpdateGoogleAdsReportDto } from "./dto/update-google-ads-report.dto";
 import { UpdateGoogleAdsConfigDto } from "./dto/update-google-ads-config.dto";
 import { GoogleAdsService } from "./google-ads.service";
 
@@ -173,6 +176,36 @@ export class GoogleAdsController {
     return this.googleAdsService.retryAdminClientInsights(currentUser, clientId, query);
   }
 
+  @Get("admin/clients/:clientId/google-ads/reports")
+  @RequirePermissions("reports.read")
+  getAdminClientGoogleAdsReports(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: GoogleAdsReportsQueryDto,
+  ) {
+    return this.googleAdsService.getAdminClientReports(currentUser, clientId, query);
+  }
+
+  @Post("admin/clients/:clientId/google-ads/reports")
+  @RequirePermissions("reports.manage")
+  createAdminClientGoogleAdsReport(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Body() dto: CreateGoogleAdsReportDto,
+  ) {
+    return this.googleAdsService.createAdminClientReport(currentUser, clientId, dto);
+  }
+
+  @Patch("admin/google-ads/reports/:reportId")
+  @RequirePermissions("reports.manage")
+  updateAdminGoogleAdsReport(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("reportId", ParseUUIDPipe) reportId: string,
+    @Body() dto: UpdateGoogleAdsReportDto,
+  ) {
+    return this.googleAdsService.updateAdminReport(currentUser, reportId, dto);
+  }
+
   @Get("google-ads/clients/:clientId/config")
   @RequirePermissions("googleAds.config.read.assigned")
   getAssignedClientGoogleAdsConfig(
@@ -272,6 +305,36 @@ export class GoogleAdsController {
     return this.googleAdsService.syncAssignedClientInsights(currentUser, clientId, query);
   }
 
+  @Get("google-ads/clients/:clientId/reports")
+  @RequirePermissions("googleAds.config.read.assigned", "googleAds.reporting.read.assigned")
+  getAssignedClientGoogleAdsReports(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: GoogleAdsReportsQueryDto,
+  ) {
+    return this.googleAdsService.getAssignedClientReports(currentUser, clientId, query);
+  }
+
+  @Post("google-ads/clients/:clientId/reports")
+  @RequirePermissions("googleAds.config.read.assigned", "googleAds.notes.manage.assigned")
+  createAssignedClientGoogleAdsReport(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Body() dto: CreateGoogleAdsReportDto,
+  ) {
+    return this.googleAdsService.createAssignedClientReport(currentUser, clientId, dto);
+  }
+
+  @Patch("google-ads/reports/:reportId")
+  @RequirePermissions("googleAds.config.read.assigned", "googleAds.notes.manage.assigned")
+  updateAssignedGoogleAdsReport(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("reportId", ParseUUIDPipe) reportId: string,
+    @Body() dto: UpdateGoogleAdsReportDto,
+  ) {
+    return this.googleAdsService.updateAssignedReport(currentUser, reportId, dto);
+  }
+
   @Get("clients/me/google-ads/config")
   @RequirePermissions("googleAds.config.read.own")
   getOwnClientGoogleAdsConfig(@CurrentUser() currentUser: AuthenticatedUser) {
@@ -357,5 +420,14 @@ export class GoogleAdsController {
     @Query() query: GoogleAdsDateRangeQueryDto,
   ) {
     return this.googleAdsService.syncOwnClientInsights(currentUser, query);
+  }
+
+  @Get("clients/me/google-ads/reports")
+  @RequirePermissions("googleAds.config.read.own", "reports.read.own")
+  getOwnClientGoogleAdsReports(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Query() query: GoogleAdsReportsQueryDto,
+  ) {
+    return this.googleAdsService.getOwnClientReports(currentUser, query);
   }
 }

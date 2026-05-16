@@ -2473,116 +2473,6 @@ Affected files:
 
 ---
 
-## 2026-05-16 - Google Ads Faz 6 Employee Workspace (Assigned Scope + Role-Aware UI + Permission Split)
-
-Context:
-Google Ads Faz 5 ile admin global yönetim görünürlüğü tamamlandı ancak employee tarafında Project Manager, Performance Specialist ve Designer için assigned-scope Google Ads çalışma alanı eksikti. Ayrıca assigned reporting/sync endpointlerinin config izni üzerinden yürümesi FAZ-06 hedefindeki permission ayrımını karşılamıyordu.
-
-Decision:
-Google Ads Faz 6 backend + employee panel katmanları API-first olarak uygulandı:
-
-- Backend permission ayrımı:
-  - Assigned reporting endpointleri `googleAds.reporting.read.assigned` iznine taşındı.
-  - Assigned sync endpointi `googleAds.sync.read.assigned` iznine taşındı.
-- Assigned endpoint surface genişletmesi:
-  - `GET /api/v1/google-ads/clients/:clientId/keywords`
-  - `GET /api/v1/google-ads/clients/:clientId/conversions`
-  - `GET /api/v1/google-ads/clients/:clientId/search-terms`
-- Seed permission sözlüğü FAZ-06 slugs ile genişletildi:
-  - `googleAds.reporting.read.assigned`
-  - `googleAds.notes.manage.assigned`
-  - `googleAds.approvals.create.assigned`
-  - `googleAds.sync.read.assigned`
-  - `googleAds.recommendations.manage.assigned`
-- Role permission mapping güncellendi:
-  - `PROJECT_MANAGER`, `PERFORMANCE_SPECIALIST`, `DESIGNER` için Google Ads assigned permission setleri eklendi.
-- Employee panel:
-  - Yeni generic workspace component: `GoogleAdsWorkspace`
-  - Yeni route/page: `/employee/google-ads` (`GoogleAdsCalismaAlani`)
-  - PM/Performance/Designer sidebar menülerine `Google Ads Workspace` girişi eklendi.
-  - Role-specific section davranışı:
-    - Performance: metrics/optimization/keywords/search terms/recommendation
-    - PM: project/tasks/messages/reports/approvals
-    - Designer: creative approval + asset upload entry
-- Test kapsamı:
-  - Backend e2e: assigned keywords/conversions/search-terms + assigned sync coverage
-  - Frontend: `GoogleAdsWorkspace` role/permission/scope testleri + `EmployeeLayout` menu visibility testleri
-
-Reason:
-Bu karar Google Ads tarafında role-aware employee operasyonlarını Meta Ads FAZ-06 seviyesine yaklaştırır, assigned-scope data leak riskini endpoint bazında testle güvenceye alır ve reporting/sync aksiyonlarını doğru permission domain’lerine ayırarak RBAC netliğini artırır.
-
-Affected files:
-- `server/src/google-ads/google-ads.controller.ts`
-- `server/src/google-ads/google-ads.service.ts`
-- `server/prisma/seed.ts`
-- `server/test/google-ads-authz.e2e-spec.ts`
-- `adminandemployeePanel/src/app/features/googleAds/googleAdsTypes.ts`
-- `adminandemployeePanel/src/app/features/googleAds/googleAdsApi.ts`
-- `adminandemployeePanel/src/app/employee/components/GoogleAdsWorkspace.tsx`
-- `adminandemployeePanel/src/app/employee/pages/GoogleAdsCalismaAlani.tsx`
-- `adminandemployeePanel/src/app/routes.tsx`
-- `adminandemployeePanel/src/app/employee/EmployeeLayout.tsx`
-- `adminandemployeePanel/src/app/employee/pages/__tests__/GoogleAdsWorkspace.test.tsx`
-- `adminandemployeePanel/src/app/employee/__tests__/EmployeeLayout.google-ads.test.tsx`
-- `PROJECT_CONTEXT.md`
-- `REPO_MAP.md`
-- `ROAD_MAP.md`
-
----
-
-## 2026-05-16 - Google Ads Faz 7 Approval + Creative Collaboration (Shared Approval Enum Extension + Client Decision Flow)
-
-Context:
-Google Ads FAZ-06 sonrası reporting ve employee workspace görünürlüğü hazırdı ancak müşteri onayı gerektiren campaign launch / budget change / report acknowledgement / keyword plan / creative akışları standart task approval lifecycle’ına tam bağlanmamıştı. Mevcut approval enum ve client decision flow sadece Meta Ads isimleri üzerinden ilerliyordu.
-
-Decision:
-Google Ads FAZ-07 için mevcut approval altyapısı genişletilerek ortak model korundu:
-
-- Prisma `MetaAdsApprovalType` enumu Google Ads approval tipleriyle genişletildi:
-  - `GOOGLE_ADS_CAMPAIGN_APPROVAL`
-  - `GOOGLE_ADS_BUDGET_CHANGE_APPROVAL`
-  - `GOOGLE_ADS_REPORT_ACKNOWLEDGEMENT`
-  - `GOOGLE_ADS_STRATEGY_APPROVAL`
-  - `GOOGLE_ADS_CREATIVE_APPROVAL`
-  - `GOOGLE_ADS_KEYWORD_PLAN_APPROVAL`
-- Tasks service approval creation guard’ı service-aware hale getirildi:
-  - Meta Ads için `metaAds.approvals.create.assigned`
-  - Google Ads için `googleAds.approvals.create.assigned`
-- Client approval response scope’u Meta-only’den Meta+Google ads servislerine genişletildi.
-- `CHANGES_REQUESTED/REJECTED` yanıtlarında otomatik revision task create akışı Google Ads için de aktif edildi (service-aware açıklama metni ile).
-- Client panel Google Ads approvals tabı genişletildi:
-  - pending approvals
-  - approve/revision/acknowledge aksiyonları
-  - approval history
-  - creative preview (yalnız client-visible project files)
-- Employee Google Ads workspace FAZ-07 uyumu:
-  - approval type selector
-  - report acknowledgement request aksiyonu
-  - approval status + rejection note görünürlüğü
-- Google Ads authz e2e kapsamı approval lifecycle ve creative visibility senaryolarıyla genişletildi.
-
-Reason:
-Bu karar Meta Ads ile Google Ads arasında approval lifecycle parity sağlar, yeni bir approval entity oluşturmadan mevcut task-temelli operasyon modelini korur ve RBAC/visibility kurallarını tek çizgide sürdürülebilir kılar.
-
-Affected files:
-- `server/prisma/schema.prisma`
-- `server/prisma/migrations/20260516030000_add_google_ads_approval_types/migration.sql`
-- `server/src/tasks/tasks.service.ts`
-- `server/test/google-ads-authz.e2e-spec.ts`
-- `clientPanel/src/app/features/tasks/tasksTypes.ts`
-- `clientPanel/src/app/features/tasks/tasksUtils.ts`
-- `clientPanel/src/app/features/projectFiles/projectFilesTypes.ts`
-- `clientPanel/src/app/pages/services/google-ads-dashboard.tsx`
-- `clientPanel/src/app/pages/__tests__/google-ads-dashboard.test.tsx`
-- `adminandemployeePanel/src/app/features/tasks/tasksTypes.ts`
-- `adminandemployeePanel/src/app/employee/components/GoogleAdsWorkspace.tsx`
-- `adminandemployeePanel/src/app/employee/pages/__tests__/GoogleAdsWorkspace.test.tsx`
-- `PROJECT_CONTEXT.md`
-- `REPO_MAP.md`
-- `ROAD_MAP.md`
-
----
-
 ## 2026-05-16 - Google Ads Faz 8 Sync Automation Hardening (Observability + Safe Client States)
 
 Context:
@@ -2640,6 +2530,63 @@ Affected files:
 - `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
 - `adminandemployeePanel/src/app/pages/GoogleAdsAdmin.tsx`
 - `adminandemployeePanel/src/app/pages/__tests__/GoogleAdsAdmin.test.tsx`
+- `clientPanel/src/app/features/googleAds/googleAdsTypes.ts`
+- `clientPanel/src/app/features/googleAds/googleAdsApi.ts`
+- `clientPanel/src/app/pages/services/google-ads-dashboard.tsx`
+- `clientPanel/src/app/pages/__tests__/google-ads-dashboard.test.tsx`
+- `PROJECT_CONTEXT.md`
+- `REPO_MAP.md`
+- `ROAD_MAP.md`
+
+---
+
+## 2026-05-16 - Google Ads Faz 9 Reporting + Export Foundation (Draft/Publish + Client Visibility + Report Ack Bridge)
+
+Context:
+Google Ads FAZ-08 sonrası sync otomasyonu ve observability katmanı tamamlanmıştı ancak report lifecycle için kalıcı bir domain modeli ve role-aware endpoint surface eksikti. Özellikle admin/employee ekiplerin rapor taslağı üretmesi, yayına alması ve müşteri acknowledgement akışına bağlaması için Meta Ads FAZ-09 seviyesinde parity gerekiyordu.
+
+Decision:
+Google Ads FAZ-09 kapsamında report/export foundation backend-first olarak eklendi:
+
+- Prisma katmanına `GoogleAdsReport` entity’si ve lifecycle enumları eklendi:
+  - `GoogleAdsReportType` (`WEEKLY`, `MONTHLY`, `CAMPAIGN_PERFORMANCE`, `SEARCH_TERMS`, `KEYWORD_PERFORMANCE`, `BUDGET_RECOMMENDATION`, `CONVERSION_TRACKING`)
+  - `GoogleAdsReportStatus` (`DRAFT`, `PUBLISHED`, `ARCHIVED`)
+- Endpoint surface genişletildi:
+  - Admin:
+    - `GET /api/v1/admin/clients/:clientId/google-ads/reports`
+    - `POST /api/v1/admin/clients/:clientId/google-ads/reports`
+    - `PATCH /api/v1/admin/google-ads/reports/:reportId`
+  - Assigned employee:
+    - `GET /api/v1/google-ads/clients/:clientId/reports`
+    - `POST /api/v1/google-ads/clients/:clientId/reports`
+    - `PATCH /api/v1/google-ads/reports/:reportId`
+  - Client own:
+    - `GET /api/v1/clients/me/google-ads/reports`
+- Service layer’da publish + acknowledgement task köprüsü uygulandı:
+  - report publish state (`clientVisible`, `publishedAt`) yönetimi
+  - report acknowledgement request sırasında task create/update
+  - existing approval lifecycle ile `MetaAdsApprovalType.GOOGLE_ADS_REPORT_ACKNOWLEDGEMENT` üzerinden entegrasyon
+- Frontend contract entegrasyonu:
+  - Employee `GoogleAdsWorkspace` içinde report draft formu, publish ve acknowledgement request aksiyonları
+  - Search terms + keyword performance report tiplerinin UI görünürlüğü
+  - Client dashboard reports tabının own-reports endpoint ile API-driven hale getirilmesi
+
+Reason:
+Bu karar Google Ads tarafında report lifecycle’ı üretim akışına uygun hale getirir, admin/employee operasyonlarında draft->publish standardını netleştirir ve client portal görünürlüğünü sadece `clientVisible` published raporlarla güvenli şekilde sınırlar. Ayrıca report acknowledgement sürecini mevcut task-based approval modeline bağlayarak yeni bir approval altyapısı açmadan sürdürülebilir parity sağlar.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260516120000_add_google_ads_reports/migration.sql`
+- `server/src/google-ads/dto/create-google-ads-report.dto.ts`
+- `server/src/google-ads/dto/update-google-ads-report.dto.ts`
+- `server/src/google-ads/dto/google-ads-reports-query.dto.ts`
+- `server/src/google-ads/google-ads.controller.ts`
+- `server/src/google-ads/google-ads.service.ts`
+- `server/test/google-ads-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/googleAds/googleAdsTypes.ts`
+- `adminandemployeePanel/src/app/features/googleAds/googleAdsApi.ts`
+- `adminandemployeePanel/src/app/employee/components/GoogleAdsWorkspace.tsx`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/GoogleAdsWorkspace.test.tsx`
 - `clientPanel/src/app/features/googleAds/googleAdsTypes.ts`
 - `clientPanel/src/app/features/googleAds/googleAdsApi.ts`
 - `clientPanel/src/app/pages/services/google-ads-dashboard.tsx`

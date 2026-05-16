@@ -148,6 +148,7 @@
 - Google Ads Faz 6 employee role workspaces (Project Manager/Performance/Designer assigned scope + generic `GoogleAdsWorkspace` + role-aware actions + tests)
 - Google Ads Faz 7 approval + creative collaboration (Google Ads approval type genişletmesi, client approve/revise/ack akışı, employee workspace approval type/status/rejection-note görünürlüğü, creative visibility ve authz coverage)
 - Google Ads Faz 8 sync automation hardening (sync log modeli, manual/retry/on-demand trigger loglama, normalize error catalog, admin sync logs+retry observability, client-safe refresh/cooldown davranışı)
+- Google Ads Faz 9 reporting/export foundation (`GoogleAdsReport` entity, admin/assigned draft-publish endpoints, client own report visibility, publish->ack task bridge)
 - Meta Ads Faz 1 backend foundation (Prisma model + authz API + e2e coverage)
 - Meta Ads Faz 2 auth/token/connection management (manual connect + encrypted token storage + connection test/disconnect + admin/client connection UI)
 - Meta Ads Faz 3 reporting sync (daily snapshot model + manual sync + summary/campaign/insights API + client/admin summary integration)
@@ -213,6 +214,14 @@ None identified.
   - `clientPanel`: `npm run check` ✅
   - `adminandemployeePanel`: `npm run test:run -- src/app/pages/__tests__/GoogleAdsAdmin.test.tsx` ✅ (`8/8`)
   - `adminandemployeePanel`: `npm run check` ✅
+- Latest Google Ads FAZ-09 validation checkpoint:
+  - `server`: `npm run prisma:generate` ✅
+  - `server`: `npm run typecheck` ✅
+  - `server`: `DATABASE_URL=postgresql://ahmeteminkaya@localhost:5432/socialtech_server_test?schema=public ALLOW_E2E_DB_RESET=true node ./test/run-e2e.cjs google-ads-authz.e2e-spec.ts` ✅ (`30/30`)
+  - `adminandemployeePanel`: `npm run test:run -- src/app/employee/pages/__tests__/GoogleAdsWorkspace.test.tsx` ✅ (`9/9`)
+  - `adminandemployeePanel`: `npm run check` ✅
+  - `clientPanel`: `npm run test -- src/app/pages/__tests__/google-ads-dashboard.test.tsx` ✅ (`17/17`)
+  - `clientPanel`: `npm run check` ✅
 - Latest FAZ-05 validation checkpoint:
   - `server`: `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true node ./test/run-e2e.cjs meta-ads-authz.e2e-spec.ts` ✅ (`38/38`)
   - `server`: `npm run prisma:seed` ✅

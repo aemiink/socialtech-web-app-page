@@ -1253,3 +1253,50 @@ The `client/` directory is the public/marketing Social Tech website, not the Cli
     - refresh action
     - rate-limited disabled state
     - safe error rendering
+
+## Update - 2026-05-16 (Google Ads Faz 9)
+
+- Backend Google Ads report domain + endpoint katmanı:
+  - `server/prisma/schema.prisma`
+    - `GoogleAdsReportType`, `GoogleAdsReportStatus` enumları
+    - `GoogleAdsReport` modeli + `User/ClientProfile/Project/Task` relation genişletmeleri
+  - `server/prisma/migrations/20260516120000_add_google_ads_reports/migration.sql`
+  - `server/src/google-ads/dto/create-google-ads-report.dto.ts`
+  - `server/src/google-ads/dto/update-google-ads-report.dto.ts`
+  - `server/src/google-ads/dto/google-ads-reports-query.dto.ts`
+  - `server/src/google-ads/google-ads.controller.ts`
+    - admin report list/create/update endpointleri
+    - assigned report list/create/update endpointleri
+    - own-client report list endpointi
+  - `server/src/google-ads/google-ads.service.ts`
+    - report lifecycle service katmanı (draft/publish/ack)
+    - report period parsing + summary normalization
+    - publish -> report acknowledgement task köprüsü
+    - admin/assigned/own authz scope kontrolleri
+  - `server/test/google-ads-authz.e2e-spec.ts`
+    - report lifecycle + authz e2e coverage
+
+- Admin/employee panel Google Ads FAZ-09 rapor yüzeyi:
+  - `adminandemployeePanel/src/app/features/googleAds/googleAdsTypes.ts`
+    - `GoogleAdsReportType`, `GoogleAdsReportStatus`, report response/query type sözleşmeleri
+  - `adminandemployeePanel/src/app/features/googleAds/googleAdsApi.ts`
+    - assigned reports list/create/update hookları
+    - report query/response normalizer genişletmeleri
+  - `adminandemployeePanel/src/app/employee/components/GoogleAdsWorkspace.tsx`
+    - report draft form
+    - publish ve acknowledgement request aksiyonları
+    - search terms / keyword performance report tipleri
+  - `adminandemployeePanel/src/app/employee/pages/__tests__/GoogleAdsWorkspace.test.tsx`
+    - report draft section ve report row görünürlük testleri
+
+- Client panel Google Ads FAZ-09 rapor görünürlüğü:
+  - `clientPanel/src/app/features/googleAds/googleAdsTypes.ts`
+    - own reports response/report item type sözleşmeleri
+  - `clientPanel/src/app/features/googleAds/googleAdsApi.ts`
+    - `useGetOwnGoogleAdsReportsQuery`
+    - own reports query/response normalizerları
+  - `clientPanel/src/app/pages/services/google-ads-dashboard.tsx`
+    - reports tabında API-driven report list render
+    - loading/error/empty state katmanı
+  - `clientPanel/src/app/pages/__tests__/google-ads-dashboard.test.tsx`
+    - reports row render + loading/error/empty state testleri

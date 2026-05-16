@@ -10,6 +10,7 @@ const mockUseGetOwnGoogleAdsAdsQuery = vi.fn();
 const mockUseGetOwnGoogleAdsKeywordsQuery = vi.fn();
 const mockUseGetOwnGoogleAdsConversionsQuery = vi.fn();
 const mockUseGetOwnGoogleAdsSearchTermsQuery = vi.fn();
+const mockUseGetOwnGoogleAdsReportsQuery = vi.fn();
 const mockUseSyncOwnGoogleAdsMutation = vi.fn();
 const mockUseGetClientTasksQuery = vi.fn();
 const mockUseGetClientProjectFilesQuery = vi.fn();
@@ -27,6 +28,7 @@ vi.mock("../../features/googleAds/googleAdsApi", () => ({
   useGetOwnGoogleAdsKeywordsQuery: (...args: unknown[]) => mockUseGetOwnGoogleAdsKeywordsQuery(...args),
   useGetOwnGoogleAdsConversionsQuery: (...args: unknown[]) => mockUseGetOwnGoogleAdsConversionsQuery(...args),
   useGetOwnGoogleAdsSearchTermsQuery: (...args: unknown[]) => mockUseGetOwnGoogleAdsSearchTermsQuery(...args),
+  useGetOwnGoogleAdsReportsQuery: (...args: unknown[]) => mockUseGetOwnGoogleAdsReportsQuery(...args),
   useSyncOwnGoogleAdsMutation: (...args: unknown[]) => mockUseSyncOwnGoogleAdsMutation(...args),
 }));
 
@@ -54,6 +56,7 @@ describe("GoogleAdsDashboard", () => {
     mockUseGetOwnGoogleAdsKeywordsQuery.mockReset();
     mockUseGetOwnGoogleAdsConversionsQuery.mockReset();
     mockUseGetOwnGoogleAdsSearchTermsQuery.mockReset();
+    mockUseGetOwnGoogleAdsReportsQuery.mockReset();
     mockUseSyncOwnGoogleAdsMutation.mockReset();
     mockUseGetClientTasksQuery.mockReset();
     mockUseGetClientProjectFilesQuery.mockReset();
@@ -232,6 +235,44 @@ describe("GoogleAdsDashboard", () => {
         ],
         dateRange: { since: "2026-05-09", until: "2026-05-16" },
         lastSyncAt: "2026-01-10T08:00:00.000Z",
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    mockUseGetOwnGoogleAdsReportsQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "report-1",
+            clientProfileId: "client-google-1",
+            projectId: "project-google-1",
+            projectName: "Google Ads Project",
+            periodStart: "2026-05-01T00:00:00.000Z",
+            periodEnd: "2026-05-07T23:59:59.999Z",
+            type: "SEARCH_TERMS",
+            status: "PUBLISHED",
+            summary: "Arama terimleri optimizasyon raporu.",
+            metricsSnapshot: {
+              topSearchTerms: [],
+            },
+            clientVisible: true,
+            publishedAt: "2026-05-08T08:00:00.000Z",
+            acknowledgementRequestedAt: "2026-05-08T08:05:00.000Z",
+            acknowledgedAt: null,
+            acknowledgementStatus: "PENDING",
+            acknowledgementTaskId: "task-ack-1",
+            acknowledgementTaskUpdatedAt: "2026-05-08T08:05:00.000Z",
+            createdAt: "2026-05-08T08:00:00.000Z",
+            updatedAt: "2026-05-08T08:05:00.000Z",
+          },
+        ],
+        meta: {
+          total: 1,
+          draft: 0,
+          published: 1,
+          clientVisible: 1,
+        },
       },
       isLoading: false,
       isError: false,
@@ -549,6 +590,58 @@ describe("GoogleAdsDashboard", () => {
     expect(screen.getByText("Onay Geçmişi")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Onayla" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Okudum" })).toBeInTheDocument();
+  });
+
+  it("renders reports tab rows with search terms report type and acknowledgement status", () => {
+    render(<GoogleAdsDashboard />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Raporlar" }));
+
+    expect(screen.getByText("Search Terms Report")).toBeInTheDocument();
+    expect(screen.getByText("Arama terimleri optimizasyon raporu.")).toBeInTheDocument();
+    expect(screen.getByText("Onay: Bekleniyor")).toBeInTheDocument();
+  });
+
+  it("renders reports loading state", () => {
+    mockUseGetOwnGoogleAdsReportsQuery.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+    });
+    render(<GoogleAdsDashboard />);
+    fireEvent.click(screen.getByRole("button", { name: "Raporlar" }));
+    expect(screen.getByText("Google Ads raporları yükleniyor...")).toBeInTheDocument();
+  });
+
+  it("renders reports error state", () => {
+    mockUseGetOwnGoogleAdsReportsQuery.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+    });
+    render(<GoogleAdsDashboard />);
+    fireEvent.click(screen.getByRole("button", { name: "Raporlar" }));
+    expect(screen.getByText("Google Ads raporları alınamadı.")).toBeInTheDocument();
+  });
+
+  it("renders reports empty state", () => {
+    mockUseGetOwnGoogleAdsReportsQuery.mockReturnValue({
+      data: {
+        data: [],
+        meta: {
+          total: 0,
+          draft: 0,
+          published: 0,
+          clientVisible: 0,
+        },
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<GoogleAdsDashboard />);
+    fireEvent.click(screen.getByRole("button", { name: "Raporlar" }));
+    expect(screen.getByText("Henüz yayınlanan Google Ads raporu bulunmuyor.")).toBeInTheDocument();
   });
 
   it("submits approval and acknowledgement actions", async () => {

@@ -1459,3 +1459,76 @@ Latest reported checks: `adminandemployeePanel npm run check`, `clientPanel npm 
   - `adminandemployeePanel/src/app/pages/__tests__/GoogleAdsAdmin.test.tsx`
     - sync logs render
     - retry action
+
+## 2026-05-16 Update - Google Ads Faz 9 Reporting + Export Foundation
+
+### Backend
+- Google Ads report domain modeli eklendi:
+  - `GoogleAdsReportType` enumu:
+    - `WEEKLY`
+    - `MONTHLY`
+    - `CAMPAIGN_PERFORMANCE`
+    - `SEARCH_TERMS`
+    - `KEYWORD_PERFORMANCE`
+    - `BUDGET_RECOMMENDATION`
+    - `CONVERSION_TRACKING`
+  - `GoogleAdsReportStatus` enumu:
+    - `DRAFT`
+    - `PUBLISHED`
+    - `ARCHIVED`
+  - `GoogleAdsReport` entity:
+    - client/project scope
+    - draft/publish lifecycle
+    - `clientVisible`, `publishedAt`
+    - report-acknowledgement task köprüsü alanları
+- Yeni report endpointleri:
+  - Admin:
+    - `GET /api/v1/admin/clients/:clientId/google-ads/reports`
+    - `POST /api/v1/admin/clients/:clientId/google-ads/reports`
+    - `PATCH /api/v1/admin/google-ads/reports/:reportId`
+  - Assigned employee:
+    - `GET /api/v1/google-ads/clients/:clientId/reports`
+    - `POST /api/v1/google-ads/clients/:clientId/reports`
+    - `PATCH /api/v1/google-ads/reports/:reportId`
+  - Client own:
+    - `GET /api/v1/clients/me/google-ads/reports`
+- Publish + acknowledgement lifecycle:
+  - publish sırasında `clientVisible/publishedAt` state yönetimi
+  - acknowledgement request sırasında task oluşturma/güncelleme
+  - `MetaAdsApprovalType.GOOGLE_ADS_REPORT_ACKNOWLEDGEMENT` ile task approval köprüsü
+- Authz genişletmesi:
+  - admin (`reports.read`, `reports.manage`)
+  - assigned (`googleAds.reporting.read.assigned`, `reports.manage.assigned`, `googleAds.approvals.create.assigned`)
+  - own-client (`googleAds.config.read.own`, `reports.read.own`)
+
+### Admin + Employee Panel
+- Google Ads feature katmanı report contract ile genişletildi:
+  - `adminandemployeePanel/src/app/features/googleAds/googleAdsTypes.ts`
+  - `adminandemployeePanel/src/app/features/googleAds/googleAdsApi.ts`
+- `GoogleAdsWorkspace` FAZ-09 reports view:
+  - rapor taslağı oluşturma formu
+  - report type / period / summary / client-visible alanları
+  - taslak publish aksiyonu
+  - acknowledgement request aksiyonu
+  - search terms + keyword performance report tipi görünürlüğü
+
+### Client Panel
+- Own Google Ads reports endpoint entegrasyonu:
+  - `clientPanel/src/app/features/googleAds/googleAdsTypes.ts`
+  - `clientPanel/src/app/features/googleAds/googleAdsApi.ts`
+  - `useGetOwnGoogleAdsReportsQuery`
+- `google-ads-dashboard` reports tabı API-driven hale getirildi:
+  - loading/error/empty states
+  - report type/status/ack status etiketleri
+  - period + summary görünürlüğü
+
+### Testing
+- Backend e2e genişletmesi (`google-ads-authz.e2e-spec.ts`):
+  - admin draft/published create
+  - assigned create/update scope doğrulamaları
+  - own-client visible reports filtreleme
+- Frontend test genişletmeleri:
+  - `adminandemployeePanel/src/app/employee/pages/__tests__/GoogleAdsWorkspace.test.tsx`
+    - report draft form + search terms row
+  - `clientPanel/src/app/pages/__tests__/google-ads-dashboard.test.tsx`
+    - reports row render + loading/error/empty states

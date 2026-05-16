@@ -6,6 +6,8 @@ import {
   ClientStatus,
   EmployeeClientAssignmentScope,
   GoogleAdsConnectionStatus,
+  GoogleAdsReportStatus,
+  GoogleAdsReportType,
   MetaAdsApprovalStatus,
   MetaAdsApprovalType,
   PrismaClient,
@@ -41,6 +43,7 @@ const CLIENT_OWN_GOOGLE_ADS_INSIGHTS_PATH = "/api/v1/clients/me/google-ads/insig
 const CLIENT_OWN_GOOGLE_ADS_KEYWORDS_PATH = "/api/v1/clients/me/google-ads/keywords";
 const CLIENT_OWN_GOOGLE_ADS_CONVERSIONS_PATH = "/api/v1/clients/me/google-ads/conversions";
 const CLIENT_OWN_GOOGLE_ADS_SEARCH_TERMS_PATH = "/api/v1/clients/me/google-ads/search-terms";
+const CLIENT_OWN_GOOGLE_ADS_REPORTS_PATH = "/api/v1/clients/me/google-ads/reports";
 const CLIENT_OWN_GOOGLE_ADS_SYNC_PATH = "/api/v1/clients/me/google-ads/sync";
 const TEST_EMAIL_PREFIX = "authz-google-ads-";
 const TEST_SLUG_PREFIX = "authz-google-ads-";
@@ -1366,6 +1369,201 @@ describe("Google Ads Config Authorization (e2e)", () => {
     mockGoogleAdsReportingError = null;
   });
 
+  it("admin can create draft/published Google Ads reports and request acknowledgement", async () => {
+    const suffix = uniqueSuffix("google-ads-report-admin");
+    const project = await prisma.project.create({
+      data: {
+        clientProfileId: assignedGoogleAdsClientId,
+        serviceKey: PurchasedServiceKey.GOOGLE_ADS,
+        name: "Google Ads Report Admin Project",
+        slug: `${TEST_SLUG_PREFIX}report-admin-${suffix}`,
+        status: "IN_PROGRESS",
+        priority: "MEDIUM",
+      },
+      select: { id: true },
+    });
+
+    const draftResponse = await request(app.getHttpServer())
+      .post(adminGoogleAdsReportsPath(assignedGoogleAdsClientId))
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        projectId: project.id,
+        periodStart: "2026-05-01T00:00:00.000Z",
+        periodEnd: "2026-05-07T23:59:59.999Z",
+        type: GoogleAdsReportType.SEARCH_TERMS,
+        summary: "Search terms kalite kontrol raporu.",
+      })
+      .expect(201);
+
+    expect(draftResponse.body).toEqual(
+      expect.objectContaining({
+        clientProfileId: assignedGoogleAdsClientId,
+        projectId: project.id,
+        type: GoogleAdsReportType.SEARCH_TERMS,
+        status: GoogleAdsReportStatus.DRAFT,
+        clientVisible: false,
+        acknowledgementStatus: "NOT_REQUESTED",
+      }),
+    );
+
+    const publishedResponse = await request(app.getHttpServer())
+      .post(adminGoogleAdsReportsPath(assignedGoogleAdsClientId))
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        projectId: project.id,
+        periodStart: "2026-05-08T00:00:00.000Z",
+        periodEnd: "2026-05-15T23:59:59.999Z",
+        type: GoogleAdsReportType.KEYWORD_PERFORMANCE,
+        summary: "Keyword performance raporu.",
+        clientVisible: true,
+        requestAcknowledgement: true,
+      })
+      .expect(201);
+
+    expect(publishedResponse.body).toEqual(
+      expect.objectContaining({
+        clientProfileId: assignedGoogleAdsClientId,
+        type: GoogleAdsReportType.KEYWORD_PERFORMANCE,
+        status: GoogleAdsReportStatus.PUBLISHED,
+        clientVisible: true,
+        acknowledgementStatus: "PENDING",
+        acknowledgementTaskId: expect.any(String),
+      }),
+    );
+
+    const acknowledgementTaskId = publishedResponse.body.acknowledgementTaskId as string;
+    const task = await prisma.task.findUnique({
+      where: { id: acknowledgementTaskId },
+      select: {
+        approvalType: true,
+        approvalStatus: true,
+      },
+    });
+
+    expect(task).toEqual(
+      expect.objectContaining({
+        approvalType: MetaAdsApprovalType.GOOGLE_ADS_REPORT_ACKNOWLEDGEMENT,
+        approvalStatus: MetaAdsApprovalStatus.PENDING,
+      }),
+    );
+
+    const archiveResponse = await request(app.getHttpServer())
+      .patch(adminGoogleAdsReportByIdPath(draftResponse.body.id as string))
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        status: GoogleAdsReportStatus.ARCHIVED,
+      })
+      .expect(200);
+
+    expect(archiveResponse.body).toEqual(
+      expect.objectContaining({
+        status: GoogleAdsReportStatus.ARCHIVED,
+        clientVisible: false,
+      }),
+    );
+  });
+
+  it("assigned employee can create reports in assigned scope and unassigned scope is denied", async () => {
+    const suffix = uniqueSuffix("google-ads-report-assigned");
+    const project = await prisma.project.create({
+      data: {
+        clientProfileId: assignedGoogleAdsClientId,
+        serviceKey: PurchasedServiceKey.GOOGLE_ADS,
+        name: "Google Ads Report Assigned Project",
+        slug: `${TEST_SLUG_PREFIX}report-assigned-${suffix}`,
+        status: "IN_PROGRESS",
+        priority: "MEDIUM",
+      },
+      select: { id: true },
+    });
+
+    const assignedCreateResponse = await request(app.getHttpServer())
+      .post(assignedGoogleAdsReportsPath(assignedGoogleAdsClientId))
+      .set("Authorization", `Bearer ${performanceToken}`)
+      .send({
+        projectId: project.id,
+        periodStart: "2026-05-01T00:00:00.000Z",
+        periodEnd: "2026-05-07T23:59:59.999Z",
+        type: GoogleAdsReportType.WEEKLY,
+        summary: "Assigned weekly Google Ads raporu.",
+      })
+      .expect(201);
+
+    expect(assignedCreateResponse.body).toEqual(
+      expect.objectContaining({
+        clientProfileId: assignedGoogleAdsClientId,
+        status: GoogleAdsReportStatus.DRAFT,
+      }),
+    );
+
+    await request(app.getHttpServer())
+      .post(assignedGoogleAdsReportsPath(unassignedGoogleAdsClientId))
+      .set("Authorization", `Bearer ${performanceToken}`)
+      .send({
+        periodStart: "2026-05-01T00:00:00.000Z",
+        periodEnd: "2026-05-07T23:59:59.999Z",
+        type: GoogleAdsReportType.WEEKLY,
+      })
+      .expect(404);
+  });
+
+  it("own client reports endpoint returns only own client-visible reports", async () => {
+    await prisma.googleAdsReport.createMany({
+      data: [
+        {
+          clientProfileId: ownGoogleAdsClientId,
+          periodStart: new Date("2026-05-01T00:00:00.000Z"),
+          periodEnd: new Date("2026-05-07T23:59:59.999Z"),
+          type: GoogleAdsReportType.WEEKLY,
+          status: GoogleAdsReportStatus.DRAFT,
+          summary: "Own draft report",
+          clientVisible: false,
+        },
+        {
+          clientProfileId: ownGoogleAdsClientId,
+          periodStart: new Date("2026-05-08T00:00:00.000Z"),
+          periodEnd: new Date("2026-05-14T23:59:59.999Z"),
+          type: GoogleAdsReportType.SEARCH_TERMS,
+          status: GoogleAdsReportStatus.PUBLISHED,
+          summary: "Own visible report",
+          clientVisible: true,
+        },
+        {
+          clientProfileId: assignedGoogleAdsClientId,
+          periodStart: new Date("2026-05-08T00:00:00.000Z"),
+          periodEnd: new Date("2026-05-14T23:59:59.999Z"),
+          type: GoogleAdsReportType.KEYWORD_PERFORMANCE,
+          status: GoogleAdsReportStatus.PUBLISHED,
+          summary: "Other client visible report",
+          clientVisible: true,
+        },
+      ],
+    });
+
+    const response = await request(app.getHttpServer())
+      .get(CLIENT_OWN_GOOGLE_ADS_REPORTS_PATH)
+      .set("Authorization", `Bearer ${ownClientToken}`)
+      .expect(200);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        data: expect.any(Array),
+        meta: expect.objectContaining({
+          total: expect.any(Number),
+          clientVisible: expect.any(Number),
+        }),
+      }),
+    );
+
+    const rows = response.body.data as Array<Record<string, unknown>>;
+    expect(rows.length).toBeGreaterThan(0);
+    expect(
+      rows.some((row) => row.clientProfileId === ownGoogleAdsClientId && row.clientVisible === true),
+    ).toBe(true);
+    expect(rows.some((row) => row.clientProfileId === ownGoogleAdsClientId && row.clientVisible === false)).toBe(false);
+    expect(rows.some((row) => row.clientProfileId === assignedGoogleAdsClientId)).toBe(false);
+  });
+
   it("client own reporting endpoints return summary, campaigns and insights", async () => {
     const summaryResponse = await request(app.getHttpServer())
       .get(`${CLIENT_OWN_GOOGLE_ADS_SUMMARY_PATH}?since=2026-05-07&until=2026-05-07`)
@@ -1831,6 +2029,14 @@ describe("Google Ads Config Authorization (e2e)", () => {
     return `${ADMIN_CLIENTS_PATH}/${clientId}/google-ads/insights`;
   }
 
+  function adminGoogleAdsReportsPath(clientId: string): string {
+    return `${ADMIN_CLIENTS_PATH}/${clientId}/google-ads/reports`;
+  }
+
+  function adminGoogleAdsReportByIdPath(reportId: string): string {
+    return `/api/v1/admin/google-ads/reports/${reportId}`;
+  }
+
   function assignedGoogleAdsConfigPath(clientId: string): string {
     return `/api/v1/google-ads/clients/${clientId}/config`;
   }
@@ -1849,6 +2055,10 @@ describe("Google Ads Config Authorization (e2e)", () => {
 
   function assignedGoogleAdsSearchTermsPath(clientId: string): string {
     return `/api/v1/google-ads/clients/${clientId}/search-terms`;
+  }
+
+  function assignedGoogleAdsReportsPath(clientId: string): string {
+    return `/api/v1/google-ads/clients/${clientId}/reports`;
   }
 
   function assignedGoogleAdsSyncPath(clientId: string): string {

@@ -3,7 +3,10 @@ import {
   DeliveryReleaseApprovalStatus,
   GoogleAdsConnectionStatus,
   GoogleAdsInsightLevel,
+  GoogleAdsReportStatus,
+  GoogleAdsReportType,
   GoogleAdsSyncStatus,
+  MetaAdsApprovalType,
   MetaAdsApprovalStatus,
   Prisma,
   PurchasedServiceKey,
@@ -23,11 +26,14 @@ import { ConfigService } from "@nestjs/config";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { PrismaService } from "../database/prisma.service";
 import { ConnectManualGoogleAdsDto } from "./dto/connect-manual-google-ads.dto";
+import { CreateGoogleAdsReportDto } from "./dto/create-google-ads-report.dto";
 import { GoogleAdsCampaignsQueryDto } from "./dto/google-ads-campaigns-query.dto";
 import { GoogleAdsDateRangeQueryDto } from "./dto/google-ads-date-range-query.dto";
 import { GoogleAdsInsightsQueryDto } from "./dto/google-ads-insights-query.dto";
+import { GoogleAdsReportsQueryDto } from "./dto/google-ads-reports-query.dto";
 import { GoogleAdsSyncLogsQueryDto } from "./dto/google-ads-sync-logs-query.dto";
 import { TestGoogleAdsConnectionDto } from "./dto/test-google-ads-connection.dto";
+import { UpdateGoogleAdsReportDto } from "./dto/update-google-ads-report.dto";
 import { UpdateGoogleAdsConfigDto } from "./dto/update-google-ads-config.dto";
 import {
   GoogleAdsApiService,
@@ -41,10 +47,15 @@ const GOOGLE_ADS_CONFIG_READ_ANY_PERMISSION = "googleAds.config.read.any";
 const GOOGLE_ADS_CONFIG_MANAGE_ANY_PERMISSION = "googleAds.config.manage.any";
 const GOOGLE_ADS_CONFIG_READ_ASSIGNED_PERMISSION = "googleAds.config.read.assigned";
 const GOOGLE_ADS_REPORTING_READ_ASSIGNED_PERMISSION = "googleAds.reporting.read.assigned";
+const GOOGLE_ADS_NOTES_MANAGE_ASSIGNED_PERMISSION = "googleAds.notes.manage.assigned";
+const GOOGLE_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION = "googleAds.approvals.create.assigned";
 const GOOGLE_ADS_SYNC_READ_ASSIGNED_PERMISSION = "googleAds.sync.read.assigned";
 const GOOGLE_ADS_CONFIG_READ_OWN_PERMISSION = "googleAds.config.read.own";
 const GOOGLE_ADS_REPORTING_READ_ANY_PERMISSION = "googleAds.reporting.read.any";
 const GOOGLE_ADS_SYNC_RUN_ANY_PERMISSION = "googleAds.sync.run.any";
+const REPORTS_READ_PERMISSION = "reports.read";
+const REPORTS_MANAGE_PERMISSION = "reports.manage";
+const REPORTS_READ_OWN_PERMISSION = "reports.read.own";
 const DEFAULT_GOOGLE_ADS_REQUIRED_SCOPES = [
   "https://www.googleapis.com/auth/adwords",
 ] as const;
@@ -111,6 +122,38 @@ const googleAdsSyncLogSelect = {
   createdAt: true,
 } satisfies Prisma.GoogleAdsSyncLogSelect;
 
+const googleAdsReportSelect = {
+  id: true,
+  clientProfileId: true,
+  projectId: true,
+  periodStart: true,
+  periodEnd: true,
+  type: true,
+  status: true,
+  summary: true,
+  metricsSnapshot: true,
+  clientVisible: true,
+  publishedAt: true,
+  acknowledgementRequestedAt: true,
+  acknowledgedAt: true,
+  createdAt: true,
+  updatedAt: true,
+  project: {
+    select: {
+      id: true,
+      name: true,
+    },
+  },
+  acknowledgementTask: {
+    select: {
+      id: true,
+      approvalStatus: true,
+      status: true,
+      updatedAt: true,
+    },
+  },
+} satisfies Prisma.GoogleAdsReportSelect;
+
 type GoogleAdsConfigModel = Prisma.ClientGoogleAdsConfigGetPayload<{
   select: typeof googleAdsConfigSummarySelect;
 }>;
@@ -121,6 +164,10 @@ type GoogleAdsCredentialSecureModel = Prisma.ClientGoogleAdsCredentialGetPayload
 
 type GoogleAdsDailyInsightModel = Prisma.GoogleAdsDailyInsightGetPayload<{
   select: typeof googleAdsDailyInsightSelect;
+}>;
+
+type GoogleAdsReportModel = Prisma.GoogleAdsReportGetPayload<{
+  select: typeof googleAdsReportSelect;
 }>;
 
 type GoogleAdsConfigPatchData = {
@@ -472,6 +519,44 @@ type AdminGoogleAdsClientListResponse = {
     connected: number;
     error: number;
     pendingApprovals: number;
+  };
+};
+
+type GoogleAdsReportAcknowledgementStatus =
+  | "NOT_REQUESTED"
+  | "PENDING"
+  | "ACKNOWLEDGED"
+  | "CHANGES_REQUESTED";
+
+type GoogleAdsReportItem = {
+  id: string;
+  clientProfileId: string;
+  projectId: string | null;
+  projectName: string | null;
+  periodStart: string;
+  periodEnd: string;
+  type: GoogleAdsReportType;
+  status: GoogleAdsReportStatus;
+  summary: string | null;
+  metricsSnapshot: Prisma.JsonValue | null;
+  clientVisible: boolean;
+  publishedAt: string | null;
+  acknowledgementRequestedAt: string | null;
+  acknowledgedAt: string | null;
+  acknowledgementStatus: GoogleAdsReportAcknowledgementStatus;
+  acknowledgementTaskId: string | null;
+  acknowledgementTaskUpdatedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type GoogleAdsReportsResponse = {
+  data: GoogleAdsReportItem[];
+  meta: {
+    total: number;
+    draft: number;
+    published: number;
+    clientVisible: number;
   };
 };
 
@@ -1256,6 +1341,45 @@ export class GoogleAdsService {
     });
   }
 
+  async getAdminClientReports(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+    query: GoogleAdsReportsQueryDto,
+  ): Promise<GoogleAdsReportsResponse> {
+    this.assertCanReadAnyConfig(currentUser);
+    this.assertCanReadReports(currentUser);
+    await this.assertClientProfileExists(clientProfileId);
+    await this.assertClientHasActiveGoogleAdsService(clientProfileId);
+
+    return this.getReportsByClientProfileId(clientProfileId, query, {
+      onlyClientVisible: false,
+    });
+  }
+
+  async createAdminClientReport(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+    dto: CreateGoogleAdsReportDto,
+  ): Promise<GoogleAdsReportItem> {
+    this.assertCanManageAnyConfig(currentUser);
+    this.assertCanManageReports(currentUser);
+    await this.assertClientProfileExists(clientProfileId);
+    await this.assertClientHasActiveGoogleAdsService(clientProfileId);
+
+    return this.createReportByClientProfileId(currentUser, clientProfileId, dto);
+  }
+
+  async updateAdminReport(
+    currentUser: AuthenticatedUser,
+    reportId: string,
+    dto: UpdateGoogleAdsReportDto,
+  ): Promise<GoogleAdsReportItem> {
+    this.assertCanManageAnyConfig(currentUser);
+    this.assertCanManageReports(currentUser);
+
+    return this.updateReportById(currentUser, reportId, dto, { scope: "ANY" });
+  }
+
   async getAssignedClientSummary(
     currentUser: AuthenticatedUser,
     clientProfileId: string,
@@ -1368,6 +1492,54 @@ export class GoogleAdsService {
     });
   }
 
+  async getAssignedClientReports(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+    query: GoogleAdsReportsQueryDto,
+  ): Promise<GoogleAdsReportsResponse> {
+    this.assertCanReadAssignedConfig(currentUser);
+    this.assertCanReadAssignedReporting(currentUser);
+    await this.assertAssignedClientProfileOrFail(currentUser.id, clientProfileId);
+    await this.assertClientHasActiveGoogleAdsService(clientProfileId);
+
+    return this.getReportsByClientProfileId(clientProfileId, query, {
+      onlyClientVisible: false,
+    });
+  }
+
+  async createAssignedClientReport(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+    dto: CreateGoogleAdsReportDto,
+  ): Promise<GoogleAdsReportItem> {
+    this.assertCanReadAssignedConfig(currentUser);
+    this.assertCanManageAssignedNotes(currentUser);
+    if (dto.requestAcknowledgement === true) {
+      this.assertCanCreateAssignedApprovals(currentUser);
+    }
+    await this.assertAssignedClientProfileOrFail(currentUser.id, clientProfileId);
+    await this.assertClientHasActiveGoogleAdsService(clientProfileId);
+
+    return this.createReportByClientProfileId(currentUser, clientProfileId, dto);
+  }
+
+  async updateAssignedReport(
+    currentUser: AuthenticatedUser,
+    reportId: string,
+    dto: UpdateGoogleAdsReportDto,
+  ): Promise<GoogleAdsReportItem> {
+    this.assertCanReadAssignedConfig(currentUser);
+    this.assertCanManageAssignedNotes(currentUser);
+    if (dto.requestAcknowledgement === true) {
+      this.assertCanCreateAssignedApprovals(currentUser);
+    }
+
+    return this.updateReportById(currentUser, reportId, dto, {
+      scope: "ASSIGNED",
+      employeeUserId: currentUser.id,
+    });
+  }
+
   async getOwnClientSummary(
     currentUser: AuthenticatedUser,
     query: GoogleAdsDateRangeQueryDto,
@@ -1477,6 +1649,21 @@ export class GoogleAdsService {
       trigger: "ON_DEMAND_CLIENT_REFRESH",
       applySyncTtl: true,
       revealDetailedError: false,
+    });
+  }
+
+  async getOwnClientReports(
+    currentUser: AuthenticatedUser,
+    query: GoogleAdsReportsQueryDto,
+  ): Promise<GoogleAdsReportsResponse> {
+    this.assertCanReadOwnConfig(currentUser);
+    this.assertCanReadOwnReports(currentUser);
+    const clientProfileId = this.getClientProfileIdOrFail(currentUser);
+    await this.assertClientProfileExists(clientProfileId);
+    await this.assertClientHasActiveGoogleAdsService(clientProfileId);
+
+    return this.getReportsByClientProfileId(clientProfileId, query, {
+      onlyClientVisible: true,
     });
   }
 
@@ -2141,6 +2328,474 @@ export class GoogleAdsService {
       level,
       limit: query.limit ?? DEFAULT_INSIGHTS_LIMIT,
     });
+  }
+
+  private async getReportsByClientProfileId(
+    clientProfileId: string,
+    query: GoogleAdsReportsQueryDto,
+    options: {
+      onlyClientVisible: boolean;
+    },
+  ): Promise<GoogleAdsReportsResponse> {
+    const where: Prisma.GoogleAdsReportWhereInput = {
+      clientProfileId,
+    };
+
+    if (options.onlyClientVisible) {
+      where.clientVisible = true;
+    } else if (query.clientVisible !== undefined) {
+      where.clientVisible = query.clientVisible;
+    }
+
+    if (query.status !== undefined) {
+      where.status = query.status;
+    }
+
+    if (query.type !== undefined) {
+      where.type = query.type;
+    }
+
+    const statsWhere: Prisma.GoogleAdsReportWhereInput = {
+      clientProfileId,
+      ...(options.onlyClientVisible ? { clientVisible: true } : {}),
+    };
+    const limit = query.limit ?? 30;
+
+    const [reports, total, draft, published, clientVisible] = await this.prisma.$transaction([
+      this.prisma.googleAdsReport.findMany({
+        where,
+        select: googleAdsReportSelect,
+        orderBy: [{ periodEnd: "desc" }, { createdAt: "desc" }],
+        take: limit,
+      }),
+      this.prisma.googleAdsReport.count({ where }),
+      this.prisma.googleAdsReport.count({
+        where: {
+          ...statsWhere,
+          status: GoogleAdsReportStatus.DRAFT,
+        },
+      }),
+      this.prisma.googleAdsReport.count({
+        where: {
+          ...statsWhere,
+          status: GoogleAdsReportStatus.PUBLISHED,
+        },
+      }),
+      this.prisma.googleAdsReport.count({
+        where: {
+          ...statsWhere,
+          clientVisible: true,
+        },
+      }),
+    ]);
+
+    return {
+      data: reports.map((report) => this.toGoogleAdsReportItem(report)),
+      meta: {
+        total,
+        draft,
+        published,
+        clientVisible,
+      },
+    };
+  }
+
+  private async createReportByClientProfileId(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+    dto: CreateGoogleAdsReportDto,
+  ): Promise<GoogleAdsReportItem> {
+    const period = this.resolveGoogleAdsReportPeriod(dto.periodStart, dto.periodEnd);
+    const summary = this.normalizeGoogleAdsReportSummary(dto.summary);
+    const projectId = await this.resolveGoogleAdsReportProjectId(clientProfileId, dto.projectId ?? null);
+    const shouldPublish = dto.clientVisible === true || dto.requestAcknowledgement === true;
+    const now = new Date();
+
+    let report = await this.prisma.googleAdsReport.create({
+      data: {
+        clientProfileId,
+        projectId,
+        periodStart: period.periodStart,
+        periodEnd: period.periodEnd,
+        type: dto.type,
+        status: shouldPublish ? GoogleAdsReportStatus.PUBLISHED : GoogleAdsReportStatus.DRAFT,
+        summary,
+        metricsSnapshot: dto.metricsSnapshot as Prisma.InputJsonValue | undefined,
+        createdByUserId: currentUser.id,
+        publishedByUserId: shouldPublish ? currentUser.id : null,
+        clientVisible: shouldPublish,
+        publishedAt: shouldPublish ? now : null,
+      },
+      select: googleAdsReportSelect,
+    });
+
+    if (dto.requestAcknowledgement === true) {
+      const acknowledgementProjectId =
+        projectId ?? (await this.resolveGoogleAdsReportProjectId(clientProfileId, null));
+      if (!acknowledgementProjectId) {
+        throw new BadRequestException(
+          "A GOOGLE_ADS project is required to request report acknowledgement.",
+        );
+      }
+
+      const task = await this.prisma.task.create({
+        data: {
+          projectId: acknowledgementProjectId,
+          title: this.buildReportAcknowledgementTaskTitle(
+            report.type,
+            report.periodStart,
+            report.periodEnd,
+          ),
+          description: this.buildReportAcknowledgementTaskDescription(summary),
+          status: TaskStatus.REVIEW,
+          type: TaskType.REVISION,
+          approvalRequired: true,
+          approvalType: MetaAdsApprovalType.GOOGLE_ADS_REPORT_ACKNOWLEDGEMENT,
+          approvalStatus: MetaAdsApprovalStatus.PENDING,
+          approvalRequestedAt: now,
+          approvalContext: {
+            reportId: report.id,
+            reportType: report.type,
+            periodStart: report.periodStart.toISOString(),
+            periodEnd: report.periodEnd.toISOString(),
+          },
+        },
+        select: { id: true },
+      });
+
+      report = await this.prisma.googleAdsReport.update({
+        where: {
+          id: report.id,
+        },
+        data: {
+          acknowledgementRequestedAt: now,
+          acknowledgementTaskId: task.id,
+        },
+        select: googleAdsReportSelect,
+      });
+    }
+
+    return this.toGoogleAdsReportItem(report);
+  }
+
+  private async updateReportById(
+    currentUser: AuthenticatedUser,
+    reportId: string,
+    dto: UpdateGoogleAdsReportDto,
+    options: {
+      scope: "ANY" | "ASSIGNED";
+      employeeUserId?: string;
+    },
+  ): Promise<GoogleAdsReportItem> {
+    this.assertHasGoogleAdsReportUpdatePayload(dto);
+
+    const existing = await this.prisma.googleAdsReport.findUnique({
+      where: { id: reportId },
+      select: {
+        id: true,
+        clientProfileId: true,
+        projectId: true,
+        type: true,
+        periodStart: true,
+        periodEnd: true,
+        summary: true,
+        status: true,
+        clientVisible: true,
+        publishedAt: true,
+        publishedByUserId: true,
+        acknowledgementTaskId: true,
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundException("Google Ads report not found.");
+    }
+
+    if (options.scope === "ASSIGNED") {
+      if (!options.employeeUserId) {
+        throw new ForbiddenException("Missing employee context for assigned report update.");
+      }
+      await this.assertAssignedClientProfileOrFail(options.employeeUserId, existing.clientProfileId);
+    }
+
+    await this.assertClientHasActiveGoogleAdsService(existing.clientProfileId);
+
+    const now = new Date();
+    const updateData: Prisma.GoogleAdsReportUpdateInput = {};
+    const normalizedSummary =
+      dto.summary !== undefined ? this.normalizeGoogleAdsReportSummary(dto.summary) : undefined;
+
+    if (dto.summary !== undefined) {
+      updateData.summary = normalizedSummary;
+    }
+
+    if (dto.metricsSnapshot !== undefined) {
+      updateData.metricsSnapshot = dto.metricsSnapshot as Prisma.InputJsonValue;
+    }
+
+    if (dto.clientVisible !== undefined) {
+      updateData.clientVisible = dto.clientVisible;
+    }
+
+    if (dto.status !== undefined) {
+      updateData.status = dto.status;
+      if (dto.status === GoogleAdsReportStatus.DRAFT) {
+        updateData.clientVisible = false;
+      }
+      if (dto.status === GoogleAdsReportStatus.ARCHIVED) {
+        updateData.clientVisible = false;
+      }
+    }
+
+    if (dto.status === GoogleAdsReportStatus.PUBLISHED && dto.clientVisible === false) {
+      throw new BadRequestException("Published report cannot be hidden from client.");
+    }
+
+    const shouldPublish =
+      dto.requestAcknowledgement === true ||
+      dto.clientVisible === true ||
+      dto.status === GoogleAdsReportStatus.PUBLISHED;
+
+    if (shouldPublish) {
+      if (!existing.publishedAt) {
+        updateData.publishedAt = now;
+      }
+      if (!existing.publishedByUserId) {
+        updateData.publishedBy = {
+          connect: {
+            id: currentUser.id,
+          },
+        };
+      }
+      if (dto.status === undefined) {
+        updateData.status = GoogleAdsReportStatus.PUBLISHED;
+      }
+      if (dto.clientVisible === undefined) {
+        updateData.clientVisible = true;
+      }
+    }
+
+    if (
+      dto.requestAcknowledgement === true &&
+      (dto.status === GoogleAdsReportStatus.DRAFT || dto.status === GoogleAdsReportStatus.ARCHIVED)
+    ) {
+      throw new BadRequestException(
+        "Acknowledgement request cannot be created for DRAFT or ARCHIVED report status.",
+      );
+    }
+
+    const fallbackProjectId =
+      existing.projectId ??
+      (await this.resolveGoogleAdsReportProjectId(existing.clientProfileId, null));
+
+    if (dto.requestAcknowledgement === true && !fallbackProjectId) {
+      throw new BadRequestException(
+        "A GOOGLE_ADS project is required to request report acknowledgement.",
+      );
+    }
+
+    if (dto.requestAcknowledgement === true && fallbackProjectId && !existing.projectId) {
+      updateData.project = {
+        connect: {
+          id: fallbackProjectId,
+        },
+      };
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      let acknowledgementTaskId = existing.acknowledgementTaskId;
+
+      if (dto.requestAcknowledgement === true && fallbackProjectId) {
+        const taskPayload: Prisma.TaskUncheckedCreateInput = {
+          projectId: fallbackProjectId,
+          title: this.buildReportAcknowledgementTaskTitle(
+            existing.type,
+            existing.periodStart,
+            existing.periodEnd,
+          ),
+          description: this.buildReportAcknowledgementTaskDescription(
+            normalizedSummary ?? existing.summary ?? null,
+          ),
+          status: TaskStatus.REVIEW,
+          type: TaskType.REVISION,
+          approvalRequired: true,
+          approvalType: MetaAdsApprovalType.GOOGLE_ADS_REPORT_ACKNOWLEDGEMENT,
+          approvalStatus: MetaAdsApprovalStatus.PENDING,
+          approvalRequestedAt: now,
+          approvalContext: {
+            reportId: existing.id,
+          },
+        };
+
+        if (acknowledgementTaskId) {
+          await tx.task.update({
+            where: { id: acknowledgementTaskId },
+            data: {
+              title: taskPayload.title,
+              description: taskPayload.description,
+              status: TaskStatus.REVIEW,
+              approvalRequired: true,
+              approvalType: MetaAdsApprovalType.GOOGLE_ADS_REPORT_ACKNOWLEDGEMENT,
+              approvalStatus: MetaAdsApprovalStatus.PENDING,
+              approvalRequestedAt: now,
+              approvalRespondedAt: null,
+              approvalRespondedByUserId: null,
+              approvalResponseNote: null,
+              approvalContext: taskPayload.approvalContext,
+            },
+          });
+        } else {
+          const createdTask = await tx.task.create({
+            data: taskPayload,
+            select: { id: true },
+          });
+          acknowledgementTaskId = createdTask.id;
+        }
+
+        updateData.acknowledgementRequestedAt = now;
+        if (acknowledgementTaskId) {
+          updateData.acknowledgementTask = {
+            connect: {
+              id: acknowledgementTaskId,
+            },
+          };
+        }
+      }
+
+      return tx.googleAdsReport.update({
+        where: { id: existing.id },
+        data: updateData,
+        select: googleAdsReportSelect,
+      });
+    });
+
+    return this.toGoogleAdsReportItem(updated);
+  }
+
+  private toGoogleAdsReportItem(report: GoogleAdsReportModel): GoogleAdsReportItem {
+    const acknowledgementStatus =
+      report.acknowledgementRequestedAt === null
+        ? "NOT_REQUESTED"
+        : report.acknowledgementTask?.approvalStatus === MetaAdsApprovalStatus.ACKNOWLEDGED ||
+            report.acknowledgementTask?.approvalStatus === MetaAdsApprovalStatus.APPROVED
+          ? "ACKNOWLEDGED"
+          : report.acknowledgementTask?.approvalStatus === MetaAdsApprovalStatus.CHANGES_REQUESTED ||
+              report.acknowledgementTask?.approvalStatus === MetaAdsApprovalStatus.REJECTED
+            ? "CHANGES_REQUESTED"
+            : "PENDING";
+
+    return {
+      id: report.id,
+      clientProfileId: report.clientProfileId,
+      projectId: report.projectId ?? null,
+      projectName: report.project?.name ?? null,
+      periodStart: report.periodStart.toISOString(),
+      periodEnd: report.periodEnd.toISOString(),
+      type: report.type,
+      status: report.status,
+      summary: report.summary ?? null,
+      metricsSnapshot: (report.metricsSnapshot as Prisma.JsonValue | null) ?? null,
+      clientVisible: report.clientVisible,
+      publishedAt: report.publishedAt?.toISOString() ?? null,
+      acknowledgementRequestedAt: report.acknowledgementRequestedAt?.toISOString() ?? null,
+      acknowledgedAt: report.acknowledgedAt?.toISOString() ?? null,
+      acknowledgementStatus,
+      acknowledgementTaskId: report.acknowledgementTask?.id ?? null,
+      acknowledgementTaskUpdatedAt: report.acknowledgementTask?.updatedAt.toISOString() ?? null,
+      createdAt: report.createdAt.toISOString(),
+      updatedAt: report.updatedAt.toISOString(),
+    };
+  }
+
+  private resolveGoogleAdsReportPeriod(periodStartRaw: string, periodEndRaw: string): {
+    periodStart: Date;
+    periodEnd: Date;
+  } {
+    const periodStart = new Date(periodStartRaw);
+    const periodEnd = new Date(periodEndRaw);
+
+    if (Number.isNaN(periodStart.getTime()) || Number.isNaN(periodEnd.getTime())) {
+      throw new BadRequestException("Report periodStart and periodEnd must be valid ISO date values.");
+    }
+
+    if (periodStart > periodEnd) {
+      throw new BadRequestException("Report periodStart cannot be greater than periodEnd.");
+    }
+
+    return { periodStart, periodEnd };
+  }
+
+  private normalizeGoogleAdsReportSummary(summary: string | undefined): string | null {
+    if (summary === undefined) {
+      return null;
+    }
+
+    const normalized = summary.trim();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  private async resolveGoogleAdsReportProjectId(
+    clientProfileId: string,
+    projectId: string | null,
+  ): Promise<string | null> {
+    if (projectId) {
+      const project = await this.prisma.project.findFirst({
+        where: {
+          id: projectId,
+          clientProfileId,
+          serviceKey: PurchasedServiceKey.GOOGLE_ADS,
+        },
+        select: { id: true },
+      });
+
+      if (!project) {
+        throw new BadRequestException(
+          "Provided projectId is not a GOOGLE_ADS project for this client.",
+        );
+      }
+
+      return project.id;
+    }
+
+    const project = await this.prisma.project.findFirst({
+      where: {
+        clientProfileId,
+        serviceKey: PurchasedServiceKey.GOOGLE_ADS,
+      },
+      select: { id: true },
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+    });
+
+    return project?.id ?? null;
+  }
+
+  private buildReportAcknowledgementTaskTitle(
+    reportType: GoogleAdsReportType,
+    periodStart: Date,
+    periodEnd: Date,
+  ): string {
+    const start = periodStart.toISOString().slice(0, 10);
+    const end = periodEnd.toISOString().slice(0, 10);
+    return `Google Ads Rapor Onayı · ${reportType} (${start} - ${end})`;
+  }
+
+  private buildReportAcknowledgementTaskDescription(summary: string | null): string {
+    if (summary) {
+      return `Rapor müşteri onayına açıldı. Özet: ${summary}`;
+    }
+    return "Rapor müşteri onayına açıldı.";
+  }
+
+  private assertHasGoogleAdsReportUpdatePayload(dto: UpdateGoogleAdsReportDto): void {
+    if (
+      dto.status === undefined &&
+      dto.summary === undefined &&
+      dto.metricsSnapshot === undefined &&
+      dto.clientVisible === undefined &&
+      dto.requestAcknowledgement === undefined
+    ) {
+      throw new BadRequestException("Provide at least one report field to update.");
+    }
   }
 
   private async syncInsightsByClientProfileId(
@@ -3309,6 +3964,28 @@ export class GoogleAdsService {
     }
 
     this.assertHasPermission(currentUser, GOOGLE_ADS_CONFIG_READ_OWN_PERMISSION);
+  }
+
+  private assertCanReadReports(currentUser: AuthenticatedUser): void {
+    this.assertHasPermission(currentUser, REPORTS_READ_PERMISSION);
+  }
+
+  private assertCanManageReports(currentUser: AuthenticatedUser): void {
+    this.assertHasPermission(currentUser, REPORTS_MANAGE_PERMISSION);
+  }
+
+  private assertCanReadOwnReports(currentUser: AuthenticatedUser): void {
+    this.assertHasPermission(currentUser, REPORTS_READ_OWN_PERMISSION);
+  }
+
+  private assertCanManageAssignedNotes(currentUser: AuthenticatedUser): void {
+    this.assertEmployeeAccount(currentUser, "manage assigned Google Ads notes");
+    this.assertHasPermission(currentUser, GOOGLE_ADS_NOTES_MANAGE_ASSIGNED_PERMISSION);
+  }
+
+  private assertCanCreateAssignedApprovals(currentUser: AuthenticatedUser): void {
+    this.assertEmployeeAccount(currentUser, "create Google Ads approvals");
+    this.assertHasPermission(currentUser, GOOGLE_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION);
   }
 
   private getClientProfileIdOrFail(currentUser: AuthenticatedUser): string {

@@ -15,6 +15,9 @@ const mockUseGetAssignedClientGoogleAdsKeywordsQuery = vi.fn();
 const mockUseGetAssignedClientGoogleAdsSearchTermsQuery = vi.fn();
 const mockUseGetAssignedClientGoogleAdsConversionsQuery = vi.fn();
 const mockUseGetAssignedClientGoogleAdsAdGroupsQuery = vi.fn();
+const mockUseGetAssignedClientGoogleAdsReportsQuery = vi.fn();
+const mockUseCreateAssignedClientGoogleAdsReportMutation = vi.fn();
+const mockUseUpdateAssignedGoogleAdsReportMutation = vi.fn();
 const mockUseSyncAssignedClientGoogleAdsMutation = vi.fn();
 const mockUseGetProjectsQuery = vi.fn();
 const mockUseGetProjectWorkspaceMessagesQuery = vi.fn();
@@ -53,6 +56,12 @@ vi.mock("../../../features/googleAds/googleAdsApi", () => ({
     mockUseGetAssignedClientGoogleAdsConversionsQuery(...args),
   useGetAssignedClientGoogleAdsAdGroupsQuery: (...args: unknown[]) =>
     mockUseGetAssignedClientGoogleAdsAdGroupsQuery(...args),
+  useGetAssignedClientGoogleAdsReportsQuery: (...args: unknown[]) =>
+    mockUseGetAssignedClientGoogleAdsReportsQuery(...args),
+  useCreateAssignedClientGoogleAdsReportMutation: (...args: unknown[]) =>
+    mockUseCreateAssignedClientGoogleAdsReportMutation(...args),
+  useUpdateAssignedGoogleAdsReportMutation: (...args: unknown[]) =>
+    mockUseUpdateAssignedGoogleAdsReportMutation(...args),
   useSyncAssignedClientGoogleAdsMutation: (...args: unknown[]) =>
     mockUseSyncAssignedClientGoogleAdsMutation(...args),
 }));
@@ -242,6 +251,44 @@ function setupBaseMocks() {
     },
   });
 
+  mockUseGetAssignedClientGoogleAdsReportsQuery.mockReturnValue({
+    data: {
+      data: [
+        {
+          id: "report-1",
+          clientProfileId: "client-google",
+          projectId: "project-google-1",
+          projectName: "Google Ads Project",
+          periodStart: "2026-05-01T00:00:00.000Z",
+          periodEnd: "2026-05-07T23:59:59.999Z",
+          type: "SEARCH_TERMS",
+          status: "DRAFT",
+          summary: "Search terms eşleşme kalitesi raporu.",
+          metricsSnapshot: {
+            topSearchTerms: [],
+          },
+          clientVisible: false,
+          publishedAt: null,
+          acknowledgementRequestedAt: null,
+          acknowledgedAt: null,
+          acknowledgementStatus: "NOT_REQUESTED",
+          acknowledgementTaskId: null,
+          acknowledgementTaskUpdatedAt: null,
+          createdAt: "2026-05-16T08:00:00.000Z",
+          updatedAt: "2026-05-16T08:00:00.000Z",
+        },
+      ],
+      meta: {
+        total: 1,
+        draft: 1,
+        published: 0,
+        clientVisible: 0,
+      },
+    },
+    isLoading: false,
+    isError: false,
+  });
+
   mockUseGetProjectsQuery.mockReturnValue({
     data: {
       data: [
@@ -329,6 +376,16 @@ function setupBaseMocks() {
 
   mockUseSyncAssignedClientGoogleAdsMutation.mockReturnValue([
     vi.fn(() => ({ unwrap: () => Promise.resolve({ success: true }) })),
+    { isLoading: false },
+  ]);
+
+  mockUseCreateAssignedClientGoogleAdsReportMutation.mockReturnValue([
+    vi.fn(() => ({ unwrap: () => Promise.resolve({ id: "report-new" }) })),
+    { isLoading: false },
+  ]);
+
+  mockUseUpdateAssignedGoogleAdsReportMutation.mockReturnValue([
+    vi.fn(() => ({ unwrap: () => Promise.resolve({ id: "report-updated" }) })),
     { isLoading: false },
   ]);
 
@@ -428,11 +485,13 @@ describe("GoogleAdsWorkspace", () => {
     expect(screen.getByText("Not: Banner başlığı güncellensin.")).toBeInTheDocument();
   });
 
-  it("shows report acknowledgement action in reports view", () => {
+  it("renders report draft section and search terms report row in reports view", () => {
     currentUser = { ...baseEmployeeUser, role: "PROJECT_MANAGER" };
     renderWorkspace("reports");
 
-    expect(screen.getByRole("button", { name: "Report Ack Talebi" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Rapor Taslağı Oluştur" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Search Terms Report" })).toBeInTheDocument();
+    expect(screen.getByText("Search terms eşleşme kalitesi raporu.")).toBeInTheDocument();
   });
 
   it("shows empty state when assigned clients have no ACTIVE GOOGLE_ADS service", () => {

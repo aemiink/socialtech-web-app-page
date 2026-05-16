@@ -11,14 +11,18 @@ import { hasUserPermission, selectCurrentUser } from "../../features/auth/authSe
 import { useGetClientsQuery } from "../../features/clients/clientsApi";
 import type { ClientProfile, ClientsListQuery } from "../../features/clients/clientsTypes";
 import {
+  useCreateAssignedClientGoogleAdsReportMutation,
   useGetAssignedClientGoogleAdsAdGroupsQuery,
   useGetAssignedClientGoogleAdsCampaignsQuery,
   useGetAssignedClientGoogleAdsConversionsQuery,
   useGetAssignedClientGoogleAdsKeywordsQuery,
+  useGetAssignedClientGoogleAdsReportsQuery,
   useGetAssignedClientGoogleAdsSearchTermsQuery,
   useGetAssignedClientGoogleAdsSummaryQuery,
   useSyncAssignedClientGoogleAdsMutation,
+  useUpdateAssignedGoogleAdsReportMutation,
 } from "../../features/googleAds/googleAdsApi";
+import type { CreateGoogleAdsReportRequest, GoogleAdsReportItem } from "../../features/googleAds/googleAdsTypes";
 import { useCreateProjectWorkspaceMessageMutation, useGetProjectWorkspaceMessagesQuery, useGetProjectsQuery } from "../../features/projects/projectsApi";
 import { extractApiErrorMessage } from "../../features/projects/projectsUtils";
 import { useCreateTaskMutation, useGetTasksQuery } from "../../features/tasks/tasksApi";
@@ -97,6 +101,19 @@ const ROLE_DEFAULT_APPROVAL_TYPE: Record<WorkspaceMode, NonNullable<CreateTaskRe
   designer: "GOOGLE_ADS_CREATIVE_APPROVAL",
 };
 
+const GOOGLE_ADS_REPORT_TYPE_OPTIONS: Array<{
+  value: CreateGoogleAdsReportRequest["type"];
+  label: string;
+}> = [
+  { value: "WEEKLY", label: "Weekly Google Ads Report" },
+  { value: "MONTHLY", label: "Monthly Google Ads Report" },
+  { value: "CAMPAIGN_PERFORMANCE", label: "Campaign Performance Report" },
+  { value: "SEARCH_TERMS", label: "Search Terms Report" },
+  { value: "KEYWORD_PERFORMANCE", label: "Keyword Performance Report" },
+  { value: "BUDGET_RECOMMENDATION", label: "Budget Recommendation Report" },
+  { value: "CONVERSION_TRACKING", label: "Conversion Tracking Report" },
+];
+
 export function GoogleAdsWorkspace({ initialView = "overview" }: GoogleAdsWorkspaceProps) {
   const currentUser = useAppSelector(selectCurrentUser);
   const workspaceMode = resolveWorkspaceMode(currentUser?.role);
@@ -130,6 +147,12 @@ export function GoogleAdsWorkspace({ initialView = "overview" }: GoogleAdsWorksp
   const [selectedApprovalType, setSelectedApprovalType] = useState<
     NonNullable<CreateTaskRequest["approvalType"]>
   >("GOOGLE_ADS_CAMPAIGN_APPROVAL");
+  const [reportType, setReportType] = useState<CreateGoogleAdsReportRequest["type"]>("WEEKLY");
+  const [reportPeriodStart, setReportPeriodStart] = useState(() => toIsoDateString(daysAgo(7)));
+  const [reportPeriodEnd, setReportPeriodEnd] = useState(() => toIsoDateString(new Date()));
+  const [reportSummary, setReportSummary] = useState("");
+  const [reportClientVisible, setReportClientVisible] = useState(false);
+  const [reportRequestAcknowledgement, setReportRequestAcknowledgement] = useState(false);
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -193,6 +216,11 @@ export function GoogleAdsWorkspace({ initialView = "overview" }: GoogleAdsWorksp
     { clientId: selectedClientId, query: { limit: 12 } },
     { skip: shouldSkipReportingQueries },
   );
+  const { data: reportsResponse, isLoading: isReportsLoading, isError: isReportsError } =
+    useGetAssignedClientGoogleAdsReportsQuery(
+      { clientId: selectedClientId, query: { limit: 20 } },
+      { skip: shouldSkipReportingQueries },
+    );
 
   const { data: projectsResponse } = useGetProjectsQuery(
     selectedClientId.length > 0 ? { clientProfileId: selectedClientId } : undefined,
@@ -248,6 +276,10 @@ export function GoogleAdsWorkspace({ initialView = "overview" }: GoogleAdsWorksp
   );
 
   const [syncGoogleAds, { isLoading: isSyncing }] = useSyncAssignedClientGoogleAdsMutation();
+  const [createGoogleAdsReport, { isLoading: isCreatingReport }] =
+    useCreateAssignedClientGoogleAdsReportMutation();
+  const [updateGoogleAdsReport, { isLoading: isUpdatingReport }] =
+    useUpdateAssignedGoogleAdsReportMutation();
   const [createTask, { isLoading: isCreatingTask }] = useCreateTaskMutation();
   const [createWorkspaceMessage, { isLoading: isCreatingMessage }] =
     useCreateProjectWorkspaceMessageMutation();
@@ -298,7 +330,10 @@ export function GoogleAdsWorkspace({ initialView = "overview" }: GoogleAdsWorksp
   const conversionValue = conversions?.data.reduce((total, item) => total + (item.conversionValue ?? 0), 0) ?? 0;
   const lowCtrRows = (adGroups?.data ?? []).filter((item) => item.ctr < 1.2);
   const busiestCampaign = campaigns?.data[0] ?? null;
-  const isActionBusy = isSyncing || isCreatingTask || isCreatingMessage;
+  const reportRows = reportsResponse?.data ?? [];
+  const reportMeta = reportsResponse?.meta;
+  const isActionBusy =
+    isSyncing || isCreatingTask || isCreatingMessage || isCreatingReport || isUpdatingReport;
 
   async function handleCreateTask(
     action: "optimization" | "report" | "approval" | "recommendation" | "report-ack",
@@ -367,6 +402,99 @@ export function GoogleAdsWorkspace({ initialView = "overview" }: GoogleAdsWorksp
       setFeedback({
         type: "error",
         text: extractApiErrorMessage(error, "Google Ads görevi oluşturulamadı."),
+      });
+    } finally {
+      setActiveAction(null);
+    }
+  }
+
+  async function handleCreateReportDraft() {
+    if (!selectedClientId) {
+      return;
+    }
+
+    if (!reportPeriodStart || !reportPeriodEnd) {
+      setFeedback({ type: "error", text: "Rapor dönem başlangıç ve bitiş tarihini girin." });
+      return;
+    }
+
+    const metricsSnapshot: Record<string, unknown> = {
+      summary: summary ?? null,
+      topCampaigns: (campaigns?.data ?? []).slice(0, 5),
+      topKeywords: (keywords?.data ?? []).slice(0, 8),
+      topSearchTerms: (searchTerms?.data ?? []).slice(0, 8),
+      conversions: (conversions?.data ?? []).slice(0, 8),
+    };
+
+    const payload: CreateGoogleAdsReportRequest = {
+      periodStart: toIsoDateTimeStart(reportPeriodStart),
+      periodEnd: toIsoDateTimeEnd(reportPeriodEnd),
+      type: reportType,
+      summary: reportSummary.trim().length > 0 ? reportSummary.trim() : undefined,
+      metricsSnapshot,
+      clientVisible: reportClientVisible,
+      requestAcknowledgement: reportRequestAcknowledgement,
+      ...(googleAdsProjectId ? { projectId: googleAdsProjectId } : {}),
+    };
+
+    try {
+      setActiveAction("report-create");
+      setFeedback(null);
+      await createGoogleAdsReport({
+        clientId: selectedClientId,
+        body: payload,
+      }).unwrap();
+      setFeedback({ type: "success", text: "Google Ads rapor taslağı oluşturuldu." });
+      setReportSummary("");
+      setReportClientVisible(false);
+      setReportRequestAcknowledgement(false);
+    } catch (error) {
+      setFeedback({
+        type: "error",
+        text: extractApiErrorMessage(error, "Google Ads raporu oluşturulamadı."),
+      });
+    } finally {
+      setActiveAction(null);
+    }
+  }
+
+  async function handlePublishReport(report: GoogleAdsReportItem) {
+    try {
+      setActiveAction(`report-publish-${report.id}`);
+      setFeedback(null);
+      await updateGoogleAdsReport({
+        reportId: report.id,
+        body: {
+          status: "PUBLISHED",
+          clientVisible: true,
+        },
+      }).unwrap();
+      setFeedback({ type: "success", text: "Google Ads raporu müşteriye yayınlandı." });
+    } catch (error) {
+      setFeedback({
+        type: "error",
+        text: extractApiErrorMessage(error, "Google Ads raporu yayınlanamadı."),
+      });
+    } finally {
+      setActiveAction(null);
+    }
+  }
+
+  async function handleRequestReportAcknowledgement(report: GoogleAdsReportItem) {
+    try {
+      setActiveAction(`report-ack-${report.id}`);
+      setFeedback(null);
+      await updateGoogleAdsReport({
+        reportId: report.id,
+        body: {
+          requestAcknowledgement: true,
+        },
+      }).unwrap();
+      setFeedback({ type: "success", text: "Rapor acknowledgement talebi gönderildi." });
+    } catch (error) {
+      setFeedback({
+        type: "error",
+        text: extractApiErrorMessage(error, "Rapor acknowledgement talebi gönderilemedi."),
       });
     } finally {
       setActiveAction(null);
@@ -696,7 +824,7 @@ export function GoogleAdsWorkspace({ initialView = "overview" }: GoogleAdsWorksp
               <div className="space-y-4">
                 <h3 className="font-medium text-white">Raporlama</h3>
                 <p className="text-sm text-[#A0A0A0]">
-                  Campaign summary, search terms ve conversion snapshot bilgileri rapor prep için kullanılabilir.
+                  Draft/publish rapor akışı ve müşteri acknowledgement talebi bu bölümden yönetilir.
                 </p>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <Card className="border-white/[0.08] bg-[#131313] p-4">
@@ -708,24 +836,141 @@ export function GoogleAdsWorkspace({ initialView = "overview" }: GoogleAdsWorksp
                     <p className="mt-1 text-lg font-semibold text-white">{formatDateTime(summary?.lastSyncAt)}</p>
                   </Card>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <Card className="border-white/[0.08] bg-[#131313] p-4 space-y-3">
+                  <p className="text-sm font-medium text-white">Yeni Rapor Taslağı</p>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="google-ads-report-type">Rapor tipi</Label>
+                      <select
+                        id="google-ads-report-type"
+                        value={reportType}
+                        onChange={(event) =>
+                          setReportType(event.target.value as CreateGoogleAdsReportRequest["type"])
+                        }
+                        className="w-full rounded-md border border-white/[0.12] bg-[#111111] px-3 py-2 text-sm text-white outline-none focus:border-[#AAFF01]/40"
+                      >
+                        {GOOGLE_ADS_REPORT_TYPE_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="google-ads-report-summary">Özet</Label>
+                      <Input
+                        id="google-ads-report-summary"
+                        value={reportSummary}
+                        onChange={(event) => setReportSummary(event.target.value)}
+                        placeholder="Rapor özeti"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="google-ads-report-start">Dönem başlangıç</Label>
+                      <Input
+                        id="google-ads-report-start"
+                        type="date"
+                        value={reportPeriodStart}
+                        onChange={(event) => setReportPeriodStart(event.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="google-ads-report-end">Dönem bitiş</Label>
+                      <Input
+                        id="google-ads-report-end"
+                        type="date"
+                        value={reportPeriodEnd}
+                        onChange={(event) => setReportPeriodEnd(event.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-4 text-sm text-[#D8D8D8]">
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={reportClientVisible}
+                        onChange={(event) => setReportClientVisible(event.target.checked)}
+                      />
+                      Client görünür oluştur
+                    </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={reportRequestAcknowledgement}
+                        onChange={(event) => setReportRequestAcknowledgement(event.target.checked)}
+                      />
+                      Ack talebi aç
+                    </label>
+                  </div>
                   <Button
                     type="button"
-                    onClick={() => void handleCreateTask("report")}
-                    disabled={!canManageTasks || isActionBusy}
+                    onClick={() => void handleCreateReportDraft()}
+                    disabled={!canManageGoogleAdsNotes || isActionBusy}
                   >
-                    Rapor Task Oluştur
+                    Rapor Taslağı Oluştur
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="border-white/[0.14] bg-transparent text-white"
-                    onClick={() => void handleCreateTask("report-ack")}
-                    disabled={!canManageTasks || !canCreateGoogleAdsApprovals || isActionBusy}
-                  >
-                    Report Ack Talebi
-                  </Button>
+                </Card>
+
+                <div className="flex flex-wrap gap-2 text-xs text-[#A0A0A0]">
+                  <span>Toplam: {reportMeta?.total ?? 0}</span>
+                  <span>Draft: {reportMeta?.draft ?? 0}</span>
+                  <span>Published: {reportMeta?.published ?? 0}</span>
+                  <span>Client Visible: {reportMeta?.clientVisible ?? 0}</span>
                 </div>
+
+                {isReportsLoading ? (
+                  <p className="text-sm text-[#A0A0A0]">Google Ads raporları yükleniyor...</p>
+                ) : isReportsError ? (
+                  <p className="text-sm text-red-300">Google Ads raporları alınamadı.</p>
+                ) : reportRows.length === 0 ? (
+                  <p className="text-sm text-[#A0A0A0]">Henüz Google Ads raporu bulunmuyor.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {reportRows.map((report) => (
+                      <Card key={report.id} className="border-white/[0.08] bg-[#131313] p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-medium text-white">
+                              {getGoogleAdsReportTypeLabel(report.type)}
+                            </p>
+                            <p className="text-xs text-[#A0A0A0]">
+                              {formatDate(report.periodStart)} - {formatDate(report.periodEnd)}
+                            </p>
+                          </div>
+                          <div className="text-xs text-[#D8D8D8]">
+                            <p>Durum: {getGoogleAdsReportStatusLabel(report.status)}</p>
+                            <p>Ack: {getGoogleAdsReportAcknowledgementLabel(report.acknowledgementStatus)}</p>
+                          </div>
+                        </div>
+                        {report.summary ? (
+                          <p className="mt-2 text-xs text-[#CFCFCF]">{report.summary}</p>
+                        ) : null}
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {report.status === "DRAFT" ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => void handlePublishReport(report)}
+                              disabled={isActionBusy}
+                            >
+                              Yayınla
+                            </Button>
+                          ) : null}
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-white/[0.14] bg-transparent text-white"
+                            onClick={() => void handleRequestReportAcknowledgement(report)}
+                            disabled={!canCreateGoogleAdsApprovals || isActionBusy}
+                          >
+                            Ack Talebi
+                          </Button>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : null}
 
@@ -996,6 +1241,42 @@ function getGoogleAdsApprovalStatusLabel(value: string): string {
   return value;
 }
 
+function getGoogleAdsReportTypeLabel(value: GoogleAdsReportItem["type"]): string {
+  const option = GOOGLE_ADS_REPORT_TYPE_OPTIONS.find((item) => item.value === value);
+  return option ? option.label : value;
+}
+
+function getGoogleAdsReportStatusLabel(value: GoogleAdsReportItem["status"]): string {
+  if (value === "DRAFT") {
+    return "Taslak";
+  }
+  if (value === "PUBLISHED") {
+    return "Yayınlandı";
+  }
+  if (value === "ARCHIVED") {
+    return "Arşivlendi";
+  }
+  return value;
+}
+
+function getGoogleAdsReportAcknowledgementLabel(
+  value: GoogleAdsReportItem["acknowledgementStatus"],
+): string {
+  if (value === "NOT_REQUESTED") {
+    return "Talep Yok";
+  }
+  if (value === "PENDING") {
+    return "Bekliyor";
+  }
+  if (value === "ACKNOWLEDGED") {
+    return "Okundu";
+  }
+  if (value === "CHANGES_REQUESTED") {
+    return "Revizyon";
+  }
+  return value;
+}
+
 function resolveWorkspaceMode(role: string | undefined): WorkspaceMode | null {
   if (role === "PERFORMANCE_SPECIALIST") {
     return "performance";
@@ -1051,4 +1332,35 @@ function formatDateTime(value: string | null | undefined): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("tr-TR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
+}
+
+function daysAgo(days: number): Date {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return date;
+}
+
+function toIsoDateString(value: Date): string {
+  return value.toISOString().slice(0, 10);
+}
+
+function toIsoDateTimeStart(value: string): string {
+  return `${value}T00:00:00.000Z`;
+}
+
+function toIsoDateTimeEnd(value: string): string {
+  return `${value}T23:59:59.999Z`;
 }
