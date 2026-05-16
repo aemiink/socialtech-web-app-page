@@ -1300,3 +1300,17 @@ The `client/` directory is the public/marketing Social Tech website, not the Cli
     - loading/error/empty state katmanı
   - `clientPanel/src/app/pages/__tests__/google-ads-dashboard.test.tsx`
     - reports row render + loading/error/empty state testleri
+
+## Update - 2026-05-16 (Google Ads Faz 10)
+
+- Backend production hardening (token-safe error handling):
+  - `server/src/google-ads/google-ads.service.ts`
+    - sync error message redaction helper
+    - token-like fragment masking (`[REDACTED]`)
+    - bounded error-detail length before admin response/sync-log persistence
+
+- Backend e2e hardening coverage:
+  - `server/test/google-ads-authz.e2e-spec.ts`
+    - sync logs limit boundary validation
+    - reporting max 90-day range validation
+    - admin sync error/log redaction assertions

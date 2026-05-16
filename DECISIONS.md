@@ -2473,6 +2473,43 @@ Affected files:
 
 ---
 
+## 2026-05-16 - Google Ads Faz 10 Production Hardening (Token-Safe Errors + Validation Coverage Audit)
+
+Context:
+Google Ads FAZ-09 sonrası report lifecycle tamamlandı ancak production öncesi son sertleştirme adımında iki risk öne çıktı: sync pipeline hatalarında token-benzeri parçaların admin-facing hata metinlerine sızma ihtimali ve kritik validation guardlarının (limit/date-range) regression riski.
+
+Decision:
+Google Ads FAZ-10 kapsamında backend-first production hardening yapıldı:
+
+- Sync error güvenliği:
+  - `GoogleAdsService` içinde hata mesajları için redaction katmanı eklendi.
+  - Aşağıdaki patternler admin response/sync-log yüzeyine çıkmadan maskelenir:
+    - `refresh/access/developer token`
+    - `Bearer ...`
+    - OAuth-style token fragmentleri (`ya29.*`, `1//...`)
+    - API key benzeri `AIza...` parçaları
+  - Uzun hata metinleri bounded-length olarak truncate edilir.
+- Validation coverage genişletmesi (`google-ads-authz.e2e-spec.ts`):
+  - sync logs `limit` boundary (`>100`) doğrulaması
+  - reporting date-range max 90 gün guard doğrulaması
+  - token-benzeri fragmentlerin admin sync response ve sync-log payload’larında redacted tutulduğunun doğrulanması
+- Frontend audit sonucu:
+  - Google Ads admin/employee/client yüzeylerinde mock fallback izi kalmadı.
+  - role/scope görünürlüğü ve loading/error/empty state coverage mevcut test seti ile korunuyor.
+  - mevcut lazy/code-splitting yapısı faz içinde yeterli görüldü; framework migration yapılmadı.
+
+Reason:
+Bu karar production’da güvenlik ve operasyon dengesi sağlar: admin ekipleri teşhis edilebilir hata mesajı alırken gizli token fragmentleri log/response katmanına sızmaz. Ayrıca limit/date-range guard testleriyle API sözleşmesi regression’a karşı kilitlenir.
+
+Affected files:
+- `server/src/google-ads/google-ads.service.ts`
+- `server/test/google-ads-authz.e2e-spec.ts`
+- `PROJECT_CONTEXT.md`
+- `REPO_MAP.md`
+- `ROAD_MAP.md`
+
+---
+
 ## 2026-05-16 - Google Ads Faz 8 Sync Automation Hardening (Observability + Safe Client States)
 
 Context:

@@ -1248,6 +1248,15 @@ describe("Google Ads Config Authorization (e2e)", () => {
     ).toBe(true);
   });
 
+  it("sync logs endpoint validates pagination limit boundaries", async () => {
+    const response = await request(app.getHttpServer())
+      .get(`${ADMIN_GOOGLE_ADS_SYNC_LOGS_PATH}?limit=101`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(400);
+
+    expectApiError(response.body, /limit must not be greater than 100/i);
+  });
+
   it("own sync uses TTL and returns SKIPPED during cooldown window", async () => {
     await request(app.getHttpServer())
       .post(adminGoogleAdsManualConnectPath(ownGoogleAdsClientId))
@@ -1365,6 +1374,55 @@ describe("Google Ads Config Authorization (e2e)", () => {
         ),
       ).toBe(true);
     }
+
+    mockGoogleAdsReportingError = null;
+  });
+
+  it("redacts token-like fragments from admin sync errors and sync logs", async () => {
+    await request(app.getHttpServer())
+      .post(adminGoogleAdsManualConnectPath(assignedGoogleAdsClientId))
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        refreshToken: "sync-error-redaction-google-ads-tests-123456",
+        customerId: "1234567890",
+        managerCustomerId: "9988776655",
+      })
+      .expect(201);
+
+    const leakedTokenFragment = "ya29.leakedsensitivefragment";
+    mockGoogleAdsReportingError = new Error(
+      `Unhandled upstream error while fetching snapshot ${leakedTokenFragment}`,
+    );
+
+    const syncResponse = await request(app.getHttpServer())
+      .post(`${adminGoogleAdsSyncPath(assignedGoogleAdsClientId)}?since=2026-05-07&until=2026-05-07`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(502);
+
+    expectApiError(syncResponse.body, /Google Ads API hatası/i);
+    const syncErrorText = JSON.stringify(syncResponse.body);
+    expect(syncErrorText).toContain("[REDACTED]");
+    expect(syncErrorText).not.toContain(leakedTokenFragment);
+
+    const logsResponse = await request(app.getHttpServer())
+      .get(`${ADMIN_GOOGLE_ADS_SYNC_LOGS_PATH}?clientProfileId=${assignedGoogleAdsClientId}&failedOnly=true&limit=20`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    const rows = Array.isArray(logsResponse.body.data)
+      ? (logsResponse.body.data as Array<Record<string, unknown>>)
+      : [];
+    const failedRow = rows.find(
+      (row) =>
+        row.clientProfileId === assignedGoogleAdsClientId &&
+        row.status === "FAILED" &&
+        typeof row.errorMessage === "string",
+    );
+
+    expect(failedRow).toBeDefined();
+    const logErrorMessage = String(failedRow?.errorMessage ?? "");
+    expect(logErrorMessage).toContain("[REDACTED]");
+    expect(logErrorMessage).not.toContain(leakedTokenFragment);
 
     mockGoogleAdsReportingError = null;
   });
@@ -1617,6 +1675,15 @@ describe("Google Ads Config Authorization (e2e)", () => {
       .expect(200);
 
     expect(Array.isArray(searchTermsResponse.body.data)).toBe(true);
+  });
+
+  it("reporting endpoints enforce max 90-day date range validation", async () => {
+    const response = await request(app.getHttpServer())
+      .get(`${CLIENT_OWN_GOOGLE_ADS_SUMMARY_PATH}?since=2026-01-01&until=2026-05-07`)
+      .set("Authorization", `Bearer ${ownClientToken}`)
+      .expect(400);
+
+    expectApiError(response.body, /cannot exceed 90 days/i);
   });
 
   it("client own sync returns only safe error messages when API fails", async () => {

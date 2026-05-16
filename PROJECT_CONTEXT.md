@@ -1532,3 +1532,28 @@ Latest reported checks: `adminandemployeePanel npm run check`, `clientPanel npm 
     - report draft form + search terms row
   - `clientPanel/src/app/pages/__tests__/google-ads-dashboard.test.tsx`
     - reports row render + loading/error/empty states
+
+## 2026-05-16 Update - Google Ads Faz 10 Production Hardening
+
+### Backend
+- Sync error hardening güçlendirildi:
+  - `GoogleAdsService.normalizeSyncError` içinde admin-facing error detail’leri token/redaction filtresinden geçiriliyor.
+  - Redacted patternler:
+    - `refresh/access/developer token`
+    - `Bearer ...`
+    - `ya29.*`
+    - `1//...`
+    - `AIza...`
+  - Uzun error payload’ları güvenli uzunlukta truncate ediliyor.
+- Bu değişiklikle admin sync response ve sync log error metinlerinde token-benzeri parçalar maskelenmiş (`[REDACTED]`) olarak tutuluyor.
+
+### API Validation Coverage
+- `google-ads-authz.e2e-spec.ts` FAZ-10 sertleştirme senaryolarıyla genişletildi:
+  - admin sync logs `limit` boundary validation (`>100` -> `400`)
+  - own reporting date-range max 90 gün doğrulaması (`400`)
+  - admin sync error + sync logs içinde token-benzeri fragment redaction doğrulaması
+
+### Frontend Audit
+- Google Ads admin/employee/client ekranlarında mock fallback izi bulunmadı; API-driven state korunuyor.
+- Loading/error/empty state akışları mevcut test setiyle doğrulandı.
+- Lazy/code-splitting tarafında mevcut route-level lazy + Vite chunk stratejisi FAZ-10’da korunarak devam ediyor.

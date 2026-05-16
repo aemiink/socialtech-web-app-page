@@ -65,6 +65,7 @@ const DEFAULT_CAMPAIGNS_LIMIT = 12;
 const DEFAULT_INSIGHTS_LIMIT = 100;
 const DEFAULT_GOOGLE_ADS_SYNC_TTL_MINUTES = 30;
 const CLIENT_SAFE_SYNC_ERROR_MESSAGE = "Bağlantı problemi var, ekibimiz ilgileniyor.";
+const MAX_SANITIZED_SYNC_ERROR_MESSAGE_LENGTH = 280;
 
 const googleAdsConfigSummarySelect = {
   customerId: true,
@@ -3715,7 +3716,7 @@ export class GoogleAdsService {
 
   private normalizeSyncError(error: unknown): GoogleAdsSyncErrorInfo {
     const normalizedError = this.googleAdsApiService.normalizeError(error);
-    const normalizedMessage = normalizedError.message.trim();
+    const normalizedMessage = this.sanitizeSyncErrorMessage(normalizedError.message);
     const lowerMessage = normalizedMessage.toLowerCase();
 
     if (
@@ -3820,6 +3821,32 @@ export class GoogleAdsService {
       }.`,
       clientMessage: CLIENT_SAFE_SYNC_ERROR_MESSAGE,
     };
+  }
+
+  private sanitizeSyncErrorMessage(message: string): string {
+    const trimmed = message.trim();
+    if (trimmed.length === 0) {
+      return "";
+    }
+
+    const redactPatterns: Array<[RegExp, string]> = [
+      [/((?:refresh|access|developer)[\s_-]*token\s*[:=]\s*)([^\s,;]+)/gi, "$1[REDACTED]"],
+      [/(bearer\s+)([^\s,;]+)/gi, "$1[REDACTED]"],
+      [/\bya29\.[A-Za-z0-9._-]+\b/g, "[REDACTED]"],
+      [/\b1\/\/[A-Za-z0-9._-]+\b/g, "[REDACTED]"],
+      [/\bAIza[0-9A-Za-z\-_]{20,}\b/g, "[REDACTED]"],
+    ];
+
+    let sanitized = trimmed;
+    for (const [pattern, replacement] of redactPatterns) {
+      sanitized = sanitized.replace(pattern, replacement);
+    }
+
+    if (sanitized.length > MAX_SANITIZED_SYNC_ERROR_MESSAGE_LENGTH) {
+      return `${sanitized.slice(0, MAX_SANITIZED_SYNC_ERROR_MESSAGE_LENGTH)}...`;
+    }
+
+    return sanitized;
   }
 
   private toConnectionTestException(
