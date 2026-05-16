@@ -21,7 +21,7 @@ import { clearAuth, setAuthError, setCredentials } from "../features/auth/authSl
 import { selectCurrentUser, selectIsAuthenticated } from "../features/auth/authSelectors";
 import { useLoginMutation, useLogoutMutation } from "../features/auth/authApi";
 import type { AccountType, UserRole } from "../features/auth/authTypes";
-import { getBackendRoleLabel } from "../features/auth/roleMapping";
+import { getBackendRoleLabel, mapBackendRoleToEmployeeRole } from "../features/auth/roleMapping";
 import yatayLogo from "../../assets/branding/yatay-logo.svg";
 
 type LoginAccountType = Exclude<AccountType, "CLIENT">;
@@ -98,7 +98,27 @@ export function Login() {
       });
   }, [currentUser, dispatch, isAuthenticated, logout]);
 
-  if (currentUser && isAuthenticated && currentUser.accountType !== "CLIENT") {
+  useEffect(() => {
+    if (!currentUser || !isAuthenticated || currentUser.accountType !== "EMPLOYEE") {
+      return;
+    }
+
+    if (mapBackendRoleToEmployeeRole(currentUser.role) !== null) {
+      return;
+    }
+
+    dispatch(clearAuth());
+    dispatch(setAuthError(null));
+    setError("Bu çalışan rolü panelde desteklenmiyor. Lütfen yöneticinizle iletişime geçin.");
+  }, [currentUser, dispatch, isAuthenticated]);
+
+  const canAutoRedirect =
+    currentUser &&
+    isAuthenticated &&
+    currentUser.accountType !== "CLIENT" &&
+    (currentUser.accountType === "ADMIN" || mapBackendRoleToEmployeeRole(currentUser.role) !== null);
+
+  if (canAutoRedirect) {
     return (
       <Navigate
         to={currentUser.accountType === "ADMIN" ? "/" : "/employee/dashboard"}

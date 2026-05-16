@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import {
@@ -67,7 +68,7 @@ const googleAdsConfigReadSelect = {
   syncError: true,
 } satisfies Prisma.ClientGoogleAdsConfigSelect;
 
-const adminClientReadSelect = {
+const adminClientReadBaseSelect = {
   id: true,
   slug: true,
   companyName: true,
@@ -87,9 +88,17 @@ const adminClientReadSelect = {
     select: purchasedServiceReadSelect,
     orderBy: [{ serviceKey: "asc" }, { id: "asc" }],
   },
+} satisfies Prisma.ClientProfileSelect;
+
+const adminClientReadSelect = {
+  ...adminClientReadBaseSelect,
   googleAdsConfig: {
     select: googleAdsConfigReadSelect,
   },
+} satisfies Prisma.ClientProfileSelect;
+
+const adminClientReadSelectWithoutGoogleAdsConfig = {
+  ...adminClientReadBaseSelect,
 } satisfies Prisma.ClientProfileSelect;
 
 type ClientOwnerReadModel = Prisma.UserGetPayload<{
@@ -98,6 +107,10 @@ type ClientOwnerReadModel = Prisma.UserGetPayload<{
 
 type AdminClientReadModel = Prisma.ClientProfileGetPayload<{
   select: typeof adminClientReadSelect;
+}>;
+
+type AdminClientReadModelWithoutGoogleAdsConfig = Prisma.ClientProfileGetPayload<{
+  select: typeof adminClientReadSelectWithoutGoogleAdsConfig;
 }>;
 
 type PurchasedServiceReadModel = Prisma.ClientPurchasedServiceGetPayload<{
@@ -176,6 +189,8 @@ type ClientAuditMetadataOptions = {
 
 @Injectable()
 export class AdminClientsService {
+  private readonly logger = new Logger(AdminClientsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly authService: AuthService,
@@ -211,7 +226,7 @@ export class AdminClientsService {
               ? { purchasedServices: { create: purchasedServiceInputs } }
               : {}),
           },
-          select: adminClientReadSelect,
+          select: { id: true },
         });
 
         if (dto.googleAdsConfig !== undefined) {
@@ -590,11 +605,12 @@ export class AdminClientsService {
     auditRequestContext?: AuditLogRequestContext,
   ): Promise<AdminClientReadModel> {
     return this.prisma.$transaction(async (tx) => {
-      const clientProfile = await tx.clientProfile.update({
+      const updatedClientProfile = await tx.clientProfile.update({
         where: { id: existingClient.id },
         data: { status },
-        select: adminClientReadSelect,
+        select: { id: true },
       });
+      const clientProfile = await this.getClientProfileOrFail(updatedClientProfile.id, tx);
 
       await this.recordAdminClientAudit(
         tx,
@@ -619,16 +635,58 @@ export class AdminClientsService {
     clientProfileId: string,
     tx?: Prisma.TransactionClient,
   ): Promise<AdminClientReadModel> {
-    const client = await (tx ?? this.prisma).clientProfile.findUnique({
-      where: { id: clientProfileId },
-      select: adminClientReadSelect,
-    });
+    if (tx) {
+      const clientInTransaction = await tx.clientProfile.findUnique({
+        where: { id: clientProfileId },
+        select: adminClientReadSelectWithoutGoogleAdsConfig,
+      });
+
+      if (!clientInTransaction) {
+        throw new NotFoundException("Client profile not found.");
+      }
+
+      return this.toAdminClientReadModel(clientInTransaction);
+    }
+
+    const clientRepository = this.prisma.clientProfile;
+    let client: AdminClientReadModel | null = null;
+
+    try {
+      client = await clientRepository.findUnique({
+        where: { id: clientProfileId },
+        select: adminClientReadSelect,
+      });
+    } catch (error) {
+      if (!this.isMissingClientGoogleAdsConfigTableError(error)) {
+        throw error;
+      }
+
+      this.logger.warn(
+        `ClientGoogleAdsConfig table is missing while reading admin client ${clientProfileId}. Returning client without googleAdsConfig.`,
+      );
+
+      const fallbackClient = await clientRepository.findUnique({
+        where: { id: clientProfileId },
+        select: adminClientReadSelectWithoutGoogleAdsConfig,
+      });
+
+      client = fallbackClient ? this.toAdminClientReadModel(fallbackClient) : null;
+    }
 
     if (!client) {
       throw new NotFoundException("Client profile not found.");
     }
 
     return client;
+  }
+
+  private toAdminClientReadModel(
+    client: AdminClientReadModelWithoutGoogleAdsConfig,
+  ): AdminClientReadModel {
+    return {
+      ...client,
+      googleAdsConfig: null,
+    };
   }
 
   private async assertClientHasNoOwner(
@@ -1050,6 +1108,12 @@ export class AdminClientsService {
   }
 
   private throwKnownCreateOrUpdateError(error: unknown): void {
+    if (this.isMissingClientGoogleAdsConfigTableError(error)) {
+      throw new BadRequestException(
+        "Google Ads config tabloları eksik. Lütfen bekleyen Prisma migrationlarını çalıştırın.",
+      );
+    }
+
     if (!this.isUniqueConstraintError(error)) {
       return;
     }
@@ -1078,6 +1142,15 @@ export class AdminClientsService {
     return (
       error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
     );
+  }
+
+  private isMissingClientGoogleAdsConfigTableError(error: unknown): boolean {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2021") {
+      return false;
+    }
+
+    const target = error.meta?.["table"] ?? error.meta?.["modelName"];
+    return typeof target === "string" && target.includes("ClientGoogleAdsConfig");
   }
 
   private toAdminClientResponse(client: AdminClientReadModel): AdminClientResponse {

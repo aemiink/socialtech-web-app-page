@@ -1498,7 +1498,6 @@ export class GoogleAdsService {
     clientProfileId: string,
     query: GoogleAdsReportsQueryDto,
   ): Promise<GoogleAdsReportsResponse> {
-    this.assertCanReadAssignedConfig(currentUser);
     this.assertCanReadAssignedReporting(currentUser);
     await this.assertAssignedClientProfileOrFail(currentUser.id, clientProfileId);
     await this.assertClientHasActiveGoogleAdsService(clientProfileId);

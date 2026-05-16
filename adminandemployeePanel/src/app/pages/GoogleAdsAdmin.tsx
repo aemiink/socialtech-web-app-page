@@ -91,6 +91,7 @@ export function GoogleAdsAdmin() {
     error: syncLogsError,
     isError: isSyncLogsError,
     isLoading: isSyncLogsLoading,
+    refetch: refetchSyncLogs,
   } = useGetAdminGoogleAdsSyncLogsQuery(
     {
       limit: 20,
@@ -380,7 +381,9 @@ export function GoogleAdsAdmin() {
           type="button"
           variant="outline"
           className="gap-2"
-          onClick={() => refetch()}
+          onClick={() => {
+            void Promise.all([refetch(), refetchSyncLogs()]);
+          }}
           disabled={isLoading || isFetching}
         >
           <RefreshCw className="h-4 w-4" />
@@ -482,7 +485,9 @@ export function GoogleAdsAdmin() {
                         ) : null}
                       </td>
                       <td className="py-3 pr-3">
-                        <p className="font-medium text-white">{formatCurrency(item.summary.cost)}</p>
+                        <p className="font-medium text-white">
+                          {formatCurrency(item.summary.cost, item.account.currencyCode)}
+                        </p>
                         <p className="text-xs text-[#A0A0A0]">
                           {item.summary.impressions.toLocaleString("tr-TR")} gösterim
                         </p>
@@ -910,10 +915,19 @@ function normalizeOptionalText(value: string): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 2,
-  }).format(value);
+function formatCurrency(value: number, currencyCode: string | null | undefined): string {
+  const normalizedCurrency = currencyCode?.trim().toUpperCase() || "TRY";
+  try {
+    return new Intl.NumberFormat("tr-TR", {
+      style: "currency",
+      currency: normalizedCurrency,
+      maximumFractionDigits: 2,
+    }).format(value);
+  } catch {
+    return new Intl.NumberFormat("tr-TR", {
+      style: "currency",
+      currency: "TRY",
+      maximumFractionDigits: 2,
+    }).format(value);
+  }
 }

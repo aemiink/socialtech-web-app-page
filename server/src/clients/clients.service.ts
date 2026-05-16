@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { AccountType, Prisma, ProjectStatus, TaskStatus, UserRole } from "@prisma/client";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { PrismaService } from "../database/prisma.service";
@@ -8,7 +8,7 @@ import {
   type ClientSortOrder,
 } from "./dto/client-query.dto";
 
-const clientReadSelect = {
+const clientReadBaseSelect = {
   id: true,
   slug: true,
   companyName: true,
@@ -28,6 +28,10 @@ const clientReadSelect = {
     },
     orderBy: [{ serviceKey: "asc" }, { id: "asc" }],
   },
+} satisfies Prisma.ClientProfileSelect;
+
+const clientReadSelect = {
+  ...clientReadBaseSelect,
   googleAdsConfig: {
     select: {
       customerId: true,
@@ -42,7 +46,14 @@ const clientReadSelect = {
   },
 } satisfies Prisma.ClientProfileSelect;
 
+const clientReadSelectWithoutGoogleAdsConfig = {
+  ...clientReadBaseSelect,
+} satisfies Prisma.ClientProfileSelect;
+
 type ClientReadModel = Prisma.ClientProfileGetPayload<{ select: typeof clientReadSelect }>;
+type ClientReadModelWithoutGoogleAdsConfig = Prisma.ClientProfileGetPayload<{
+  select: typeof clientReadSelectWithoutGoogleAdsConfig;
+}>;
 
 type ClientsListResponse = {
   data: ClientReadModel[];
@@ -119,6 +130,8 @@ const CLIENT_ORDER_BY_FACTORIES = {
 
 @Injectable()
 export class ClientsService {
+  private readonly logger = new Logger(ClientsService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async getClients(
@@ -128,16 +141,7 @@ export class ClientsService {
     const visibilityWhere = this.buildClientVisibilityWhere(currentUser);
     const where = this.buildClientListWhere(visibilityWhere, query);
 
-    const [clients, total] = await this.prisma.$transaction([
-      this.prisma.clientProfile.findMany({
-        where,
-        select: clientReadSelect,
-        orderBy: this.getClientOrderBy(query.sortBy, query.sortOrder),
-        skip: (query.page - 1) * query.limit,
-        take: query.limit,
-      }),
-      this.prisma.clientProfile.count({ where }),
-    ]);
+    const [clients, total] = await this.getClientsListOrFallback(where, query);
 
     const totalPages = total === 0 ? 0 : Math.ceil(total / query.limit);
 
@@ -423,6 +427,52 @@ export class ClientsService {
     return [CLIENT_ORDER_BY_FACTORIES[sortBy](sortOrder), { id: "asc" }];
   }
 
+  private async getClientsListOrFallback(
+    where: Prisma.ClientProfileWhereInput,
+    query: ClientQueryDto,
+  ): Promise<[ClientReadModel[], number]> {
+    try {
+      return await this.prisma.$transaction([
+        this.prisma.clientProfile.findMany({
+          where,
+          select: clientReadSelect,
+          orderBy: this.getClientOrderBy(query.sortBy, query.sortOrder),
+          skip: (query.page - 1) * query.limit,
+          take: query.limit,
+        }),
+        this.prisma.clientProfile.count({ where }),
+      ]);
+    } catch (error) {
+      if (!this.isMissingClientGoogleAdsConfigTableError(error)) {
+        throw error;
+      }
+
+      this.logger.warn(
+        "ClientGoogleAdsConfig table is missing. Falling back to clients list without googleAdsConfig. Run pending Prisma migrations to enable Google Ads fields.",
+      );
+
+      const [clientsWithoutGoogleAdsConfig, total] = await this.prisma.$transaction([
+        this.prisma.clientProfile.findMany({
+          where,
+          select: clientReadSelectWithoutGoogleAdsConfig,
+          orderBy: this.getClientOrderBy(query.sortBy, query.sortOrder),
+          skip: (query.page - 1) * query.limit,
+          take: query.limit,
+        }),
+        this.prisma.clientProfile.count({ where }),
+      ]);
+
+      return [clientsWithoutGoogleAdsConfig.map((client) => this.toClientReadModel(client)), total];
+    }
+  }
+
+  private toClientReadModel(client: ClientReadModelWithoutGoogleAdsConfig): ClientReadModel {
+    return {
+      ...client,
+      googleAdsConfig: null,
+    };
+  }
+
   private getClientProfileIdOrFail(currentUser: AuthenticatedUser): string {
     if (!currentUser.clientProfileId) {
       throw new ForbiddenException("Client account is not linked to a client profile.");
@@ -436,10 +486,29 @@ export class ClientsService {
   }
 
   private async getClientProfileOrFail(clientId: string): Promise<ClientReadModel> {
-    const clientProfile = await this.prisma.clientProfile.findUnique({
-      where: { id: clientId },
-      select: clientReadSelect,
-    });
+    let clientProfile: ClientReadModel | null = null;
+
+    try {
+      clientProfile = await this.prisma.clientProfile.findUnique({
+        where: { id: clientId },
+        select: clientReadSelect,
+      });
+    } catch (error) {
+      if (!this.isMissingClientGoogleAdsConfigTableError(error)) {
+        throw error;
+      }
+
+      this.logger.warn(
+        `ClientGoogleAdsConfig table is missing while reading client ${clientId}. Returning client without googleAdsConfig.`,
+      );
+
+      const fallbackClient = await this.prisma.clientProfile.findUnique({
+        where: { id: clientId },
+        select: clientReadSelectWithoutGoogleAdsConfig,
+      });
+
+      clientProfile = fallbackClient ? this.toClientReadModel(fallbackClient) : null;
+    }
 
     if (!clientProfile) {
       throw new NotFoundException("Client profile not found.");
@@ -452,18 +521,45 @@ export class ClientsService {
     employeeUserId: string,
     clientId: string,
   ): Promise<ClientReadModel> {
-    const clientProfile = await this.prisma.clientProfile.findFirst({
-      where: {
-        id: clientId,
-        employeeAssignments: {
-          some: {
-            employeeUserId,
-            isActive: true,
+    let clientProfile: ClientReadModel | null = null;
+
+    try {
+      clientProfile = await this.prisma.clientProfile.findFirst({
+        where: {
+          id: clientId,
+          employeeAssignments: {
+            some: {
+              employeeUserId,
+              isActive: true,
+            },
           },
         },
-      },
-      select: clientReadSelect,
-    });
+        select: clientReadSelect,
+      });
+    } catch (error) {
+      if (!this.isMissingClientGoogleAdsConfigTableError(error)) {
+        throw error;
+      }
+
+      this.logger.warn(
+        `ClientGoogleAdsConfig table is missing while reading assigned client ${clientId}. Returning client without googleAdsConfig.`,
+      );
+
+      const fallbackClient = await this.prisma.clientProfile.findFirst({
+        where: {
+          id: clientId,
+          employeeAssignments: {
+            some: {
+              employeeUserId,
+              isActive: true,
+            },
+          },
+        },
+        select: clientReadSelectWithoutGoogleAdsConfig,
+      });
+
+      clientProfile = fallbackClient ? this.toClientReadModel(fallbackClient) : null;
+    }
 
     if (!clientProfile) {
       throw new NotFoundException("Client profile not found.");
@@ -492,5 +588,14 @@ export class ClientsService {
 
   private isEmployee(currentUser: AuthenticatedUser): boolean {
     return currentUser.accountType === AccountType.EMPLOYEE;
+  }
+
+  private isMissingClientGoogleAdsConfigTableError(error: unknown): boolean {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2021") {
+      return false;
+    }
+
+    const target = error.meta?.["table"] ?? error.meta?.["modelName"];
+    return typeof target === "string" && target.includes("ClientGoogleAdsConfig");
   }
 }

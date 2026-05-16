@@ -172,18 +172,34 @@ export function EmployeeLayout() {
   }
 
   if (!isAuthenticated || !currentUser) {
+    if (location.pathname === "/login") {
+      return null;
+    }
+
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
   if (currentUser.accountType === "ADMIN") {
+    if (location.pathname === "/") {
+      return null;
+    }
+
     return <Navigate to="/" replace />;
   }
 
   if (currentUser.accountType !== "EMPLOYEE") {
+    if (location.pathname === "/login") {
+      return null;
+    }
+
     return <Navigate to="/login" replace />;
   }
 
   if (!selectedRole) {
+    if (location.pathname === "/login") {
+      return null;
+    }
+
     return <Navigate to="/login" replace />;
   }
 

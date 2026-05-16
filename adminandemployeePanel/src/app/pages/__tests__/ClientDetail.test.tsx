@@ -470,6 +470,25 @@ describe("ClientDetail", () => {
     expect(screen.getByText("TRY")).toBeInTheDocument();
   });
 
+  it("deduplicates repeated Google Ads permission errors into a single message", () => {
+    setupGoogleAdsConfigState({
+      data: undefined,
+      error: { status: 403, data: { message: "Missing required permissions." } },
+    });
+    setupGoogleAdsConnectionState({
+      data: undefined,
+      error: { status: 403, data: { message: "Missing required permissions." } },
+    });
+    setupGoogleAdsSummaryState({
+      data: undefined,
+      error: { status: 403, data: { message: "Missing required permissions." } },
+    });
+
+    renderClientDetail();
+
+    expect(screen.getAllByText("Bu işlem için yetkiniz bulunmuyor.")).toHaveLength(1);
+  });
+
   it("renders recent projects and tasks with links", () => {
     renderClientDetail();
 

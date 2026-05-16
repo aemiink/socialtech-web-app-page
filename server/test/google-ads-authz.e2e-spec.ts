@@ -57,6 +57,19 @@ const SENSITIVE_RESPONSE_TOKENS = [
   "tokenHash",
   "googleAdsCredential",
 ] as const;
+const SENSITIVE_RESPONSE_TOKEN_FRAGMENTS = [
+  "enc-own-refresh",
+  "enc-own-access",
+  "enc-assigned-refresh",
+  "enc-assigned-access",
+  "sync-error-redaction-google-ads-tests-123456",
+  "own-safe-error-refresh-token-google-ads-tests-123456",
+  "sync-refresh-token-error-google-ads-tests-123456",
+] as const;
+const SENSITIVE_TOKEN_LIKE_PATTERNS = [
+  /ya29\.[a-z0-9\-_]+/i,
+  /google-(own|assigned)-[a-z0-9-]+/i,
+] as const;
 
 let mockGoogleAdsApiResult: GoogleAdsConnectionTestResult | null = null;
 let mockGoogleAdsApiError: Error | null = null;
@@ -74,6 +87,8 @@ describe("Google Ads Config Authorization (e2e)", () => {
 
   let adminToken = "";
   let performanceToken = "";
+  let projectManagerToken = "";
+  let designerToken = "";
   let ownClientToken = "";
   let assignedClientToken = "";
 
@@ -85,6 +100,8 @@ describe("Google Ads Config Authorization (e2e)", () => {
   let inactiveGoogleAdsClientId = "";
   let missingGoogleAdsClientId = "";
   let performanceUserId = "";
+  let projectManagerUserId = "";
+  let designerUserId = "";
   let previousGoogleAdsTokenEncryptionKey: string | undefined;
 
   beforeAll(async () => {
@@ -289,6 +306,24 @@ describe("Google Ads Config Authorization (e2e)", () => {
     }
     performanceUserId = performanceUser.id;
 
+    const projectManagerUser = await prisma.user.findUnique({
+      where: { email: "project@socialtech.com" },
+      select: { id: true },
+    });
+    if (!projectManagerUser) {
+      throw new Error("Project manager demo user was not found.");
+    }
+    projectManagerUserId = projectManagerUser.id;
+
+    const designerUser = await prisma.user.findUnique({
+      where: { email: "designer@socialtech.com" },
+      select: { id: true },
+    });
+    if (!designerUser) {
+      throw new Error("Designer demo user was not found.");
+    }
+    designerUserId = designerUser.id;
+
     const fixtureSuffix = uniqueSuffix("fixtures");
     ownClientEmail = `${TEST_EMAIL_PREFIX}owner-${fixtureSuffix}@example.com`;
     assignedClientEmail = `${TEST_EMAIL_PREFIX}assigned-owner-${fixtureSuffix}@example.com`;
@@ -442,13 +477,27 @@ describe("Google Ads Config Authorization (e2e)", () => {
         select: { id: true },
       });
 
-      await tx.employeeClientAssignment.create({
-        data: {
-          employeeUserId: performanceUserId,
-          clientProfileId: assignedClient.id,
-          scope: EmployeeClientAssignmentScope.PERFORMANCE,
-          isActive: true,
-        },
+      await tx.employeeClientAssignment.createMany({
+        data: [
+          {
+            employeeUserId: performanceUserId,
+            clientProfileId: assignedClient.id,
+            scope: EmployeeClientAssignmentScope.PERFORMANCE,
+            isActive: true,
+          },
+          {
+            employeeUserId: projectManagerUserId,
+            clientProfileId: assignedClient.id,
+            scope: EmployeeClientAssignmentScope.PROJECT,
+            isActive: true,
+          },
+          {
+            employeeUserId: designerUserId,
+            clientProfileId: assignedClient.id,
+            scope: EmployeeClientAssignmentScope.DESIGN,
+            isActive: true,
+          },
+        ],
       });
 
       return {
@@ -468,6 +517,8 @@ describe("Google Ads Config Authorization (e2e)", () => {
 
     adminToken = (await loginWithDemoUser("admin@socialtech.com")).accessToken;
     performanceToken = (await loginWithDemoUser("performance@socialtech.com")).accessToken;
+    projectManagerToken = (await loginWithDemoUser("project@socialtech.com")).accessToken;
+    designerToken = (await loginWithDemoUser("designer@socialtech.com")).accessToken;
     ownClientToken = (await loginWithDemoUser(ownClientEmail)).accessToken;
     assignedClientToken = (await loginWithDemoUser(assignedClientEmail)).accessToken;
   });
@@ -1521,6 +1572,65 @@ describe("Google Ads Config Authorization (e2e)", () => {
     );
   });
 
+  it("report update lifecycle rejects invalid publish and acknowledgement combinations", async () => {
+    const suffix = uniqueSuffix("google-ads-report-negative");
+    const project = await prisma.project.create({
+      data: {
+        clientProfileId: assignedGoogleAdsClientId,
+        serviceKey: PurchasedServiceKey.GOOGLE_ADS,
+        name: "Google Ads Report Negative Lifecycle Project",
+        slug: `${TEST_SLUG_PREFIX}report-negative-${suffix}`,
+        status: "IN_PROGRESS",
+        priority: "MEDIUM",
+      },
+      select: { id: true },
+    });
+
+    const reportResponse = await request(app.getHttpServer())
+      .post(adminGoogleAdsReportsPath(assignedGoogleAdsClientId))
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        projectId: project.id,
+        periodStart: "2026-05-01T00:00:00.000Z",
+        periodEnd: "2026-05-07T23:59:59.999Z",
+        type: GoogleAdsReportType.WEEKLY,
+        summary: "Lifecycle validation report.",
+      })
+      .expect(201);
+
+    const reportId = reportResponse.body.id as string;
+
+    const publishedButHiddenResponse = await request(app.getHttpServer())
+      .patch(adminGoogleAdsReportByIdPath(reportId))
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        status: GoogleAdsReportStatus.PUBLISHED,
+        clientVisible: false,
+      })
+      .expect(400);
+    expectApiError(publishedButHiddenResponse.body, /Published report cannot be hidden/i);
+
+    const draftAckResponse = await request(app.getHttpServer())
+      .patch(adminGoogleAdsReportByIdPath(reportId))
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        status: GoogleAdsReportStatus.DRAFT,
+        requestAcknowledgement: true,
+      })
+      .expect(400);
+    expectApiError(draftAckResponse.body, /cannot be created for DRAFT or ARCHIVED/i);
+
+    const archivedAckResponse = await request(app.getHttpServer())
+      .patch(adminGoogleAdsReportByIdPath(reportId))
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        status: GoogleAdsReportStatus.ARCHIVED,
+        requestAcknowledgement: true,
+      })
+      .expect(400);
+    expectApiError(archivedAckResponse.body, /cannot be created for DRAFT or ARCHIVED/i);
+  });
+
   it("assigned employee can create reports in assigned scope and unassigned scope is denied", async () => {
     const suffix = uniqueSuffix("google-ads-report-assigned");
     const project = await prisma.project.create({
@@ -1742,6 +1852,48 @@ describe("Google Ads Config Authorization (e2e)", () => {
       .get(`${assignedGoogleAdsSummaryPath(unassignedGoogleAdsClientId)}?since=2026-05-07&until=2026-05-07`)
       .set("Authorization", `Bearer ${performanceToken}`)
       .expect(404);
+  });
+
+  it("project manager and designer can read assigned Google Ads scope and are denied for unassigned clients", async () => {
+    const scopedRoleTokens = [projectManagerToken, designerToken];
+
+    for (const token of scopedRoleTokens) {
+      const summaryResponse = await request(app.getHttpServer())
+        .get(`${assignedGoogleAdsSummaryPath(assignedGoogleAdsClientId)}?since=2026-05-07&until=2026-05-07`)
+        .set("Authorization", `Bearer ${token}`)
+        .expect(200);
+
+      expect(summaryResponse.body).toEqual(
+        expect.objectContaining({
+          cost: expect.any(Number),
+          impressions: expect.any(Number),
+        }),
+      );
+
+      const reportsResponse = await request(app.getHttpServer())
+        .get(`${assignedGoogleAdsReportsPath(assignedGoogleAdsClientId)}?limit=5`)
+        .set("Authorization", `Bearer ${token}`)
+        .expect(200);
+
+      expect(reportsResponse.body).toEqual(
+        expect.objectContaining({
+          data: expect.any(Array),
+          meta: expect.objectContaining({
+            total: expect.any(Number),
+          }),
+        }),
+      );
+
+      await request(app.getHttpServer())
+        .get(`${assignedGoogleAdsSummaryPath(unassignedGoogleAdsClientId)}?since=2026-05-07&until=2026-05-07`)
+        .set("Authorization", `Bearer ${token}`)
+        .expect(404);
+
+      await request(app.getHttpServer())
+        .get(`${assignedGoogleAdsReportsPath(unassignedGoogleAdsClientId)}?limit=5`)
+        .set("Authorization", `Bearer ${token}`)
+        .expect(404);
+    }
   });
 
   it("assigned employee can read assigned keywords/conversions/search terms endpoints", async () => {
@@ -1981,7 +2133,12 @@ describe("Google Ads Config Authorization (e2e)", () => {
     await prisma.user.updateMany({
       where: {
         email: {
-          in: ["admin@socialtech.com", "performance@socialtech.com"],
+          in: [
+            "admin@socialtech.com",
+            "performance@socialtech.com",
+            "project@socialtech.com",
+            "designer@socialtech.com",
+          ],
         },
       },
       data: {
@@ -2136,6 +2293,12 @@ describe("Google Ads Config Authorization (e2e)", () => {
     const serialized = JSON.stringify(value);
     for (const token of SENSITIVE_RESPONSE_TOKENS) {
       expect(serialized).not.toMatch(new RegExp(token, "i"));
+    }
+    for (const fragment of SENSITIVE_RESPONSE_TOKEN_FRAGMENTS) {
+      expect(serialized).not.toContain(fragment);
+    }
+    for (const pattern of SENSITIVE_TOKEN_LIKE_PATTERNS) {
+      expect(serialized).not.toMatch(pattern);
     }
   }
 

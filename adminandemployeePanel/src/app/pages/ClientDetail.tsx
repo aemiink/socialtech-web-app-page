@@ -291,6 +291,24 @@ export function ClientDetail() {
     googleAdsConnection?.connectionStatus ??
     googleAdsConfig?.connectionStatus ??
     googleAdsForm.connectionStatus;
+  const googleAdsErrorMessages = Array.from(
+    new Set(
+      [
+        hasGoogleAdsConfigError
+          ? extractApiErrorMessage(googleAdsConfigError, "Google Ads konfigürasyonu alınamadı.")
+          : null,
+        hasGoogleAdsConnectionError
+          ? extractApiErrorMessage(
+              googleAdsConnectionError,
+              "Google Ads bağlantı özeti alınamadı.",
+            )
+          : null,
+        hasGoogleAdsSummaryError
+          ? extractApiErrorMessage(googleAdsSummaryError, "Google Ads performans özeti alınamadı.")
+          : null,
+      ].filter((message): message is string => typeof message === "string" && message.length > 0),
+    ),
+  );
 
   const handleGoogleAdsEditOpen = () => {
     setGoogleAdsFeedback(null);
@@ -702,21 +720,11 @@ export function ClientDetail() {
         {isGoogleAdsSummaryLoading ? (
           <p className="text-sm text-[#A0A0A0]">Google Ads performans özeti yükleniyor...</p>
         ) : null}
-        {hasGoogleAdsConfigError ? (
-          <p className="text-sm text-red-300">
-            {extractApiErrorMessage(googleAdsConfigError, "Google Ads konfigürasyonu alınamadı.")}
+        {googleAdsErrorMessages.map((message) => (
+          <p key={message} className="text-sm text-red-300">
+            {message}
           </p>
-        ) : null}
-        {hasGoogleAdsConnectionError ? (
-          <p className="text-sm text-red-300">
-            {extractApiErrorMessage(googleAdsConnectionError, "Google Ads bağlantı özeti alınamadı.")}
-          </p>
-        ) : null}
-        {hasGoogleAdsSummaryError ? (
-          <p className="text-sm text-red-300">
-            {extractApiErrorMessage(googleAdsSummaryError, "Google Ads performans özeti alınamadı.")}
-          </p>
-        ) : null}
+        ))}
 
         {isGoogleAdsEditMode ? (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">

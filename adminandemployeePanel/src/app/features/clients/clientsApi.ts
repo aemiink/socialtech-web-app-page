@@ -270,6 +270,7 @@ export const clientsApi = baseApi.injectEndpoints({
         ...getAdminClientMutationInvalidations(clientId),
         { type: "Clients", id: getClientGoogleAdsConnectionTagId(clientId) },
         { type: "Clients", id: CLIENT_GOOGLE_ADS_GLOBAL_LIST_ID },
+        { type: "Clients", id: CLIENT_GOOGLE_ADS_SYNC_LOGS_LIST_ID },
       ],
     }),
     getAdminClientMetaAdsConnection: builder.query<AdminClientMetaAdsConnection, string>({

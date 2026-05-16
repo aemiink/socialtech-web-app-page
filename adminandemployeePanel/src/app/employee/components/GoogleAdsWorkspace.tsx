@@ -12,6 +12,7 @@ import { useGetClientsQuery } from "../../features/clients/clientsApi";
 import type { ClientProfile, ClientsListQuery } from "../../features/clients/clientsTypes";
 import {
   useCreateAssignedClientGoogleAdsReportMutation,
+  useGetAssignedClientGoogleAdsConfigQuery,
   useGetAssignedClientGoogleAdsAdGroupsQuery,
   useGetAssignedClientGoogleAdsCampaignsQuery,
   useGetAssignedClientGoogleAdsConversionsQuery,
@@ -34,6 +35,7 @@ type WorkspaceMode = "performance" | "project-manager" | "designer";
 export type GoogleAdsWorkspaceView =
   | "overview"
   | "campaigns"
+  | "ad-groups"
   | "keywords"
   | "search-terms"
   | "reports"
@@ -56,6 +58,7 @@ const ASSIGNED_CLIENTS_QUERY: ClientsListQuery = {
 const VIEW_LABELS: Record<GoogleAdsWorkspaceView, string> = {
   overview: "Özet",
   campaigns: "Kampanyalar",
+  "ad-groups": "Reklam Grupları",
   keywords: "Anahtar Kelimeler",
   "search-terms": "Arama Terimleri",
   reports: "Raporlar",
@@ -66,7 +69,15 @@ const VIEW_LABELS: Record<GoogleAdsWorkspaceView, string> = {
 };
 
 const ROLE_VIEWS: Record<WorkspaceMode, readonly GoogleAdsWorkspaceView[]> = {
-  performance: ["overview", "campaigns", "keywords", "search-terms", "reports", "approvals"],
+  performance: [
+    "overview",
+    "campaigns",
+    "ad-groups",
+    "keywords",
+    "search-terms",
+    "reports",
+    "approvals",
+  ],
   "project-manager": ["overview", "campaigns", "reports", "approvals", "tasks", "messages"],
   designer: ["overview", "design", "approvals", "reports"],
 };
@@ -190,6 +201,12 @@ export function GoogleAdsWorkspace({ initialView = "overview" }: GoogleAdsWorksp
     [googleAdsClients, selectedClientId],
   );
 
+  const { data: assignedGoogleAdsConfig } = useGetAssignedClientGoogleAdsConfigQuery(
+    { clientId: selectedClientId },
+    { skip: selectedClientId.length === 0 || !canReadGoogleAdsConfig },
+  );
+  const googleAdsCurrencyCode = assignedGoogleAdsConfig?.account.currencyCode ?? "TRY";
+
   const shouldSkipReportingQueries = !canReadGoogleAdsReporting || selectedClientId.length === 0;
 
   const { data: summary, isLoading: isSummaryLoading } = useGetAssignedClientGoogleAdsSummaryQuery(
@@ -304,14 +321,6 @@ export function GoogleAdsWorkspace({ initialView = "overview" }: GoogleAdsWorksp
     return (
       <Card className="border-red-500/30 bg-red-500/10 p-6 text-red-200">
         Atanmış müşteri listesini görüntüleme yetkiniz bulunmuyor.
-      </Card>
-    );
-  }
-
-  if (!canReadGoogleAdsConfig) {
-    return (
-      <Card className="border-orange-500/30 bg-orange-500/10 p-6 text-orange-200">
-        Google Ads yapılandırmasını görüntülemek için `googleAds.config.read.assigned` izni gereklidir.
       </Card>
     );
   }
@@ -693,7 +702,10 @@ export function GoogleAdsWorkspace({ initialView = "overview" }: GoogleAdsWorksp
             {currentView === "overview" ? (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                  <MetricCard label="Spend" value={summary ? formatCurrency(summary.cost) : "—"} />
+                  <MetricCard
+                    label="Spend"
+                    value={summary ? formatCurrency(summary.cost, googleAdsCurrencyCode) : "—"}
+                  />
                   <MetricCard
                     label="Dönüşüm"
                     value={summary ? formatNumber(summary.conversions) : "—"}
@@ -701,7 +713,7 @@ export function GoogleAdsWorkspace({ initialView = "overview" }: GoogleAdsWorksp
                   <MetricCard label="CTR" value={summary ? `%${summary.ctr.toFixed(2)}` : "—"} />
                   <MetricCard
                     label="Conversion Value"
-                    value={formatCurrency(conversionValue)}
+                    value={formatCurrency(conversionValue, googleAdsCurrencyCode)}
                   />
                 </div>
 
@@ -769,8 +781,35 @@ export function GoogleAdsWorkspace({ initialView = "overview" }: GoogleAdsWorksp
                             </p>
                           </div>
                           <div className="text-right text-xs text-[#A0A0A0]">
-                            <p>Spend: {formatCurrency(campaign.cost)}</p>
+                            <p>Spend: {formatCurrency(campaign.cost, googleAdsCurrencyCode)}</p>
                             <p>Clicks: {formatNumber(campaign.clicks)}</p>
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {currentView === "ad-groups" ? (
+              <div className="space-y-3">
+                <h3 className="font-medium text-white">Reklam Grubu Performansı</h3>
+                {(adGroups?.data ?? []).length === 0 ? (
+                  <p className="text-sm text-[#A0A0A0]">Reklam grubu verisi bulunamadı.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {(adGroups?.data ?? []).slice(0, 12).map((row) => (
+                      <Card key={row.id} className="border-white/[0.08] bg-[#131313] p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-medium text-white">{row.entityName ?? "Ad Group"}</p>
+                            <p className="text-xs text-[#A0A0A0]">{formatDate(row.date)}</p>
+                          </div>
+                          <div className="text-right text-xs text-[#A0A0A0]">
+                            <p>Cost: {formatCurrency(row.cost, googleAdsCurrencyCode)}</p>
+                            <p>Clicks: {formatNumber(row.clicks)}</p>
+                            <p>CTR: %{row.ctr.toFixed(2)}</p>
                           </div>
                         </div>
                       </Card>
@@ -791,7 +830,8 @@ export function GoogleAdsWorkspace({ initialView = "overview" }: GoogleAdsWorksp
                       <Card key={row.id} className="border-white/[0.08] bg-[#131313] p-3">
                         <p className="text-sm font-medium text-white">{row.keywordText}</p>
                         <p className="text-xs text-[#A0A0A0]">
-                          {row.matchType} • CTR %{row.ctr.toFixed(2)} • Cost {formatCurrency(row.cost)}
+                          {row.matchType} • CTR %{row.ctr.toFixed(2)} • Cost{" "}
+                          {formatCurrency(row.cost, googleAdsCurrencyCode)}
                         </p>
                       </Card>
                     ))}
@@ -829,7 +869,9 @@ export function GoogleAdsWorkspace({ initialView = "overview" }: GoogleAdsWorksp
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <Card className="border-white/[0.08] bg-[#131313] p-4">
                     <p className="text-sm text-[#A0A0A0]">Toplam conversion value</p>
-                    <p className="mt-1 text-lg font-semibold text-white">{formatCurrency(conversionValue)}</p>
+                    <p className="mt-1 text-lg font-semibold text-white">
+                      {formatCurrency(conversionValue, googleAdsCurrencyCode)}
+                    </p>
                   </Card>
                   <Card className="border-white/[0.08] bg-[#131313] p-4">
                     <p className="text-sm text-[#A0A0A0]">Son sync</p>
@@ -1301,12 +1343,21 @@ function filterGoogleAdsClients(clients: ClientProfile[]): ClientProfile[] {
   );
 }
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 2,
-  }).format(value);
+function formatCurrency(value: number, currencyCode: string | null | undefined): string {
+  const normalizedCurrency = currencyCode?.trim().toUpperCase() || "TRY";
+  try {
+    return new Intl.NumberFormat("tr-TR", {
+      style: "currency",
+      currency: normalizedCurrency,
+      maximumFractionDigits: 2,
+    }).format(value);
+  } catch {
+    return new Intl.NumberFormat("tr-TR", {
+      style: "currency",
+      currency: "TRY",
+      maximumFractionDigits: 2,
+    }).format(value);
+  }
 }
 
 function formatNumber(value: number): string {

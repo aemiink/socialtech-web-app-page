@@ -43,6 +43,14 @@ type AssignedClientQueryArg<TQuery = void> = {
   query?: TQuery;
 };
 
+const ASSIGNED_GOOGLE_ADS_SCOPE_TAG_PREFIX = "GOOGLE_ADS_ASSIGNED_SCOPE";
+const ASSIGNED_GOOGLE_ADS_REPORTS_TAG_PREFIX = "GOOGLE_ADS_ASSIGNED_REPORTS";
+const ASSIGNED_GOOGLE_ADS_GLOBAL_TAG_ID = "GOOGLE_ADS_ASSIGNED_GLOBAL";
+const ASSIGNED_GOOGLE_ADS_GLOBAL_TAG = {
+  type: "Clients",
+  id: ASSIGNED_GOOGLE_ADS_GLOBAL_TAG_ID,
+} as const;
+
 export const googleAdsApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     getAssignedClientGoogleAdsConfig: builder.query<
@@ -54,6 +62,9 @@ export const googleAdsApi = baseApi.injectEndpoints({
         method: "GET",
       }),
       transformResponse: (response: unknown) => normalizeAssignedGoogleAdsConfigResponse(response),
+      providesTags: (_result, _error, { clientId }) => [
+        { type: "Clients", id: getAssignedGoogleAdsScopeTagId(clientId) },
+      ],
     }),
     getAssignedClientGoogleAdsSummary: builder.query<
       GoogleAdsSummaryResponse,
@@ -65,6 +76,9 @@ export const googleAdsApi = baseApi.injectEndpoints({
         params: serializeDateRangeQuery(query),
       }),
       transformResponse: (response: unknown) => normalizeGoogleAdsSummaryResponse(response),
+      providesTags: (_result, _error, { clientId }) => [
+        { type: "Clients", id: getAssignedGoogleAdsScopeTagId(clientId) },
+      ],
     }),
     getAssignedClientGoogleAdsCampaigns: builder.query<
       GoogleAdsCampaignsResponse,
@@ -76,6 +90,9 @@ export const googleAdsApi = baseApi.injectEndpoints({
         params: serializeCampaignsQuery(query),
       }),
       transformResponse: (response: unknown) => normalizeGoogleAdsCampaignsResponse(response),
+      providesTags: (_result, _error, { clientId }) => [
+        { type: "Clients", id: getAssignedGoogleAdsScopeTagId(clientId) },
+      ],
     }),
     getAssignedClientGoogleAdsAdGroups: builder.query<
       GoogleAdsInsightsResponse,
@@ -87,6 +104,9 @@ export const googleAdsApi = baseApi.injectEndpoints({
         params: serializeCampaignsQuery(query),
       }),
       transformResponse: (response: unknown) => normalizeGoogleAdsInsightsResponse(response),
+      providesTags: (_result, _error, { clientId }) => [
+        { type: "Clients", id: getAssignedGoogleAdsScopeTagId(clientId) },
+      ],
     }),
     getAssignedClientGoogleAdsAds: builder.query<
       GoogleAdsInsightsResponse,
@@ -98,6 +118,9 @@ export const googleAdsApi = baseApi.injectEndpoints({
         params: serializeCampaignsQuery(query),
       }),
       transformResponse: (response: unknown) => normalizeGoogleAdsInsightsResponse(response),
+      providesTags: (_result, _error, { clientId }) => [
+        { type: "Clients", id: getAssignedGoogleAdsScopeTagId(clientId) },
+      ],
     }),
     getAssignedClientGoogleAdsKeywords: builder.query<
       GoogleAdsKeywordsResponse,
@@ -109,6 +132,9 @@ export const googleAdsApi = baseApi.injectEndpoints({
         params: serializeCampaignsQuery(query),
       }),
       transformResponse: (response: unknown) => normalizeGoogleAdsKeywordsResponse(response),
+      providesTags: (_result, _error, { clientId }) => [
+        { type: "Clients", id: getAssignedGoogleAdsScopeTagId(clientId) },
+      ],
     }),
     getAssignedClientGoogleAdsConversions: builder.query<
       GoogleAdsConversionsResponse,
@@ -120,6 +146,9 @@ export const googleAdsApi = baseApi.injectEndpoints({
         params: serializeCampaignsQuery(query),
       }),
       transformResponse: (response: unknown) => normalizeGoogleAdsConversionsResponse(response),
+      providesTags: (_result, _error, { clientId }) => [
+        { type: "Clients", id: getAssignedGoogleAdsScopeTagId(clientId) },
+      ],
     }),
     getAssignedClientGoogleAdsSearchTerms: builder.query<
       GoogleAdsSearchTermsResponse,
@@ -131,6 +160,9 @@ export const googleAdsApi = baseApi.injectEndpoints({
         params: serializeCampaignsQuery(query),
       }),
       transformResponse: (response: unknown) => normalizeGoogleAdsSearchTermsResponse(response),
+      providesTags: (_result, _error, { clientId }) => [
+        { type: "Clients", id: getAssignedGoogleAdsScopeTagId(clientId) },
+      ],
     }),
     getAssignedClientGoogleAdsInsights: builder.query<
       GoogleAdsInsightsResponse,
@@ -142,6 +174,9 @@ export const googleAdsApi = baseApi.injectEndpoints({
         params: serializeInsightsQuery(query),
       }),
       transformResponse: (response: unknown) => normalizeGoogleAdsInsightsResponse(response),
+      providesTags: (_result, _error, { clientId }) => [
+        { type: "Clients", id: getAssignedGoogleAdsScopeTagId(clientId) },
+      ],
     }),
     getAssignedClientGoogleAdsReports: builder.query<
       GoogleAdsReportsResponse,
@@ -153,6 +188,10 @@ export const googleAdsApi = baseApi.injectEndpoints({
         params: serializeReportsQuery(query),
       }),
       transformResponse: (response: unknown) => normalizeGoogleAdsReportsResponse(response),
+      providesTags: (_result, _error, { clientId }) => [
+        { type: "Clients", id: getAssignedGoogleAdsScopeTagId(clientId) },
+        { type: "Clients", id: getAssignedGoogleAdsReportsTagId(clientId) },
+      ],
     }),
     createAssignedClientGoogleAdsReport: builder.mutation<
       GoogleAdsReportItem,
@@ -164,6 +203,10 @@ export const googleAdsApi = baseApi.injectEndpoints({
         body,
       }),
       transformResponse: (response: unknown) => normalizeGoogleAdsReportItemResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "Clients", id: getAssignedGoogleAdsScopeTagId(clientId) },
+        { type: "Clients", id: getAssignedGoogleAdsReportsTagId(clientId) },
+      ],
     }),
     updateAssignedGoogleAdsReport: builder.mutation<
       GoogleAdsReportItem,
@@ -175,6 +218,13 @@ export const googleAdsApi = baseApi.injectEndpoints({
         body,
       }),
       transformResponse: (response: unknown) => normalizeGoogleAdsReportItemResponse(response),
+      invalidatesTags: (result) =>
+        result
+          ? [
+              { type: "Clients", id: getAssignedGoogleAdsScopeTagId(result.clientProfileId) },
+              { type: "Clients", id: getAssignedGoogleAdsReportsTagId(result.clientProfileId) },
+            ]
+          : [ASSIGNED_GOOGLE_ADS_GLOBAL_TAG],
     }),
     syncAssignedClientGoogleAds: builder.mutation<
       GoogleAdsSyncResponse,
@@ -186,6 +236,10 @@ export const googleAdsApi = baseApi.injectEndpoints({
         params: serializeDateRangeQuery(query),
       }),
       transformResponse: (response: unknown) => normalizeGoogleAdsSyncResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "Clients", id: getAssignedGoogleAdsScopeTagId(clientId) },
+        { type: "Clients", id: getAssignedGoogleAdsReportsTagId(clientId) },
+      ],
     }),
   }),
 });
@@ -228,6 +282,14 @@ function normalizeAssignedGoogleAdsConfigResponse(response: unknown): AssignedGo
     lastSyncAt: readNullableString(candidate, "lastSyncAt"),
     syncError: readNullableString(candidate, "syncError"),
   };
+}
+
+function getAssignedGoogleAdsScopeTagId(clientId: string): string {
+  return `${ASSIGNED_GOOGLE_ADS_SCOPE_TAG_PREFIX}:${clientId}`;
+}
+
+function getAssignedGoogleAdsReportsTagId(clientId: string): string {
+  return `${ASSIGNED_GOOGLE_ADS_REPORTS_TAG_PREFIX}:${clientId}`;
 }
 
 function normalizeGoogleAdsSummaryResponse(response: unknown): GoogleAdsSummaryResponse {

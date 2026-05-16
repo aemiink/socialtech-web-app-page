@@ -231,6 +231,14 @@ None identified.
   - `adminandemployeePanel`: `npm run check` ✅
   - `clientPanel`: `npm run test -- src/app/pages/__tests__/google-ads-dashboard.test.tsx` ✅ (`17/17`)
   - `clientPanel`: `npm run check` ✅
+- Latest Google Ads post-phase QA sweep checkpoint:
+  - `server`: `npm run check` ✅
+  - `server`: `DATABASE_URL=postgresql://ahmeteminkaya@localhost:5432/socialtech_server_test?schema=public ALLOW_E2E_DB_RESET=true npm run test:e2e:authz` ✅ (`12/12 suites`, `285/285 tests`)
+  - `server`: `DATABASE_URL=postgresql://ahmeteminkaya@localhost:5432/socialtech_server_test?schema=public ALLOW_E2E_DB_RESET=true node ./test/run-e2e.cjs google-ads-authz.e2e-spec.ts` ✅ (`35/35`)
+  - `adminandemployeePanel`: `npm run test:run` ✅ (`30 files`, `193/193 tests`)
+  - `adminandemployeePanel`: `npm run check` ✅
+  - `clientPanel`: `npm run test` ✅ (`5 files`, `36/36 tests`)
+  - `clientPanel`: `npm run check` ✅
 - Latest FAZ-05 validation checkpoint:
   - `server`: `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true node ./test/run-e2e.cjs meta-ads-authz.e2e-spec.ts` ✅ (`38/38`)
   - `server`: `npm run prisma:seed` ✅

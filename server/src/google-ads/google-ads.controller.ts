@@ -306,7 +306,7 @@ export class GoogleAdsController {
   }
 
   @Get("google-ads/clients/:clientId/reports")
-  @RequirePermissions("googleAds.config.read.assigned", "googleAds.reporting.read.assigned")
+  @RequirePermissions("googleAds.reporting.read.assigned")
   getAssignedClientGoogleAdsReports(
     @CurrentUser() currentUser: AuthenticatedUser,
     @Param("clientId", ParseUUIDPipe) clientId: string,

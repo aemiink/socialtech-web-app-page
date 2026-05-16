@@ -3,6 +3,16 @@ import { createBrowserRouter, Navigate } from "react-router";
 
 type LazyModule = Record<string, unknown>;
 
+function RouteHydrateFallback() {
+  return (
+    <div className="min-h-screen bg-[#131313] text-white flex items-center justify-center p-6">
+      <div className="rounded-xl border border-white/[0.08] bg-[#1A1A1A] px-6 py-4 text-sm text-[#A0A0A0]">
+        Sayfa yükleniyor...
+      </div>
+    </div>
+  );
+}
+
 function lazyComponent(loader: () => Promise<LazyModule>, exportName: string) {
   return async () => {
     const module = await loader();
@@ -23,10 +33,12 @@ function LoginRedirect() {
 export const router = createBrowserRouter([
   {
     path: "/login",
+    HydrateFallback: RouteHydrateFallback,
     lazy: lazyComponent(() => import("./pages/Login"), "Login"),
   },
   {
     path: "/",
+    HydrateFallback: RouteHydrateFallback,
     lazy: lazyComponent(() => import("./components/RootLayout"), "RootLayout"),
     children: [
       { index: true, lazy: lazyComponent(() => import("./pages/Dashboard"), "Dashboard") },
@@ -64,6 +76,7 @@ export const router = createBrowserRouter([
   },
   {
     path: "/employee",
+    HydrateFallback: RouteHydrateFallback,
     lazy: lazyComponent(() => import("./employee/EmployeeLayout"), "EmployeeLayout"),
     children: [
       { index: true, element: <Navigate to="dashboard" replace /> },

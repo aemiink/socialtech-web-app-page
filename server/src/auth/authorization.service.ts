@@ -7,7 +7,7 @@ export class AuthorizationService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getPermissionsForRole(role: UserRole): Promise<string[]> {
-    const permissions = await this.prisma.rolePermission.findMany({
+    const rolePermissions = await this.prisma.rolePermission.findMany({
       where: { role },
       select: {
         permission: {
@@ -16,6 +16,22 @@ export class AuthorizationService {
       },
     });
 
-    return permissions.map((item) => item.permission.slug);
+    const resolvedPermissions = rolePermissions.map((item) => item.permission.slug);
+    if (role !== UserRole.ADMIN) {
+      return resolvedPermissions;
+    }
+
+    // Admin role is treated as super-user in this product.
+    // This fallback prevents stale rolePermission mappings from blocking newly added admin scopes.
+    const allPermissions = await this.prisma.permission.findMany({
+      select: { slug: true },
+    });
+
+    const permissionSet = new Set<string>(resolvedPermissions);
+    for (const permission of allPermissions) {
+      permissionSet.add(permission.slug);
+    }
+
+    return Array.from(permissionSet);
   }
 }

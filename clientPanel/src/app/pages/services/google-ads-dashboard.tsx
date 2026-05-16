@@ -88,7 +88,12 @@ export function GoogleAdsDashboard() {
 
   const { data: config, isLoading, isError } = useGetOwnGoogleAdsConfigQuery();
   const connectionStatus = config?.connectionStatus ?? "NOT_CONNECTED";
-  const statusCopy = getClientConnectionCopy(connectionStatus, isError);
+  const statusCopy = getClientConnectionCopy({
+    connectionStatus,
+    hasQueryError: isError,
+    hasActiveService: config?.hasActiveService !== false,
+  });
+  const dashboardCurrencyCode = config?.currencyCode;
   const shouldSkipReportingQueries = statusCopy.kind !== "connected";
 
   const {
@@ -281,7 +286,7 @@ export function GoogleAdsDashboard() {
   const summaryCards = [
     {
       label: "Toplam Harcama",
-      value: summary ? formatCurrency(summary.cost) : "—",
+      value: summary ? formatCurrency(summary.cost, dashboardCurrencyCode) : "—",
       Icon: DollarSign,
     },
     {
@@ -542,7 +547,11 @@ export function GoogleAdsDashboard() {
             {campaigns && campaigns.data.length > 0 ? (
               <div className="space-y-3">
                 {campaigns.data.map((campaign) => (
-                  <CampaignRow key={campaign.id} campaign={campaign} />
+                  <CampaignRow
+                    key={campaign.id}
+                    campaign={campaign}
+                    currencyCode={dashboardCurrencyCode}
+                  />
                 ))}
               </div>
             ) : (
@@ -563,7 +572,11 @@ export function GoogleAdsDashboard() {
         >
           <div className="space-y-3">
             {campaigns?.data.map((campaign) => (
-              <CampaignRow key={campaign.id} campaign={campaign} />
+              <CampaignRow
+                key={campaign.id}
+                campaign={campaign}
+                currencyCode={dashboardCurrencyCode}
+              />
             ))}
           </div>
         </DataSection>
@@ -580,7 +593,11 @@ export function GoogleAdsDashboard() {
         >
           <div className="space-y-3">
             {adGroups?.data.map((adGroup) => (
-              <AdGroupRow key={adGroup.id} adGroup={adGroup} />
+              <AdGroupRow
+                key={adGroup.id}
+                adGroup={adGroup}
+                currencyCode={dashboardCurrencyCode}
+              />
             ))}
           </div>
         </DataSection>
@@ -597,7 +614,7 @@ export function GoogleAdsDashboard() {
         >
           <div className="space-y-3">
             {ads?.data.map((ad) => (
-              <AdRow key={ad.id} ad={ad} />
+              <AdRow key={ad.id} ad={ad} currencyCode={dashboardCurrencyCode} />
             ))}
           </div>
         </DataSection>
@@ -614,7 +631,11 @@ export function GoogleAdsDashboard() {
         >
           <div className="space-y-3">
             {keywords?.data.map((keyword) => (
-              <KeywordRow key={keyword.id} keyword={keyword} />
+              <KeywordRow
+                key={keyword.id}
+                keyword={keyword}
+                currencyCode={dashboardCurrencyCode}
+              />
             ))}
           </div>
         </DataSection>
@@ -631,7 +652,11 @@ export function GoogleAdsDashboard() {
         >
           <div className="space-y-3">
             {conversions?.data.map((conversion) => (
-              <ConversionRow key={conversion.id} conversion={conversion} />
+              <ConversionRow
+                key={conversion.id}
+                conversion={conversion}
+                currencyCode={dashboardCurrencyCode}
+              />
             ))}
           </div>
         </DataSection>
@@ -648,7 +673,11 @@ export function GoogleAdsDashboard() {
         >
           <div className="space-y-3">
             {searchTerms?.data.map((searchTerm) => (
-              <SearchTermRow key={searchTerm.id} searchTerm={searchTerm} />
+              <SearchTermRow
+                key={searchTerm.id}
+                searchTerm={searchTerm}
+                currencyCode={dashboardCurrencyCode}
+              />
             ))}
           </div>
         </DataSection>
@@ -743,14 +772,20 @@ function DataSection({
   return <div className="space-y-3">{children}</div>;
 }
 
-function CampaignRow({ campaign }: { campaign: GoogleAdsCampaign }) {
+function CampaignRow({
+  campaign,
+  currencyCode,
+}: {
+  campaign: GoogleAdsCampaign;
+  currencyCode: string | null | undefined;
+}) {
   return (
     <div className="grid grid-cols-1 gap-2 rounded-xl border border-white/[0.06] bg-[#1A1A1A] p-4 md:grid-cols-6 md:items-center">
       <div>
         <div className="text-white text-sm">{campaign.name}</div>
         <div className="text-xs text-[#A0A0A0]">{campaign.channelType}</div>
       </div>
-      <div className="text-sm text-white">{formatCurrency(campaign.cost)}</div>
+      <div className="text-sm text-white">{formatCurrency(campaign.cost, currencyCode)}</div>
       <div className="text-sm text-white">{formatInteger(campaign.clicks)} tıklama</div>
       <div className="text-sm text-white">{campaign.conversions.toFixed(2)} dönüşüm</div>
       <div className="text-sm text-white">CTR %{campaign.ctr.toFixed(2)}</div>
@@ -759,14 +794,20 @@ function CampaignRow({ campaign }: { campaign: GoogleAdsCampaign }) {
   );
 }
 
-function AdGroupRow({ adGroup }: { adGroup: GoogleAdsAdGroup }) {
+function AdGroupRow({
+  adGroup,
+  currencyCode,
+}: {
+  adGroup: GoogleAdsAdGroup;
+  currencyCode: string | null | undefined;
+}) {
   return (
     <div className="grid grid-cols-1 gap-2 rounded-xl border border-white/[0.06] bg-[#1A1A1A] p-4 md:grid-cols-6 md:items-center">
       <div>
         <div className="text-white text-sm">{adGroup.adGroupName}</div>
         <div className="text-xs text-[#A0A0A0]">{adGroup.campaignName}</div>
       </div>
-      <div className="text-sm text-white">{formatCurrency(adGroup.cost)}</div>
+      <div className="text-sm text-white">{formatCurrency(adGroup.cost, currencyCode)}</div>
       <div className="text-sm text-white">{formatInteger(adGroup.clicks)} tıklama</div>
       <div className="text-sm text-white">{adGroup.conversions.toFixed(2)} dönüşüm</div>
       <div className="text-sm text-white">CTR %{adGroup.ctr.toFixed(2)}</div>
@@ -775,7 +816,13 @@ function AdGroupRow({ adGroup }: { adGroup: GoogleAdsAdGroup }) {
   );
 }
 
-function AdRow({ ad }: { ad: GoogleAdsAd }) {
+function AdRow({
+  ad,
+  currencyCode,
+}: {
+  ad: GoogleAdsAd;
+  currencyCode: string | null | undefined;
+}) {
   return (
     <div className="grid grid-cols-1 gap-2 rounded-xl border border-white/[0.06] bg-[#1A1A1A] p-4 md:grid-cols-6 md:items-center">
       <div>
@@ -783,7 +830,7 @@ function AdRow({ ad }: { ad: GoogleAdsAd }) {
         <div className="text-xs text-[#A0A0A0]">{ad.campaignName} / {ad.adGroupName}</div>
       </div>
       <div className="text-sm text-white">{ad.adType}</div>
-      <div className="text-sm text-white">{formatCurrency(ad.cost)}</div>
+      <div className="text-sm text-white">{formatCurrency(ad.cost, currencyCode)}</div>
       <div className="text-sm text-white">{formatInteger(ad.clicks)} tıklama</div>
       <div className="text-sm text-white">{ad.conversions.toFixed(2)} dönüşüm</div>
       <div className="text-xs text-[#A0A0A0] text-left md:text-right">{ad.status}</div>
@@ -791,7 +838,13 @@ function AdRow({ ad }: { ad: GoogleAdsAd }) {
   );
 }
 
-function KeywordRow({ keyword }: { keyword: GoogleAdsKeyword }) {
+function KeywordRow({
+  keyword,
+  currencyCode,
+}: {
+  keyword: GoogleAdsKeyword;
+  currencyCode: string | null | undefined;
+}) {
   return (
     <div className="grid grid-cols-1 gap-2 rounded-xl border border-white/[0.06] bg-[#1A1A1A] p-4 md:grid-cols-7 md:items-center">
       <div>
@@ -799,7 +852,7 @@ function KeywordRow({ keyword }: { keyword: GoogleAdsKeyword }) {
         <div className="text-xs text-[#A0A0A0]">{keyword.campaignName} / {keyword.adGroupName}</div>
       </div>
       <div className="text-sm text-white">{keyword.matchType}</div>
-      <div className="text-sm text-white">{formatCurrency(keyword.cost)}</div>
+      <div className="text-sm text-white">{formatCurrency(keyword.cost, currencyCode)}</div>
       <div className="text-sm text-white">{formatInteger(keyword.clicks)} tıklama</div>
       <div className="text-sm text-white">{keyword.conversions.toFixed(2)} dönüşüm</div>
       <div className="text-sm text-white">CTR %{keyword.ctr.toFixed(2)}</div>
@@ -808,21 +861,37 @@ function KeywordRow({ keyword }: { keyword: GoogleAdsKeyword }) {
   );
 }
 
-function ConversionRow({ conversion }: { conversion: GoogleAdsConversion }) {
+function ConversionRow({
+  conversion,
+  currencyCode,
+}: {
+  conversion: GoogleAdsConversion;
+  currencyCode: string | null | undefined;
+}) {
   return (
     <div className="grid grid-cols-1 gap-2 rounded-xl border border-white/[0.06] bg-[#1A1A1A] p-4 md:grid-cols-5 md:items-center">
       <div>
         <div className="text-white text-sm">{conversion.conversionAction}</div>
       </div>
       <div className="text-sm text-white">{conversion.conversions.toFixed(2)} dönüşüm</div>
-      <div className="text-sm text-white">{conversion.conversionValue === null ? "—" : formatCurrency(conversion.conversionValue)}</div>
-      <div className="text-sm text-white">{conversion.costPerConversion === null ? "—" : formatCurrency(conversion.costPerConversion)}</div>
+      <div className="text-sm text-white">
+        {conversion.conversionValue === null ? "—" : formatCurrency(conversion.conversionValue, currencyCode)}
+      </div>
+      <div className="text-sm text-white">
+        {conversion.costPerConversion === null ? "—" : formatCurrency(conversion.costPerConversion, currencyCode)}
+      </div>
       <div className="text-sm text-white">%{conversion.conversionRate.toFixed(2)}</div>
     </div>
   );
 }
 
-function SearchTermRow({ searchTerm }: { searchTerm: GoogleAdsSearchTerm }) {
+function SearchTermRow({
+  searchTerm,
+  currencyCode,
+}: {
+  searchTerm: GoogleAdsSearchTerm;
+  currencyCode: string | null | undefined;
+}) {
   return (
     <div className="grid grid-cols-1 gap-2 rounded-xl border border-white/[0.06] bg-[#1A1A1A] p-4 md:grid-cols-6 md:items-center">
       <div>
@@ -830,7 +899,7 @@ function SearchTermRow({ searchTerm }: { searchTerm: GoogleAdsSearchTerm }) {
         <div className="text-xs text-[#A0A0A0]">{searchTerm.campaignName} / {searchTerm.adGroupName}</div>
       </div>
       <div className="text-sm text-white">{searchTerm.keywordText ?? "—"}</div>
-      <div className="text-sm text-white">{formatCurrency(searchTerm.cost)}</div>
+      <div className="text-sm text-white">{formatCurrency(searchTerm.cost, currencyCode)}</div>
       <div className="text-sm text-white">{formatInteger(searchTerm.clicks)} tıklama</div>
       <div className="text-sm text-white">{searchTerm.conversions.toFixed(2)} dönüşüm</div>
       <div className="text-sm text-white">CTR %{searchTerm.ctr.toFixed(2)}</div>
@@ -1166,12 +1235,21 @@ function formatDateTime(value: string | null | undefined): string | null {
   return parsedDate.toLocaleString("tr-TR");
 }
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 2,
-  }).format(value);
+function formatCurrency(value: number, currencyCode: string | null | undefined): string {
+  const normalizedCurrency = currencyCode?.trim().toUpperCase() || "TRY";
+  try {
+    return new Intl.NumberFormat("tr-TR", {
+      style: "currency",
+      currency: normalizedCurrency,
+      maximumFractionDigits: 2,
+    }).format(value);
+  } catch {
+    return new Intl.NumberFormat("tr-TR", {
+      style: "currency",
+      currency: "TRY",
+      maximumFractionDigits: 2,
+    }).format(value);
+  }
 }
 
 function formatInteger(value: number): string {
@@ -1180,14 +1258,27 @@ function formatInteger(value: number): string {
   }).format(value);
 }
 
-function getClientConnectionCopy(
-  connectionStatus: GoogleAdsConnectionStatus,
-  hasQueryError: boolean,
-): {
+function getClientConnectionCopy({
+  connectionStatus,
+  hasQueryError,
+  hasActiveService,
+}: {
+  connectionStatus: GoogleAdsConnectionStatus;
+  hasQueryError: boolean;
+  hasActiveService: boolean;
+}): {
   kind: "connected" | "pending" | "issue";
   title: string;
   description: string;
 } {
+  if (!hasActiveService) {
+    return {
+      kind: "issue",
+      title: "Google Ads hizmeti aktif değil",
+      description: "Google Ads hizmetiniz şu anda aktif değil. Ekibimizle iletişime geçebilirsiniz.",
+    };
+  }
+
   if (hasQueryError) {
     return {
       kind: "issue",

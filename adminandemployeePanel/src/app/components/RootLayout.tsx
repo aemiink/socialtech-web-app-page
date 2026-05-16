@@ -65,14 +65,26 @@ export function RootLayout() {
   }
 
   if (!isAuthenticated || !currentUser) {
+    if (location.pathname === "/login") {
+      return null;
+    }
+
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
   if (currentUser.accountType === "EMPLOYEE") {
+    if (location.pathname === "/employee" || location.pathname.startsWith("/employee/")) {
+      return null;
+    }
+
     return <Navigate to="/employee/dashboard" replace />;
   }
 
   if (currentUser.accountType !== "ADMIN" || currentUser.role !== "ADMIN") {
+    if (location.pathname === "/login") {
+      return null;
+    }
+
     return <Navigate to="/login" replace />;
   }
 

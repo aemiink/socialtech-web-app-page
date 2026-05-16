@@ -5,6 +5,11 @@ import { MetaAdsDashboard } from "../services/meta-ads-dashboard";
 const mockUseGetOwnMetaAdsConfigQuery = vi.fn();
 const mockUseGetOwnMetaAdsSummaryQuery = vi.fn();
 const mockUseGetOwnMetaAdsCampaignsQuery = vi.fn();
+const mockUseGetOwnMetaAdsInsightsQuery = vi.fn();
+const mockUseGetOwnMetaAdsAdSetsQuery = vi.fn();
+const mockUseGetOwnMetaAdsPixelStatusQuery = vi.fn();
+const mockUseGetOwnMetaAdsReportsQuery = vi.fn();
+const mockUseGetClientTasksQuery = vi.fn();
 const mockUseSyncOwnMetaAdsMutation = vi.fn();
 
 vi.mock("../../features/metaAds/metaAdsApi", () => ({
@@ -12,7 +17,18 @@ vi.mock("../../features/metaAds/metaAdsApi", () => ({
   useGetOwnMetaAdsSummaryQuery: (...args: unknown[]) => mockUseGetOwnMetaAdsSummaryQuery(...args),
   useGetOwnMetaAdsCampaignsQuery: (...args: unknown[]) =>
     mockUseGetOwnMetaAdsCampaignsQuery(...args),
+  useGetOwnMetaAdsInsightsQuery: (...args: unknown[]) =>
+    mockUseGetOwnMetaAdsInsightsQuery(...args),
+  useGetOwnMetaAdsAdSetsQuery: (...args: unknown[]) => mockUseGetOwnMetaAdsAdSetsQuery(...args),
+  useGetOwnMetaAdsPixelStatusQuery: (...args: unknown[]) =>
+    mockUseGetOwnMetaAdsPixelStatusQuery(...args),
+  useGetOwnMetaAdsReportsQuery: (...args: unknown[]) =>
+    mockUseGetOwnMetaAdsReportsQuery(...args),
   useSyncOwnMetaAdsMutation: (...args: unknown[]) => mockUseSyncOwnMetaAdsMutation(...args),
+}));
+
+vi.mock("../../features/tasks/tasksApi", () => ({
+  useGetClientTasksQuery: (...args: unknown[]) => mockUseGetClientTasksQuery(...args),
 }));
 
 describe("MetaAdsDashboard", () => {
@@ -29,6 +45,11 @@ describe("MetaAdsDashboard", () => {
     mockUseGetOwnMetaAdsConfigQuery.mockReset();
     mockUseGetOwnMetaAdsSummaryQuery.mockReset();
     mockUseGetOwnMetaAdsCampaignsQuery.mockReset();
+    mockUseGetOwnMetaAdsInsightsQuery.mockReset();
+    mockUseGetOwnMetaAdsAdSetsQuery.mockReset();
+    mockUseGetOwnMetaAdsPixelStatusQuery.mockReset();
+    mockUseGetOwnMetaAdsReportsQuery.mockReset();
+    mockUseGetClientTasksQuery.mockReset();
     mockUseSyncOwnMetaAdsMutation.mockReset();
 
     mockUseGetOwnMetaAdsConfigQuery.mockReturnValue({
@@ -87,6 +108,31 @@ describe("MetaAdsDashboard", () => {
       isLoading: false,
       isError: false,
     });
+    mockUseGetOwnMetaAdsInsightsQuery.mockReturnValue({
+      data: {
+        data: [],
+      },
+    });
+    mockUseGetOwnMetaAdsAdSetsQuery.mockReturnValue({
+      data: {
+        data: [],
+      },
+    });
+    mockUseGetOwnMetaAdsPixelStatusQuery.mockReturnValue({
+      data: {
+        pixelId: null,
+        adAccountId: null,
+        eventStatus: "UNKNOWN",
+        setupWarning: null,
+        lastInsightAt: null,
+      },
+    });
+    mockUseGetOwnMetaAdsReportsQuery.mockReturnValue({
+      data: {
+        data: [],
+      },
+    });
+    mockUseGetClientTasksQuery.mockReturnValue([]);
     mockUseSyncOwnMetaAdsMutation.mockReturnValue([
       vi.fn(() => ({ unwrap: () => Promise.resolve({ syncStatus: "SUCCESS" }) })),
       { isLoading: false },

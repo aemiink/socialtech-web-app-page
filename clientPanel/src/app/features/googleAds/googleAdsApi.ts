@@ -45,6 +45,13 @@ export type GoogleAdsReportsQuery = {
   limit?: number;
 };
 
+const GOOGLE_ADS_TAG_TYPE = "GoogleAds" as const;
+const GOOGLE_ADS_OWN_SCOPE_TAG_ID = "OWN_SCOPE";
+const OWN_GOOGLE_ADS_TAG = {
+  type: GOOGLE_ADS_TAG_TYPE,
+  id: GOOGLE_ADS_OWN_SCOPE_TAG_ID,
+} as const;
+
 export const googleAdsApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     getOwnGoogleAdsConfig: builder.query<OwnGoogleAdsConfigResponse, void>({
@@ -53,6 +60,7 @@ export const googleAdsApi = baseApi.injectEndpoints({
         method: "GET",
       }),
       transformResponse: (response: unknown) => normalizeOwnGoogleAdsConfigResponse(response),
+      providesTags: [OWN_GOOGLE_ADS_TAG],
     }),
     getOwnGoogleAdsSummary: builder.query<GoogleAdsSummaryResponse, GoogleAdsDateRangeQuery | void>({
       query: (query) => ({
@@ -61,6 +69,7 @@ export const googleAdsApi = baseApi.injectEndpoints({
         params: serializeDateRangeQuery(query),
       }),
       transformResponse: (response: unknown) => normalizeOwnGoogleAdsSummaryResponse(response),
+      providesTags: [OWN_GOOGLE_ADS_TAG],
     }),
     getOwnGoogleAdsCampaigns: builder.query<GoogleAdsCampaignsResponse, GoogleAdsCampaignsQuery | void>({
       query: (query) => ({
@@ -69,6 +78,7 @@ export const googleAdsApi = baseApi.injectEndpoints({
         params: serializeCampaignsQuery(query),
       }),
       transformResponse: (response: unknown) => normalizeOwnGoogleAdsCampaignsResponse(response),
+      providesTags: [OWN_GOOGLE_ADS_TAG],
     }),
     getOwnGoogleAdsAdGroups: builder.query<GoogleAdsAdGroupsResponse, GoogleAdsCampaignsQuery | void>({
       query: (query) => ({
@@ -77,6 +87,7 @@ export const googleAdsApi = baseApi.injectEndpoints({
         params: serializeCampaignsQuery(query),
       }),
       transformResponse: (response: unknown) => normalizeOwnGoogleAdsAdGroupsResponse(response),
+      providesTags: [OWN_GOOGLE_ADS_TAG],
     }),
     getOwnGoogleAdsAds: builder.query<GoogleAdsAdsResponse, GoogleAdsCampaignsQuery | void>({
       query: (query) => ({
@@ -85,6 +96,7 @@ export const googleAdsApi = baseApi.injectEndpoints({
         params: serializeCampaignsQuery(query),
       }),
       transformResponse: (response: unknown) => normalizeOwnGoogleAdsAdsResponse(response),
+      providesTags: [OWN_GOOGLE_ADS_TAG],
     }),
     getOwnGoogleAdsKeywords: builder.query<GoogleAdsKeywordsResponse, GoogleAdsCampaignsQuery | void>({
       query: (query) => ({
@@ -93,6 +105,7 @@ export const googleAdsApi = baseApi.injectEndpoints({
         params: serializeCampaignsQuery(query),
       }),
       transformResponse: (response: unknown) => normalizeOwnGoogleAdsKeywordsResponse(response),
+      providesTags: [OWN_GOOGLE_ADS_TAG],
     }),
     getOwnGoogleAdsConversions: builder.query<GoogleAdsConversionsResponse, GoogleAdsCampaignsQuery | void>({
       query: (query) => ({
@@ -101,6 +114,7 @@ export const googleAdsApi = baseApi.injectEndpoints({
         params: serializeCampaignsQuery(query),
       }),
       transformResponse: (response: unknown) => normalizeOwnGoogleAdsConversionsResponse(response),
+      providesTags: [OWN_GOOGLE_ADS_TAG],
     }),
     getOwnGoogleAdsSearchTerms: builder.query<GoogleAdsSearchTermsResponse, GoogleAdsCampaignsQuery | void>({
       query: (query) => ({
@@ -109,6 +123,7 @@ export const googleAdsApi = baseApi.injectEndpoints({
         params: serializeCampaignsQuery(query),
       }),
       transformResponse: (response: unknown) => normalizeOwnGoogleAdsSearchTermsResponse(response),
+      providesTags: [OWN_GOOGLE_ADS_TAG],
     }),
     getOwnGoogleAdsInsights: builder.query<GoogleAdsInsightsResponse, GoogleAdsInsightsQuery | void>({
       query: (query) => ({
@@ -117,6 +132,7 @@ export const googleAdsApi = baseApi.injectEndpoints({
         params: serializeInsightsQuery(query),
       }),
       transformResponse: (response: unknown) => normalizeOwnGoogleAdsInsightsResponse(response),
+      providesTags: [OWN_GOOGLE_ADS_TAG],
     }),
     syncOwnGoogleAds: builder.mutation<GoogleAdsSyncResponse, GoogleAdsDateRangeQuery | void>({
       query: (query) => ({
@@ -125,6 +141,7 @@ export const googleAdsApi = baseApi.injectEndpoints({
         params: serializeDateRangeQuery(query),
       }),
       transformResponse: (response: unknown) => normalizeOwnGoogleAdsSyncResponse(response),
+      invalidatesTags: [OWN_GOOGLE_ADS_TAG],
     }),
     getOwnGoogleAdsReports: builder.query<GoogleAdsReportsResponse, GoogleAdsReportsQuery | void>({
       query: (query) => ({
@@ -133,6 +150,7 @@ export const googleAdsApi = baseApi.injectEndpoints({
         params: serializeReportsQuery(query),
       }),
       transformResponse: (response: unknown) => normalizeOwnGoogleAdsReportsResponse(response),
+      providesTags: [OWN_GOOGLE_ADS_TAG],
     }),
   }),
 });

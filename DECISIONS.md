@@ -18,6 +18,47 @@ Affected files:
 
 ---
 
+## 2026-05-16 - Google Ads Post-Phase QA Sweep Hardening
+
+Context:
+FAZ-10 sonrası toplu QA + code-review sweep’inde üç risk öne çıktı: stale cache/refetch davranışı, employee role erişim uyumsuzluğu (özellikle Designer report visibility), ve production safety test boşlukları.
+
+Decision:
+Sweep kapsamında aşağıdaki hardening değişiklikleri uygulandı:
+
+- Frontend cache/refetch:
+  - Client panel own Google Ads query/mutation zincirine `GoogleAds` tag invalidation eklendi.
+  - Admin/Employee panel assigned Google Ads query/mutation zincirine client-scope `Clients` tag invalidation eklendi.
+  - Admin Google Ads `Yenile` aksiyonu artık hem client listesini hem sync loglarını birlikte refetch ediyor.
+- Role behavior alignment:
+  - Employee workspace’te Designer erişimi `googleAds.config.read.assigned` bağımlılığından çıkarıldı; reporting-read ile workspace erişimi korunuyor.
+  - Assigned reports read endpointi `googleAds.reporting.read.assigned` ile erişilebilir hale getirildi (config-read zorunluluğu kaldırıldı).
+- UX data integrity:
+  - Employee workspace’e ad-group görünümü eklendi.
+  - Google Ads para birimi gösterimi hardcoded TRY yerine config `currencyCode` üzerinden dinamikleştirildi (fallback TRY).
+  - Client dashboard’da `hasActiveService` gating’i aktif kullanıma alındı.
+- Test hardening:
+  - `google-ads-authz.e2e-spec.ts` kapsamı PM/Designer assigned-scope read senaryoları ve report lifecycle negatif geçişleriyle genişletildi.
+  - `expectNoSensitiveTokens` helper’ı sadece anahtar adları değil token-fragment/pattern sızıntılarını da yakalayacak şekilde güçlendirildi.
+
+Reason:
+Bu kararlar phase tamamlanmış görünmesine rağmen production’da sessiz stale-data, role inconsistency ve token-leak regression risklerini azaltır; mevcut Vite+React + NestJS mimarisini bozmadan güvenilirliği artırır.
+
+Affected files:
+- `clientPanel/src/app/services/baseApi.ts`
+- `clientPanel/src/app/features/googleAds/googleAdsApi.ts`
+- `clientPanel/src/app/pages/services/google-ads-dashboard.tsx`
+- `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
+- `adminandemployeePanel/src/app/features/googleAds/googleAdsApi.ts`
+- `adminandemployeePanel/src/app/pages/GoogleAdsAdmin.tsx`
+- `adminandemployeePanel/src/app/employee/components/GoogleAdsWorkspace.tsx`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/GoogleAdsWorkspace.test.tsx`
+- `server/src/google-ads/google-ads.controller.ts`
+- `server/src/google-ads/google-ads.service.ts`
+- `server/test/google-ads-authz.e2e-spec.ts`
+
+---
+
 
 ## 2026-05-10 - Meta Ads Faz 10 Production Hardening (Client-Safe Errors + Coverage + Safe Code-Splitting)
 

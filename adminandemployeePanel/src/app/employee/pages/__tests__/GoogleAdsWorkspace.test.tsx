@@ -9,6 +9,7 @@ import { GoogleAdsWorkspace } from "../../components/GoogleAdsWorkspace";
 
 let currentUser: AuthUserProfile | null = null;
 const mockUseGetClientsQuery = vi.fn();
+const mockUseGetAssignedClientGoogleAdsConfigQuery = vi.fn();
 const mockUseGetAssignedClientGoogleAdsSummaryQuery = vi.fn();
 const mockUseGetAssignedClientGoogleAdsCampaignsQuery = vi.fn();
 const mockUseGetAssignedClientGoogleAdsKeywordsQuery = vi.fn();
@@ -44,6 +45,8 @@ vi.mock("../../../features/clients/clientsApi", () => ({
 }));
 
 vi.mock("../../../features/googleAds/googleAdsApi", () => ({
+  useGetAssignedClientGoogleAdsConfigQuery: (...args: unknown[]) =>
+    mockUseGetAssignedClientGoogleAdsConfigQuery(...args),
   useGetAssignedClientGoogleAdsSummaryQuery: (...args: unknown[]) =>
     mockUseGetAssignedClientGoogleAdsSummaryQuery(...args),
   useGetAssignedClientGoogleAdsCampaignsQuery: (...args: unknown[]) =>
@@ -150,6 +153,22 @@ function setupBaseMocks() {
       lastSyncAt: "2026-05-16T07:00:00.000Z",
     },
     isLoading: false,
+  });
+
+  mockUseGetAssignedClientGoogleAdsConfigQuery.mockReturnValue({
+    data: {
+      clientProfileId: "client-google",
+      connectionStatus: "CONNECTED",
+      account: {
+        customerId: "123-456-7890",
+        managerCustomerId: "999-888-7777",
+        descriptiveName: "Google Client Ads",
+        currencyCode: "TRY",
+        timeZone: "Europe/Istanbul",
+      },
+      lastSyncAt: "2026-05-16T07:00:00.000Z",
+      syncError: null,
+    },
   });
 
   mockUseGetAssignedClientGoogleAdsCampaignsQuery.mockReturnValue({
@@ -445,7 +464,7 @@ describe("GoogleAdsWorkspace", () => {
     expect(screen.getByRole("link", { name: "Kreatif Asset Yükle" })).toBeInTheDocument();
   });
 
-  it("shows permission warning when Google Ads config permission is missing", () => {
+  it("keeps workspace accessible when Google Ads config permission is missing", () => {
     currentUser = {
       ...baseEmployeeUser,
       permissions: baseEmployeeUser.permissions.filter(
@@ -455,11 +474,8 @@ describe("GoogleAdsWorkspace", () => {
 
     renderWorkspace("overview");
 
-    expect(
-      screen.getByText(
-        "Google Ads yapılandırmasını görüntülemek için `googleAds.config.read.assigned` izni gereklidir.",
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Google Ads Service Workspace")).toBeInTheDocument();
+    expect(screen.getByText("Performance & Optimization")).toBeInTheDocument();
   });
 
   it("disables task create action when task manage permission is missing", () => {
