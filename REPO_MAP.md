@@ -93,6 +93,7 @@ Location: `adminandemployeePanel/`
   - `adminandemployeePanel/src/app/employee/components/DeveloperTasksPage.tsx`
   - `adminandemployeePanel/src/app/employee/components/MetaAdsWorkspace.tsx`
   - `adminandemployeePanel/src/app/employee/components/TikTokAdsWorkspace.tsx`
+  - `adminandemployeePanel/src/app/employee/components/AmazonAdsWorkspace.tsx`
 - Employee CRM pages:
   - `adminandemployeePanel/src/app/employee/pages/CrmLeadlerim.tsx`
   - `adminandemployeePanel/src/app/employee/pages/CrmLeadDetail.tsx`
@@ -108,10 +109,12 @@ Location: `adminandemployeePanel/`
   - `adminandemployeePanel/src/app/employee/pages/TestYayin.tsx`
   - `adminandemployeePanel/src/app/employee/pages/Projeler.tsx`
   - `adminandemployeePanel/src/app/employee/pages/TikTokAdsCalismaAlani.tsx`
+  - `adminandemployeePanel/src/app/employee/pages/AmazonAdsCalismaAlani.tsx`
 - Employee page tests:
   - `adminandemployeePanel/src/app/employee/pages/__tests__/Musterilerim.test.tsx`
   - `adminandemployeePanel/src/app/employee/pages/__tests__/MetaAdsWorkspace.test.tsx`
   - `adminandemployeePanel/src/app/employee/pages/__tests__/TikTokAdsWorkspace.test.tsx`
+  - `adminandemployeePanel/src/app/employee/pages/__tests__/AmazonAdsWorkspace.test.tsx`
   - `adminandemployeePanel/src/app/employee/pages/__tests__/CrmLeadDetail.test.tsx`
   - `adminandemployeePanel/src/app/employee/pages/__tests__/DeveloperTaskPages.test.tsx`
   - `adminandemployeePanel/src/app/employee/pages/__tests__/ProjectManagerServiceWorkspace.test.tsx`

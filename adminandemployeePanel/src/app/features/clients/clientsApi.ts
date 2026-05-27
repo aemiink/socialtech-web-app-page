@@ -3,12 +3,19 @@ import type {
   AdminAmazonAdsClientListResponse,
   AdminMetaAdsSyncLogsQuery,
   AdminMetaAdsSyncLogsResponse,
+  AmazonAdsCampaignsQuery,
+  AmazonAdsCampaignsResponse,
   CreateMetaAdsReportRequest,
   AdminMetaAdsClientListResponse,
+  AssignedClientAmazonAdsConfig,
   AdminClientAmazonAdsConnection,
   AdminClientMetaAdsConnection,
   AmazonAdsDateRangeQuery,
+  AmazonAdsInsightsQuery,
+  AmazonAdsInsightsResponse,
   AmazonAdsOAuthStartResponse,
+  AmazonAdsProductsQuery,
+  AmazonAdsProductsResponse,
   AmazonAdsRegion,
   AmazonAdsSummaryResponse,
   AmazonAdsSyncResponse,
@@ -38,8 +45,12 @@ import type {
   UpdateAdminClientRequest,
 } from "./clientsTypes";
 import {
+  normalizeAmazonAdsCampaignsResponse,
+  normalizeAssignedAmazonAdsConfigResponse,
   normalizeAdminAmazonAdsConnectionResponse,
   normalizeAdminAmazonAdsClientListResponse,
+  normalizeAmazonAdsInsightsResponse,
+  normalizeAmazonAdsProductsResponse,
   normalizeAmazonAdsSummaryResponse,
   normalizeAmazonAdsSyncResponse,
   normalizeAmazonAdsOAuthStartResponse,
@@ -137,6 +148,76 @@ export const clientsApi = baseApi.injectEndpoints({
         params: serializeAmazonAdsDateRangeQuery(query),
       }),
       transformResponse: (response: unknown) => normalizeAmazonAdsSummaryResponse(response),
+      providesTags: (_result, _error, { clientId }) => [
+        { type: "Clients", id: getClientAmazonAdsConnectionTagId(clientId) },
+      ],
+    }),
+    getAssignedClientAmazonAdsConfig: builder.query<
+      AssignedClientAmazonAdsConfig,
+      { clientId: string }
+    >({
+      query: ({ clientId }) => ({
+        url: `/amazon-ads/clients/${clientId}/config`,
+        method: "GET",
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeAssignedAmazonAdsConfigResponse(response),
+      providesTags: (_result, _error, { clientId }) => [
+        { type: "Clients", id: getClientAmazonAdsConnectionTagId(clientId) },
+      ],
+    }),
+    getAssignedClientAmazonAdsSummary: builder.query<
+      AmazonAdsSummaryResponse,
+      { clientId: string; query?: AmazonAdsDateRangeQuery }
+    >({
+      query: ({ clientId, query }) => ({
+        url: `/amazon-ads/clients/${clientId}/summary`,
+        method: "GET",
+        params: serializeAmazonAdsDateRangeQuery(query),
+      }),
+      transformResponse: (response: unknown) => normalizeAmazonAdsSummaryResponse(response),
+      providesTags: (_result, _error, { clientId }) => [
+        { type: "Clients", id: getClientAmazonAdsConnectionTagId(clientId) },
+      ],
+    }),
+    getAssignedClientAmazonAdsCampaigns: builder.query<
+      AmazonAdsCampaignsResponse,
+      { clientId: string; query?: AmazonAdsCampaignsQuery }
+    >({
+      query: ({ clientId, query }) => ({
+        url: `/amazon-ads/clients/${clientId}/campaigns`,
+        method: "GET",
+        params: serializeAmazonAdsCampaignsQuery(query),
+      }),
+      transformResponse: (response: unknown) => normalizeAmazonAdsCampaignsResponse(response),
+      providesTags: (_result, _error, { clientId }) => [
+        { type: "Clients", id: getClientAmazonAdsConnectionTagId(clientId) },
+      ],
+    }),
+    getAssignedClientAmazonAdsProducts: builder.query<
+      AmazonAdsProductsResponse,
+      { clientId: string; query?: AmazonAdsProductsQuery }
+    >({
+      query: ({ clientId, query }) => ({
+        url: `/amazon-ads/clients/${clientId}/products`,
+        method: "GET",
+        params: serializeAmazonAdsProductsQuery(query),
+      }),
+      transformResponse: (response: unknown) => normalizeAmazonAdsProductsResponse(response),
+      providesTags: (_result, _error, { clientId }) => [
+        { type: "Clients", id: getClientAmazonAdsConnectionTagId(clientId) },
+      ],
+    }),
+    getAssignedClientAmazonAdsInsights: builder.query<
+      AmazonAdsInsightsResponse,
+      { clientId: string; query?: AmazonAdsInsightsQuery }
+    >({
+      query: ({ clientId, query }) => ({
+        url: `/amazon-ads/clients/${clientId}/insights`,
+        method: "GET",
+        params: serializeAmazonAdsInsightsQuery(query),
+      }),
+      transformResponse: (response: unknown) => normalizeAmazonAdsInsightsResponse(response),
       providesTags: (_result, _error, { clientId }) => [
         { type: "Clients", id: getClientAmazonAdsConnectionTagId(clientId) },
       ],
@@ -305,6 +386,21 @@ export const clientsApi = baseApi.injectEndpoints({
         ...getAdminClientMutationInvalidations(clientId),
         { type: "Clients", id: getClientAmazonAdsConnectionTagId(clientId) },
         { type: "Clients", id: CLIENT_AMAZON_ADS_GLOBAL_LIST_ID },
+      ],
+    }),
+    syncAssignedClientAmazonAds: builder.mutation<
+      AmazonAdsSyncResponse,
+      { clientId: string; query?: AmazonAdsDateRangeQuery }
+    >({
+      query: ({ clientId, query }) => ({
+        url: `/amazon-ads/clients/${clientId}/sync`,
+        method: "POST",
+        params: serializeAmazonAdsDateRangeQuery(query),
+      }),
+      transformResponse: (response: unknown) => normalizeAmazonAdsSyncResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "Clients", id: CLIENTS_LIST_ID },
+        { type: "Clients", id: getClientAmazonAdsConnectionTagId(clientId) },
       ],
     }),
     disconnectAdminClientAmazonAds: builder.mutation<
@@ -519,6 +615,11 @@ export const {
   useGetAdminClientMetaAdsConnectionQuery,
   useGetAdminClientAmazonAdsConnectionQuery,
   useGetAdminClientAmazonAdsSummaryQuery,
+  useGetAssignedClientAmazonAdsConfigQuery,
+  useGetAssignedClientAmazonAdsSummaryQuery,
+  useGetAssignedClientAmazonAdsCampaignsQuery,
+  useGetAssignedClientAmazonAdsProductsQuery,
+  useGetAssignedClientAmazonAdsInsightsQuery,
   useGetAdminClientMetaAdsSummaryQuery,
   useGetAdminMetaAdsClientsQuery,
   useGetAdminAmazonAdsClientsQuery,
@@ -530,6 +631,7 @@ export const {
   useConnectAdminClientAmazonAdsManualMutation,
   useTestAdminClientAmazonAdsConnectionMutation,
   useSyncAdminClientAmazonAdsMutation,
+  useSyncAssignedClientAmazonAdsMutation,
   useDisconnectAdminClientAmazonAdsMutation,
   useConnectAdminClientMetaAdsManualMutation,
   useDisconnectAdminClientMetaAdsMutation,
@@ -660,6 +762,68 @@ function serializeAmazonAdsDateRangeQuery(
 
   if (query.until !== undefined && query.until.trim().length > 0) {
     params.until = query.until.trim();
+  }
+
+  return params;
+}
+
+function serializeAmazonAdsCampaignsQuery(
+  query: AmazonAdsCampaignsQuery | void,
+): Record<string, string | number> {
+  if (!query) {
+    return {};
+  }
+
+  const params: Record<string, string | number> = {
+    ...serializeAmazonAdsDateRangeQuery(query),
+  };
+
+  if (query.adProduct !== undefined) {
+    params.adProduct = query.adProduct;
+  }
+
+  if (typeof query.limit === "number" && Number.isFinite(query.limit)) {
+    params.limit = Math.trunc(query.limit);
+  }
+
+  return params;
+}
+
+function serializeAmazonAdsProductsQuery(
+  query: AmazonAdsProductsQuery | void,
+): Record<string, string | number> {
+  if (!query) {
+    return {};
+  }
+
+  const params: Record<string, string | number> = {
+    ...serializeAmazonAdsDateRangeQuery(query),
+  };
+
+  if (typeof query.limit === "number" && Number.isFinite(query.limit)) {
+    params.limit = Math.trunc(query.limit);
+  }
+
+  return params;
+}
+
+function serializeAmazonAdsInsightsQuery(
+  query: AmazonAdsInsightsQuery | void,
+): Record<string, string | number> {
+  if (!query) {
+    return {};
+  }
+
+  const params: Record<string, string | number> = {
+    ...serializeAmazonAdsDateRangeQuery(query),
+  };
+
+  if (query.level !== undefined) {
+    params.level = query.level;
+  }
+
+  if (typeof query.limit === "number" && Number.isFinite(query.limit)) {
+    params.limit = Math.trunc(query.limit);
   }
 
   return params;

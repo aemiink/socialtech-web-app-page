@@ -1,5 +1,38 @@
 # Architecture Decisions
 
+## 2026-05-28 - Amazon Ads Faz 6 Employee Assigned-Scope Workspace (Social/Performance/Designer)
+
+Context:
+Amazon Ads Faz 5 ile admin global panel tamamlandıktan sonra employee panelde Social Media Specialist, Performance Specialist ve Designer rollerinin assigned Amazon Ads müşterileri üzerinde ortak bir çalışma alanına ihtiyacı vardı. Amaç, mock veriye dönmeden Faz 5/Faz 3 read-model endpointleriyle role-aware bir workspace sunmaktı.
+
+Decision:
+
+- Employee panelde yeni `/employee/amazon-ads` route’u eklendi ve Social/Performance/Designer sidebar menülerine `Amazon Ads Workspace` girişleri tanımlandı.
+- Yeni generic component `AmazonAdsWorkspace` oluşturuldu; role bazlı görünüm/tabs:
+  - Social: campaigns, search terms, reports, approvals
+  - Performance: campaigns, products/ASIN, search terms, reports, approvals + recommendation action
+  - Designer: creative/assets, approvals, reports
+- Frontend data contract’ı genişletildi: assigned Amazon Ads `config/summary/campaigns/products/insights/sync` endpointleri için RTK Query hookları, query serializer’ları, tipler ve normalizer katmanı eklendi.
+- Workspace aksiyonları permission-aware tasarlandı (`amazonAds.config.read.assigned`, `amazonAds.reporting.read.assigned`, `amazonAds.sync.read.assigned`, `amazonAds.notes.manage.assigned`, `amazonAds.approvals.create.assigned`, `amazonAds.recommendations.manage.assigned`).
+- Seed permission kataloğuna `amazonAds.recommendations.manage.assigned` eklendi ve ilgili employee role mapping’leri güncellendi.
+- Faz 6 için dedicated frontend test dosyası eklendi; assigned-scope filtreleme, role görünürlüğü, sync aksiyonu, permission disable ve empty-state senaryoları doğrulandı.
+
+Reason:
+Bu yaklaşım Meta/TikTok employee workspace pattern’iyle uyumlu, minimum invaziv ve Phase 5 read-model’i doğrudan kullanan bir Amazon çalışma yüzeyi sağlar. Böylece employee operasyonu admin/client panelden kopmadan aynı yetki sınırları içinde devam eder.
+
+Affected files:
+- `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
+- `adminandemployeePanel/src/app/employee/components/AmazonAdsWorkspace.tsx`
+- `adminandemployeePanel/src/app/employee/pages/AmazonAdsCalismaAlani.tsx`
+- `adminandemployeePanel/src/app/routes.tsx`
+- `adminandemployeePanel/src/app/employee/EmployeeLayout.tsx`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/AmazonAdsWorkspace.test.tsx`
+- `server/prisma/seed.ts`
+
+---
+
 ## 2026-05-28 - Amazon Ads Faz 5 Admin Global Panel ve Merkezi Yönetim
 
 Context:

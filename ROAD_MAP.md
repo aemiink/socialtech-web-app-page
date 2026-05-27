@@ -166,6 +166,7 @@
 - Amazon Ads Faz 3: Reporting v3 async sync (daily snapshot tables + manual sync + summary/campaign/product/insight API + admin/client dashboard read-model integration)
 - Amazon Ads Faz 4: Client panel API-driven tab workspace (sponsored product/brand/display + campaigns/products/keywords/targeting/search terms + approvals/agency notes + report-ready tab + config-aware states)
 - Amazon Ads Faz 5: Admin global panel (`/amazon-ads`) + backend global clients list endpoint + config/test/sync/disconnect/onay talebi merkezi yönetim ekranı
+- Amazon Ads Faz 6: Employee role workspaces (`/employee/amazon-ads` + `AmazonAdsWorkspace` + Social/Performance/Designer role-aware sections/actions + assigned endpoint coverage)
 
 ## Blocked
 
@@ -290,6 +291,11 @@ None identified.
   - `server`: `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true node ./test/run-e2e.cjs amazon-ads-authz.e2e-spec.ts` ✅ (`12/12`)
   - `adminandemployeePanel`: `npm run test:run -- src/app/pages/__tests__/AmazonAdsAdmin.test.tsx` ✅ (`6/6`)
   - `adminandemployeePanel`: `npm run typecheck` ✅
+  - `adminandemployeePanel`: `npm run check` ✅
+- Latest Amazon Ads Faz 6 checkpoint:
+  - `server`: `npm run typecheck:seed` ✅
+  - `server`: `npm run check` ✅
+  - `adminandemployeePanel`: `npm run test:run -- src/app/employee/pages/__tests__/AmazonAdsWorkspace.test.tsx` ✅ (`8/8`)
   - `adminandemployeePanel`: `npm run check` ✅
 - Latest admin/employee frontend validation checkpoint: `25` test files, `153/153` tests.
 - Latest client portal frontend validation checkpoint: `4` test files, `17/17` tests.

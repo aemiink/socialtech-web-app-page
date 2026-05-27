@@ -7,6 +7,12 @@ import type {
   AdminMetaAdsSyncLogsResponse,
   AdminMetaAdsClientListItem,
   AdminMetaAdsClientListResponse,
+  AmazonAdsCampaignsResponse,
+  AmazonAdsInsightLevel,
+  AmazonAdsInsightsResponse,
+  AmazonAdsProductType,
+  AmazonAdsProductsResponse,
+  AssignedClientAmazonAdsConfig,
   AdminClientAmazonAdsConnection,
   AdminClientMetaAdsConnection,
   AmazonAdsSummaryResponse,
@@ -664,6 +670,101 @@ export function normalizeAmazonAdsSummaryResponse(response: unknown): AmazonAdsS
     acos: readNumber(isRecord(candidate) ? candidate.acos : undefined, 0),
     roas: readNumber(isRecord(candidate) ? candidate.roas : undefined, 0),
     conversionRate: readNumber(isRecord(candidate) ? candidate.conversionRate : undefined, 0),
+    dateRange: {
+      since: typeof dateRange.since === "string" ? dateRange.since : "",
+      until: typeof dateRange.until === "string" ? dateRange.until : "",
+    },
+    lastSyncAt:
+      isRecord(candidate) && isStringOrNull(candidate.lastSyncAt) ? candidate.lastSyncAt : null,
+  };
+}
+
+export function normalizeAssignedAmazonAdsConfigResponse(
+  response: unknown,
+): AssignedClientAmazonAdsConfig {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  const ids = isRecord(candidate) && isRecord(candidate.ids) ? candidate.ids : {};
+  const account = isRecord(candidate) && isRecord(candidate.account) ? candidate.account : {};
+  const settings = isRecord(candidate) && isRecord(candidate.settings) ? candidate.settings : {};
+
+  return {
+    clientProfileId:
+      isRecord(candidate) && typeof candidate.clientProfileId === "string"
+        ? candidate.clientProfileId
+        : "",
+    connectionStatus:
+      isRecord(candidate) && candidate.connectionStatus
+        ? normalizeAmazonAdsConnectionStatus(candidate.connectionStatus)
+        : "NOT_CONNECTED",
+    ids: {
+      profileId: isStringOrNull(ids.profileId) ? ids.profileId : null,
+      advertiserAccountId: isStringOrNull(ids.advertiserAccountId)
+        ? ids.advertiserAccountId
+        : null,
+      marketplaceId: isStringOrNull(ids.marketplaceId) ? ids.marketplaceId : null,
+    },
+    account: {
+      accountType: isStringOrNull(account.accountType) ? account.accountType : null,
+      accountName: isStringOrNull(account.accountName) ? account.accountName : null,
+      validPaymentMethod:
+        typeof account.validPaymentMethod === "boolean" ? account.validPaymentMethod : null,
+    },
+    settings: {
+      region: normalizeAmazonAdsRegion(settings.region),
+      countryCode: isStringOrNull(settings.countryCode) ? settings.countryCode : null,
+      currencyCode: isStringOrNull(settings.currencyCode) ? settings.currencyCode : null,
+      timezone: isStringOrNull(settings.timezone) ? settings.timezone : null,
+    },
+    lastSyncAt:
+      isRecord(candidate) && isStringOrNull(candidate.lastSyncAt) ? candidate.lastSyncAt : null,
+    syncError:
+      isRecord(candidate) && isStringOrNull(candidate.syncError) ? candidate.syncError : null,
+  };
+}
+
+export function normalizeAmazonAdsCampaignsResponse(response: unknown): AmazonAdsCampaignsResponse {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  const rows = isRecord(candidate) && Array.isArray(candidate.data) ? candidate.data : [];
+  const dateRange = isRecord(candidate) && isRecord(candidate.dateRange) ? candidate.dateRange : {};
+
+  return {
+    data: rows.map((row) => normalizeAmazonAdsCampaign(row)).filter(isDefined),
+    dateRange: {
+      since: typeof dateRange.since === "string" ? dateRange.since : "",
+      until: typeof dateRange.until === "string" ? dateRange.until : "",
+    },
+    lastSyncAt:
+      isRecord(candidate) && isStringOrNull(candidate.lastSyncAt) ? candidate.lastSyncAt : null,
+  };
+}
+
+export function normalizeAmazonAdsProductsResponse(response: unknown): AmazonAdsProductsResponse {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  const rows = isRecord(candidate) && Array.isArray(candidate.data) ? candidate.data : [];
+  const dateRange = isRecord(candidate) && isRecord(candidate.dateRange) ? candidate.dateRange : {};
+
+  return {
+    data: rows.map((row) => normalizeAmazonAdsProduct(row)).filter(isDefined),
+    dateRange: {
+      since: typeof dateRange.since === "string" ? dateRange.since : "",
+      until: typeof dateRange.until === "string" ? dateRange.until : "",
+    },
+    lastSyncAt:
+      isRecord(candidate) && isStringOrNull(candidate.lastSyncAt) ? candidate.lastSyncAt : null,
+  };
+}
+
+export function normalizeAmazonAdsInsightsResponse(response: unknown): AmazonAdsInsightsResponse {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  const rows = isRecord(candidate) && Array.isArray(candidate.data) ? candidate.data : [];
+  const dateRange = isRecord(candidate) && isRecord(candidate.dateRange) ? candidate.dateRange : {};
+
+  return {
+    data: rows.map((row) => normalizeAmazonAdsInsight(row)).filter(isDefined),
+    level:
+      isRecord(candidate) && candidate.level
+        ? normalizeAmazonAdsInsightLevel(candidate.level) ?? "ACCOUNT"
+        : "ACCOUNT",
     dateRange: {
       since: typeof dateRange.since === "string" ? dateRange.since : "",
       until: typeof dateRange.until === "string" ? dateRange.until : "",
@@ -1430,6 +1531,99 @@ function normalizeMetaAdsReportItem(value: unknown): MetaAdsReportItem | null {
   };
 }
 
+function normalizeAmazonAdsCampaign(
+  value: unknown,
+): AmazonAdsCampaignsResponse["data"][number] | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const id = typeof value.id === "string" ? value.id : "";
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    name: typeof value.name === "string" ? value.name : id,
+    adProduct: normalizeAmazonAdsProductType(value.adProduct),
+    status: typeof value.status === "string" ? value.status : "UNKNOWN",
+    spend: readNumber(value.spend, 0),
+    impressions: Math.trunc(readNumber(value.impressions, 0)),
+    clicks: Math.trunc(readNumber(value.clicks, 0)),
+    sales: readNumber(value.sales, 0),
+    orders: Math.trunc(readNumber(value.orders, 0)),
+    acos: readNumber(value.acos, 0),
+    roas: readNumber(value.roas, 0),
+  };
+}
+
+function normalizeAmazonAdsProduct(
+  value: unknown,
+): AmazonAdsProductsResponse["data"][number] | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    asin: isStringOrNull(value.asin) ? value.asin : null,
+    sku: isStringOrNull(value.sku) ? value.sku : null,
+    title: isStringOrNull(value.title) ? value.title : null,
+    spend: readNumber(value.spend, 0),
+    clicks: Math.trunc(readNumber(value.clicks, 0)),
+    sales: readNumber(value.sales, 0),
+    orders: Math.trunc(readNumber(value.orders, 0)),
+    acos: readNumber(value.acos, 0),
+    roas: readNumber(value.roas, 0),
+  };
+}
+
+function normalizeAmazonAdsInsight(
+  value: unknown,
+): AmazonAdsInsightsResponse["data"][number] | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const id = typeof value.id === "string" ? value.id : "";
+  const level = normalizeAmazonAdsInsightLevel(value.level);
+  if (!id || !level) {
+    return null;
+  }
+
+  return {
+    id,
+    date: typeof value.date === "string" ? value.date : "",
+    level,
+    entityId: typeof value.entityId === "string" ? value.entityId : "",
+    entityName: isStringOrNull(value.entityName) ? value.entityName : null,
+    adProduct: normalizeAmazonAdsProductType(value.adProduct),
+    spend: readNumber(value.spend, 0),
+    impressions: Math.trunc(readNumber(value.impressions, 0)),
+    clicks: Math.trunc(readNumber(value.clicks, 0)),
+    sales: readNumber(value.sales, 0),
+    orders: Math.trunc(readNumber(value.orders, 0)),
+    unitsSold: Math.trunc(readNumber(value.unitsSold, 0)),
+    ctr: readNumber(value.ctr, 0),
+    cpc: readNumber(value.cpc, 0),
+    acos: readNumber(value.acos, 0),
+    roas: readNumber(value.roas, 0),
+    conversionRate: readNumber(value.conversionRate, 0),
+    campaignId: isStringOrNull(value.campaignId) ? value.campaignId : null,
+    campaignName: isStringOrNull(value.campaignName) ? value.campaignName : null,
+    adGroupId: isStringOrNull(value.adGroupId) ? value.adGroupId : null,
+    adGroupName: isStringOrNull(value.adGroupName) ? value.adGroupName : null,
+    keywordId: isStringOrNull(value.keywordId) ? value.keywordId : null,
+    keywordText: isStringOrNull(value.keywordText) ? value.keywordText : null,
+    keywordType: isStringOrNull(value.keywordType) ? value.keywordType : null,
+    matchType: isStringOrNull(value.matchType) ? value.matchType : null,
+    targeting: isStringOrNull(value.targeting) ? value.targeting : null,
+    searchTerm: isStringOrNull(value.searchTerm) ? value.searchTerm : null,
+    reportTypeId: isStringOrNull(value.reportTypeId) ? value.reportTypeId : null,
+    updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : "",
+  };
+}
+
 function isDefined<T>(value: T | null | undefined): value is T {
   return value !== null && value !== undefined;
 }
@@ -1665,6 +1859,36 @@ function normalizeAmazonAdsProfile(value: unknown): AmazonAdsProfileSummary | nu
 
 function normalizeAmazonAdsRegion(value: unknown): AmazonAdsRegion | null {
   if (value === "NA" || value === "EU" || value === "FE") {
+    return value;
+  }
+
+  return null;
+}
+
+function normalizeAmazonAdsProductType(value: unknown): AmazonAdsProductType | null {
+  if (
+    value === "SPONSORED_PRODUCTS" ||
+    value === "SPONSORED_BRANDS" ||
+    value === "SPONSORED_DISPLAY"
+  ) {
+    return value;
+  }
+
+  return null;
+}
+
+function normalizeAmazonAdsInsightLevel(value: unknown): AmazonAdsInsightLevel | null {
+  if (
+    value === "ACCOUNT" ||
+    value === "PORTFOLIO" ||
+    value === "CAMPAIGN" ||
+    value === "AD_GROUP" ||
+    value === "AD" ||
+    value === "KEYWORD" ||
+    value === "TARGET" ||
+    value === "PRODUCT" ||
+    value === "SEARCH_TERM"
+  ) {
     return value;
   }
 
