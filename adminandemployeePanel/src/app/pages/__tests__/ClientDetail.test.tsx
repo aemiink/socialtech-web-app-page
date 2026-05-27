@@ -5,6 +5,7 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
+  AdminClientAmazonAdsConnection,
   AdminClientMetaAdsConnection,
   ClientSummaryResponse,
   MetaAdsSummaryResponse,
@@ -30,6 +31,14 @@ type ClientSummaryQueryResult = {
 
 type MetaAdsConnectionQueryResult = {
   data?: AdminClientMetaAdsConnection;
+  error?: unknown;
+  isLoading: boolean;
+  isFetching: boolean;
+  refetch: () => void;
+};
+
+type AmazonAdsConnectionQueryResult = {
+  data?: AdminClientAmazonAdsConnection;
   error?: unknown;
   isLoading: boolean;
   isFetching: boolean;
@@ -71,6 +80,15 @@ const mockUseConnectAdminClientMetaAdsManualMutation = vi.fn();
 const mockUseTestAdminClientMetaAdsConnectionMutation = vi.fn();
 const mockUseSyncAdminClientMetaAdsMutation = vi.fn();
 const mockUseDisconnectAdminClientMetaAdsMutation = vi.fn();
+const mockUseGetAdminClientAmazonAdsConnectionQuery = vi.fn<
+  (id: string, options: QueryOptions) => AmazonAdsConnectionQueryResult
+>();
+const mockUseUpdateAdminClientAmazonAdsConfigMutation = vi.fn();
+const mockUseCreateAdminClientAmazonAdsOAuthUrlMutation = vi.fn();
+const mockUseExchangeAdminClientAmazonAdsOAuthCodeMutation = vi.fn();
+const mockUseConnectAdminClientAmazonAdsManualMutation = vi.fn();
+const mockUseTestAdminClientAmazonAdsConnectionMutation = vi.fn();
+const mockUseDisconnectAdminClientAmazonAdsMutation = vi.fn();
 const mockUseResetClientOwnerPasswordMutation = vi.fn();
 const mockUseGetAdminClientTikTokAdsConnectionQuery = vi.fn<
   (id: string, options: QueryOptions) => TikTokAdsConnectionQueryResult
@@ -88,6 +106,20 @@ vi.mock("../../features/clients/clientsApi", () => ({
     mockUseGetAdminClientMetaAdsConnectionQuery(id, options),
   useGetAdminClientMetaAdsSummaryQuery: (...args: unknown[]) =>
     mockUseGetAdminClientMetaAdsSummaryQuery(...args),
+  useGetAdminClientAmazonAdsConnectionQuery: (id: string, options: QueryOptions) =>
+    mockUseGetAdminClientAmazonAdsConnectionQuery(id, options),
+  useUpdateAdminClientAmazonAdsConfigMutation: () =>
+    mockUseUpdateAdminClientAmazonAdsConfigMutation(),
+  useCreateAdminClientAmazonAdsOAuthUrlMutation: () =>
+    mockUseCreateAdminClientAmazonAdsOAuthUrlMutation(),
+  useExchangeAdminClientAmazonAdsOAuthCodeMutation: () =>
+    mockUseExchangeAdminClientAmazonAdsOAuthCodeMutation(),
+  useConnectAdminClientAmazonAdsManualMutation: () =>
+    mockUseConnectAdminClientAmazonAdsManualMutation(),
+  useTestAdminClientAmazonAdsConnectionMutation: () =>
+    mockUseTestAdminClientAmazonAdsConnectionMutation(),
+  useDisconnectAdminClientAmazonAdsMutation: () =>
+    mockUseDisconnectAdminClientAmazonAdsMutation(),
   useConnectAdminClientMetaAdsManualMutation: () =>
     mockUseConnectAdminClientMetaAdsManualMutation(),
   useTestAdminClientMetaAdsConnectionMutation: () =>
@@ -213,6 +245,38 @@ const metaAdsSummary: MetaAdsSummaryResponse = {
   lastSyncAt: "2026-05-09T10:00:00.000Z",
 };
 
+const amazonAdsConnectionSummary: AdminClientAmazonAdsConnection = {
+  clientProfileId,
+  connectionStatus: "CONNECTED",
+  hasActiveService: true,
+  ids: {
+    profileId: "amzn1.profile.test",
+    advertiserAccountId: "ENTITY123456789",
+    marketplaceId: "ATVPDKIKX0DER",
+  },
+  account: {
+    accountType: "seller",
+    accountName: "Amazon Ads E2E",
+    validPaymentMethod: true,
+  },
+  settings: {
+    region: "NA",
+    countryCode: "US",
+    currencyCode: "USD",
+    timezone: "America/Los_Angeles",
+  },
+  lastSyncAt: "2026-05-01T10:00:00.000Z",
+  syncError: null,
+  credential: {
+    hasAccessToken: true,
+    hasRefreshToken: true,
+    tokenLastUpdatedAt: "2026-05-01T09:00:00.000Z",
+    accessTokenExpiresAt: "2026-05-01T10:00:00.000Z",
+    refreshTokenExpiresAt: null,
+    grantedScopes: ["advertising::campaign_management"],
+  },
+};
+
 const tikTokAdsConnectionSummary: AdminTikTokAdsConnection = {
   clientProfileId,
   connectionStatus: "CONNECTED",
@@ -286,6 +350,19 @@ function setupMetaAdsConnectionState(overrides: Partial<MetaAdsConnectionQueryRe
   });
 }
 
+function setupAmazonAdsConnectionState(
+  overrides: Partial<AmazonAdsConnectionQueryResult> = {},
+) {
+  mockUseGetAdminClientAmazonAdsConnectionQuery.mockReturnValue({
+    data: amazonAdsConnectionSummary,
+    error: undefined,
+    isLoading: false,
+    isFetching: false,
+    refetch: vi.fn(),
+    ...overrides,
+  });
+}
+
 function setupTikTokAdsConnectionState(
   overrides: Partial<TikTokAdsConnectionQueryResult> = {},
 ) {
@@ -345,6 +422,7 @@ describe("ClientDetail", () => {
     vi.clearAllMocks();
     setupSummaryState();
     setupMetaAdsConnectionState();
+    setupAmazonAdsConnectionState();
     setupMetaAdsSummaryState();
     setupTikTokAdsConnectionState();
     setupTikTokAdsSummaryState();
@@ -352,6 +430,12 @@ describe("ClientDetail", () => {
     mockUseTestAdminClientMetaAdsConnectionMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseSyncAdminClientMetaAdsMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseDisconnectAdminClientMetaAdsMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
+    mockUseUpdateAdminClientAmazonAdsConfigMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
+    mockUseCreateAdminClientAmazonAdsOAuthUrlMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
+    mockUseExchangeAdminClientAmazonAdsOAuthCodeMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
+    mockUseConnectAdminClientAmazonAdsManualMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
+    mockUseTestAdminClientAmazonAdsConnectionMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
+    mockUseDisconnectAdminClientAmazonAdsMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseConnectAdminClientTikTokAdsManualMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseTestAdminClientTikTokAdsConnectionMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseSyncAdminClientTikTokAdsMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
@@ -416,6 +500,10 @@ describe("ClientDetail", () => {
     expect(screen.getByText("Müşteri Portal Şifre Sıfırlama")).toBeInTheDocument();
     expect(screen.getByText("Meta Ads Bağlantı Yönetimi")).toBeInTheDocument();
     expect(screen.getByText("TikTok Ads Yapılandırması")).toBeInTheDocument();
+    expect(screen.getByText("Amazon Ads Yapılandırması")).toBeInTheDocument();
+    expect(screen.getByText("Refresh Token ile Bağla")).toBeInTheDocument();
+    expect(screen.getByText("OAuth URL Oluştur")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Refresh Token")).toBeInTheDocument();
     expect(screen.getAllByText("Token Durumu").length).toBeGreaterThan(0);
     expect(screen.getByText("Video İzlenme")).toBeInTheDocument();
     expect(screen.getByText("18000")).toBeInTheDocument();

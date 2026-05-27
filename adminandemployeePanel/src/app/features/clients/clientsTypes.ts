@@ -290,6 +290,65 @@ export type UpdateAdminClientAmazonAdsConfigRequest = {
   connectionStatus?: AmazonAdsConnectionStatus;
 };
 
+export type ConnectManualAmazonAdsRequest = {
+  refreshToken: string;
+  accessToken?: string;
+  profileId?: string;
+  advertiserAccountId?: string;
+  marketplaceId?: string;
+  region?: AmazonAdsRegion;
+  countryCode?: string;
+  currencyCode?: string;
+  timezone?: string;
+  accountType?: string;
+  accountName?: string;
+  validPaymentMethod?: boolean;
+  accessTokenExpiresAt?: string;
+  refreshTokenExpiresAt?: string;
+  grantedScopes?: string[];
+};
+
+export type TestAmazonAdsConnectionRequest = {
+  refreshToken?: string;
+  profileId?: string;
+  region?: AmazonAdsRegion;
+};
+
+export type AmazonAdsProfileSummary = {
+  profileId: string;
+  advertiserAccountId: string | null;
+  marketplaceId: string | null;
+  region: AmazonAdsRegion;
+  countryCode: string | null;
+  currencyCode: string | null;
+  timezone: string | null;
+  accountType: string | null;
+  accountName: string | null;
+  validPaymentMethod: boolean | null;
+};
+
+export type TestAmazonAdsConnectionResponse = {
+  success: true;
+  checkedAt: string;
+  connection: AdminClientAmazonAdsConnection;
+  profile: AmazonAdsProfileSummary;
+  profiles: AmazonAdsProfileSummary[];
+  grantedScopes: string[];
+};
+
+export type AmazonAdsOAuthStartResponse = {
+  authorizationUrl: string;
+  state: string;
+  redirectUri: string;
+  scopes: string[];
+};
+
+export type ExchangeAmazonAdsOAuthCodeRequest = {
+  code: string;
+  profileId?: string;
+  region?: AmazonAdsRegion;
+};
+
 export type TestMetaAdsConnectionRequest = {
   accessToken?: string;
   adAccountId?: string;

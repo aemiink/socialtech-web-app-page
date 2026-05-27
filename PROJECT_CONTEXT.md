@@ -484,6 +484,23 @@ Active Amazon Ads endpoints:
 - `GET /api/v1/amazon-ads/clients/:clientId/config`
 - `GET /api/v1/clients/me/amazon-ads/config`
 
+## Amazon Ads Faz 2 — LwA OAuth ve Token Connection Management (2026-05-27)
+
+Amazon Ads Faz 2 ile müşteri bazlı connection lifecycle eklendi. Özet:
+- Backend `AmazonAdsTokenService`, `AMAZON_ADS_TOKEN_ENCRYPTION_KEY` ile AES-256-GCM refresh/access token encryption ve SHA-256 token hash üretir; admin response’larında raw/encrypted token alanları sızdırılmaz.
+- Backend `AmazonAdsApiService`, LwA authorization URL/code exchange/refresh-token grant, regional `/v2/profiles` lookup ve API error normalization yüzeyi sağlar.
+- Admin connection actions: OAuth URL başlatma, OAuth code exchange, manual refresh token connect, stored/transient refresh token ile test connection ve disconnect endpointleri eklendi.
+- Test connection başarılı olunca profile/account/marketplace/region metadata config’e yazılır ve connection `CONNECTED` olur; API/auth/permission/rate-limit hatalarında status `ERROR` olarak normalize edilir.
+- Admin ClientDetail Amazon Ads kartı artık OAuth URL/code, manual refresh token, test connection, disconnect ve config update aksiyonlarını destekler.
+- Client portal Amazon Ads dashboard connected durumda readonly profile/advertiser/marketplace/region/status bilgisini gösterir.
+
+Additional active Amazon Ads endpoints:
+- `GET /api/v1/admin/clients/:clientId/amazon-ads/oauth/start`
+- `POST /api/v1/admin/clients/:clientId/amazon-ads/oauth/exchange`
+- `POST /api/v1/admin/clients/:clientId/amazon-ads/connect/manual`
+- `POST /api/v1/admin/clients/:clientId/amazon-ads/test-connection`
+- `POST /api/v1/admin/clients/:clientId/amazon-ads/disconnect`
+
 Planned next backend phases:
 - Broader domain endpoint authorization rollout (beyond users/clients/admin-assignments/projects/tasks)
 - Forced password change on first login flow

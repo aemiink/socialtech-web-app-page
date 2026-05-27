@@ -330,16 +330,26 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 - `server/src/amazon-ads/amazon-ads.controller.ts`
   - admin config/connection read endpoints
   - admin config update endpoint
+  - admin OAuth start/code exchange, manual connect, test connection, and disconnect endpoints
   - assigned employee read-only config endpoint
   - own client safe config endpoint
 - `server/src/amazon-ads/amazon-ads.service.ts`
   - service-level admin/assigned/client permission checks
   - active `AMAZON_ADS` purchased-service checks
   - safe config/connection response shaping without credential secret leakage
+  - encrypted credential persistence, profile metadata config updates, and normalized connection error state handling
+- `server/src/amazon-ads/amazon-ads-api.service.ts`
+  - LwA OAuth URL/code exchange/refresh grant, regional `/v2/profiles` lookup, profile selection, and Amazon Ads API error normalization
+- `server/src/amazon-ads/amazon-ads-token.service.ts`
+  - AES-256-GCM token encryption/decryption plus SHA-256 token hashing using `AMAZON_ADS_TOKEN_ENCRYPTION_KEY`
 - `server/src/amazon-ads/dto/update-amazon-ads-config.dto.ts`
+- `server/src/amazon-ads/dto/amazon-ads-oauth-start-query.dto.ts`
+- `server/src/amazon-ads/dto/exchange-amazon-ads-oauth-code.dto.ts`
+- `server/src/amazon-ads/dto/connect-manual-amazon-ads.dto.ts`
+- `server/src/amazon-ads/dto/test-amazon-ads-connection.dto.ts`
 - `server/prisma/migrations/20260527180000_add_amazon_ads_foundation/migration.sql`
 - `server/test/amazon-ads-authz.e2e-spec.ts`
-  - admin read/update, assigned/own read, admin endpoint denial for client accounts, and sensitive-token response safety
+  - admin read/update, assigned/own read, admin endpoint denial for client accounts, encrypted manual connect, test connection, OAuth exchange, disconnect, normalized permission failure, and sensitive-token response safety
 
 ### TikTok Ads Admin Frontend
 
@@ -363,15 +373,15 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 ### Amazon Ads Admin Frontend Foundation
 
 - `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
-  - admin Amazon Ads connection query and config update mutation under existing Clients API slice
+  - admin Amazon Ads connection query plus config update, OAuth URL/code exchange, manual connect, test connection, and disconnect mutations under existing Clients API slice
 - `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`
-  - Amazon Ads connection/config request types and `AmazonAdsRegion`
+  - Amazon Ads connection/config/OAuth/manual-connect/test request/response types and `AmazonAdsRegion`
 - `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
-  - Amazon Ads connection normalizer and status badge helpers
+  - Amazon Ads connection/test/OAuth response normalizers and status badge helpers
 - `adminandemployeePanel/src/app/pages/Clients.tsx`
   - `AMAZON_ADS` service selection reveals Amazon profile/account/marketplace config fields in create/edit forms
 - `adminandemployeePanel/src/app/pages/ClientDetail.tsx`
-  - Amazon Ads config/status card with admin config edit action
+  - Amazon Ads config/status card with OAuth URL/code, manual refresh token, test connection, disconnect, and config edit actions
 
 ### TikTok Ads Employee Frontend
 
@@ -409,7 +419,7 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 - `clientPanel/src/app/features/amazonAds/amazonAdsTypes.ts`
   - own-client Amazon Ads config/status response types
 - `clientPanel/src/app/pages/services/amazon-ads-dashboard.tsx`
-  - connection-aware empty/error state; mock metrics are hidden unless config status is `CONNECTED`
+  - connection-aware empty/error state; mock metrics are hidden unless config status is `CONNECTED`; connected view includes readonly profile/advertiser/marketplace/region status
 
 ## 2026-05-05 Incremental Map Update
 

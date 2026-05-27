@@ -7,6 +7,8 @@ import type {
   AdminMetaAdsClientListResponse,
   AdminClientAmazonAdsConnection,
   AdminClientMetaAdsConnection,
+  AmazonAdsOAuthStartResponse,
+  AmazonAdsProfileSummary,
   AmazonAdsConnectionStatus,
   AmazonAdsRegion,
   BackendPurchasedServiceKey,
@@ -30,6 +32,7 @@ import type {
   MetaAdsSummaryResponse,
   PurchasedServiceStatus,
   ServiceKey,
+  TestAmazonAdsConnectionResponse,
   TestMetaAdsConnectionResponse,
 } from "./clientsTypes";
 
@@ -564,6 +567,52 @@ export function normalizeTestMetaAdsConnectionResponse(
     },
     grantedScopes: Array.isArray(candidate.grantedScopes)
       ? candidate.grantedScopes.filter((item): item is string => typeof item === "string")
+      : [],
+  };
+}
+
+export function normalizeTestAmazonAdsConnectionResponse(
+  response: unknown,
+): TestAmazonAdsConnectionResponse {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  if (!isRecord(candidate)) {
+    throw new Error("Amazon Ads test connection response could not be parsed.");
+  }
+
+  const profile = normalizeAmazonAdsProfile(candidate.profile);
+  if (!profile) {
+    throw new Error("Amazon Ads test connection profile could not be parsed.");
+  }
+
+  return {
+    success: true,
+    checkedAt: typeof candidate.checkedAt === "string" ? candidate.checkedAt : "",
+    connection: normalizeAdminAmazonAdsConnectionResponse(candidate.connection),
+    profile,
+    profiles: Array.isArray(candidate.profiles)
+      ? candidate.profiles.map(normalizeAmazonAdsProfile).filter(isDefined)
+      : [],
+    grantedScopes: Array.isArray(candidate.grantedScopes)
+      ? candidate.grantedScopes.filter((item): item is string => typeof item === "string")
+      : [],
+  };
+}
+
+export function normalizeAmazonAdsOAuthStartResponse(
+  response: unknown,
+): AmazonAdsOAuthStartResponse {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  if (!isRecord(candidate)) {
+    throw new Error("Amazon Ads OAuth start response could not be parsed.");
+  }
+
+  return {
+    authorizationUrl:
+      typeof candidate.authorizationUrl === "string" ? candidate.authorizationUrl : "",
+    state: typeof candidate.state === "string" ? candidate.state : "",
+    redirectUri: typeof candidate.redirectUri === "string" ? candidate.redirectUri : "",
+    scopes: Array.isArray(candidate.scopes)
+      ? candidate.scopes.filter((item): item is string => typeof item === "string")
       : [],
   };
 }
@@ -1399,6 +1448,34 @@ function normalizeAmazonAdsConnectionStatus(value: unknown): AmazonAdsConnection
   }
 
   return "NOT_CONNECTED";
+}
+
+function normalizeAmazonAdsProfile(value: unknown): AmazonAdsProfileSummary | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const region = normalizeAmazonAdsRegion(value.region);
+  const profileId = typeof value.profileId === "string" ? value.profileId : "";
+  if (!profileId || !region) {
+    return null;
+  }
+
+  return {
+    profileId,
+    advertiserAccountId: isStringOrNull(value.advertiserAccountId)
+      ? value.advertiserAccountId
+      : null,
+    marketplaceId: isStringOrNull(value.marketplaceId) ? value.marketplaceId : null,
+    region,
+    countryCode: isStringOrNull(value.countryCode) ? value.countryCode : null,
+    currencyCode: isStringOrNull(value.currencyCode) ? value.currencyCode : null,
+    timezone: isStringOrNull(value.timezone) ? value.timezone : null,
+    accountType: isStringOrNull(value.accountType) ? value.accountType : null,
+    accountName: isStringOrNull(value.accountName) ? value.accountName : null,
+    validPaymentMethod:
+      typeof value.validPaymentMethod === "boolean" ? value.validPaymentMethod : null,
+  };
 }
 
 function normalizeAmazonAdsRegion(value: unknown): AmazonAdsRegion | null {

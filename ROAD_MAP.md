@@ -162,6 +162,7 @@
 - TikTok Ads Faz 10: Production hardening (client-safe error surface, report CSV/JSON export file generation, backend reports.read/manage guard alignment, expanded authz/state coverage)
 - Amazon Ads Faz 0: Discovery contract (official API research, LwA OAuth/profile/account/marketplace strategy, Reporting v3 read-only V1 scope, role-scope matrix, Faz 1 implementation contract)
 - Amazon Ads Faz 1: Backend foundation (Prisma config/credential models + NestJS module + permission seed + admin/client config-aware UI + authz e2e coverage)
+- Amazon Ads Faz 2: LwA OAuth/token connection management (encrypted refresh token storage, OAuth URL/code exchange, profile selection/test connection, disconnect, admin/client connection UI)
 
 ## Blocked
 
@@ -256,6 +257,16 @@ None identified.
   - `clientPanel`: `npm run typecheck` ✅
   - `clientPanel`: `npm run build` ✅
   - `server/test/amazon-ads-authz.e2e-spec.ts` eklendi; local `DATABASE_URL` test DB olmadığı için e2e runner bu checkpointte çalıştırılmadı (mevcut DB adı test guard’ına uymuyor).
+- Latest Amazon Ads Faz 2 checkpoint:
+  - `server`: `npm run typecheck` ✅
+  - `server`: `npm run typecheck:spec` ✅
+  - `server`: `npm run build` ✅
+  - `adminandemployeePanel`: `npm run typecheck` ✅
+  - `adminandemployeePanel`: `npm run test:run -- src/app/pages/__tests__/ClientDetail.test.tsx` ✅ (`9/9`)
+  - `adminandemployeePanel`: `npm run build` ✅
+  - `clientPanel`: `npm run typecheck` ✅
+  - `clientPanel`: `npm run build` ✅
+  - `server`: `npm run test:e2e -- amazon-ads-authz.e2e-spec.ts` çalıştırılmak istendi; local `DATABASE_URL` test DB olmadığı için e2e runner güvenlik guard’ı ile reddetti.
 - Latest admin/employee frontend validation checkpoint: `25` test files, `153/153` tests.
 - Latest client portal frontend validation checkpoint: `4` test files, `17/17` tests.
 - Latest FAZ-05 validation checkpoint:

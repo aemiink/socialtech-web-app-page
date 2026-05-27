@@ -1,5 +1,33 @@
 # Architecture Decisions
 
+## 2026-05-27 - Amazon Ads Faz 2 LwA OAuth ve Token Connection Management
+
+Context:
+Amazon Ads Faz 1 config/credential temeli hazırlandıktan sonra adminlerin müşteri bağlantısını güvenli şekilde başlatması, refresh token saklaması, profile selection/test connection yapması ve bağlantıyı kesmesi gerekiyordu. Amazon Ads, Meta/TikTok’tan farklı olarak LwA refresh-token grant ve regional profile context gerektiriyor.
+
+Decision:
+
+- `AmazonAdsTokenService`, refresh/access token değerlerini `AMAZON_ADS_TOKEN_ENCRYPTION_KEY` ile AES-256-GCM şifreler; token hash SHA-256 olarak tutulur ve response yüzeyinde raw/encrypted token alanları gösterilmez.
+- `AmazonAdsApiService`, LwA authorization URL/code exchange/refresh-token grant, regional `/v2/profiles` lookup, profile selection ve API hata normalizasyonu için tek entegrasyon yüzeyi oldu.
+- Admin endpointleri OAuth URL başlatma, OAuth code exchange, manual refresh token connect, stored/transient refresh token ile test connection ve disconnect aksiyonlarını kapsayacak şekilde genişletildi.
+- Test connection başarıyla döndüğünde selected profile metadata config’e yazılır ve connection `CONNECTED` olur; API/auth/permission/rate-limit hataları config üzerinde `ERROR` + normalized `syncError` olarak kalır.
+- Admin ClientDetail Amazon Ads kartı OAuth/code/manual/test/disconnect aksiyonlarını destekler; client portal Amazon Ads dashboard connected durumda readonly connection status bilgisini gösterir.
+
+Reason:
+Bu karar Amazon Ads credential lifecycle’ını reporting fazlarından önce güvenli ve profile-aware hale getirir. Refresh token saklama encrypted-first kalır, admin UI write-only token alanları kullanır, client portal ise yalnızca safe connection metadata görür.
+
+Affected files:
+- `server/src/amazon-ads/*`
+- `server/src/config/env.validation.ts`
+- `server/.env.example`
+- `server/test/amazon-ads-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/clients/*`
+- `adminandemployeePanel/src/app/pages/ClientDetail.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/ClientDetail.test.tsx`
+- `clientPanel/src/app/pages/services/amazon-ads-dashboard.tsx`
+
+---
+
 ## 2026-05-27 - Amazon Ads Faz 1 Backend Foundation
 
 Context:

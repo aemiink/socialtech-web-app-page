@@ -6,6 +6,9 @@ import type {
   AdminMetaAdsClientListResponse,
   AdminClientAmazonAdsConnection,
   AdminClientMetaAdsConnection,
+  AmazonAdsOAuthStartResponse,
+  AmazonAdsRegion,
+  ConnectManualAmazonAdsRequest,
   ConnectManualMetaAdsRequest,
   ClientProfile,
   ClientsListQuery,
@@ -20,6 +23,9 @@ import type {
   CreateOrLinkClientOwnerRequest,
   MetaAdsSummaryResponse,
   ResetClientOwnerPasswordRequest,
+  ExchangeAmazonAdsOAuthCodeRequest,
+  TestAmazonAdsConnectionRequest,
+  TestAmazonAdsConnectionResponse,
   TestMetaAdsConnectionRequest,
   TestMetaAdsConnectionResponse,
   UpdateMetaAdsReportRequest,
@@ -29,6 +35,7 @@ import type {
 } from "./clientsTypes";
 import {
   normalizeAdminAmazonAdsConnectionResponse,
+  normalizeAmazonAdsOAuthStartResponse,
   normalizeAdminMetaAdsClientListResponse,
   normalizeAdminMetaAdsSyncLogsResponse,
   normalizeClientResponse,
@@ -39,6 +46,7 @@ import {
   normalizeMetaAdsReportsResponse,
   normalizeMetaAdsReportItemResponse,
   normalizeMetaAdsSummaryResponse,
+  normalizeTestAmazonAdsConnectionResponse,
   normalizeTestMetaAdsConnectionResponse,
   toBackendServiceKey,
 } from "./clientsUtils";
@@ -174,6 +182,76 @@ export const clientsApi = baseApi.injectEndpoints({
         url: `/admin/clients/${clientId}/amazon-ads/config`,
         method: "PATCH",
         body,
+      }),
+      transformResponse: (response: unknown) => normalizeAdminAmazonAdsConnectionResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        ...getAdminClientMutationInvalidations(clientId),
+        { type: "Clients", id: getClientAmazonAdsConnectionTagId(clientId) },
+      ],
+    }),
+    createAdminClientAmazonAdsOAuthUrl: builder.mutation<
+      AmazonAdsOAuthStartResponse,
+      { clientId: string; region?: AmazonAdsRegion }
+    >({
+      query: ({ clientId, region }) => ({
+        url: `/admin/clients/${clientId}/amazon-ads/oauth/start`,
+        method: "GET",
+        params: region ? { region } : undefined,
+      }),
+      transformResponse: (response: unknown) => normalizeAmazonAdsOAuthStartResponse(response),
+    }),
+    exchangeAdminClientAmazonAdsOAuthCode: builder.mutation<
+      TestAmazonAdsConnectionResponse,
+      { clientId: string; body: ExchangeAmazonAdsOAuthCodeRequest }
+    >({
+      query: ({ clientId, body }) => ({
+        url: `/admin/clients/${clientId}/amazon-ads/oauth/exchange`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeTestAmazonAdsConnectionResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        ...getAdminClientMutationInvalidations(clientId),
+        { type: "Clients", id: getClientAmazonAdsConnectionTagId(clientId) },
+      ],
+    }),
+    connectAdminClientAmazonAdsManual: builder.mutation<
+      AdminClientAmazonAdsConnection,
+      { clientId: string; body: ConnectManualAmazonAdsRequest }
+    >({
+      query: ({ clientId, body }) => ({
+        url: `/admin/clients/${clientId}/amazon-ads/connect/manual`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeAdminAmazonAdsConnectionResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        ...getAdminClientMutationInvalidations(clientId),
+        { type: "Clients", id: getClientAmazonAdsConnectionTagId(clientId) },
+      ],
+    }),
+    testAdminClientAmazonAdsConnection: builder.mutation<
+      TestAmazonAdsConnectionResponse,
+      { clientId: string; body: TestAmazonAdsConnectionRequest }
+    >({
+      query: ({ clientId, body }) => ({
+        url: `/admin/clients/${clientId}/amazon-ads/test-connection`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeTestAmazonAdsConnectionResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        ...getAdminClientMutationInvalidations(clientId),
+        { type: "Clients", id: getClientAmazonAdsConnectionTagId(clientId) },
+      ],
+    }),
+    disconnectAdminClientAmazonAds: builder.mutation<
+      AdminClientAmazonAdsConnection,
+      { clientId: string }
+    >({
+      query: ({ clientId }) => ({
+        url: `/admin/clients/${clientId}/amazon-ads/disconnect`,
+        method: "POST",
       }),
       transformResponse: (response: unknown) => normalizeAdminAmazonAdsConnectionResponse(response),
       invalidatesTags: (_result, _error, { clientId }) => [
@@ -382,6 +460,11 @@ export const {
   useGetAdminMetaAdsSyncLogsQuery,
   useUpdateAdminClientMetaAdsConfigMutation,
   useUpdateAdminClientAmazonAdsConfigMutation,
+  useCreateAdminClientAmazonAdsOAuthUrlMutation,
+  useExchangeAdminClientAmazonAdsOAuthCodeMutation,
+  useConnectAdminClientAmazonAdsManualMutation,
+  useTestAdminClientAmazonAdsConnectionMutation,
+  useDisconnectAdminClientAmazonAdsMutation,
   useConnectAdminClientMetaAdsManualMutation,
   useDisconnectAdminClientMetaAdsMutation,
   useTestAdminClientMetaAdsConnectionMutation,

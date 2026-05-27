@@ -121,6 +121,25 @@ export function AmazonAdsDashboard() {
         </p>
       </div>
 
+      <div className="flex flex-col gap-3 border-y border-white/[0.08] py-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full bg-[#AAFF01] px-3 py-1 text-xs font-medium text-[#131313]">
+            {getAmazonAdsStatusLabel(amazonAdsConfig.connectionStatus)}
+          </span>
+          <span className="text-sm text-[#A0A0A0]">
+            {amazonAdsConfig.marketplaceId ?? "Marketplace yok"}
+          </span>
+          <span className="text-sm text-[#A0A0A0]">
+            {amazonAdsConfig.region ?? "Region yok"}
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-4 text-sm text-[#A0A0A0]">
+          <span>Profile: {amazonAdsConfig.profileId ?? "—"}</span>
+          <span>Advertiser: {amazonAdsConfig.advertiserAccountId ?? "—"}</span>
+          <span>Son güncelleme: {formatAmazonAdsDateTime(amazonAdsConfig.lastSyncAt)}</span>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         {stats.map((stat, i) => {
           const colorMap = {
@@ -330,6 +349,45 @@ export function AmazonAdsDashboard() {
       </div>
     </div>
   );
+}
+
+function getAmazonAdsStatusLabel(status: string) {
+  if (status === "CONNECTED") {
+    return "Bağlı";
+  }
+
+  if (status === "PENDING") {
+    return "Beklemede";
+  }
+
+  if (status === "ERROR") {
+    return "Hata";
+  }
+
+  if (status === "DISCONNECTED") {
+    return "Bağlantı Kesildi";
+  }
+
+  return "Bağlı Değil";
+}
+
+function formatAmazonAdsDateTime(value: string | null) {
+  if (!value) {
+    return "—";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+
+  return new Intl.DateTimeFormat("tr-TR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function AmazonAdsUnavailableState({

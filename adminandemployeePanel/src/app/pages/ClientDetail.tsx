@@ -31,14 +31,19 @@ import {
   getTikTokAdsConnectionStatusLabel,
 } from "../features/tiktokAds/tiktokAdsTypes";
 import {
+  useConnectAdminClientAmazonAdsManualMutation,
   useConnectAdminClientMetaAdsManualMutation,
+  useCreateAdminClientAmazonAdsOAuthUrlMutation,
+  useDisconnectAdminClientAmazonAdsMutation,
   useDisconnectAdminClientMetaAdsMutation,
+  useExchangeAdminClientAmazonAdsOAuthCodeMutation,
   useGetAdminClientAmazonAdsConnectionQuery,
   useGetAdminClientMetaAdsConnectionQuery,
   useGetAdminClientMetaAdsSummaryQuery,
   useGetClientSummaryQuery,
   useResetClientOwnerPasswordMutation,
   useSyncAdminClientMetaAdsMutation,
+  useTestAdminClientAmazonAdsConnectionMutation,
   useTestAdminClientMetaAdsConnectionMutation,
   useUpdateAdminClientAmazonAdsConfigMutation,
 } from "../features/clients/clientsApi";
@@ -46,6 +51,7 @@ import type {
   AmazonAdsRegion,
   ClientSummaryRecentProject,
   ClientSummaryRecentTask,
+  ConnectManualAmazonAdsRequest,
   UpdateAdminClientAmazonAdsConfigRequest,
 } from "../features/clients/clientsTypes";
 import { validatePassword, validatePasswordConfirmation } from "../features/adminUsers/adminUsersUtils";
@@ -93,6 +99,10 @@ export function ClientDetail() {
   const [amazonAccountName, setAmazonAccountName] = useState("");
   const [amazonValidPaymentMethod, setAmazonValidPaymentMethod] =
     useState<"" | "true" | "false">("");
+  const [amazonRefreshToken, setAmazonRefreshToken] = useState("");
+  const [amazonAccessToken, setAmazonAccessToken] = useState("");
+  const [amazonOAuthCode, setAmazonOAuthCode] = useState("");
+  const [amazonOAuthUrl, setAmazonOAuthUrl] = useState("");
   const [amazonConnectionFeedback, setAmazonConnectionFeedback] = useState<string | null>(null);
   const [resetClientOwnerPassword, { isLoading: isResettingOwnerPassword }] =
     useResetClientOwnerPasswordMutation();
@@ -112,6 +122,16 @@ export function ClientDetail() {
     useDisconnectAdminClientTikTokAdsMutation();
   const [updateAmazonAdsConfig, { isLoading: isAmazonConfigSaving }] =
     useUpdateAdminClientAmazonAdsConfigMutation();
+  const [createAmazonAdsOAuthUrl, { isLoading: isAmazonOAuthStarting }] =
+    useCreateAdminClientAmazonAdsOAuthUrlMutation();
+  const [exchangeAmazonAdsOAuthCode, { isLoading: isAmazonOAuthExchanging }] =
+    useExchangeAdminClientAmazonAdsOAuthCodeMutation();
+  const [connectAmazonAdsManual, { isLoading: isAmazonManualConnecting }] =
+    useConnectAdminClientAmazonAdsManualMutation();
+  const [testAmazonAdsConnection, { isLoading: isAmazonTesting }] =
+    useTestAdminClientAmazonAdsConnectionMutation();
+  const [disconnectAmazonAds, { isLoading: isAmazonDisconnecting }] =
+    useDisconnectAdminClientAmazonAdsMutation();
 
   const {
     data: summary,
@@ -285,6 +305,13 @@ export function ClientDetail() {
   const hasTikTokSummaryError = Boolean(tikTokAdsSummaryError);
   const hasAmazonConnectionError = Boolean(amazonAdsConnectionError);
   const tikTokAdsCurrency = tikTokAdsConnection?.settings.currency ?? "TRY";
+  const isAmazonConnectionActionRunning =
+    isAmazonConfigSaving ||
+    isAmazonOAuthStarting ||
+    isAmazonOAuthExchanging ||
+    isAmazonManualConnecting ||
+    isAmazonTesting ||
+    isAmazonDisconnecting;
 
   const handleManualMetaConnect = async () => {
     if (!clientProfileId) {
@@ -509,6 +536,154 @@ export function ClientDetail() {
     } catch (mutationError) {
       setAmazonConnectionFeedback(
         extractApiErrorMessage(mutationError, "Amazon Ads yapılandırması kaydedilemedi."),
+      );
+    }
+  };
+
+  const handleAmazonOAuthUrlCreate = async () => {
+    if (!clientProfileId) {
+      return;
+    }
+
+    setAmazonConnectionFeedback(null);
+
+    try {
+      const result = await createAmazonAdsOAuthUrl({
+        clientId: clientProfileId,
+        ...(amazonRegion ? { region: amazonRegion } : {}),
+      }).unwrap();
+      setAmazonOAuthUrl(result.authorizationUrl);
+      setAmazonConnectionFeedback("Amazon Ads OAuth bağlantı URL'i oluşturuldu.");
+    } catch (mutationError) {
+      setAmazonConnectionFeedback(
+        extractApiErrorMessage(mutationError, "Amazon Ads OAuth URL'i oluşturulamadı."),
+      );
+    }
+  };
+
+  const handleAmazonOAuthExchange = async () => {
+    if (!clientProfileId) {
+      return;
+    }
+
+    const code = amazonOAuthCode.trim();
+    if (!code) {
+      setAmazonConnectionFeedback("OAuth code ile bağlanmak için code gereklidir.");
+      return;
+    }
+
+    setAmazonConnectionFeedback(null);
+
+    try {
+      await exchangeAmazonAdsOAuthCode({
+        clientId: clientProfileId,
+        body: {
+          code,
+          ...(amazonProfileId.trim() ? { profileId: amazonProfileId.trim() } : {}),
+          ...(amazonRegion ? { region: amazonRegion } : {}),
+        },
+      }).unwrap();
+      setAmazonOAuthCode("");
+      setAmazonOAuthUrl("");
+      setAmazonRefreshToken("");
+      setAmazonAccessToken("");
+      setAmazonConnectionFeedback("Amazon Ads OAuth bağlantısı tamamlandı.");
+      await refetchAmazonAdsConnection();
+    } catch (mutationError) {
+      setAmazonConnectionFeedback(
+        extractApiErrorMessage(mutationError, "Amazon Ads OAuth bağlantısı tamamlanamadı."),
+      );
+    }
+  };
+
+  const handleManualAmazonConnect = async () => {
+    if (!clientProfileId) {
+      return;
+    }
+
+    const payload = buildAmazonAdsManualConnectPayload({
+      refreshToken: amazonRefreshToken,
+      accessToken: amazonAccessToken,
+      profileId: amazonProfileId,
+      advertiserAccountId: amazonAdvertiserAccountId,
+      marketplaceId: amazonMarketplaceId,
+      region: amazonRegion,
+      countryCode: amazonCountryCode,
+      currencyCode: amazonCurrencyCode,
+      timezone: amazonTimezone,
+      accountType: amazonAccountType,
+      accountName: amazonAccountName,
+      validPaymentMethod: amazonValidPaymentMethod,
+    });
+
+    if (!payload) {
+      setAmazonConnectionFeedback("Manual bağlantı için refresh token gereklidir.");
+      return;
+    }
+
+    setAmazonConnectionFeedback(null);
+
+    try {
+      await connectAmazonAdsManual({
+        clientId: clientProfileId,
+        body: payload,
+      }).unwrap();
+      setAmazonRefreshToken("");
+      setAmazonAccessToken("");
+      setAmazonConnectionFeedback("Amazon Ads refresh token şifreli olarak kaydedildi.");
+      await refetchAmazonAdsConnection();
+    } catch (mutationError) {
+      setAmazonConnectionFeedback(
+        extractApiErrorMessage(mutationError, "Amazon Ads manual bağlantısı kaydedilemedi."),
+      );
+    }
+  };
+
+  const handleAmazonConnectionTest = async () => {
+    if (!clientProfileId) {
+      return;
+    }
+
+    setAmazonConnectionFeedback(null);
+
+    try {
+      await testAmazonAdsConnection({
+        clientId: clientProfileId,
+        body: {
+          ...(amazonRefreshToken.trim() ? { refreshToken: amazonRefreshToken.trim() } : {}),
+          ...(amazonProfileId.trim() ? { profileId: amazonProfileId.trim() } : {}),
+          ...(amazonRegion ? { region: amazonRegion } : {}),
+        },
+      }).unwrap();
+      setAmazonRefreshToken("");
+      setAmazonAccessToken("");
+      setAmazonConnectionFeedback("Amazon Ads bağlantı testi başarılı.");
+      await refetchAmazonAdsConnection();
+    } catch (mutationError) {
+      setAmazonConnectionFeedback(
+        extractApiErrorMessage(mutationError, "Amazon Ads bağlantı testi başarısız."),
+      );
+    }
+  };
+
+  const handleAmazonDisconnect = async () => {
+    if (!clientProfileId) {
+      return;
+    }
+
+    setAmazonConnectionFeedback(null);
+
+    try {
+      await disconnectAmazonAds({ clientId: clientProfileId }).unwrap();
+      setAmazonRefreshToken("");
+      setAmazonAccessToken("");
+      setAmazonOAuthCode("");
+      setAmazonOAuthUrl("");
+      setAmazonConnectionFeedback("Amazon Ads bağlantısı kesildi.");
+      await refetchAmazonAdsConnection();
+    } catch (mutationError) {
+      setAmazonConnectionFeedback(
+        extractApiErrorMessage(mutationError, "Amazon Ads bağlantısı kesilemedi."),
       );
     }
   };
@@ -960,13 +1135,12 @@ export function ClientDetail() {
               value={amazonAdsConnection.hasActiveService ? "Evet" : "Hayır"}
             />
             <DetailRow
-              label="Token Durumu"
-              value={
-                amazonAdsConnection.credential.hasAccessToken ||
-                amazonAdsConnection.credential.hasRefreshToken
-                  ? "Kayıtlı"
-                  : "Kayıtlı değil"
-              }
+              label="Access Token"
+              value={amazonAdsConnection.credential.hasAccessToken ? "Kayıtlı" : "Kayıtlı değil"}
+            />
+            <DetailRow
+              label="Refresh Token"
+              value={amazonAdsConnection.credential.hasRefreshToken ? "Kayıtlı" : "Kayıtlı değil"}
             />
             <DetailRow
               label="Son Token Güncellemesi"
@@ -1000,6 +1174,48 @@ export function ClientDetail() {
               value={formatClientDateTime(amazonAdsConnection.lastSyncAt)}
             />
             <DetailRow label="Hata Özeti" value={amazonAdsConnection.syncError ?? "—"} />
+          </div>
+        ) : null}
+
+        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+          <Input
+            type="password"
+            value={amazonOAuthCode}
+            onChange={(event) => setAmazonOAuthCode(event.target.value)}
+            className="border-white/[0.12] bg-black/20 text-white placeholder:text-[#7A7A7A]"
+            placeholder="OAuth Code"
+            autoComplete="off"
+          />
+          <Input
+            type="password"
+            value={amazonRefreshToken}
+            onChange={(event) => setAmazonRefreshToken(event.target.value)}
+            className="border-white/[0.12] bg-black/20 text-white placeholder:text-[#7A7A7A]"
+            placeholder="Refresh Token"
+            autoComplete="off"
+          />
+          <Input
+            type="password"
+            value={amazonAccessToken}
+            onChange={(event) => setAmazonAccessToken(event.target.value)}
+            className="border-white/[0.12] bg-black/20 text-white placeholder:text-[#7A7A7A]"
+            placeholder="Access Token (opsiyonel)"
+            autoComplete="off"
+          />
+        </div>
+
+        {amazonOAuthUrl ? (
+          <div className="mt-3 flex flex-col gap-2 rounded-lg border border-white/[0.08] bg-black/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="break-all text-xs text-[#A0A0A0]">{amazonOAuthUrl}</p>
+            <a
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-white/[0.12] px-3 text-sm font-medium text-white transition-colors hover:bg-white/[0.06]"
+              href={amazonOAuthUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <ExternalLink className="h-4 w-4" />
+              Aç
+            </a>
           </div>
         ) : null}
 
@@ -1078,12 +1294,61 @@ export function ClientDetail() {
         <div className="mt-4 flex flex-wrap gap-2">
           <Button
             type="button"
+            variant="outline"
+            className="gap-2"
+            onClick={handleAmazonOAuthUrlCreate}
+            disabled={isAmazonConnectionActionRunning}
+          >
+            <ExternalLink className="h-4 w-4" />
+            {isAmazonOAuthStarting ? "URL Hazırlanıyor..." : "OAuth URL Oluştur"}
+          </Button>
+          <Button
+            type="button"
+            className="gap-2"
+            onClick={handleAmazonOAuthExchange}
+            disabled={isAmazonConnectionActionRunning}
+          >
+            <PlugZap className="h-4 w-4" />
+            {isAmazonOAuthExchanging ? "Bağlanıyor..." : "OAuth Code ile Bağla"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-2"
+            onClick={handleManualAmazonConnect}
+            disabled={isAmazonConnectionActionRunning}
+          >
+            <PlugZap className="h-4 w-4" />
+            {isAmazonManualConnecting ? "Kaydediliyor..." : "Refresh Token ile Bağla"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-2"
+            onClick={handleAmazonConnectionTest}
+            disabled={isAmazonConnectionActionRunning}
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            {isAmazonTesting ? "Test Ediliyor..." : "Bağlantıyı Test Et"}
+          </Button>
+          <Button
+            type="button"
             className="gap-2"
             onClick={handleAmazonConfigSave}
-            disabled={isAmazonConfigSaving}
+            disabled={isAmazonConnectionActionRunning}
           >
             <ShoppingCart className="h-4 w-4" />
             {isAmazonConfigSaving ? "Kaydediliyor..." : "Config Güncelle"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-2 border-red-500/30 text-red-200 hover:bg-red-500/10"
+            onClick={handleAmazonDisconnect}
+            disabled={isAmazonConnectionActionRunning}
+          >
+            <Link2Off className="h-4 w-4" />
+            {isAmazonDisconnecting ? "Kesiliyor..." : "Bağlantıyı Kes"}
           </Button>
         </div>
 
@@ -1309,6 +1574,11 @@ type AmazonAdsConfigFormSnapshot = {
   validPaymentMethod: "" | "true" | "false";
 };
 
+type AmazonAdsManualConnectFormSnapshot = AmazonAdsConfigFormSnapshot & {
+  refreshToken: string;
+  accessToken: string;
+};
+
 function buildAmazonAdsConfigPayload(
   form: AmazonAdsConfigFormSnapshot,
 ): UpdateAdminClientAmazonAdsConfigRequest | null {
@@ -1334,6 +1604,40 @@ function buildAmazonAdsConfigPayload(
   return Object.keys(payload).length > 0 ? payload : null;
 }
 
+function buildAmazonAdsManualConnectPayload(
+  form: AmazonAdsManualConnectFormSnapshot,
+): ConnectManualAmazonAdsRequest | null {
+  const refreshToken = form.refreshToken.trim();
+  if (!refreshToken) {
+    return null;
+  }
+
+  const payload: ConnectManualAmazonAdsRequest = { refreshToken };
+  const accessToken = form.accessToken.trim();
+  if (accessToken) {
+    payload.accessToken = accessToken;
+  }
+
+  addOptionalManualAmazonAdsText(payload, "profileId", form.profileId);
+  addOptionalManualAmazonAdsText(payload, "advertiserAccountId", form.advertiserAccountId);
+  addOptionalManualAmazonAdsText(payload, "marketplaceId", form.marketplaceId);
+  addOptionalManualAmazonAdsText(payload, "countryCode", form.countryCode.toUpperCase());
+  addOptionalManualAmazonAdsText(payload, "currencyCode", form.currencyCode.toUpperCase());
+  addOptionalManualAmazonAdsText(payload, "timezone", form.timezone);
+  addOptionalManualAmazonAdsText(payload, "accountType", form.accountType);
+  addOptionalManualAmazonAdsText(payload, "accountName", form.accountName);
+
+  if (form.region) {
+    payload.region = form.region;
+  }
+
+  if (form.validPaymentMethod !== "") {
+    payload.validPaymentMethod = form.validPaymentMethod === "true";
+  }
+
+  return payload;
+}
+
 function addOptionalAmazonAdsText<K extends keyof UpdateAdminClientAmazonAdsConfigRequest>(
   payload: UpdateAdminClientAmazonAdsConfigRequest,
   key: K,
@@ -1342,6 +1646,17 @@ function addOptionalAmazonAdsText<K extends keyof UpdateAdminClientAmazonAdsConf
   const normalizedValue = value.trim();
   if (normalizedValue.length > 0) {
     payload[key] = normalizedValue as UpdateAdminClientAmazonAdsConfigRequest[K];
+  }
+}
+
+function addOptionalManualAmazonAdsText<K extends keyof ConnectManualAmazonAdsRequest>(
+  payload: ConnectManualAmazonAdsRequest,
+  key: K,
+  value: string,
+): void {
+  const normalizedValue = value.trim();
+  if (normalizedValue.length > 0) {
+    payload[key] = normalizedValue as ConnectManualAmazonAdsRequest[K];
   }
 }
 
