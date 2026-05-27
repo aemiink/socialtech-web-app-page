@@ -160,6 +160,7 @@
 - TikTok Ads Faz 8: Sync automation hardening (admin sync logs + retry + assigned TTL-safe sync + normalized error catalog + admin/employee UI observability)
 - TikTok Ads Faz 9: Reporting/export foundation (`TikTokAdsReport` entity, admin/assigned draft-publish endpoints, client own report visibility, publish->ack task bridge)
 - TikTok Ads Faz 10: Production hardening (client-safe error surface, report CSV/JSON export file generation, backend reports.read/manage guard alignment, expanded authz/state coverage)
+- Amazon Ads Faz 0: Discovery contract (official API research, LwA OAuth/profile/account/marketplace strategy, Reporting v3 read-only V1 scope, role-scope matrix, Faz 1 implementation contract)
 
 ## Blocked
 
@@ -241,6 +242,9 @@ None identified.
   - `clientPanel`: `npm test -- --run src/app/pages/__tests__/service-tab-page.tiktok-ads.test.tsx` ✅ (`8/8`)
   - `clientPanel`: `npm run build` ✅
   - Browser smoke: admin/client local targets loaded without Vite/internal error ✅
+- Latest Amazon Ads Faz 0 checkpoint:
+  - Official Amazon Ads API docs reviewed for API overview, LwA OAuth, `/v2/profiles`, regional hosts, Reporting v3 async flow, report types, throttling and rate-limit guidance ✅
+  - No build/test run required; documentation/architecture contract only.
 - Latest admin/employee frontend validation checkpoint: `25` test files, `153/153` tests.
 - Latest client portal frontend validation checkpoint: `4` test files, `17/17` tests.
 - Latest FAZ-05 validation checkpoint:

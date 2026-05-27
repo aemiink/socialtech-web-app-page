@@ -1,5 +1,37 @@
 # Architecture Decisions
 
+## 2026-05-27 - Amazon Ads Faz 0: Discovery Contract ve Teknik Sözleşme
+
+Context:
+Meta Ads ve TikTok Ads entegrasyonları tamamlanmış durumda; Amazon Ads service key (`AMAZON_ADS`) Prisma `PurchasedServiceKey` enumunda ve frontend service catalog/client portal mock görünümünde zaten mevcut. Backend’de Amazon Ads modülü ve Amazon-specific Prisma modelleri henüz yok.
+
+Decision:
+
+- Amazon Ads V1 kapsamı read-only reporting + snapshot + report lifecycle olarak belirlendi; campaign create/update/pause, bid/budget/keyword mutation ve otomatik negative keyword yönetimi V1 dışında kalacak.
+- Resmi Amazon Ads API akışı Login with Amazon OAuth 2.0 Authorization Code Grant üzerine kurulacak; manuel long-lived access token girişi tercih edilmeyecek.
+- V1 auth stratejisi: admin-managed OAuth consent, server-side code exchange, encrypted access/refresh token storage, `/v2/profiles` ile profile/account selection.
+- Resmi kaynaklara göre access token 60 dakika geçerli; 30 Haziran 2026 ve sonrasında verilen refresh token’lar consent tarihinden itibaren 365 gün geçerli olacak. Bu nedenle credential modelinde `accessTokenExpiresAt` ve nullable `refreshTokenExpiresAt` tutulacak.
+- Region standardı `NA | EU | FE`; regional host map backend helper’da tutulacak:
+  - NA: `https://advertising-api.amazon.com`
+  - EU: `https://advertising-api-eu.amazon.com`
+  - FE: `https://advertising-api-fe.amazon.com`
+- Amazon profile/account config alanları official `/v2/profiles` response’una göre normalize edilecek: `profileId`, `advertiserAccountId` (`accountInfo.id` / reporting `Amazon-Ads-AccountId`), `marketplaceId` (`accountInfo.marketplaceStringId`), `countryCode`, `currencyCode`, `timezone`, `accountType`, `accountName`, `validPaymentMethod`.
+- Eski taslaklardaki generic `advertiserId` yerine Amazon domaininde `advertiserAccountId` kullanılacak; DSP advertiser id ile karışması engellenecek.
+- Reporting v3 V1 veri kaynağı olacak: `POST /reporting/reports`, status polling via `GET /reporting/reports/{reportId}`, `COMPLETED` olunca gzip JSON download ve snapshot upsert.
+- V1 report type seti: `spCampaigns`, `sbCampaigns`, `sdCampaigns`, `spTargeting`, `sbTargeting`, `sdTargeting`, `spSearchTerm`, `sbSearchTerm`, `spAdvertisedProduct`, `sdAdvertisedProduct`, `spPurchasedProduct`, `sbPurchasedProduct`, `sdPurchasedProduct`, optional admin diagnostics için `sp/sb/sdGrossAndInvalids`.
+- Sponsored Brands Reporting v3 official docs’ta preview olduğu için V1 sync partial/best-effort state desteklemeli.
+- TACOS, Buy Box ve Retail Readiness official Amazon Ads Reporting v3’den güvenilir şekilde gelmediği için V1’de API-first empty/manual state olarak kalacak; SP-API veya manual retail data integration V2 konusu.
+
+Reason:
+Amazon Ads API, Meta/TikTok’tan farklı olarak profile/account/marketplace ve region context’iyle çalışıyor; reporting ise async report generation ve rate-limit hassasiyeti gerektiriyor. Bu karar Social Tech’in mevcut platform pattern’iyle uyumlu kalırken Amazon’a özgü `profileId`, `marketplaceId`, `advertiserAccountId`, attribution window ve async reporting gereksinimlerini Faz 1 öncesinde sabitler.
+
+Affected files:
+- `docs/amazon-ads-phases/00-amazon-ads-discovery-contract.md`
+- `DECISIONS.md`
+- `ROAD_MAP.md`
+
+---
+
 ## 2026-05-27 - TikTok Ads Faz 0: Discovery Contract ve Teknik Sözleşme
 
 Context:
