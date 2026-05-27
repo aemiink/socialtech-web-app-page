@@ -14,6 +14,7 @@ import type {
   TikTokAdsDateRangeQuery,
   TikTokAdsInsightsQuery,
   TikTokAdsInsightsResponse,
+  TikTokAdsReportExportFormat,
   TikTokAdsReportItem,
   TikTokAdsReportsQuery,
   TikTokAdsReportsResponse,
@@ -220,6 +221,18 @@ const tiktokAdsApi = baseApi.injectEndpoints({
       ],
     }),
 
+    exportAdminTikTokAdsReport: build.mutation<
+      string,
+      { reportId: string; format: TikTokAdsReportExportFormat }
+    >({
+      query: ({ reportId, format }) => ({
+        url: `/admin/tiktok-ads/reports/${reportId}/export`,
+        method: "GET",
+        params: { format },
+        responseHandler: (response: Response) => response.text(),
+      }),
+    }),
+
     getAssignedClientTikTokAdsReports: build.query<
       TikTokAdsReportsResponse,
       AdminClientTikTokAdsQueryArg<TikTokAdsReportsQuery>
@@ -263,6 +276,18 @@ const tiktokAdsApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, { clientId }) => [
         { type: "TikTokAdsConfig", id: `${TIKTOK_ADS_REPORTS_LIST_ID}:ASSIGNED:${clientId}` },
       ],
+    }),
+
+    exportAssignedTikTokAdsReport: build.mutation<
+      string,
+      { reportId: string; format: TikTokAdsReportExportFormat }
+    >({
+      query: ({ reportId, format }) => ({
+        url: `/tiktok-ads/reports/${reportId}/export`,
+        method: "GET",
+        params: { format },
+        responseHandler: (response: Response) => response.text(),
+      }),
     }),
 
     updateAdminClientTikTokAdsConfig: build.mutation<
@@ -380,6 +405,8 @@ export const {
   useCreateAdminClientTikTokAdsReportMutation,
   useCreateAssignedClientTikTokAdsReportMutation,
   useDisconnectAdminClientTikTokAdsMutation,
+  useExportAdminTikTokAdsReportMutation,
+  useExportAssignedTikTokAdsReportMutation,
   useGetAdminClientTikTokAdsReportsQuery,
   useGetAdminTikTokAdsClientsQuery,
   useGetAdminTikTokAdsSyncLogsQuery,

@@ -31,6 +31,10 @@ import { TestTikTokAdsConnectionDto } from "./dto/test-tiktok-ads-connection.dto
 import { TikTokAdsCampaignsQueryDto } from "./dto/tiktok-ads-campaigns-query.dto";
 import { TikTokAdsDateRangeQueryDto } from "./dto/tiktok-ads-date-range-query.dto";
 import { TikTokAdsInsightsQueryDto } from "./dto/tiktok-ads-insights-query.dto";
+import {
+  TikTokAdsReportExportQueryDto,
+  type TikTokAdsReportExportFormat,
+} from "./dto/tiktok-ads-report-export-query.dto";
 import { TikTokAdsReportsQueryDto } from "./dto/tiktok-ads-reports-query.dto";
 import { TikTokAdsSyncLogsQueryDto } from "./dto/tiktok-ads-sync-logs-query.dto";
 import { UpdateTikTokAdsReportDto } from "./dto/update-tiktok-ads-report.dto";
@@ -64,6 +68,7 @@ const DEFAULT_CAMPAIGNS_LIMIT = 12;
 const DEFAULT_INSIGHTS_LIMIT = 100;
 const DEFAULT_TIKTOK_ADS_SYNC_TTL_MINUTES = 30;
 const CLIENT_SAFE_SYNC_ERROR_MESSAGE = "Bağlantı problemi var, ekibimiz ilgileniyor.";
+const CLIENT_SAFE_REPORT_NOT_FOUND_MESSAGE = "TikTok Ads raporu bulunamadı.";
 
 const adminTikTokAdsConfigSelect = {
   id: true,
@@ -498,6 +503,25 @@ type TikTokAdsReportsResponse = {
     clientVisible: number;
   };
 };
+
+type TikTokAdsReportExportFile = {
+  filename: string;
+  contentType: string;
+  body: string;
+};
+
+type TikTokAdsReportExportScope =
+  | {
+      visibility: "ANY";
+    }
+  | {
+      visibility: "ASSIGNED";
+      employeeUserId: string;
+    }
+  | {
+      visibility: "OWN_VISIBLE";
+      clientProfileId: string;
+    };
 
 @Injectable()
 export class TikTokAdsService {
@@ -1200,6 +1224,17 @@ export class TikTokAdsService {
     return this.updateReportById(actor, reportId, dto, { scope: "ANY" });
   }
 
+  async exportAdminReport(
+    reportId: string,
+    query: TikTokAdsReportExportQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<TikTokAdsReportExportFile> {
+    this.assertCanReadAnyConfig(actor);
+    this.assertCanReadReports(actor);
+
+    return this.exportReportById(reportId, query, { visibility: "ANY" });
+  }
+
   // ─── Assigned employee: read config ─────────────────────────────────────────
 
   async getAssignedClientConfig(clientId: string, actor: AuthenticatedUser) {
@@ -1268,6 +1303,7 @@ export class TikTokAdsService {
   ): Promise<TikTokAdsReportsResponse> {
     this.assertCanReadAssignedConfig(actor);
     this.assertCanReadAssignedReporting(actor);
+    this.assertCanReadReports(actor);
     await this.assertActiveAssignment(clientId, actor.id);
     await this.assertClientHasActiveTikTokAdsService(clientId);
 
@@ -1283,6 +1319,7 @@ export class TikTokAdsService {
   ): Promise<TikTokAdsReportItem> {
     this.assertCanReadAssignedConfig(actor);
     this.assertCanManageAssignedNotes(actor);
+    this.assertCanManageReports(actor);
     if (dto.requestAcknowledgement === true) {
       this.assertCanCreateAssignedApprovals(actor);
     }
@@ -1299,12 +1336,28 @@ export class TikTokAdsService {
   ): Promise<TikTokAdsReportItem> {
     this.assertCanReadAssignedConfig(actor);
     this.assertCanManageAssignedNotes(actor);
+    this.assertCanManageReports(actor);
     if (dto.requestAcknowledgement === true) {
       this.assertCanCreateAssignedApprovals(actor);
     }
 
     return this.updateReportById(actor, reportId, dto, {
       scope: "ASSIGNED",
+      employeeUserId: actor.id,
+    });
+  }
+
+  async exportAssignedReport(
+    reportId: string,
+    query: TikTokAdsReportExportQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<TikTokAdsReportExportFile> {
+    this.assertCanReadAssignedConfig(actor);
+    this.assertCanReadAssignedReporting(actor);
+    this.assertCanReadReports(actor);
+
+    return this.exportReportById(reportId, query, {
+      visibility: "ASSIGNED",
       employeeUserId: actor.id,
     });
   }
@@ -1407,6 +1460,24 @@ export class TikTokAdsService {
 
     return this.getReportsByClientProfileId(clientProfileId, query, {
       onlyClientVisible: true,
+      onlyPublished: true,
+    });
+  }
+
+  async exportOwnReport(
+    reportId: string,
+    query: TikTokAdsReportExportQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<TikTokAdsReportExportFile> {
+    this.assertCanReadOwnConfig(actor);
+    this.assertCanReadOwnReports(actor);
+    const clientProfileId = this.getClientProfileIdOrFail(actor);
+    await this.assertClientExists(clientProfileId);
+    await this.assertClientHasActiveTikTokAdsService(clientProfileId);
+
+    return this.exportReportById(reportId, query, {
+      visibility: "OWN_VISIBLE",
+      clientProfileId,
     });
   }
 
@@ -1804,6 +1875,7 @@ export class TikTokAdsService {
     query: TikTokAdsReportsQueryDto,
     options: {
       onlyClientVisible: boolean;
+      onlyPublished?: boolean;
     },
   ): Promise<TikTokAdsReportsResponse> {
     const where: Prisma.TikTokAdsReportWhereInput = {
@@ -1816,7 +1888,9 @@ export class TikTokAdsService {
       where.clientVisible = query.clientVisible;
     }
 
-    if (query.status !== undefined) {
+    if (options.onlyPublished) {
+      where.status = TikTokAdsReportStatus.PUBLISHED;
+    } else if (query.status !== undefined) {
       where.status = query.status;
     }
 
@@ -1827,6 +1901,7 @@ export class TikTokAdsService {
     const statsWhere: Prisma.TikTokAdsReportWhereInput = {
       clientProfileId: clientId,
       ...(options.onlyClientVisible ? { clientVisible: true } : {}),
+      ...(options.onlyPublished ? { status: TikTokAdsReportStatus.PUBLISHED } : {}),
     };
     const limit = query.limit ?? 30;
 
@@ -1862,11 +1937,123 @@ export class TikTokAdsService {
       data: reports.map((report) => this.toTikTokAdsReportItem(report)),
       meta: {
         total,
-        draft,
+        draft: options.onlyPublished ? 0 : draft,
         published,
         clientVisible,
       },
     };
+  }
+
+  private async exportReportById(
+    reportId: string,
+    query: TikTokAdsReportExportQueryDto,
+    scope: TikTokAdsReportExportScope,
+  ): Promise<TikTokAdsReportExportFile> {
+    const report = await this.prisma.tikTokAdsReport.findUnique({
+      where: { id: reportId },
+      select: tikTokAdsReportSelect,
+    });
+
+    if (!report) {
+      throw new NotFoundException(CLIENT_SAFE_REPORT_NOT_FOUND_MESSAGE);
+    }
+
+    if (scope.visibility === "ASSIGNED") {
+      await this.assertActiveAssignment(report.clientProfileId, scope.employeeUserId);
+    }
+
+    if (
+      scope.visibility === "OWN_VISIBLE" &&
+      (report.clientProfileId !== scope.clientProfileId ||
+        report.status !== TikTokAdsReportStatus.PUBLISHED ||
+        report.clientVisible !== true)
+    ) {
+      throw new NotFoundException(CLIENT_SAFE_REPORT_NOT_FOUND_MESSAGE);
+    }
+
+    await this.assertClientHasActiveTikTokAdsService(report.clientProfileId);
+
+    const format = this.resolveReportExportFormat(query.format);
+    const item = this.toTikTokAdsReportItem(report);
+    const filename = this.buildTikTokAdsReportExportFilename(item, format);
+
+    if (format === "csv") {
+      return {
+        filename,
+        contentType: "text/csv; charset=utf-8",
+        body: this.buildTikTokAdsReportCsv(item),
+      };
+    }
+
+    return {
+      filename,
+      contentType: "application/json; charset=utf-8",
+      body: this.buildTikTokAdsReportJson(item),
+    };
+  }
+
+  private resolveReportExportFormat(
+    value: TikTokAdsReportExportFormat | string | undefined,
+  ): TikTokAdsReportExportFormat {
+    if (typeof value !== "string") {
+      return "json";
+    }
+
+    const normalized = value.trim().toLowerCase();
+    return normalized === "csv" ? "csv" : "json";
+  }
+
+  private buildTikTokAdsReportExportFilename(
+    report: TikTokAdsReportItem,
+    format: TikTokAdsReportExportFormat,
+  ): string {
+    const periodEnd = report.periodEnd.slice(0, 10);
+    return `tiktok-ads-report-${periodEnd}-${report.id}.${format}`;
+  }
+
+  private buildTikTokAdsReportJson(report: TikTokAdsReportItem): string {
+    return JSON.stringify(
+      {
+        exportedAt: new Date().toISOString(),
+        report,
+      },
+      null,
+      2,
+    );
+  }
+
+  private buildTikTokAdsReportCsv(report: TikTokAdsReportItem): string {
+    const columns: Array<{ header: string; value: unknown }> = [
+      { header: "reportId", value: report.id },
+      { header: "clientProfileId", value: report.clientProfileId },
+      { header: "projectId", value: report.projectId },
+      { header: "projectName", value: report.projectName },
+      { header: "periodStart", value: report.periodStart },
+      { header: "periodEnd", value: report.periodEnd },
+      { header: "type", value: report.type },
+      { header: "status", value: report.status },
+      { header: "clientVisible", value: report.clientVisible },
+      { header: "publishedAt", value: report.publishedAt },
+      { header: "acknowledgementStatus", value: report.acknowledgementStatus },
+      { header: "acknowledgementTaskId", value: report.acknowledgementTaskId },
+      { header: "summary", value: report.summary },
+      { header: "metricsSnapshot", value: report.metricsSnapshot },
+    ];
+
+    return [
+      columns.map((column) => this.escapeCsvValue(column.header)).join(","),
+      columns.map((column) => this.escapeCsvValue(column.value)).join(","),
+    ].join("\n");
+  }
+
+  private escapeCsvValue(value: unknown): string {
+    if (value === null || value === undefined) {
+      return "";
+    }
+
+    const text = typeof value === "object" ? JSON.stringify(value) : String(value);
+    const escaped = text.replace(/"/g, "\"\"");
+    return /[",\n\r]/.test(escaped) ? `"${escaped}"` : escaped;
   }
 
   private async createReportByClientProfileId(

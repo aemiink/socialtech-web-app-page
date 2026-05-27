@@ -7,7 +7,6 @@
 
 ## Planned
 
-- TikTok Ads Faz 10: Production hardening
 - Remaining employee role pages API migration (mock/static -> backend)
 - Remaining admin mock/static pages API migration
 - Service-specific project/task filtering refinements (client purchased service scope)
@@ -160,6 +159,7 @@
 - TikTok Ads Faz 7: Approval + creative collaboration (task approval type'ları + assigned create permission + client own response + UGC/script approval queue + creative preview)
 - TikTok Ads Faz 8: Sync automation hardening (admin sync logs + retry + assigned TTL-safe sync + normalized error catalog + admin/employee UI observability)
 - TikTok Ads Faz 9: Reporting/export foundation (`TikTokAdsReport` entity, admin/assigned draft-publish endpoints, client own report visibility, publish->ack task bridge)
+- TikTok Ads Faz 10: Production hardening (client-safe error surface, report CSV/JSON export file generation, backend reports.read/manage guard alignment, expanded authz/state coverage)
 
 ## Blocked
 
@@ -228,6 +228,19 @@ None identified.
   - `clientPanel`: `npm run typecheck` ✅
   - `clientPanel`: `npm test -- src/app/pages/__tests__/service-tab-page.tiktok-ads.test.tsx` ✅ (`7/7`)
   - Browser smoke: admin/employee/client local targets loaded without blocking runtime error ✅
+- Latest TikTok Ads Faz 10 validation checkpoint:
+  - `server`: `npm run typecheck` ✅
+  - `server`: `npm run typecheck:spec` ✅
+  - `server`: `npm run typecheck:seed` ✅
+  - `server`: `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true node ./test/run-e2e.cjs tiktok-ads-authz.e2e-spec.ts` ✅ (`34/34`)
+  - `server`: `npm run build` ✅
+  - `adminandemployeePanel`: `npm run typecheck` ✅
+  - `adminandemployeePanel`: `npm test -- --run src/app/pages/__tests__/TikTokAdsAdmin.test.tsx src/app/employee/pages/__tests__/TikTokAdsWorkspace.test.tsx` ✅ (`22/22`)
+  - `adminandemployeePanel`: `npm run build` ✅
+  - `clientPanel`: `npm run typecheck` ✅
+  - `clientPanel`: `npm test -- --run src/app/pages/__tests__/service-tab-page.tiktok-ads.test.tsx` ✅ (`8/8`)
+  - `clientPanel`: `npm run build` ✅
+  - Browser smoke: admin/client local targets loaded without Vite/internal error ✅
 - Latest admin/employee frontend validation checkpoint: `25` test files, `153/153` tests.
 - Latest client portal frontend validation checkpoint: `4` test files, `17/17` tests.
 - Latest FAZ-05 validation checkpoint:

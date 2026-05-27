@@ -7,8 +7,10 @@ const mockUseGetOwnTikTokAdsSummaryQuery = vi.fn();
 const mockUseGetOwnTikTokAdsCampaignsQuery = vi.fn();
 const mockUseGetOwnTikTokAdsInsightsQuery = vi.fn();
 const mockUseGetOwnTikTokAdsReportsQuery = vi.fn();
+const mockUseExportOwnTikTokAdsReportMutation = vi.fn();
 const mockUseGetClientTasksQuery = vi.fn();
 const mockUpdateClientTaskApproval = vi.fn();
+const mockExportOwnTikTokAdsReport = vi.fn();
 
 vi.mock("../../features/tiktokAds/tiktokAdsApi", () => ({
   useGetOwnTikTokAdsConfigQuery: (...args: unknown[]) => mockUseGetOwnTikTokAdsConfigQuery(...args),
@@ -16,6 +18,8 @@ vi.mock("../../features/tiktokAds/tiktokAdsApi", () => ({
   useGetOwnTikTokAdsCampaignsQuery: (...args: unknown[]) => mockUseGetOwnTikTokAdsCampaignsQuery(...args),
   useGetOwnTikTokAdsInsightsQuery: (...args: unknown[]) => mockUseGetOwnTikTokAdsInsightsQuery(...args),
   useGetOwnTikTokAdsReportsQuery: (...args: unknown[]) => mockUseGetOwnTikTokAdsReportsQuery(...args),
+  useExportOwnTikTokAdsReportMutation: (...args: unknown[]) =>
+    mockUseExportOwnTikTokAdsReportMutation(...args),
 }));
 
 vi.mock("../../features/metaAds/metaAdsApi", () => ({
@@ -164,11 +168,20 @@ describe("ServiceTabPage TikTok Ads tabs", () => {
     mockUseGetOwnTikTokAdsCampaignsQuery.mockReset();
     mockUseGetOwnTikTokAdsInsightsQuery.mockReset();
     mockUseGetOwnTikTokAdsReportsQuery.mockReset();
+    mockUseExportOwnTikTokAdsReportMutation.mockReset();
     mockUseGetClientTasksQuery.mockReset();
     mockUpdateClientTaskApproval.mockReset();
+    mockExportOwnTikTokAdsReport.mockReset();
     mockUpdateClientTaskApproval.mockReturnValue({
       unwrap: () => Promise.resolve({ ...tiktokApprovalTask, approvalStatus: "APPROVED" }),
     });
+    mockExportOwnTikTokAdsReport.mockReturnValue({
+      unwrap: () => Promise.resolve("reportId,summary\nreport-1,TikTok"),
+    });
+    mockUseExportOwnTikTokAdsReportMutation.mockReturnValue([
+      mockExportOwnTikTokAdsReport,
+      { isLoading: false },
+    ]);
 
     mockUseGetOwnTikTokAdsConfigQuery.mockReturnValue({
       data: {
@@ -360,5 +373,18 @@ describe("ServiceTabPage TikTok Ads tabs", () => {
 
     expect(screen.getByText("TikTok haftalık rapor müşteri özeti.")).toBeInTheDocument();
     expect(screen.getByText(/Müşteri Onayı Bekliyor/)).toBeInTheDocument();
+  });
+
+  it("exports published TikTok Ads reports from optimization notes tab", async () => {
+    render(<ServiceTabPage serviceId="tiktok-ads" tabId="optimization-notes" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "CSV" }));
+
+    await waitFor(() =>
+      expect(mockExportOwnTikTokAdsReport).toHaveBeenCalledWith({
+        reportId: "report-1",
+        format: "csv",
+      }),
+    );
   });
 });

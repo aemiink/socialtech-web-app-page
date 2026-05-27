@@ -41,6 +41,7 @@ const mockUseRetryAdminClientTikTokAdsSyncMutation = vi.fn();
 const mockUseDisconnectAdminClientTikTokAdsMutation = vi.fn();
 const mockUseCreateAdminClientTikTokAdsReportMutation = vi.fn();
 const mockUseUpdateAdminTikTokAdsReportMutation = vi.fn();
+const mockUseExportAdminTikTokAdsReportMutation = vi.fn();
 
 let currentUser: AuthUserProfile | null = null;
 
@@ -67,6 +68,8 @@ vi.mock("../../features/tiktokAds/tiktokAdsApi", () => ({
     mockUseCreateAdminClientTikTokAdsReportMutation(),
   useUpdateAdminTikTokAdsReportMutation: () =>
     mockUseUpdateAdminTikTokAdsReportMutation(),
+  useExportAdminTikTokAdsReportMutation: () =>
+    mockUseExportAdminTikTokAdsReportMutation(),
 }));
 
 const adminUser: AuthUserProfile = {
@@ -268,6 +271,10 @@ describe("TikTokAdsAdmin", () => {
       createResolvedMutation({ ...reportsResponse.data[0], status: "PUBLISHED" }),
       { isLoading: false },
     ]);
+    mockUseExportAdminTikTokAdsReportMutation.mockReturnValue([
+      createResolvedMutation("reportId,summary\nreport-1,TikTok haftalık rapor taslağı."),
+      { isLoading: false },
+    ]);
   });
 
   it("renders success, loading, error, and empty states", () => {
@@ -365,6 +372,25 @@ describe("TikTokAdsAdmin", () => {
           clientVisible: true,
           requestAcknowledgement: undefined,
         },
+      }),
+    );
+  });
+
+  it("exports a TikTok Ads report file", async () => {
+    const exportReportMutation = createResolvedMutation("reportId,summary\nreport-1,TikTok");
+    mockUseExportAdminTikTokAdsReportMutation.mockReturnValue([
+      exportReportMutation,
+      { isLoading: false },
+    ]);
+
+    render(<TikTokAdsAdmin />, { wrapper: MemoryRouter });
+
+    fireEvent.click(screen.getByRole("button", { name: "CSV" }));
+
+    await waitFor(() =>
+      expect(exportReportMutation).toHaveBeenCalledWith({
+        reportId: "report-1",
+        format: "csv",
       }),
     );
   });

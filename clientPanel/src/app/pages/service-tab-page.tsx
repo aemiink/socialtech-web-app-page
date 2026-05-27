@@ -47,13 +47,19 @@ import {
 } from '../features/metaAds/metaAdsApi';
 import type { MetaAdsCampaign, MetaAdsInsightItem, MetaAdsReportItem } from '../features/metaAds/metaAdsTypes';
 import {
+  useExportOwnTikTokAdsReportMutation,
   useGetOwnTikTokAdsCampaignsQuery,
   useGetOwnTikTokAdsConfigQuery,
   useGetOwnTikTokAdsInsightsQuery,
   useGetOwnTikTokAdsReportsQuery,
   useGetOwnTikTokAdsSummaryQuery,
 } from '../features/tiktokAds/tiktokAdsApi';
-import type { TikTokAdsCampaign, TikTokAdsInsightItem, TikTokAdsReportItem } from '../features/tiktokAds/tiktokAdsTypes';
+import type {
+  TikTokAdsCampaign,
+  TikTokAdsInsightItem,
+  TikTokAdsReportExportFormat,
+  TikTokAdsReportItem,
+} from '../features/tiktokAds/tiktokAdsTypes';
 import type { ProjectFile } from '../features/projectFiles/projectFilesTypes';
 import { useGetClientProjectFilesQuery } from '../features/projectFiles/projectFilesApi';
 import { useGetClientTasksQuery, useUpdateClientTaskApprovalMutation } from '../features/tasks/tasksApi';
@@ -1377,6 +1383,8 @@ function TikTokAdsServiceTab({
     { limit: 20 },
     { skip: !isConnected || tabId !== "optimization-notes" },
   );
+  const [exportTikTokReport, { isLoading: isExportingTikTokReport }] =
+    useExportOwnTikTokAdsReportMutation();
   const {
     data: ugcTasks = [],
     isLoading: isUgcTasksLoading,
@@ -1385,6 +1393,7 @@ function TikTokAdsServiceTab({
   const [updateClientTaskApproval, { isLoading: isUpdatingApproval }] =
     useUpdateClientTaskApprovalMutation();
   const [activeApprovalTaskId, setActiveApprovalTaskId] = useState<string | null>(null);
+  const [activeTikTokReportExportId, setActiveTikTokReportExportId] = useState<string | null>(null);
 
   const campaigns = campaignsResponse?.data ?? [];
   const adGroups = adGroupInsightsResponse?.data ?? [];
@@ -1470,6 +1479,26 @@ function TikTokAdsServiceTab({
       runClientAction(`${task.title} onayı güncellenemedi`, "comment");
     } finally {
       setActiveApprovalTaskId(null);
+    }
+  };
+
+  const handleTikTokReportExport = async (
+    report: TikTokAdsReportItem,
+    format: TikTokAdsReportExportFormat,
+  ) => {
+    if (isExportingTikTokReport) {
+      return;
+    }
+
+    setActiveTikTokReportExportId(report.id);
+    try {
+      const body = await exportTikTokReport({ reportId: report.id, format }).unwrap();
+      downloadTikTokAdsReportFile(report, format, body);
+      runClientAction(`TikTok Ads raporu ${format.toUpperCase()} olarak indirildi`, "report");
+    } catch {
+      runClientAction("TikTok Ads raporu indirilemedi", "comment");
+    } finally {
+      setActiveTikTokReportExportId(null);
     }
   };
 
@@ -1590,6 +1619,9 @@ function TikTokAdsServiceTab({
             rows={tiktokReports}
             loading={isTikTokReportsLoading}
             isError={isTikTokReportsError}
+            exportingReportId={activeTikTokReportExportId}
+            isExporting={isExportingTikTokReport}
+            onExport={handleTikTokReportExport}
           />
           <TikTokOptimizationNotesPanel notes={notes} loading={isCampaignsLoading || isAdsLoading || isSummaryLoading} />
         </div>
@@ -2215,10 +2247,16 @@ function TikTokAdsReportPanel({
   rows,
   loading,
   isError,
+  exportingReportId,
+  isExporting,
+  onExport,
 }: {
   rows: TikTokAdsReportItem[];
   loading: boolean;
   isError: boolean;
+  exportingReportId: string | null;
+  isExporting: boolean;
+  onExport: (row: TikTokAdsReportItem, format: TikTokAdsReportExportFormat) => void;
 }) {
   if (loading) {
     return <MetaAdsStatePanel title="TikTok Ads rapor listesi yükleniyor..." />;
@@ -2265,11 +2303,52 @@ function TikTokAdsReportPanel({
               <p>Onay: {getTikTokAdsReportAcknowledgementLabel(row.acknowledgementStatus)}</p>
               <p>Snapshot: {hasMetricsSnapshot ? "Var" : "Yok"}</p>
             </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button
+                variant="secondary"
+                className="text-xs"
+                disabled={isExporting}
+                onClick={() => onExport(row, "csv")}
+              >
+                <Download className="mr-1 h-3.5 w-3.5" />
+                {exportingReportId === row.id ? "İndiriliyor..." : "CSV"}
+              </Button>
+              <Button
+                variant="secondary"
+                className="text-xs"
+                disabled={isExporting}
+                onClick={() => onExport(row, "json")}
+              >
+                <Download className="mr-1 h-3.5 w-3.5" />
+                JSON
+              </Button>
+            </div>
           </div>
         );
       })}
     </div>
   );
+}
+
+function downloadTikTokAdsReportFile(
+  report: TikTokAdsReportItem,
+  format: TikTokAdsReportExportFormat,
+  body: string,
+) {
+  if (typeof URL.createObjectURL !== "function") {
+    return;
+  }
+
+  const mimeType = format === "csv" ? "text/csv;charset=utf-8" : "application/json;charset=utf-8";
+  const blob = new Blob([body], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `tiktok-ads-report-${report.periodEnd.slice(0, 10)}-${report.id}.${format}`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 function getMetaAdsReportTypeLabel(type: MetaAdsReportItem["type"]): string {

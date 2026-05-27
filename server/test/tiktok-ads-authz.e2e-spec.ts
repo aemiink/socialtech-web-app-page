@@ -1,10 +1,12 @@
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import {
+  ClientStatus,
   MetaAdsApprovalType,
   PrismaClient,
   PurchasedServiceKey,
   PurchasedServiceStatus,
+  TikTokAdsConnectionStatus,
   TikTokAdsReportStatus,
   TikTokAdsReportType,
   UserRole,
@@ -23,6 +25,8 @@ const SENSITIVE_RESPONSE_TOKENS = [
   "refreshTokenEnc",
 ] as const;
 const CLIENT_OWN_TIKTOK_ADS_REPORTS_PATH = "/api/v1/clients/me/tiktok-ads/reports";
+const CLIENT_SAFE_SYNC_ERROR_MESSAGE = "Bağlantı problemi var, ekibimiz ilgileniyor.";
+const CLIENT_SAFE_REPORT_NOT_FOUND_MESSAGE = "TikTok Ads raporu bulunamadı.";
 
 describe("TikTok Ads Config Authz (e2e)", () => {
   let app: INestApplication;
@@ -33,6 +37,7 @@ describe("TikTok Ads Config Authz (e2e)", () => {
   let clientProfileId: string;
   let tikTokAdsProjectId: string;
   let previousTikTokTokenEncryptionKey: string | undefined;
+  let tikTokAdsApiFailure: Error | null = null;
 
   beforeAll(async () => {
     previousTikTokTokenEncryptionKey = process.env.TIKTOK_ADS_TOKEN_ENCRYPTION_KEY;
@@ -51,6 +56,10 @@ describe("TikTok Ads Config Authz (e2e)", () => {
           grantedScopes: [],
         }),
         fetchReportingSnapshot: async (input: TikTokAdsReportingSnapshotInput) => {
+          if (tikTokAdsApiFailure) {
+            throw tikTokAdsApiFailure;
+          }
+
           const campaignId = "campaign-123";
           const adGroupId = "adgroup-123";
           const adId = "ad-123";
@@ -196,6 +205,10 @@ describe("TikTok Ads Config Authz (e2e)", () => {
     } else {
       process.env.TIKTOK_ADS_TOKEN_ENCRYPTION_KEY = previousTikTokTokenEncryptionKey;
     }
+  });
+
+  beforeEach(() => {
+    tikTokAdsApiFailure = null;
   });
 
   describe("GET /admin/clients/:clientId/tiktok-ads/config", () => {
@@ -685,6 +698,149 @@ describe("TikTok Ads Config Authz (e2e)", () => {
       expectResponseHasNoSensitiveTokenData(res.body);
     });
 
+    it("archived TikTok report is not visible to own client even when clientVisible is true", async () => {
+      if (!clientProfileId) return;
+      const archivedReport = await prisma.tikTokAdsReport.create({
+        data: {
+          clientProfileId,
+          periodStart: new Date("2026-05-15T00:00:00.000Z"),
+          periodEnd: new Date("2026-05-21T23:59:59.000Z"),
+          type: TikTokAdsReportType.CREATIVE_PERFORMANCE,
+          status: TikTokAdsReportStatus.ARCHIVED,
+          summary: "TikTok archived visible report",
+          clientVisible: true,
+          publishedAt: new Date("2026-05-22T09:00:00.000Z"),
+        },
+        select: { id: true },
+      });
+
+      const res = await request(app.getHttpServer())
+        .get(CLIENT_OWN_TIKTOK_ADS_REPORTS_PATH)
+        .set("Authorization", `Bearer ${clientToken}`);
+
+      expect(res.status).toBe(200);
+      const rowIds = Array.isArray(res.body.data)
+        ? res.body.data.map((row: { id?: string }) => row.id).filter(Boolean)
+        : [];
+      expect(rowIds).not.toContain(archivedReport.id);
+      expectResponseHasNoSensitiveTokenData(res.body);
+    });
+
+    it("TikTok report exports generate CSV and JSON files with scoped visibility", async () => {
+      if (!clientProfileId) return;
+      const visibleReport = await prisma.tikTokAdsReport.create({
+        data: {
+          clientProfileId,
+          projectId: tikTokAdsProjectId,
+          periodStart: new Date("2026-05-22T00:00:00.000Z"),
+          periodEnd: new Date("2026-05-28T23:59:59.000Z"),
+          type: TikTokAdsReportType.WEEKLY,
+          status: TikTokAdsReportStatus.PUBLISHED,
+          summary: "TikTok exportable weekly report",
+          metricsSnapshot: {
+            spend: 210,
+            impressions: 42000,
+          },
+          clientVisible: true,
+          publishedAt: new Date("2026-05-29T09:00:00.000Z"),
+        },
+        select: { id: true },
+      });
+
+      const adminCsvRes = await request(app.getHttpServer())
+        .get(adminTikTokAdsReportExportPath(visibleReport.id))
+        .query({ format: "csv" })
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(adminCsvRes.status).toBe(200);
+      expect(adminCsvRes.headers["content-type"]).toContain("text/csv");
+      expect(adminCsvRes.headers["content-disposition"]).toContain(".csv");
+      expect(adminCsvRes.text).toContain("TikTok exportable weekly report");
+      expect(adminCsvRes.text).toContain("metricsSnapshot");
+      expectResponseHasNoSensitiveTokenData(adminCsvRes.text);
+
+      const ownJsonRes = await request(app.getHttpServer())
+        .get(ownTikTokAdsReportExportPath(visibleReport.id))
+        .query({ format: "json" })
+        .set("Authorization", `Bearer ${clientToken}`);
+
+      expect(ownJsonRes.status).toBe(200);
+      expect(ownJsonRes.headers["content-type"]).toContain("application/json");
+      expect(ownJsonRes.headers["content-disposition"]).toContain(".json");
+      expect(ownJsonRes.text).toContain("TikTok exportable weekly report");
+      expect(ownJsonRes.text).toContain("\"metricsSnapshot\"");
+      expectResponseHasNoSensitiveTokenData(ownJsonRes.text);
+    });
+
+    it("own client cannot export draft or hidden TikTok reports", async () => {
+      if (!clientProfileId) return;
+      const hiddenReport = await prisma.tikTokAdsReport.create({
+        data: {
+          clientProfileId,
+          periodStart: new Date("2026-05-01T00:00:00.000Z"),
+          periodEnd: new Date("2026-05-07T23:59:59.000Z"),
+          type: TikTokAdsReportType.MONTHLY,
+          status: TikTokAdsReportStatus.DRAFT,
+          summary: "Hidden TikTok report",
+          clientVisible: false,
+        },
+        select: { id: true },
+      });
+
+      const res = await request(app.getHttpServer())
+        .get(ownTikTokAdsReportExportPath(hiddenReport.id))
+        .query({ format: "csv" })
+        .set("Authorization", `Bearer ${clientToken}`);
+
+      expect(res.status).toBe(404);
+      expect(JSON.stringify(res.body)).toContain(CLIENT_SAFE_REPORT_NOT_FOUND_MESSAGE);
+      expectResponseHasNoSensitiveTokenData(res.body);
+    });
+
+    it("assigned employee report export requires reports.read permission", async () => {
+      if (!clientProfileId) return;
+      const report = await prisma.tikTokAdsReport.create({
+        data: {
+          clientProfileId,
+          periodStart: new Date("2026-05-29T00:00:00.000Z"),
+          periodEnd: new Date("2026-06-04T23:59:59.000Z"),
+          type: TikTokAdsReportType.WEEKLY,
+          status: TikTokAdsReportStatus.PUBLISHED,
+          summary: "Assigned export authz report",
+          clientVisible: true,
+          publishedAt: new Date("2026-06-05T09:00:00.000Z"),
+        },
+        select: { id: true },
+      });
+      const permission = await prisma.permission.findUnique({
+        where: { slug: "reports.read" },
+        select: { id: true },
+      });
+      if (!permission) {
+        throw new Error("Expected reports.read permission to exist.");
+      }
+
+      await prisma.rolePermission.deleteMany({
+        where: {
+          role: UserRole.PERFORMANCE_SPECIALIST,
+          permissionId: permission.id,
+        },
+      });
+
+      try {
+        await request(app.getHttpServer())
+          .get(assignedTikTokAdsReportExportPath(report.id))
+          .query({ format: "json" })
+          .set("Authorization", `Bearer ${employeeToken}`)
+          .expect(403);
+      } finally {
+        await prisma.rolePermission.createMany({
+          data: [{ role: UserRole.PERFORMANCE_SPECIALIST, permissionId: permission.id }],
+          skipDuplicates: true,
+        });
+      }
+    });
+
     it("publish TikTok report can request acknowledgement task", async () => {
       if (!clientProfileId) return;
       const report = await prisma.tikTokAdsReport.create({
@@ -729,6 +885,101 @@ describe("TikTok Ads Config Authz (e2e)", () => {
       });
       expect(linkedTask?.approvalType).toBe(MetaAdsApprovalType.TIKTOK_ADS_REPORT_ACKNOWLEDGEMENT);
       expect(linkedTask?.approvalStatus).toBe("PENDING");
+      expectResponseHasNoSensitiveTokenData(res.body);
+    });
+
+    it("publishing a TikTok report cannot force clientVisible false", async () => {
+      if (!clientProfileId) return;
+      const report = await prisma.tikTokAdsReport.create({
+        data: {
+          clientProfileId,
+          periodStart: new Date("2026-06-05T00:00:00.000Z"),
+          periodEnd: new Date("2026-06-11T23:59:59.000Z"),
+          type: TikTokAdsReportType.BUDGET_RECOMMENDATION,
+          status: TikTokAdsReportStatus.DRAFT,
+          summary: "TikTok invalid publish state",
+          clientVisible: false,
+        },
+        select: { id: true },
+      });
+
+      const res = await request(app.getHttpServer())
+        .patch(adminTikTokAdsReportPath(report.id))
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({
+          status: TikTokAdsReportStatus.PUBLISHED,
+          clientVisible: false,
+        });
+
+      expect(res.status).toBe(400);
+      expect(JSON.stringify(res.body)).toContain("Published report cannot be hidden from client.");
+      expectResponseHasNoSensitiveTokenData(res.body);
+    });
+
+    it("requesting TikTok report acknowledgement without a project fails without creating report", async () => {
+      const slug = `tiktok-no-project-${Date.now()}`;
+      const clientWithoutProject = await prisma.clientProfile.create({
+        data: {
+          slug,
+          companyName: "TikTok No Project Client",
+          contactEmail: `${slug}@example.com`,
+          status: ClientStatus.ACTIVE,
+        },
+        select: { id: true },
+      });
+      await prisma.clientPurchasedService.create({
+        data: {
+          clientProfileId: clientWithoutProject.id,
+          serviceKey: PurchasedServiceKey.TIKTOK_ADS,
+          status: PurchasedServiceStatus.ACTIVE,
+        },
+      });
+
+      const res = await request(app.getHttpServer())
+        .post(adminTikTokAdsReportsPath(clientWithoutProject.id))
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({
+          periodStart: "2026-06-01T00:00:00.000Z",
+          periodEnd: "2026-06-07T23:59:59.000Z",
+          type: TikTokAdsReportType.WEEKLY,
+          summary: "Ack without project",
+          requestAcknowledgement: true,
+        });
+
+      expect(res.status).toBe(400);
+      expect(JSON.stringify(res.body)).toContain(
+        "A TIKTOK_ADS project is required to request report acknowledgement.",
+      );
+
+      const createdReports = await prisma.tikTokAdsReport.count({
+        where: { clientProfileId: clientWithoutProject.id },
+      });
+      expect(createdReports).toBe(0);
+    });
+
+    it("own client TikTok sync failure returns client-safe error surface", async () => {
+      if (!clientProfileId) return;
+      await prisma.clientTikTokAdsConfig.update({
+        where: { clientProfileId },
+        data: {
+          lastSyncAt: null,
+          connectionStatus: TikTokAdsConnectionStatus.CONNECTED,
+          syncError: null,
+        },
+      });
+      tikTokAdsApiFailure = new Error(
+        "TikTok advertiser adv-sensitive-123 token expired with scope advertiser.read",
+      );
+
+      const res = await request(app.getHttpServer())
+        .post("/api/v1/clients/me/tiktok-ads/sync")
+        .set("Authorization", `Bearer ${clientToken}`);
+
+      expect([400, 403, 502]).toContain(res.status);
+      const serializedBody = JSON.stringify(res.body);
+      expect(serializedBody).toContain(CLIENT_SAFE_SYNC_ERROR_MESSAGE);
+      expect(serializedBody).not.toContain("adv-sensitive-123");
+      expect(serializedBody).not.toContain("token expired");
       expectResponseHasNoSensitiveTokenData(res.body);
     });
 
@@ -822,8 +1073,20 @@ function adminTikTokAdsReportPath(reportId: string): string {
   return `/api/v1/admin/tiktok-ads/reports/${reportId}`;
 }
 
+function adminTikTokAdsReportExportPath(reportId: string): string {
+  return `/api/v1/admin/tiktok-ads/reports/${reportId}/export`;
+}
+
 function assignedTikTokAdsReportsPath(clientId: string): string {
   return `/api/v1/tiktok-ads/clients/${clientId}/reports`;
+}
+
+function assignedTikTokAdsReportExportPath(reportId: string): string {
+  return `/api/v1/tiktok-ads/reports/${reportId}/export`;
+}
+
+function ownTikTokAdsReportExportPath(reportId: string): string {
+  return `/api/v1/clients/me/tiktok-ads/reports/${reportId}/export`;
 }
 
 function createTikTokInsightRow(overrides: {

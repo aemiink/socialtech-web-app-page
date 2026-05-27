@@ -189,6 +189,42 @@ Affected files:
 - `REPO_MAP.md`
 - `ROAD_MAP.md`
 
+## 2026-05-27 - TikTok Ads Faz 10 Production Hardening
+
+Context:
+TikTok Ads Faz 9 ile report lifecycle tamamlandı ancak gerçek dosya üretimi, client-safe error yüzeyinin export/sync edge-case'lerine yayılması ve report authz/state coverage sertleştirmesi Faz 10'a bırakılmıştı.
+
+Decision:
+TikTok Ads Faz 10 production hardening aşağıdaki sınırlı kapsamla tamamlandı:
+- Admin, assigned employee ve own-client rapor export endpointleri eklendi: `GET /api/v1/admin/tiktok-ads/reports/:reportId/export`, `GET /api/v1/tiktok-ads/reports/:reportId/export`, `GET /api/v1/clients/me/tiktok-ads/reports/:reportId/export`.
+- Export formatı V1 için `json|csv` ile sınırlandı; dosya içeriği server tarafında üretildi ve `Content-Disposition` + no-store header'larıyla döndürülür.
+- Own-client rapor görünürlüğü ve export scope'u yalnızca `PUBLISHED + clientVisible` raporlarla sınırlandı; draft/hidden/archived raporlar client tarafına not-found olarak döner.
+- Assigned report read/create/update/export endpointleri backend `reports.read` / `reports.manage` guard'ları ile frontend permission modeline hizalandı.
+- Client-safe sync error yüzeyi e2e ile sabitlendi; client response'ları advertiser/token/scope gibi internal detayları döndürmez.
+- Admin, employee ve client panellerine CSV/JSON indirme aksiyonları eklendi; RTK Query export mutation'ları text body alıp tarayıcıda Blob download üretir.
+
+Reason:
+Bu karar export üretimini frontend string birleştirme veya açık URL download yerine server-scoped ve permission-aware endpointlerde tutar. Client yüzeyi publish state'ine göre daraltılırken admin/assigned operasyonlar tam dosya erişimini korur. Faz 10, yeni domain modeli açmadan mevcut `TikTokAdsReport` contract'ını production kullanımına hazır hale getirir.
+
+Affected files:
+- `server/src/tiktok-ads/dto/tiktok-ads-report-export-query.dto.ts`
+- `server/src/tiktok-ads/tiktok-ads.controller.ts`
+- `server/src/tiktok-ads/tiktok-ads.service.ts`
+- `server/test/tiktok-ads-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/tiktokAds/tiktokAdsApi.ts`
+- `adminandemployeePanel/src/app/features/tiktokAds/tiktokAdsTypes.ts`
+- `adminandemployeePanel/src/app/pages/TikTokAdsAdmin.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/TikTokAdsAdmin.test.tsx`
+- `adminandemployeePanel/src/app/employee/components/TikTokAdsWorkspace.tsx`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/TikTokAdsWorkspace.test.tsx`
+- `clientPanel/src/app/features/tiktokAds/tiktokAdsApi.ts`
+- `clientPanel/src/app/features/tiktokAds/tiktokAdsTypes.ts`
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+- `clientPanel/src/app/pages/__tests__/service-tab-page.tiktok-ads.test.tsx`
+- `PROJECT_CONTEXT.md`
+- `REPO_MAP.md`
+- `ROAD_MAP.md`
+
 ---
 
 ## 2026-05-10 - Meta Ads Faz 9 Reporting + Export Foundation (Report Entity + Publish/Ack Bridge)

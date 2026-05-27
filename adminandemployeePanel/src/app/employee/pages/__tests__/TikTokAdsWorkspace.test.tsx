@@ -17,6 +17,7 @@ const mockUseGetAssignedClientTikTokAdsReportsQuery = vi.fn();
 const mockUseSyncAssignedClientTikTokAdsMutation = vi.fn();
 const mockUseCreateAssignedClientTikTokAdsReportMutation = vi.fn();
 const mockUseUpdateAssignedTikTokAdsReportMutation = vi.fn();
+const mockUseExportAssignedTikTokAdsReportMutation = vi.fn();
 const mockUseGetProjectsQuery = vi.fn();
 const mockUseGetProjectWorkspaceMessagesQuery = vi.fn();
 const mockUseCreateProjectWorkspaceMessageMutation = vi.fn();
@@ -28,6 +29,7 @@ const mockCreateTask = vi.fn();
 const mockSyncAssignedTikTokAds = vi.fn();
 const mockCreateTikTokAdsReport = vi.fn();
 const mockUpdateTikTokAdsReport = vi.fn();
+const mockExportTikTokAdsReport = vi.fn();
 
 vi.mock("../../../store/hooks", () => ({
   useAppSelector: (selector: (state: unknown) => unknown) =>
@@ -64,6 +66,8 @@ vi.mock("../../../features/tiktokAds/tiktokAdsApi", () => ({
     mockUseCreateAssignedClientTikTokAdsReportMutation(...args),
   useUpdateAssignedTikTokAdsReportMutation: (...args: unknown[]) =>
     mockUseUpdateAssignedTikTokAdsReportMutation(...args),
+  useExportAssignedTikTokAdsReportMutation: (...args: unknown[]) =>
+    mockUseExportAssignedTikTokAdsReportMutation(...args),
 }));
 
 vi.mock("../../../features/projects/projectsApi", () => ({
@@ -380,6 +384,13 @@ function setupBaseMocks() {
     mockUpdateTikTokAdsReport,
     { isLoading: false },
   ]);
+  mockExportTikTokAdsReport.mockReturnValue({
+    unwrap: () => Promise.resolve("reportId,summary\nreport-1,TikTok"),
+  });
+  mockUseExportAssignedTikTokAdsReportMutation.mockReturnValue([
+    mockExportTikTokAdsReport,
+    { isLoading: false },
+  ]);
 }
 
 function renderWorkspace(initialView?: Parameters<typeof TikTokAdsWorkspace>[0]["initialView"]) {
@@ -526,6 +537,19 @@ describe("TikTokAdsWorkspace", () => {
           clientVisible: true,
           requestAcknowledgement: true,
         },
+      }),
+    );
+  });
+
+  it("exports TikTok Ads report from employee workspace", async () => {
+    renderWorkspace("reports");
+
+    fireEvent.click(screen.getByRole("button", { name: "CSV" }));
+
+    await waitFor(() =>
+      expect(mockExportTikTokAdsReport).toHaveBeenCalledWith({
+        reportId: "report-1",
+        format: "csv",
       }),
     );
   });

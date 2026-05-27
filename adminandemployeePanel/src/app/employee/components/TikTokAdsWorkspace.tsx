@@ -4,6 +4,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Clapperboard,
+  Download,
   MessageSquare,
   RefreshCw,
   Upload,
@@ -24,6 +25,7 @@ import { extractApiErrorMessage, formatClientDateTime } from "../../features/cli
 import { useCreateProjectWorkspaceMessageMutation, useGetProjectsQuery, useGetProjectWorkspaceMessagesQuery } from "../../features/projects/projectsApi";
 import {
   useCreateAssignedClientTikTokAdsReportMutation,
+  useExportAssignedTikTokAdsReportMutation,
   useGetAssignedClientTikTokAdsCampaignsQuery,
   useGetAssignedClientTikTokAdsConfigQuery,
   useGetAssignedClientTikTokAdsInsightsQuery,
@@ -36,6 +38,7 @@ import type {
   TikTokAdsCampaign,
   TikTokAdsConfig,
   TikTokAdsInsightItem,
+  TikTokAdsReportExportFormat,
   TikTokAdsReportItem,
   TikTokAdsReportStatus,
   TikTokAdsReportType,
@@ -300,6 +303,9 @@ export function TikTokAdsWorkspace({ initialView = "overview" }: TikTokAdsWorksp
     useCreateAssignedClientTikTokAdsReportMutation();
   const [updateTikTokAdsReport, { isLoading: isUpdatingReport }] =
     useUpdateAssignedTikTokAdsReportMutation();
+  const [exportTikTokAdsReport, { isLoading: isExportingReport }] =
+    useExportAssignedTikTokAdsReportMutation();
+  const [exportingReportId, setExportingReportId] = useState<string | null>(null);
 
   if (!workspaceMode) {
     return (
@@ -339,7 +345,8 @@ export function TikTokAdsWorkspace({ initialView = "overview" }: TikTokAdsWorksp
     isCreatingMessage ||
     isSyncingAssignedTikTokAds ||
     isCreatingReport ||
-    isUpdatingReport;
+    isUpdatingReport ||
+    isExportingReport;
 
   async function handleSyncAssignedTikTokAds() {
     if (!selectedClientId) {
@@ -482,6 +489,33 @@ export function TikTokAdsWorkspace({ initialView = "overview" }: TikTokAdsWorksp
       });
     } finally {
       setActiveAction(null);
+    }
+  }
+
+  async function handleExportReport(
+    report: TikTokAdsReportItem,
+    format: TikTokAdsReportExportFormat,
+  ) {
+    if (!canReadTikTokAdsReports || isActionBusy) {
+      return;
+    }
+
+    setFeedback(null);
+    setExportingReportId(report.id);
+    try {
+      const body = await exportTikTokAdsReport({ reportId: report.id, format }).unwrap();
+      downloadTikTokAdsReportFile(report, format, body);
+      setFeedback({
+        type: "success",
+        text: `TikTok Ads raporu ${format.toUpperCase()} olarak indirildi.`,
+      });
+    } catch (error) {
+      setFeedback({
+        type: "error",
+        text: extractApiErrorMessage(error, "TikTok Ads raporu indirilemedi."),
+      });
+    } finally {
+      setExportingReportId(null);
     }
   }
 
@@ -915,9 +949,11 @@ export function TikTokAdsWorkspace({ initialView = "overview" }: TikTokAdsWorksp
                 hasTikTokAdsProject={hasTikTokAdsProject}
                 isActionBusy={isActionBusy}
                 activeAction={activeAction}
+                exportingReportId={exportingReportId}
                 reportTasks={tikTokAdsTasks.filter((task) => task.type === "QA")}
                 onCreateReportDraft={(event) => void handleCreateReportDraft(event)}
                 onPublishReport={(reportId) => void handlePublishReport(reportId)}
+                onExportReport={(report, format) => void handleExportReport(report, format)}
                 onCreateInternalNote={() => void handleCreateInternalNote()}
                 onCreateReportTask={() => void handleCreateRoleTask("report")}
               />
@@ -1348,9 +1384,11 @@ function ReportsSection({
   hasTikTokAdsProject,
   isActionBusy,
   activeAction,
+  exportingReportId,
   reportTasks,
   onCreateReportDraft,
   onPublishReport,
+  onExportReport,
   onCreateInternalNote,
   onCreateReportTask,
 }: {
@@ -1376,9 +1414,14 @@ function ReportsSection({
   hasTikTokAdsProject: boolean;
   isActionBusy: boolean;
   activeAction: string | null;
+  exportingReportId: string | null;
   reportTasks: Task[];
   onCreateReportDraft: (event: FormEvent<HTMLFormElement>) => void;
   onPublishReport: (reportId: string) => void;
+  onExportReport: (
+    report: TikTokAdsReportItem,
+    format: TikTokAdsReportExportFormat,
+  ) => void;
   onCreateInternalNote: () => void;
   onCreateReportTask: () => void;
 }) {
@@ -1580,25 +1623,49 @@ function ReportsSection({
                     <p className="text-xs text-[#DADADA]">{report.summary ?? "Rapor özeti girilmedi."}</p>
                     <p className="text-xs text-[#A0A0A0]">Ack: {report.acknowledgementStatus}</p>
                   </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => onPublishReport(report.id)}
-                    disabled={
-                      report.status === "PUBLISHED" ||
-                      !canManageTikTokAdsReports ||
-                      !canCreateTikTokAdsApprovals ||
-                      isActionBusy
-                    }
-                    title={
-                      canCreateTikTokAdsApprovals
-                        ? undefined
-                        : "Publish acknowledgement için approval oluşturma izni gerekir."
-                    }
-                  >
-                    {activeAction === report.id ? "Yayınlanıyor..." : "Publish + Ack"}
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onPublishReport(report.id)}
+                      disabled={
+                        report.status === "PUBLISHED" ||
+                        !canManageTikTokAdsReports ||
+                        !canCreateTikTokAdsApprovals ||
+                        isActionBusy
+                      }
+                      title={
+                        canCreateTikTokAdsApprovals
+                          ? undefined
+                          : "Publish acknowledgement için approval oluşturma izni gerekir."
+                      }
+                    >
+                      {activeAction === report.id ? "Yayınlanıyor..." : "Publish + Ack"}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onExportReport(report, "csv")}
+                      disabled={!canReadTikTokAdsReports || isActionBusy}
+                      title="CSV olarak indir"
+                    >
+                      <Download className="mr-1 h-3.5 w-3.5" />
+                      {exportingReportId === report.id ? "İndiriliyor..." : "CSV"}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onExportReport(report, "json")}
+                      disabled={!canReadTikTokAdsReports || isActionBusy}
+                      title="JSON olarak indir"
+                    >
+                      <Download className="mr-1 h-3.5 w-3.5" />
+                      JSON
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1814,6 +1881,27 @@ function formatReportTypeLabel(type: TikTokAdsReportType): string {
     BUDGET_RECOMMENDATION: "Budget",
   };
   return labels[type] ?? type;
+}
+
+function downloadTikTokAdsReportFile(
+  report: TikTokAdsReportItem,
+  format: TikTokAdsReportExportFormat,
+  body: string,
+) {
+  if (typeof URL.createObjectURL !== "function") {
+    return;
+  }
+
+  const mimeType = format === "csv" ? "text/csv;charset=utf-8" : "application/json;charset=utf-8";
+  const blob = new Blob([body], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `tiktok-ads-report-${report.periodEnd.slice(0, 10)}-${report.id}.${format}`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 function formatReportPeriod(periodStart: string, periodEnd: string): string {

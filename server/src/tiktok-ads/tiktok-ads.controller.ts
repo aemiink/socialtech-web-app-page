@@ -8,8 +8,10 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   UseGuards,
 } from "@nestjs/common";
+import { Response } from "express";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { RequirePermissions } from "../auth/decorators/permissions.decorator";
@@ -22,6 +24,7 @@ import { TestTikTokAdsConnectionDto } from "./dto/test-tiktok-ads-connection.dto
 import { TikTokAdsCampaignsQueryDto } from "./dto/tiktok-ads-campaigns-query.dto";
 import { TikTokAdsDateRangeQueryDto } from "./dto/tiktok-ads-date-range-query.dto";
 import { TikTokAdsInsightsQueryDto } from "./dto/tiktok-ads-insights-query.dto";
+import { TikTokAdsReportExportQueryDto } from "./dto/tiktok-ads-report-export-query.dto";
 import { TikTokAdsReportsQueryDto } from "./dto/tiktok-ads-reports-query.dto";
 import { TikTokAdsSyncLogsQueryDto } from "./dto/tiktok-ads-sync-logs-query.dto";
 import { UpdateTikTokAdsReportDto } from "./dto/update-tiktok-ads-report.dto";
@@ -189,6 +192,20 @@ export class TikTokAdsController {
     return this.tikTokAdsService.updateAdminReport(reportId, dto, actor);
   }
 
+  @Get("admin/tiktok-ads/reports/:reportId/export")
+  @RequirePermissions("reports.read")
+  async exportAdminReport(
+    @Param("reportId", ParseUUIDPipe) reportId: string,
+    @Query() query: TikTokAdsReportExportQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<string> {
+    return this.writeReportExport(
+      response,
+      await this.tikTokAdsService.exportAdminReport(reportId, query, actor),
+    );
+  }
+
   // ─── Assigned employee endpoints ───────────────────────────────────────────
 
   @Get("tiktok-ads/clients/:clientId/config")
@@ -241,7 +258,11 @@ export class TikTokAdsController {
   }
 
   @Get("tiktok-ads/clients/:clientId/reports")
-  @RequirePermissions("tiktokAds.config.read.assigned", "tiktokAds.reporting.read.assigned")
+  @RequirePermissions(
+    "tiktokAds.config.read.assigned",
+    "tiktokAds.reporting.read.assigned",
+    "reports.read",
+  )
   getAssignedClientReports(
     @Param("clientId", ParseUUIDPipe) clientId: string,
     @Query() query: TikTokAdsReportsQueryDto,
@@ -251,7 +272,11 @@ export class TikTokAdsController {
   }
 
   @Post("tiktok-ads/clients/:clientId/reports")
-  @RequirePermissions("tiktokAds.config.read.assigned", "tiktokAds.notes.manage.assigned")
+  @RequirePermissions(
+    "tiktokAds.config.read.assigned",
+    "tiktokAds.notes.manage.assigned",
+    "reports.manage",
+  )
   createAssignedClientReport(
     @Param("clientId", ParseUUIDPipe) clientId: string,
     @Body() dto: CreateTikTokAdsReportDto,
@@ -261,13 +286,35 @@ export class TikTokAdsController {
   }
 
   @Patch("tiktok-ads/reports/:reportId")
-  @RequirePermissions("tiktokAds.config.read.assigned", "tiktokAds.notes.manage.assigned")
+  @RequirePermissions(
+    "tiktokAds.config.read.assigned",
+    "tiktokAds.notes.manage.assigned",
+    "reports.manage",
+  )
   updateAssignedReport(
     @Param("reportId", ParseUUIDPipe) reportId: string,
     @Body() dto: UpdateTikTokAdsReportDto,
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.tikTokAdsService.updateAssignedReport(reportId, dto, actor);
+  }
+
+  @Get("tiktok-ads/reports/:reportId/export")
+  @RequirePermissions(
+    "tiktokAds.config.read.assigned",
+    "tiktokAds.reporting.read.assigned",
+    "reports.read",
+  )
+  async exportAssignedReport(
+    @Param("reportId", ParseUUIDPipe) reportId: string,
+    @Query() query: TikTokAdsReportExportQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<string> {
+    return this.writeReportExport(
+      response,
+      await this.tikTokAdsService.exportAssignedReport(reportId, query, actor),
+    );
   }
 
   // ─── Own client endpoint ────────────────────────────────────────────────────
@@ -321,5 +368,29 @@ export class TikTokAdsController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.tikTokAdsService.getOwnClientReports(query, actor);
+  }
+
+  @Get("clients/me/tiktok-ads/reports/:reportId/export")
+  @RequirePermissions("tiktokAds.config.read.own", "reports.read.own", "tiktokAds.reporting.read.own")
+  async exportOwnReport(
+    @Param("reportId", ParseUUIDPipe) reportId: string,
+    @Query() query: TikTokAdsReportExportQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<string> {
+    return this.writeReportExport(
+      response,
+      await this.tikTokAdsService.exportOwnReport(reportId, query, actor),
+    );
+  }
+
+  private writeReportExport(
+    response: Response,
+    file: { body: string; contentType: string; filename: string },
+  ): string {
+    response.setHeader("Content-Type", file.contentType);
+    response.setHeader("Content-Disposition", `attachment; filename="${file.filename}"`);
+    response.setHeader("Cache-Control", "private, no-store");
+    return file.body;
   }
 }

@@ -23,6 +23,8 @@ export type TikTokAdsReportType =
 
 export type TikTokAdsReportStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
 
+export type TikTokAdsReportExportFormat = "json" | "csv";
+
 export type TikTokAdsReportAcknowledgementStatus =
   | "NOT_REQUESTED"
   | "PENDING"

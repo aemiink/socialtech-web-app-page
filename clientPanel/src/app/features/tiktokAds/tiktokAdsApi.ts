@@ -6,6 +6,7 @@ import type {
   TikTokAdsInsightItem,
   TikTokAdsInsightLevel,
   TikTokAdsInsightsResponse,
+  TikTokAdsReportExportFormat,
   TikTokAdsReportItem,
   TikTokAdsReportsQuery,
   TikTokAdsReportsResponse,
@@ -75,6 +76,17 @@ const tiktokAdsApi = baseApi.injectEndpoints({
       transformResponse: (response: unknown) => normalizeOwnTikTokAdsReportsResponse(response),
       providesTags: ["TikTokAdsConfig"],
     }),
+    exportOwnTikTokAdsReport: build.mutation<
+      string,
+      { reportId: string; format: TikTokAdsReportExportFormat }
+    >({
+      query: ({ reportId, format }) => ({
+        url: `/clients/me/tiktok-ads/reports/${reportId}/export`,
+        method: "GET",
+        params: { format },
+        responseHandler: (response: Response) => response.text(),
+      }),
+    }),
     syncOwnTikTokAds: build.mutation<TikTokAdsSyncResponse, TikTokAdsDateRangeQuery | void>({
       query: (query) => ({
         url: "/clients/me/tiktok-ads/sync",
@@ -88,6 +100,7 @@ const tiktokAdsApi = baseApi.injectEndpoints({
 });
 
 export const {
+  useExportOwnTikTokAdsReportMutation,
   useGetOwnTikTokAdsConfigQuery,
   useGetOwnTikTokAdsSummaryQuery,
   useGetOwnTikTokAdsCampaignsQuery,

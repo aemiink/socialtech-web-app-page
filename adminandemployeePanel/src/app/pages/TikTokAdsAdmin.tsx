@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  Download,
   Link2Off,
   RefreshCw,
   RotateCcw,
@@ -31,6 +32,7 @@ import {
 import {
   useCreateAdminClientTikTokAdsReportMutation,
   useDisconnectAdminClientTikTokAdsMutation,
+  useExportAdminTikTokAdsReportMutation,
   useGetAdminClientTikTokAdsReportsQuery,
   useGetAdminTikTokAdsClientsQuery,
   useGetAdminTikTokAdsSyncLogsQuery,
@@ -42,6 +44,8 @@ import {
 } from "../features/tiktokAds/tiktokAdsApi";
 import type {
   AdminTikTokAdsClientListItem,
+  TikTokAdsReportExportFormat,
+  TikTokAdsReportItem,
   TikTokAdsReportStatus,
   TikTokAdsReportType,
   TikTokAdsSyncStatus,
@@ -137,6 +141,8 @@ export function TikTokAdsAdmin() {
     useCreateAdminClientTikTokAdsReportMutation();
   const [updateTikTokAdsReport, { isLoading: isUpdatingReport }] =
     useUpdateAdminTikTokAdsReportMutation();
+  const [exportTikTokAdsReport, { isLoading: isExportingReport }] =
+    useExportAdminTikTokAdsReportMutation();
 
   const [pageMessage, setPageMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [configTarget, setConfigTarget] = useState<AdminTikTokAdsClientListItem | null>(null);
@@ -147,6 +153,7 @@ export function TikTokAdsAdmin() {
   const [reportTypeFilter, setReportTypeFilter] = useState<TikTokAdsReportType | "ALL">("ALL");
   const [reportForm, setReportForm] = useState<ReportFormState>(initialReportForm);
   const [publishAckToggle, setPublishAckToggle] = useState(false);
+  const [exportingReportId, setExportingReportId] = useState<string | null>(null);
 
   const listItems = response?.data ?? [];
   const selectedReportClient = useMemo(
@@ -194,7 +201,8 @@ export function TikTokAdsAdmin() {
     isRetryingSync ||
     isDisconnecting ||
     isCreatingReport ||
-    isUpdatingReport;
+    isUpdatingReport ||
+    isExportingReport;
 
   useEffect(() => {
     if (listItems.length === 0) {
@@ -371,6 +379,33 @@ export function TikTokAdsAdmin() {
         type: "error",
         text: extractApiErrorMessage(error, "TikTok Ads raporu yayınlanamadı."),
       });
+    }
+  }
+
+  async function handleExportReport(
+    report: TikTokAdsReportItem,
+    format: TikTokAdsReportExportFormat,
+  ) {
+    if (!canReadReports || isMutating) {
+      return;
+    }
+
+    setPageMessage(null);
+    setExportingReportId(report.id);
+    try {
+      const body = await exportTikTokAdsReport({ reportId: report.id, format }).unwrap();
+      downloadTikTokAdsReportFile(report, format, body);
+      setPageMessage({
+        type: "success",
+        text: `${selectedReportClientName} TikTok Ads raporu ${format.toUpperCase()} olarak indirildi.`,
+      });
+    } catch (error) {
+      setPageMessage({
+        type: "error",
+        text: extractApiErrorMessage(error, "TikTok Ads raporu indirilemedi."),
+      });
+    } finally {
+      setExportingReportId(null);
     }
   }
 
@@ -1027,6 +1062,7 @@ export function TikTokAdsAdmin() {
                       <td className="py-3 pr-3 text-xs text-[#DADADA]">{report.acknowledgementStatus}</td>
                       <td className="py-3 pr-3 text-xs text-[#DADADA]">{report.summary ?? "—"}</td>
                       <td className="py-3">
+                        <div className="flex flex-wrap gap-2">
                         <Button
                           type="button"
                           size="sm"
@@ -1038,6 +1074,33 @@ export function TikTokAdsAdmin() {
                         >
                           {isUpdatingReport ? "Yayınlanıyor..." : "Publish"}
                         </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            void handleExportReport(report, "csv");
+                          }}
+                          disabled={!canReadReports || isMutating}
+                          title="CSV olarak indir"
+                        >
+                          <Download className="mr-1 h-3.5 w-3.5" />
+                          {exportingReportId === report.id && isExportingReport ? "İndiriliyor..." : "CSV"}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            void handleExportReport(report, "json");
+                          }}
+                          disabled={!canReadReports || isMutating}
+                          title="JSON olarak indir"
+                        >
+                          <Download className="mr-1 h-3.5 w-3.5" />
+                          JSON
+                        </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1124,6 +1187,27 @@ export function TikTokAdsAdmin() {
       </Dialog>
     </div>
   );
+}
+
+function downloadTikTokAdsReportFile(
+  report: TikTokAdsReportItem,
+  format: TikTokAdsReportExportFormat,
+  body: string,
+) {
+  if (typeof URL.createObjectURL !== "function") {
+    return;
+  }
+
+  const mimeType = format === "csv" ? "text/csv;charset=utf-8" : "application/json;charset=utf-8";
+  const blob = new Blob([body], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `tiktok-ads-report-${report.periodEnd.slice(0, 10)}-${report.id}.${format}`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 function getServiceStatusLabel(status: string): string {
