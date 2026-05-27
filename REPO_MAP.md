@@ -44,6 +44,8 @@ Location: `adminandemployeePanel/`
   - `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
   - `adminandemployeePanel/src/app/features/metaAds/metaAdsApi.ts`
   - `adminandemployeePanel/src/app/features/metaAds/metaAdsTypes.ts`
+  - `adminandemployeePanel/src/app/features/tiktokAds/tiktokAdsApi.ts`
+  - `adminandemployeePanel/src/app/features/tiktokAds/tiktokAdsTypes.ts`
   - `adminandemployeePanel/src/app/features/projects/projectsApi.ts`
   - `adminandemployeePanel/src/app/features/projects/projectsTypes.ts`
   - `adminandemployeePanel/src/app/features/projects/projectsUtils.ts`
@@ -237,7 +239,7 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 
 - `server/src/main.ts` - Nest bootstrap, `/api/v1` global prefix, global ValidationPipe, global exception filter, CORS setup
 - `server/src/app.module.ts` - root module imports for config/database/health/auth/users/clients/admin-summary/admin-assignments/admin-clients/admin-users/admin-audit-logs/projects/tasks/crm/delivery/github integrations
-- `server/src/config/env.validation.ts` - Joi env validation schema, including `CLIENT_ORIGIN_PUBLIC`, CRM lead scan envs, Gemini scoring envs, and `GITHUB_TOKEN_ENCRYPTION_KEY`
+- `server/src/config/env.validation.ts` - Joi env validation schema, including `CLIENT_ORIGIN_PUBLIC`, CRM lead scan envs, Gemini scoring envs, `GITHUB_TOKEN_ENCRYPTION_KEY`, and TikTok Ads envs
 - `server/src/config/cors.config.ts` - env-based CORS whitelist, including public site origin support
 - `server/src/common/filters/global-exception.filter.ts` - centralized error response format
 
@@ -253,6 +255,7 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - Delivery enums: `ProjectStatus`, `TaskStatus`, `Priority`, `TaskType`, `TaskWorkstream`, `TaskSeverity`, `TaskEnvironment`, `DeliverySprintStatus`, `DeliveryReleaseStatus`, `RepositoryProvider`
   - Additional enums: `PurchasedServiceKey`, `PurchasedServiceStatus`, `TaskTodoVisibility`
   - CRM enums: `CrmLeadStatus`, `CrmLeadSource`, `CrmLeadActivityType`
+  - TikTok Ads models: `ClientTikTokAdsConfig`, `ClientTikTokAdsCredential`
   - `User.role` enum remains the primary fixed role field
   - `User.sessionInvalidatedAt` is used for access-token invalidation lifecycle
   - `ClientProfile.slug` is unique
@@ -263,6 +266,39 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
     - `@@index([employeeUserId, isActive])`
     - `@@index([clientProfileId, isActive])`
     - `@@index([scope, isActive])`
+
+### TikTok Ads Backend Module
+
+- `server/src/tiktok-ads/tiktok-ads.module.ts`
+- `server/src/tiktok-ads/tiktok-ads.controller.ts`
+  - admin config/connection/manual connect/test/disconnect endpoints
+  - assigned employee config read endpoint
+  - own client config summary endpoint
+- `server/src/tiktok-ads/tiktok-ads.service.ts`
+  - service-level admin/assigned/client permission checks
+  - active purchased-service check for connection management
+  - encrypted credential persistence and client-safe own summary
+- `server/src/tiktok-ads/tiktok-ads-api.service.ts`
+  - TikTok API for Business advertiser info connection test
+  - normalized API error categorization
+- `server/src/tiktok-ads/tiktok-ads-token.service.ts`
+  - AES-256-GCM token encryption/decryption + SHA256 hash
+- `server/src/tiktok-ads/dto/connect-manual-tiktok-ads.dto.ts`
+- `server/src/tiktok-ads/dto/test-tiktok-ads-connection.dto.ts`
+- `server/src/tiktok-ads/dto/update-tiktok-ads-config.dto.ts`
+- `server/test/tiktok-ads-authz.e2e-spec.ts`
+  - admin/employee/client authz, manual connect, test, disconnect, sensitive-token response safety
+
+### TikTok Ads Admin Frontend
+
+- `adminandemployeePanel/src/app/features/tiktokAds/tiktokAdsApi.ts`
+  - admin connection summary/manual connect/test/disconnect RTK Query hooks
+- `adminandemployeePanel/src/app/features/tiktokAds/tiktokAdsTypes.ts`
+  - connection, request, response, and status badge types/helpers
+- `adminandemployeePanel/src/app/pages/ClientDetail.tsx`
+  - TikTok Ads connection management card in admin client detail
+- `adminandemployeePanel/src/app/pages/__tests__/ClientDetail.test.tsx`
+  - TikTok Ads connection hook mocks with ClientDetail regression coverage
 
 ## 2026-05-05 Incremental Map Update
 

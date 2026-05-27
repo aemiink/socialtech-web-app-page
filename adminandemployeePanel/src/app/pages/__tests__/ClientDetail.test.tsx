@@ -9,6 +9,7 @@ import type {
   ClientSummaryResponse,
   MetaAdsSummaryResponse,
 } from "../../features/clients/clientsTypes";
+import type { AdminTikTokAdsConnection } from "../../features/tiktokAds/tiktokAdsTypes";
 import { ClientDetail } from "../ClientDetail";
 
 type QueryOptions = {
@@ -26,6 +27,14 @@ type ClientSummaryQueryResult = {
 
 type MetaAdsConnectionQueryResult = {
   data?: AdminClientMetaAdsConnection;
+  error?: unknown;
+  isLoading: boolean;
+  isFetching: boolean;
+  refetch: () => void;
+};
+
+type TikTokAdsConnectionQueryResult = {
+  data?: AdminTikTokAdsConnection;
   error?: unknown;
   isLoading: boolean;
   isFetching: boolean;
@@ -52,6 +61,12 @@ const mockUseTestAdminClientMetaAdsConnectionMutation = vi.fn();
 const mockUseSyncAdminClientMetaAdsMutation = vi.fn();
 const mockUseDisconnectAdminClientMetaAdsMutation = vi.fn();
 const mockUseResetClientOwnerPasswordMutation = vi.fn();
+const mockUseGetAdminClientTikTokAdsConnectionQuery = vi.fn<
+  (id: string, options: QueryOptions) => TikTokAdsConnectionQueryResult
+>();
+const mockUseConnectAdminClientTikTokAdsManualMutation = vi.fn();
+const mockUseTestAdminClientTikTokAdsConnectionMutation = vi.fn();
+const mockUseDisconnectAdminClientTikTokAdsMutation = vi.fn();
 
 vi.mock("../../features/clients/clientsApi", () => ({
   useGetClientSummaryQuery: (id: string, options: QueryOptions) =>
@@ -71,6 +86,16 @@ vi.mock("../../features/clients/clientsApi", () => ({
 }));
 vi.mock("../../features/adminAssignments/adminAssignmentsApi", () => ({
   useGetAdminAssignmentsQuery: (...args: unknown[]) => mockUseGetAdminAssignmentsQuery(...args),
+}));
+vi.mock("../../features/tiktokAds/tiktokAdsApi", () => ({
+  useGetAdminClientTikTokAdsConnectionQuery: (id: string, options: QueryOptions) =>
+    mockUseGetAdminClientTikTokAdsConnectionQuery(id, options),
+  useConnectAdminClientTikTokAdsManualMutation: () =>
+    mockUseConnectAdminClientTikTokAdsManualMutation(),
+  useTestAdminClientTikTokAdsConnectionMutation: () =>
+    mockUseTestAdminClientTikTokAdsConnectionMutation(),
+  useDisconnectAdminClientTikTokAdsMutation: () =>
+    mockUseDisconnectAdminClientTikTokAdsMutation(),
 }));
 
 const clientProfileId = "11111111-1111-4111-8111-111111111111";
@@ -172,6 +197,32 @@ const metaAdsSummary: MetaAdsSummaryResponse = {
   lastSyncAt: "2026-05-09T10:00:00.000Z",
 };
 
+const tikTokAdsConnectionSummary: AdminTikTokAdsConnection = {
+  clientProfileId,
+  connectionStatus: "CONNECTED",
+  hasActiveService: true,
+  ids: {
+    advertiserId: "1234567890",
+    businessCenterId: "bc-1",
+    pixelId: "tt-px-1",
+  },
+  account: {
+    advertiserName: "TikTok Test Advertiser",
+  },
+  settings: {
+    currency: "TRY",
+    timezone: "Europe/Istanbul",
+  },
+  lastSyncAt: "2026-05-01T10:00:00.000Z",
+  syncError: null,
+  credential: {
+    hasToken: true,
+    tokenLastUpdatedAt: "2026-05-01T09:00:00.000Z",
+    tokenExpiresAt: "2027-05-01T09:00:00.000Z",
+    grantedScopes: [],
+  },
+};
+
 function setupSummaryState(overrides: Partial<ClientSummaryQueryResult> = {}) {
   mockUseGetClientSummaryQuery.mockReturnValue({
     data: clientSummary,
@@ -187,6 +238,19 @@ function setupSummaryState(overrides: Partial<ClientSummaryQueryResult> = {}) {
 function setupMetaAdsConnectionState(overrides: Partial<MetaAdsConnectionQueryResult> = {}) {
   mockUseGetAdminClientMetaAdsConnectionQuery.mockReturnValue({
     data: metaAdsConnectionSummary,
+    error: undefined,
+    isLoading: false,
+    isFetching: false,
+    refetch: vi.fn(),
+    ...overrides,
+  });
+}
+
+function setupTikTokAdsConnectionState(
+  overrides: Partial<TikTokAdsConnectionQueryResult> = {},
+) {
+  mockUseGetAdminClientTikTokAdsConnectionQuery.mockReturnValue({
+    data: tikTokAdsConnectionSummary,
     error: undefined,
     isLoading: false,
     isFetching: false,
@@ -229,10 +293,14 @@ describe("ClientDetail", () => {
     setupSummaryState();
     setupMetaAdsConnectionState();
     setupMetaAdsSummaryState();
+    setupTikTokAdsConnectionState();
     mockUseConnectAdminClientMetaAdsManualMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseTestAdminClientMetaAdsConnectionMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseSyncAdminClientMetaAdsMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseDisconnectAdminClientMetaAdsMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
+    mockUseConnectAdminClientTikTokAdsManualMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
+    mockUseTestAdminClientTikTokAdsConnectionMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
+    mockUseDisconnectAdminClientTikTokAdsMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseResetClientOwnerPasswordMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseGetAdminAssignmentsQuery.mockReturnValue({
       data: [],
@@ -292,7 +360,8 @@ describe("ClientDetail", () => {
     expect(screen.getByText(clientProfileId)).toBeInTheDocument();
     expect(screen.getByText("Müşteri Portal Şifre Sıfırlama")).toBeInTheDocument();
     expect(screen.getByText("Meta Ads Bağlantı Yönetimi")).toBeInTheDocument();
-    expect(screen.getByText("Token Durumu")).toBeInTheDocument();
+    expect(screen.getByText("TikTok Ads Yapılandırması")).toBeInTheDocument();
+    expect(screen.getAllByText("Token Durumu").length).toBeGreaterThan(0);
   });
 
   it("renders project and task counts", () => {

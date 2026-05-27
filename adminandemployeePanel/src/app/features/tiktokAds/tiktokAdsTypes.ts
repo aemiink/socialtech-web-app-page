@@ -21,6 +21,32 @@ export interface TikTokAdsConfig {
   updatedAt: string;
 }
 
+export interface AdminTikTokAdsConnection {
+  clientProfileId: string;
+  connectionStatus: TikTokAdsConnectionStatus;
+  hasActiveService: boolean;
+  ids: {
+    advertiserId: string | null;
+    businessCenterId: string | null;
+    pixelId: string | null;
+  };
+  account: {
+    advertiserName: string | null;
+  };
+  settings: {
+    currency: string | null;
+    timezone: string | null;
+  };
+  lastSyncAt: string | null;
+  syncError: string | null;
+  credential: {
+    hasToken: boolean;
+    tokenLastUpdatedAt: string | null;
+    tokenExpiresAt: string | null;
+    grantedScopes: string[];
+  };
+}
+
 export interface UpdateTikTokAdsConfigPayload {
   advertiserId?: string;
   businessCenterId?: string;
@@ -29,6 +55,36 @@ export interface UpdateTikTokAdsConfigPayload {
   currency?: string;
   timezone?: string;
   connectionStatus?: TikTokAdsConnectionStatus;
+}
+
+export interface ConnectManualTikTokAdsPayload {
+  accessToken: string;
+  advertiserId: string;
+  businessCenterId?: string;
+  pixelId?: string;
+  advertiserName?: string;
+  currency?: string;
+  timezone?: string;
+  tokenExpiresAt?: string;
+  grantedScopes?: string[];
+}
+
+export interface TestTikTokAdsConnectionPayload {
+  accessToken?: string;
+  advertiserId?: string;
+}
+
+export interface TestTikTokAdsConnectionResponse {
+  success: true;
+  checkedAt: string;
+  connection: AdminTikTokAdsConnection;
+  account: {
+    advertiserId: string;
+    advertiserName: string | null;
+    currency: string | null;
+    timezone: string | null;
+  };
+  grantedScopes: string[];
 }
 
 export function getTikTokAdsConnectionStatusLabel(
