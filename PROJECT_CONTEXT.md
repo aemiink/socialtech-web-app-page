@@ -466,6 +466,24 @@ Uygulama durumu:
 - Connection test uses TikTok API for Business `GET /open_api/v1.3/advertiser/info/` with `Access-Token` and `advertiser_ids`.
 - Reporting sync uses TikTok API for Business reporting + campaign catalog reads, stores daily rows by level (`ACCOUNT`, `CAMPAIGN`, `ADGROUP`, `AD`), and exposes read-only aggregates for V1 dashboards.
 
+## Amazon Ads Faz 1 — Backend Foundation (2026-05-27)
+
+Amazon Ads Faz 0 discovery contract tamamlandı; Faz 1 foundation uygulandı. Özet:
+- Prisma foundation: `AmazonAdsConnectionStatus`, `AmazonAdsRegion`, `ClientAmazonAdsConfig`, `ClientAmazonAdsCredential`.
+- Config alanları Amazon profile/account contract’ına göre tutulur: `profileId`, `advertiserAccountId`, `marketplaceId`, `region`, `countryCode`, `currencyCode`, `timezone`, `accountType`, `accountName`, `validPaymentMethod`.
+- Backend module: `server/src/amazon-ads/` admin read/update, assigned read ve own client safe config endpointlerini sağlar.
+- Permission seed: `amazonAds.config.*` ile reporting/sync/approval/note/product-collaboration slug’ları role mapping’e eklendi.
+- Admin Clients create/edit formu `AMAZON_ADS` seçilince Amazon config alanlarını gösterir; ClientDetail Amazon Ads config/status kartı eklenmiştir.
+- Client portal Amazon Ads dashboard artık config/connection yokken mock metrik göstermeyip connection-aware empty state döndürür.
+- Faz 1 reporting sync, OAuth code exchange ve global admin Amazon panelini kapsamaz; bunlar sonraki Amazon Ads fazlarına bırakıldı.
+
+Active Amazon Ads endpoints:
+- `GET /api/v1/admin/clients/:clientId/amazon-ads/config`
+- `GET /api/v1/admin/clients/:clientId/amazon-ads/connection`
+- `PATCH /api/v1/admin/clients/:clientId/amazon-ads/config`
+- `GET /api/v1/amazon-ads/clients/:clientId/config`
+- `GET /api/v1/clients/me/amazon-ads/config`
+
 Planned next backend phases:
 - Broader domain endpoint authorization rollout (beyond users/clients/admin-assignments/projects/tasks)
 - Forced password change on first login flow

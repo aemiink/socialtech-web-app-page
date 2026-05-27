@@ -60,9 +60,11 @@ import {
   useCreateOrLinkClientOwnerMutation,
   useDeactivateAdminClientMutation,
   useGetClientsQuery,
+  useUpdateAdminClientAmazonAdsConfigMutation,
   useUpdateAdminClientMutation,
 } from "../features/clients/clientsApi";
 import type {
+  AmazonAdsRegion,
   ClientProfile,
   ClientStatus,
   ClientsListQuery,
@@ -71,6 +73,7 @@ import type {
   CreateAdminClientRequest,
   CreateOrLinkClientOwnerRequest,
   ServiceKey,
+  UpdateAdminClientAmazonAdsConfigRequest,
   UpdateAdminClientRequest,
 } from "../features/clients/clientsTypes";
 import {
@@ -110,6 +113,7 @@ const EXISTING_OWNER_REQUIRED_MESSAGE = "Bağlanacak mevcut portal sahibini seç
 type ClientStatusFilter = ClientStatus | "ALL";
 type ClientOwnerMode = "NONE" | "CREATE" | "LINK_EXISTING";
 type PendingClientStatusAction = "activate" | "deactivate";
+type AmazonAdsPaymentMethodState = "" | "true" | "false";
 type AssignmentFormState = {
   employee: AdminUser | null;
   scope: AdminAssignmentScope;
@@ -125,6 +129,16 @@ type ClientFormState = {
   ownerPassword: string;
   existingOwnerUserId: string;
   purchasedServices: ServiceKey[];
+  amazonProfileId: string;
+  amazonAdvertiserAccountId: string;
+  amazonMarketplaceId: string;
+  amazonRegion: "" | AmazonAdsRegion;
+  amazonCountryCode: string;
+  amazonCurrencyCode: string;
+  amazonTimezone: string;
+  amazonAccountType: string;
+  amazonAccountName: string;
+  amazonValidPaymentMethod: AmazonAdsPaymentMethodState;
 };
 
 type ClientFormField = keyof ClientFormState;
@@ -140,6 +154,16 @@ const initialClientForm: ClientFormState = {
   ownerPassword: "",
   existingOwnerUserId: "",
   purchasedServices: [],
+  amazonProfileId: "",
+  amazonAdvertiserAccountId: "",
+  amazonMarketplaceId: "",
+  amazonRegion: "",
+  amazonCountryCode: "",
+  amazonCurrencyCode: "",
+  amazonTimezone: "",
+  amazonAccountType: "",
+  amazonAccountName: "",
+  amazonValidPaymentMethod: "",
 };
 
 const initialAssignmentForm: AssignmentFormState = {
@@ -227,6 +251,8 @@ export function Clients() {
 
   const [createAdminClient, { isLoading: isCreating }] = useCreateAdminClientMutation();
   const [updateAdminClient, { isLoading: isUpdating }] = useUpdateAdminClientMutation();
+  const [updateAdminClientAmazonAdsConfig, { isLoading: isUpdatingAmazonAdsConfig }] =
+    useUpdateAdminClientAmazonAdsConfigMutation();
   const [deactivateAdminClient, { isLoading: isDeactivating }] =
     useDeactivateAdminClientMutation();
   const [activateAdminClient, { isLoading: isActivating }] = useActivateAdminClientMutation();
@@ -263,6 +289,7 @@ export function Clients() {
     isDeactivating ||
     isActivating ||
     isLinkingOwner ||
+    isUpdatingAmazonAdsConfig ||
     isCreatingAssignment;
 
   const kpiCards = [
@@ -350,7 +377,7 @@ export function Clients() {
 
   async function handleCreateSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isCreating || isLinkingOwner) {
+    if (isCreating || isLinkingOwner || isUpdatingAmazonAdsConfig) {
       return;
     }
 
@@ -367,6 +394,7 @@ export function Clients() {
     try {
       const createdClient = await createAdminClient(buildCreateClientPayload(createForm)).unwrap();
       const ownerPayload = buildOwnerPayload(createForm);
+      const amazonAdsPayload = buildAmazonAdsConfigPayload(createForm);
 
       if (ownerPayload) {
         try {
@@ -386,10 +414,28 @@ export function Clients() {
         }
       }
 
+      if (amazonAdsPayload) {
+        try {
+          await updateAdminClientAmazonAdsConfig({
+            clientId: createdClient.id,
+            body: amazonAdsPayload,
+          }).unwrap();
+        } catch (error) {
+          closeCreateDialog();
+          setPageError(
+            `Müşteri oluşturuldu ancak Amazon Ads yapılandırması kaydedilemedi: ${extractApiErrorMessage(
+              error,
+              "Amazon Ads yapılandırması tamamlanamadı.",
+            )}`,
+          );
+          return;
+        }
+      }
+
       closeCreateDialog();
       setPageSuccess(
-        ownerPayload
-          ? "Müşteri ve portal sahibi başarıyla kaydedildi."
+        ownerPayload || amazonAdsPayload
+          ? "Müşteri bağlantı bilgileriyle birlikte başarıyla kaydedildi."
           : "Müşteri başarıyla oluşturuldu.",
       );
     } catch (error) {
@@ -401,7 +447,7 @@ export function Clients() {
 
   async function handleUpdateSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!editTarget || !editForm || isUpdating) {
+    if (!editTarget || !editForm || isUpdating || isUpdatingAmazonAdsConfig) {
       return;
     }
 
@@ -421,6 +467,23 @@ export function Clients() {
         body: buildUpdateClientPayload(editForm),
       }).unwrap();
       setSelectedClient((prev) => (prev?.id === updatedClient.id ? updatedClient : prev));
+      const amazonAdsPayload = buildAmazonAdsConfigPayload(editForm);
+      if (amazonAdsPayload) {
+        try {
+          await updateAdminClientAmazonAdsConfig({
+            clientId: editTarget.id,
+            body: amazonAdsPayload,
+          }).unwrap();
+        } catch (error) {
+          setEditSubmitError(
+            `Müşteri güncellendi ancak Amazon Ads yapılandırması kaydedilemedi: ${extractApiErrorMessage(
+              error,
+              "Amazon Ads yapılandırması tamamlanamadı.",
+            )}`,
+          );
+          return;
+        }
+      }
       closeEditDialog();
       setPageSuccess("Müşteri bilgileri güncellendi.");
     } catch (error) {
@@ -955,7 +1018,7 @@ export function Clients() {
               idPrefix="create-client"
               form={createForm}
               onChange={updateCreateForm}
-              disabled={isCreating || isLinkingOwner}
+              disabled={isCreating || isLinkingOwner || isUpdatingAmazonAdsConfig}
               includeOwnerFields
               canLinkExistingOwner={canReadAdminUsers}
               selectedExistingOwner={createSelectedExistingOwner}
@@ -970,16 +1033,18 @@ export function Clients() {
                 type="button"
                 variant="outline"
                 onClick={closeCreateDialog}
-                disabled={isCreating || isLinkingOwner}
+                disabled={isCreating || isLinkingOwner || isUpdatingAmazonAdsConfig}
               >
                 Vazgeç
               </Button>
               <Button
                 type="submit"
                 className="bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
-                disabled={isCreating || isLinkingOwner}
+                disabled={isCreating || isLinkingOwner || isUpdatingAmazonAdsConfig}
               >
-                {isCreating || isLinkingOwner ? "Kaydediliyor..." : "Müşteri Oluştur"}
+                {isCreating || isLinkingOwner || isUpdatingAmazonAdsConfig
+                  ? "Kaydediliyor..."
+                  : "Müşteri Oluştur"}
               </Button>
             </DialogFooter>
           </form>
@@ -1012,18 +1077,25 @@ export function Clients() {
                 idPrefix="edit-client"
                 form={editForm}
                 onChange={updateEditForm}
-                disabled={isUpdating}
+                disabled={isUpdating || isUpdatingAmazonAdsConfig}
               />
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={closeEditDialog} disabled={isUpdating}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={closeEditDialog}
+                  disabled={isUpdating || isUpdatingAmazonAdsConfig}
+                >
                   Vazgeç
                 </Button>
                 <Button
                   type="submit"
                   className="bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
-                  disabled={isUpdating}
+                  disabled={isUpdating || isUpdatingAmazonAdsConfig}
                 >
-                  {isUpdating ? "Kaydediliyor..." : "Değişiklikleri Kaydet"}
+                  {isUpdating || isUpdatingAmazonAdsConfig
+                    ? "Kaydediliyor..."
+                    : "Değişiklikleri Kaydet"}
                 </Button>
               </DialogFooter>
             </form>
@@ -1260,6 +1332,15 @@ function ClientFormFields({
         }}
       />
 
+      {isAmazonAdsSelected(form.purchasedServices) && (
+        <AmazonAdsConfigFields
+          idPrefix={idPrefix}
+          form={form}
+          disabled={disabled}
+          onChange={onChange}
+        />
+      )}
+
       {includeOwnerFields && (
         <>
           <div className="space-y-2 border-t border-white/[0.06] pt-4">
@@ -1376,6 +1457,155 @@ function ServiceCheckboxGroup({
             </label>
           );
         })}
+      </div>
+    </fieldset>
+  );
+}
+
+function AmazonAdsConfigFields({
+  idPrefix,
+  form,
+  disabled,
+  onChange,
+}: {
+  idPrefix: string;
+  form: ClientFormState;
+  disabled: boolean;
+  onChange: (field: ClientFormField, value: ClientFormValue) => void;
+}) {
+  return (
+    <fieldset className="space-y-3 rounded-lg border border-[#AAFF01]/20 bg-[#202020]/60 p-3">
+      <legend className="px-1 text-sm font-medium text-white">Amazon Ads Yapılandırması</legend>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor={`${idPrefix}-amazon-profile-id`}>Profile ID</Label>
+          <Input
+            id={`${idPrefix}-amazon-profile-id`}
+            value={form.amazonProfileId}
+            onChange={(event) => onChange("amazonProfileId", event.target.value)}
+            className="border-white/[0.08] bg-[#1A1A1A]"
+            placeholder="Amazon profile ID"
+            maxLength={120}
+            disabled={disabled}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${idPrefix}-amazon-advertiser-account-id`}>
+            Advertiser Account ID
+          </Label>
+          <Input
+            id={`${idPrefix}-amazon-advertiser-account-id`}
+            value={form.amazonAdvertiserAccountId}
+            onChange={(event) => onChange("amazonAdvertiserAccountId", event.target.value)}
+            className="border-white/[0.08] bg-[#1A1A1A]"
+            placeholder="Advertiser account ID"
+            maxLength={120}
+            disabled={disabled}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${idPrefix}-amazon-marketplace-id`}>Marketplace ID</Label>
+          <Input
+            id={`${idPrefix}-amazon-marketplace-id`}
+            value={form.amazonMarketplaceId}
+            onChange={(event) => onChange("amazonMarketplaceId", event.target.value)}
+            className="border-white/[0.08] bg-[#1A1A1A]"
+            placeholder="örn. ATVPDKIKX0DER"
+            maxLength={80}
+            disabled={disabled}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${idPrefix}-amazon-region`}>Region</Label>
+          <SelectControl
+            id={`${idPrefix}-amazon-region`}
+            ariaLabel="Amazon Ads Region"
+            value={form.amazonRegion}
+            onChange={(value) => onChange("amazonRegion", value as "" | AmazonAdsRegion)}
+            disabled={disabled}
+          >
+            <option value="">Seçilmedi</option>
+            <option value="NA">NA</option>
+            <option value="EU">EU</option>
+            <option value="FE">FE</option>
+          </SelectControl>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${idPrefix}-amazon-country-code`}>Country Code</Label>
+          <Input
+            id={`${idPrefix}-amazon-country-code`}
+            value={form.amazonCountryCode}
+            onChange={(event) => onChange("amazonCountryCode", event.target.value)}
+            className="border-white/[0.08] bg-[#1A1A1A]"
+            placeholder="TR"
+            maxLength={2}
+            disabled={disabled}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${idPrefix}-amazon-currency-code`}>Currency Code</Label>
+          <Input
+            id={`${idPrefix}-amazon-currency-code`}
+            value={form.amazonCurrencyCode}
+            onChange={(event) => onChange("amazonCurrencyCode", event.target.value)}
+            className="border-white/[0.08] bg-[#1A1A1A]"
+            placeholder="TRY"
+            maxLength={3}
+            disabled={disabled}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${idPrefix}-amazon-timezone`}>Timezone</Label>
+          <Input
+            id={`${idPrefix}-amazon-timezone`}
+            value={form.amazonTimezone}
+            onChange={(event) => onChange("amazonTimezone", event.target.value)}
+            className="border-white/[0.08] bg-[#1A1A1A]"
+            placeholder="Europe/Istanbul"
+            maxLength={80}
+            disabled={disabled}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${idPrefix}-amazon-account-type`}>Account Type</Label>
+          <Input
+            id={`${idPrefix}-amazon-account-type`}
+            value={form.amazonAccountType}
+            onChange={(event) => onChange("amazonAccountType", event.target.value)}
+            className="border-white/[0.08] bg-[#1A1A1A]"
+            placeholder="seller / vendor"
+            maxLength={80}
+            disabled={disabled}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${idPrefix}-amazon-account-name`}>Account Name</Label>
+          <Input
+            id={`${idPrefix}-amazon-account-name`}
+            value={form.amazonAccountName}
+            onChange={(event) => onChange("amazonAccountName", event.target.value)}
+            className="border-white/[0.08] bg-[#1A1A1A]"
+            placeholder="Amazon hesap adı"
+            maxLength={160}
+            disabled={disabled}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${idPrefix}-amazon-payment-method`}>Payment Method</Label>
+          <SelectControl
+            id={`${idPrefix}-amazon-payment-method`}
+            ariaLabel="Amazon Ads Payment Method"
+            value={form.amazonValidPaymentMethod}
+            onChange={(value) =>
+              onChange("amazonValidPaymentMethod", value as AmazonAdsPaymentMethodState)
+            }
+            disabled={disabled}
+          >
+            <option value="">Belirtilmedi</option>
+            <option value="true">Geçerli</option>
+            <option value="false">Geçerli Değil</option>
+          </SelectControl>
+        </div>
       </div>
     </fieldset>
   );
@@ -1919,6 +2149,34 @@ function buildUpdateClientPayload(form: ClientFormState): UpdateAdminClientReque
   return payload;
 }
 
+function buildAmazonAdsConfigPayload(
+  form: ClientFormState,
+): UpdateAdminClientAmazonAdsConfigRequest | null {
+  if (!isAmazonAdsSelected(form.purchasedServices)) {
+    return null;
+  }
+
+  const payload: UpdateAdminClientAmazonAdsConfigRequest = {};
+  addOptionalAmazonAdsText(payload, "profileId", form.amazonProfileId);
+  addOptionalAmazonAdsText(payload, "advertiserAccountId", form.amazonAdvertiserAccountId);
+  addOptionalAmazonAdsText(payload, "marketplaceId", form.amazonMarketplaceId);
+  addOptionalAmazonAdsText(payload, "countryCode", form.amazonCountryCode.toUpperCase());
+  addOptionalAmazonAdsText(payload, "currencyCode", form.amazonCurrencyCode.toUpperCase());
+  addOptionalAmazonAdsText(payload, "timezone", form.amazonTimezone);
+  addOptionalAmazonAdsText(payload, "accountType", form.amazonAccountType);
+  addOptionalAmazonAdsText(payload, "accountName", form.amazonAccountName);
+
+  if (form.amazonRegion) {
+    payload.region = form.amazonRegion;
+  }
+
+  if (form.amazonValidPaymentMethod !== "") {
+    payload.validPaymentMethod = form.amazonValidPaymentMethod === "true";
+  }
+
+  return Object.keys(payload).length > 0 ? payload : null;
+}
+
 function buildOwnerPayload(form: ClientFormState): CreateOrLinkClientOwnerRequest | null {
   if (form.ownerMode === "CREATE") {
     return {
@@ -1955,6 +2213,21 @@ function toggleServiceSelection(selectedServices: ServiceKey[], serviceKey: Serv
   }
 
   return [...selectedServices, serviceKey];
+}
+
+function isAmazonAdsSelected(selectedServices: ServiceKey[]): boolean {
+  return selectedServices.includes("amazon-ads");
+}
+
+function addOptionalAmazonAdsText<K extends keyof UpdateAdminClientAmazonAdsConfigRequest>(
+  payload: UpdateAdminClientAmazonAdsConfigRequest,
+  key: K,
+  value: string,
+): void {
+  const normalizedValue = value.trim();
+  if (normalizedValue.length > 0) {
+    payload[key] = normalizedValue as UpdateAdminClientAmazonAdsConfigRequest[K];
+  }
 }
 
 function normalizeOptionalText(value: string): string | undefined {

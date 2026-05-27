@@ -6,6 +6,7 @@ import { AdminAuditLogsModule } from "./admin-audit-logs/admin-audit-logs.module
 import { AdminClientsModule } from "./admin-clients/admin-clients.module";
 import { AdminSummaryModule } from "./admin-summary/admin-summary.module";
 import { AdminUsersModule } from "./admin-users/admin-users.module";
+import { AmazonAdsModule } from "./amazon-ads/amazon-ads.module";
 import { AuthModule } from "./auth/auth.module";
 import { ClientsModule } from "./clients/clients.module";
 import { envValidationSchema } from "./config/env.validation";
@@ -43,6 +44,7 @@ import { WebAppWorkspaceModule } from "./web-app-workspace/web-app-workspace.mod
     GithubModule,
     MetaAdsModule,
     TikTokAdsModule,
+    AmazonAdsModule,
     ProjectFilesModule,
     DeliveryModule,
     AdminSummaryModule,

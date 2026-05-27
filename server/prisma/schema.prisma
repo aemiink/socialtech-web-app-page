@@ -91,6 +91,20 @@ enum TikTokAdsConnectionStatus {
   DISCONNECTED
 }
 
+enum AmazonAdsConnectionStatus {
+  NOT_CONNECTED
+  PENDING
+  CONNECTED
+  ERROR
+  DISCONNECTED
+}
+
+enum AmazonAdsRegion {
+  NA
+  EU
+  FE
+}
+
 enum TikTokAdsInsightLevel {
   ACCOUNT
   CAMPAIGN
@@ -461,6 +475,8 @@ model ClientProfile {
   tikTokAdsInsights   TikTokAdsDailyInsight[]
   tikTokAdsSyncLogs   TikTokAdsSyncLog[]
   tikTokAdsReports    TikTokAdsReport[]
+  amazonAdsConfig     ClientAmazonAdsConfig?
+  amazonAdsCredential ClientAmazonAdsCredential?
   projects            Project[]
   files               ProjectFile[]
   convertedCrmLeads   CrmLead[]                  @relation("CrmLeadConvertedClient")
@@ -504,6 +520,52 @@ model ClientMetaAdsCredential {
 
   @@index([tokenHash])
   @@index([tokenExpiresAt])
+}
+
+model ClientAmazonAdsConfig {
+  id                  String                    @id @default(uuid()) @db.Uuid
+  clientProfileId     String                    @unique @db.Uuid
+  profileId           String?
+  advertiserAccountId String?
+  marketplaceId       String?
+  region              AmazonAdsRegion?
+  countryCode         String?
+  currencyCode        String?
+  timezone            String?
+  accountType         String?
+  accountName         String?
+  validPaymentMethod  Boolean?
+  connectionStatus    AmazonAdsConnectionStatus @default(NOT_CONNECTED)
+  lastSyncAt          DateTime?
+  syncError           String?
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@index([connectionStatus])
+  @@index([lastSyncAt])
+  @@index([region])
+  @@index([marketplaceId])
+}
+
+model ClientAmazonAdsCredential {
+  id                    String    @id @default(uuid()) @db.Uuid
+  clientProfileId       String    @unique @db.Uuid
+  accessTokenEnc        String?
+  refreshTokenEnc       String?
+  tokenHash             String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  grantedScopes         String[]  @default([])
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@index([tokenHash])
+  @@index([accessTokenExpiresAt])
+  @@index([refreshTokenExpiresAt])
 }
 
 model MetaAdsDailyInsight {

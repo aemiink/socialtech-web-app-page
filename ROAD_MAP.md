@@ -161,6 +161,7 @@
 - TikTok Ads Faz 9: Reporting/export foundation (`TikTokAdsReport` entity, admin/assigned draft-publish endpoints, client own report visibility, publish->ack task bridge)
 - TikTok Ads Faz 10: Production hardening (client-safe error surface, report CSV/JSON export file generation, backend reports.read/manage guard alignment, expanded authz/state coverage)
 - Amazon Ads Faz 0: Discovery contract (official API research, LwA OAuth/profile/account/marketplace strategy, Reporting v3 read-only V1 scope, role-scope matrix, Faz 1 implementation contract)
+- Amazon Ads Faz 1: Backend foundation (Prisma config/credential models + NestJS module + permission seed + admin/client config-aware UI + authz e2e coverage)
 
 ## Blocked
 
@@ -245,6 +246,16 @@ None identified.
 - Latest Amazon Ads Faz 0 checkpoint:
   - Official Amazon Ads API docs reviewed for API overview, LwA OAuth, `/v2/profiles`, regional hosts, Reporting v3 async flow, report types, throttling and rate-limit guidance ✅
   - No build/test run required; documentation/architecture contract only.
+- Latest Amazon Ads Faz 1 checkpoint:
+  - `server`: `npm run prisma:generate` ✅
+  - `server`: `npm run typecheck` ✅
+  - `server`: `npm run typecheck:seed && npm run typecheck:spec` ✅
+  - `server`: `npm run build` ✅
+  - `adminandemployeePanel`: `npm run typecheck` ✅
+  - `adminandemployeePanel`: `npm run build` ✅
+  - `clientPanel`: `npm run typecheck` ✅
+  - `clientPanel`: `npm run build` ✅
+  - `server/test/amazon-ads-authz.e2e-spec.ts` eklendi; local `DATABASE_URL` test DB olmadığı için e2e runner bu checkpointte çalıştırılmadı (mevcut DB adı test guard’ına uymuyor).
 - Latest admin/employee frontend validation checkpoint: `25` test files, `153/153` tests.
 - Latest client portal frontend validation checkpoint: `4` test files, `17/17` tests.
 - Latest FAZ-05 validation checkpoint:

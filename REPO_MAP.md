@@ -249,7 +249,7 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 
 - `server/src/main.ts` - Nest bootstrap, `/api/v1` global prefix, global ValidationPipe, global exception filter, CORS setup
 - `server/src/app.module.ts` - root module imports for config/database/health/auth/users/clients/admin-summary/admin-assignments/admin-clients/admin-users/admin-audit-logs/projects/tasks/crm/delivery/github integrations
-- `server/src/config/env.validation.ts` - Joi env validation schema, including `CLIENT_ORIGIN_PUBLIC`, CRM lead scan envs, Gemini scoring envs, `GITHUB_TOKEN_ENCRYPTION_KEY`, and TikTok Ads envs
+- `server/src/config/env.validation.ts` - Joi env validation schema, including `CLIENT_ORIGIN_PUBLIC`, CRM lead scan envs, Gemini scoring envs, `GITHUB_TOKEN_ENCRYPTION_KEY`, TikTok Ads envs, and Amazon Ads envs
 - `server/src/config/cors.config.ts` - env-based CORS whitelist, including public site origin support
 - `server/src/common/filters/global-exception.filter.ts` - centralized error response format
 
@@ -266,6 +266,7 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - Additional enums: `PurchasedServiceKey`, `PurchasedServiceStatus`, `TaskTodoVisibility`
   - CRM enums: `CrmLeadStatus`, `CrmLeadSource`, `CrmLeadActivityType`
   - TikTok Ads models: `ClientTikTokAdsConfig`, `ClientTikTokAdsCredential`, `TikTokAdsDailyInsight`, `TikTokAdsSyncLog`, `TikTokAdsReport`
+  - Amazon Ads foundation models: `ClientAmazonAdsConfig`, `ClientAmazonAdsCredential`
   - `User.role` enum remains the primary fixed role field
   - `User.sessionInvalidatedAt` is used for access-token invalidation lifecycle
   - `ClientProfile.slug` is unique
@@ -323,6 +324,23 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 - `server/test/projects-tasks-authz.e2e-spec.ts`
   - TikTok Ads approval task create permission and client own approval response regression coverage
 
+### Amazon Ads Backend Module
+
+- `server/src/amazon-ads/amazon-ads.module.ts`
+- `server/src/amazon-ads/amazon-ads.controller.ts`
+  - admin config/connection read endpoints
+  - admin config update endpoint
+  - assigned employee read-only config endpoint
+  - own client safe config endpoint
+- `server/src/amazon-ads/amazon-ads.service.ts`
+  - service-level admin/assigned/client permission checks
+  - active `AMAZON_ADS` purchased-service checks
+  - safe config/connection response shaping without credential secret leakage
+- `server/src/amazon-ads/dto/update-amazon-ads-config.dto.ts`
+- `server/prisma/migrations/20260527180000_add_amazon_ads_foundation/migration.sql`
+- `server/test/amazon-ads-authz.e2e-spec.ts`
+  - admin read/update, assigned/own read, admin endpoint denial for client accounts, and sensitive-token response safety
+
 ### TikTok Ads Admin Frontend
 
 - `adminandemployeePanel/src/app/features/tiktokAds/tiktokAdsApi.ts`
@@ -341,6 +359,19 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - admin global TikTok Ads page render/state/action/permission/sync-log/retry/report regression coverage
 - `adminandemployeePanel/src/app/pages/__tests__/ClientDetail.test.tsx`
   - TikTok Ads connection/reporting hook mocks with ClientDetail regression coverage
+
+### Amazon Ads Admin Frontend Foundation
+
+- `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
+  - admin Amazon Ads connection query and config update mutation under existing Clients API slice
+- `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`
+  - Amazon Ads connection/config request types and `AmazonAdsRegion`
+- `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
+  - Amazon Ads connection normalizer and status badge helpers
+- `adminandemployeePanel/src/app/pages/Clients.tsx`
+  - `AMAZON_ADS` service selection reveals Amazon profile/account/marketplace config fields in create/edit forms
+- `adminandemployeePanel/src/app/pages/ClientDetail.tsx`
+  - Amazon Ads config/status card with admin config edit action
 
 ### TikTok Ads Employee Frontend
 
@@ -370,6 +401,15 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - client creative preview type surface accepts TikTok Ads approval type values
 - `clientPanel/src/app/pages/__tests__/service-tab-page.tiktok-ads.test.tsx`
   - TikTok client approval queue, decision mutation, published report render, and report export regression coverage
+
+### Amazon Ads Client Frontend Foundation
+
+- `clientPanel/src/app/features/amazonAds/amazonAdsApi.ts`
+  - own-client Amazon Ads config RTK Query hook
+- `clientPanel/src/app/features/amazonAds/amazonAdsTypes.ts`
+  - own-client Amazon Ads config/status response types
+- `clientPanel/src/app/pages/services/amazon-ads-dashboard.tsx`
+  - connection-aware empty/error state; mock metrics are hidden unless config status is `CONNECTED`
 
 ## 2026-05-05 Incremental Map Update
 

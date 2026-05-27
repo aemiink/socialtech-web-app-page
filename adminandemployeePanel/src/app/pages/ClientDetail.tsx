@@ -11,6 +11,7 @@ import {
   ListChecks,
   PlugZap,
   RefreshCw,
+  ShoppingCart,
 } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -32,22 +33,28 @@ import {
 import {
   useConnectAdminClientMetaAdsManualMutation,
   useDisconnectAdminClientMetaAdsMutation,
+  useGetAdminClientAmazonAdsConnectionQuery,
   useGetAdminClientMetaAdsConnectionQuery,
   useGetAdminClientMetaAdsSummaryQuery,
   useGetClientSummaryQuery,
   useResetClientOwnerPasswordMutation,
   useSyncAdminClientMetaAdsMutation,
   useTestAdminClientMetaAdsConnectionMutation,
+  useUpdateAdminClientAmazonAdsConfigMutation,
 } from "../features/clients/clientsApi";
 import type {
+  AmazonAdsRegion,
   ClientSummaryRecentProject,
   ClientSummaryRecentTask,
+  UpdateAdminClientAmazonAdsConfigRequest,
 } from "../features/clients/clientsTypes";
 import { validatePassword, validatePasswordConfirmation } from "../features/adminUsers/adminUsersUtils";
 import {
   extractApiErrorMessage,
   formatClientDate,
   formatClientDateTime,
+  getAmazonAdsConnectionStatusBadgeClass,
+  getAmazonAdsConnectionStatusLabel,
   getClientPriorityBadgeClass,
   getClientPriorityLabel,
   getClientProjectStatusBadgeClass,
@@ -75,6 +82,18 @@ export function ClientDetail() {
   const [tikTokAccessToken, setTikTokAccessToken] = useState("");
   const [tikTokAdvertiserId, setTikTokAdvertiserId] = useState("");
   const [tikTokConnectionFeedback, setTikTokConnectionFeedback] = useState<string | null>(null);
+  const [amazonProfileId, setAmazonProfileId] = useState("");
+  const [amazonAdvertiserAccountId, setAmazonAdvertiserAccountId] = useState("");
+  const [amazonMarketplaceId, setAmazonMarketplaceId] = useState("");
+  const [amazonRegion, setAmazonRegion] = useState<"" | AmazonAdsRegion>("");
+  const [amazonCountryCode, setAmazonCountryCode] = useState("");
+  const [amazonCurrencyCode, setAmazonCurrencyCode] = useState("");
+  const [amazonTimezone, setAmazonTimezone] = useState("");
+  const [amazonAccountType, setAmazonAccountType] = useState("");
+  const [amazonAccountName, setAmazonAccountName] = useState("");
+  const [amazonValidPaymentMethod, setAmazonValidPaymentMethod] =
+    useState<"" | "true" | "false">("");
+  const [amazonConnectionFeedback, setAmazonConnectionFeedback] = useState<string | null>(null);
   const [resetClientOwnerPassword, { isLoading: isResettingOwnerPassword }] =
     useResetClientOwnerPasswordMutation();
   const [connectMetaAdsManual, { isLoading: isMetaConnecting }] =
@@ -91,6 +110,8 @@ export function ClientDetail() {
   const [syncTikTokAds, { isLoading: isTikTokSyncing }] = useSyncAdminClientTikTokAdsMutation();
   const [disconnectTikTokAds, { isLoading: isTikTokDisconnecting }] =
     useDisconnectAdminClientTikTokAdsMutation();
+  const [updateAmazonAdsConfig, { isLoading: isAmazonConfigSaving }] =
+    useUpdateAdminClientAmazonAdsConfigMutation();
 
   const {
     data: summary,
@@ -147,6 +168,15 @@ export function ClientDetail() {
     { clientId: clientProfileId ?? "" },
     { skip: !isValidId },
   );
+  const {
+    data: amazonAdsConnection,
+    error: amazonAdsConnectionError,
+    isFetching: isAmazonAdsConnectionFetching,
+    isLoading: isAmazonAdsConnectionLoading,
+    refetch: refetchAmazonAdsConnection,
+  } = useGetAdminClientAmazonAdsConnectionQuery(clientProfileId ?? "", {
+    skip: !isValidId,
+  });
 
   useEffect(() => {
     if (!metaAdsConnection?.ids.adAccountId) {
@@ -167,6 +197,29 @@ export function ClientDetail() {
       currentValue.trim().length > 0 ? currentValue : tikTokAdsConnection.ids.advertiserId ?? "",
     );
   }, [tikTokAdsConnection?.ids.advertiserId]);
+
+  useEffect(() => {
+    if (!amazonAdsConnection) {
+      return;
+    }
+
+    setAmazonProfileId(amazonAdsConnection.ids.profileId ?? "");
+    setAmazonAdvertiserAccountId(amazonAdsConnection.ids.advertiserAccountId ?? "");
+    setAmazonMarketplaceId(amazonAdsConnection.ids.marketplaceId ?? "");
+    setAmazonRegion(amazonAdsConnection.settings.region ?? "");
+    setAmazonCountryCode(amazonAdsConnection.settings.countryCode ?? "");
+    setAmazonCurrencyCode(amazonAdsConnection.settings.currencyCode ?? "");
+    setAmazonTimezone(amazonAdsConnection.settings.timezone ?? "");
+    setAmazonAccountType(amazonAdsConnection.account.accountType ?? "");
+    setAmazonAccountName(amazonAdsConnection.account.accountName ?? "");
+    setAmazonValidPaymentMethod(
+      typeof amazonAdsConnection.account.validPaymentMethod === "boolean"
+        ? amazonAdsConnection.account.validPaymentMethod
+          ? "true"
+          : "false"
+        : "",
+    );
+  }, [amazonAdsConnection]);
 
   if (!isValidId) {
     return (
@@ -230,6 +283,7 @@ export function ClientDetail() {
   const hasMetaSummaryError = Boolean(metaAdsSummaryError);
   const hasTikTokConnectionError = Boolean(tikTokAdsConnectionError);
   const hasTikTokSummaryError = Boolean(tikTokAdsSummaryError);
+  const hasAmazonConnectionError = Boolean(amazonAdsConnectionError);
   const tikTokAdsCurrency = tikTokAdsConnection?.settings.currency ?? "TRY";
 
   const handleManualMetaConnect = async () => {
@@ -416,6 +470,45 @@ export function ClientDetail() {
     } catch (mutationError) {
       setTikTokConnectionFeedback(
         extractApiErrorMessage(mutationError, "TikTok Ads senkronizasyonu çalıştırılamadı."),
+      );
+    }
+  };
+
+  const handleAmazonConfigSave = async () => {
+    if (!clientProfileId) {
+      return;
+    }
+
+    const payload = buildAmazonAdsConfigPayload({
+      profileId: amazonProfileId,
+      advertiserAccountId: amazonAdvertiserAccountId,
+      marketplaceId: amazonMarketplaceId,
+      region: amazonRegion,
+      countryCode: amazonCountryCode,
+      currencyCode: amazonCurrencyCode,
+      timezone: amazonTimezone,
+      accountType: amazonAccountType,
+      accountName: amazonAccountName,
+      validPaymentMethod: amazonValidPaymentMethod,
+    });
+
+    if (!payload) {
+      setAmazonConnectionFeedback("Amazon Ads yapılandırması için en az bir alan girin.");
+      return;
+    }
+
+    setAmazonConnectionFeedback(null);
+
+    try {
+      await updateAmazonAdsConfig({
+        clientId: clientProfileId,
+        body: payload,
+      }).unwrap();
+      setAmazonConnectionFeedback("Amazon Ads yapılandırması kaydedildi.");
+      await refetchAmazonAdsConnection();
+    } catch (mutationError) {
+      setAmazonConnectionFeedback(
+        extractApiErrorMessage(mutationError, "Amazon Ads yapılandırması kaydedilemedi."),
       );
     }
   };
@@ -807,6 +900,199 @@ export function ClientDetail() {
       </Card>
 
       <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-white">Amazon Ads Yapılandırması</h2>
+          <div className="flex items-center gap-2">
+            {isAmazonAdsConnectionFetching ? (
+              <span className="text-xs text-[#d2ff8a]">Bağlantı güncelleniyor...</span>
+            ) : null}
+            {amazonAdsConnection ? (
+              <Badge
+                className={getAmazonAdsConnectionStatusBadgeClass(
+                  amazonAdsConnection.connectionStatus,
+                )}
+              >
+                {getAmazonAdsConnectionStatusLabel(amazonAdsConnection.connectionStatus)}
+              </Badge>
+            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => {
+                void refetchAmazonAdsConnection();
+              }}
+            >
+              <RefreshCw className="h-4 w-4" />
+              Yenile
+            </Button>
+          </div>
+        </div>
+
+        {isAmazonAdsConnectionLoading ? (
+          <p className="text-sm text-[#A0A0A0]">Amazon Ads bağlantı özeti yükleniyor...</p>
+        ) : null}
+        {hasAmazonConnectionError ? (
+          <p className="text-sm text-red-300">
+            {extractApiErrorMessage(
+              amazonAdsConnectionError,
+              "Amazon Ads bağlantı özeti alınamadı.",
+            )}
+          </p>
+        ) : null}
+
+        {amazonAdsConnection ? (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <DetailRow label="Profile ID" value={amazonAdsConnection.ids.profileId ?? "—"} mono />
+            <DetailRow
+              label="Advertiser Account ID"
+              value={amazonAdsConnection.ids.advertiserAccountId ?? "—"}
+              mono
+            />
+            <DetailRow
+              label="Marketplace ID"
+              value={amazonAdsConnection.ids.marketplaceId ?? "—"}
+              mono
+            />
+            <DetailRow
+              label="Aktif Purchased Service"
+              value={amazonAdsConnection.hasActiveService ? "Evet" : "Hayır"}
+            />
+            <DetailRow
+              label="Token Durumu"
+              value={
+                amazonAdsConnection.credential.hasAccessToken ||
+                amazonAdsConnection.credential.hasRefreshToken
+                  ? "Kayıtlı"
+                  : "Kayıtlı değil"
+              }
+            />
+            <DetailRow
+              label="Son Token Güncellemesi"
+              value={formatClientDateTime(amazonAdsConnection.credential.tokenLastUpdatedAt)}
+            />
+            <DetailRow label="Region" value={amazonAdsConnection.settings.region ?? "—"} />
+            <DetailRow
+              label="Ülke / Para Birimi"
+              value={`${amazonAdsConnection.settings.countryCode ?? "—"} / ${
+                amazonAdsConnection.settings.currencyCode ?? "—"
+              }`}
+            />
+            <DetailRow
+              label="Saat Dilimi"
+              value={amazonAdsConnection.settings.timezone ?? "—"}
+            />
+            <DetailRow label="Account Type" value={amazonAdsConnection.account.accountType ?? "—"} />
+            <DetailRow label="Account Name" value={amazonAdsConnection.account.accountName ?? "—"} />
+            <DetailRow
+              label="Payment Method"
+              value={
+                typeof amazonAdsConnection.account.validPaymentMethod === "boolean"
+                  ? amazonAdsConnection.account.validPaymentMethod
+                    ? "Geçerli"
+                    : "Geçerli Değil"
+                  : "—"
+              }
+            />
+            <DetailRow
+              label="Son Senkronizasyon"
+              value={formatClientDateTime(amazonAdsConnection.lastSyncAt)}
+            />
+            <DetailRow label="Hata Özeti" value={amazonAdsConnection.syncError ?? "—"} />
+          </div>
+        ) : null}
+
+        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
+          <Input
+            value={amazonProfileId}
+            onChange={(event) => setAmazonProfileId(event.target.value)}
+            className="border-white/[0.12] bg-black/20 text-white placeholder:text-[#7A7A7A]"
+            placeholder="Profile ID"
+          />
+          <Input
+            value={amazonAdvertiserAccountId}
+            onChange={(event) => setAmazonAdvertiserAccountId(event.target.value)}
+            className="border-white/[0.12] bg-black/20 text-white placeholder:text-[#7A7A7A]"
+            placeholder="Advertiser Account ID"
+          />
+          <Input
+            value={amazonMarketplaceId}
+            onChange={(event) => setAmazonMarketplaceId(event.target.value)}
+            className="border-white/[0.12] bg-black/20 text-white placeholder:text-[#7A7A7A]"
+            placeholder="Marketplace ID"
+          />
+          <DetailSelectControl
+            ariaLabel="Amazon Ads Region"
+            value={amazonRegion}
+            onChange={(value) => setAmazonRegion(value as "" | AmazonAdsRegion)}
+          >
+            <option value="">Region seçilmedi</option>
+            <option value="NA">NA</option>
+            <option value="EU">EU</option>
+            <option value="FE">FE</option>
+          </DetailSelectControl>
+          <Input
+            value={amazonCountryCode}
+            onChange={(event) => setAmazonCountryCode(event.target.value)}
+            className="border-white/[0.12] bg-black/20 text-white placeholder:text-[#7A7A7A]"
+            placeholder="Country Code"
+            maxLength={2}
+          />
+          <Input
+            value={amazonCurrencyCode}
+            onChange={(event) => setAmazonCurrencyCode(event.target.value)}
+            className="border-white/[0.12] bg-black/20 text-white placeholder:text-[#7A7A7A]"
+            placeholder="Currency Code"
+            maxLength={3}
+          />
+          <Input
+            value={amazonTimezone}
+            onChange={(event) => setAmazonTimezone(event.target.value)}
+            className="border-white/[0.12] bg-black/20 text-white placeholder:text-[#7A7A7A]"
+            placeholder="Timezone"
+          />
+          <Input
+            value={amazonAccountType}
+            onChange={(event) => setAmazonAccountType(event.target.value)}
+            className="border-white/[0.12] bg-black/20 text-white placeholder:text-[#7A7A7A]"
+            placeholder="Account Type"
+          />
+          <Input
+            value={amazonAccountName}
+            onChange={(event) => setAmazonAccountName(event.target.value)}
+            className="border-white/[0.12] bg-black/20 text-white placeholder:text-[#7A7A7A]"
+            placeholder="Account Name"
+          />
+          <DetailSelectControl
+            ariaLabel="Amazon Ads Payment Method"
+            value={amazonValidPaymentMethod}
+            onChange={(value) => setAmazonValidPaymentMethod(value as "" | "true" | "false")}
+          >
+            <option value="">Payment method belirtilmedi</option>
+            <option value="true">Geçerli</option>
+            <option value="false">Geçerli Değil</option>
+          </DetailSelectControl>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button
+            type="button"
+            className="gap-2"
+            onClick={handleAmazonConfigSave}
+            disabled={isAmazonConfigSaving}
+          >
+            <ShoppingCart className="h-4 w-4" />
+            {isAmazonConfigSaving ? "Kaydediliyor..." : "Config Güncelle"}
+          </Button>
+        </div>
+
+        {amazonConnectionFeedback ? (
+          <p className="mt-3 text-sm text-[#d8ff8f]">{amazonConnectionFeedback}</p>
+        ) : null}
+      </Card>
+
+      <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
         <h2 className="mb-2 text-lg font-semibold text-white">Müşteri Portal Şifre Sıfırlama</h2>
         <p className="mb-4 text-sm text-[#A0A0A0]">
           Bu müşterinin portal owner hesabı için yeni geçici parola belirleyin.
@@ -960,6 +1246,29 @@ function DetailRow({
   );
 }
 
+function DetailSelectControl({
+  value,
+  onChange,
+  children,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  children: ReactNode;
+  ariaLabel: string;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      aria-label={ariaLabel}
+      className="h-10 rounded-md border border-white/[0.12] bg-black/20 px-3 text-sm text-white outline-none focus:border-[#AAFF01]"
+    >
+      {children}
+    </select>
+  );
+}
+
 function CountSection({
   icon,
   title,
@@ -985,6 +1294,55 @@ function CountSection({
       </div>
     </Card>
   );
+}
+
+type AmazonAdsConfigFormSnapshot = {
+  profileId: string;
+  advertiserAccountId: string;
+  marketplaceId: string;
+  region: "" | AmazonAdsRegion;
+  countryCode: string;
+  currencyCode: string;
+  timezone: string;
+  accountType: string;
+  accountName: string;
+  validPaymentMethod: "" | "true" | "false";
+};
+
+function buildAmazonAdsConfigPayload(
+  form: AmazonAdsConfigFormSnapshot,
+): UpdateAdminClientAmazonAdsConfigRequest | null {
+  const payload: UpdateAdminClientAmazonAdsConfigRequest = {};
+
+  addOptionalAmazonAdsText(payload, "profileId", form.profileId);
+  addOptionalAmazonAdsText(payload, "advertiserAccountId", form.advertiserAccountId);
+  addOptionalAmazonAdsText(payload, "marketplaceId", form.marketplaceId);
+  addOptionalAmazonAdsText(payload, "countryCode", form.countryCode.toUpperCase());
+  addOptionalAmazonAdsText(payload, "currencyCode", form.currencyCode.toUpperCase());
+  addOptionalAmazonAdsText(payload, "timezone", form.timezone);
+  addOptionalAmazonAdsText(payload, "accountType", form.accountType);
+  addOptionalAmazonAdsText(payload, "accountName", form.accountName);
+
+  if (form.region) {
+    payload.region = form.region;
+  }
+
+  if (form.validPaymentMethod !== "") {
+    payload.validPaymentMethod = form.validPaymentMethod === "true";
+  }
+
+  return Object.keys(payload).length > 0 ? payload : null;
+}
+
+function addOptionalAmazonAdsText<K extends keyof UpdateAdminClientAmazonAdsConfigRequest>(
+  payload: UpdateAdminClientAmazonAdsConfigRequest,
+  key: K,
+  value: string,
+): void {
+  const normalizedValue = value.trim();
+  if (normalizedValue.length > 0) {
+    payload[key] = normalizedValue as UpdateAdminClientAmazonAdsConfigRequest[K];
+  }
 }
 
 function RecentProjectsSection({ projects }: { projects: ClientSummaryRecentProject[] }) {

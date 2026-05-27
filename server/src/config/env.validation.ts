@@ -38,6 +38,11 @@ export const envValidationSchema = Joi.object({
     .pattern(/^v\d+\.\d+$/)
     .default("v1.3"),
   TIKTOK_ADS_SYNC_TTL_MINUTES: Joi.number().integer().min(1).max(1440).default(30),
+  AMAZON_ADS_TOKEN_ENCRYPTION_KEY: Joi.string().min(32).optional(),
+  AMAZON_ADS_LWA_CLIENT_ID: Joi.string().min(1).optional(),
+  AMAZON_ADS_LWA_CLIENT_SECRET: Joi.string().min(1).optional(),
+  AMAZON_ADS_REDIRECT_URI: Joi.string().uri().optional(),
+  AMAZON_ADS_SYNC_TTL_MINUTES: Joi.number().integer().min(1).max(1440).default(30),
   CLOUDINARY_CLOUD_NAME: Joi.string().min(1).optional(),
   CLOUDINARY_API_KEY: Joi.string().min(1).optional(),
   CLOUDINARY_API_SECRET: Joi.string().min(1).optional(),

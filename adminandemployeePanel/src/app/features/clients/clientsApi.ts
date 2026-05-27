@@ -4,6 +4,7 @@ import type {
   AdminMetaAdsSyncLogsResponse,
   CreateMetaAdsReportRequest,
   AdminMetaAdsClientListResponse,
+  AdminClientAmazonAdsConnection,
   AdminClientMetaAdsConnection,
   ConnectManualMetaAdsRequest,
   ClientProfile,
@@ -22,10 +23,12 @@ import type {
   TestMetaAdsConnectionRequest,
   TestMetaAdsConnectionResponse,
   UpdateMetaAdsReportRequest,
+  UpdateAdminClientAmazonAdsConfigRequest,
   UpdateAdminClientMetaAdsConfigRequest,
   UpdateAdminClientRequest,
 } from "./clientsTypes";
 import {
+  normalizeAdminAmazonAdsConnectionResponse,
   normalizeAdminMetaAdsClientListResponse,
   normalizeAdminMetaAdsSyncLogsResponse,
   normalizeClientResponse,
@@ -43,6 +46,7 @@ import {
 const CLIENTS_LIST_ID = "LIST";
 const CLIENT_SUMMARY_ID_PREFIX = "SUMMARY";
 const CLIENT_META_ADS_CONNECTION_ID_PREFIX = "META_ADS_CONNECTION";
+const CLIENT_AMAZON_ADS_CONNECTION_ID_PREFIX = "AMAZON_ADS_CONNECTION";
 const CLIENT_META_ADS_GLOBAL_LIST_ID = "META_ADS_GLOBAL_LIST";
 const CLIENT_META_ADS_SYNC_LOGS_LIST_ID = "META_ADS_SYNC_LOGS_LIST";
 const ADMIN_SUMMARY_ID = "SUMMARY";
@@ -95,6 +99,16 @@ export const clientsApi = baseApi.injectEndpoints({
       transformResponse: (response: unknown) => normalizeAdminMetaAdsConnectionResponse(response),
       providesTags: (_result, _error, clientId) => [
         { type: "Clients", id: getClientMetaAdsConnectionTagId(clientId) },
+      ],
+    }),
+    getAdminClientAmazonAdsConnection: builder.query<AdminClientAmazonAdsConnection, string>({
+      query: (clientId) => ({
+        url: `/admin/clients/${clientId}/amazon-ads/connection`,
+        method: "GET",
+      }),
+      transformResponse: (response: unknown) => normalizeAdminAmazonAdsConnectionResponse(response),
+      providesTags: (_result, _error, clientId) => [
+        { type: "Clients", id: getClientAmazonAdsConnectionTagId(clientId) },
       ],
     }),
     getAdminClientMetaAdsSummary: builder.query<MetaAdsSummaryResponse, string>({
@@ -150,6 +164,21 @@ export const clientsApi = baseApi.injectEndpoints({
         ...getAdminClientMutationInvalidations(clientId),
         { type: "Clients", id: getClientMetaAdsConnectionTagId(clientId) },
         { type: "Clients", id: CLIENT_META_ADS_GLOBAL_LIST_ID },
+      ],
+    }),
+    updateAdminClientAmazonAdsConfig: builder.mutation<
+      AdminClientAmazonAdsConnection,
+      { clientId: string; body: UpdateAdminClientAmazonAdsConfigRequest }
+    >({
+      query: ({ clientId, body }) => ({
+        url: `/admin/clients/${clientId}/amazon-ads/config`,
+        method: "PATCH",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeAdminAmazonAdsConnectionResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        ...getAdminClientMutationInvalidations(clientId),
+        { type: "Clients", id: getClientAmazonAdsConnectionTagId(clientId) },
       ],
     }),
     connectAdminClientMetaAdsManual: builder.mutation<
@@ -347,10 +376,12 @@ export const {
   useLazyGetClientQuery,
   useGetClientSummaryQuery,
   useGetAdminClientMetaAdsConnectionQuery,
+  useGetAdminClientAmazonAdsConnectionQuery,
   useGetAdminClientMetaAdsSummaryQuery,
   useGetAdminMetaAdsClientsQuery,
   useGetAdminMetaAdsSyncLogsQuery,
   useUpdateAdminClientMetaAdsConfigMutation,
+  useUpdateAdminClientAmazonAdsConfigMutation,
   useConnectAdminClientMetaAdsManualMutation,
   useDisconnectAdminClientMetaAdsMutation,
   useTestAdminClientMetaAdsConnectionMutation,
@@ -375,12 +406,17 @@ function getClientMetaAdsConnectionTagId(id: string): string {
   return `${CLIENT_META_ADS_CONNECTION_ID_PREFIX}:${id}`;
 }
 
+function getClientAmazonAdsConnectionTagId(id: string): string {
+  return `${CLIENT_AMAZON_ADS_CONNECTION_ID_PREFIX}:${id}`;
+}
+
 function getAdminClientMutationInvalidations(id: string) {
   return [
     { type: "Clients" as const, id: CLIENTS_LIST_ID },
     { type: "Clients" as const, id: CLIENT_META_ADS_GLOBAL_LIST_ID },
     { type: "Clients" as const, id },
     { type: "Clients" as const, id: getClientSummaryTagId(id) },
+    { type: "Clients" as const, id: getClientAmazonAdsConnectionTagId(id) },
     { type: "AdminSummary" as const, id: ADMIN_SUMMARY_ID },
     { type: "AuditLogs" as const, id: AUDIT_LOGS_LIST_ID },
   ];
@@ -394,6 +430,7 @@ function getAdminClientCreateInvalidations(result: ClientProfile | undefined) {
       ? [
           { type: "Clients" as const, id: result.id },
           { type: "Clients" as const, id: getClientSummaryTagId(result.id) },
+          { type: "Clients" as const, id: getClientAmazonAdsConnectionTagId(result.id) },
         ]
       : []),
     { type: "AdminSummary" as const, id: ADMIN_SUMMARY_ID },

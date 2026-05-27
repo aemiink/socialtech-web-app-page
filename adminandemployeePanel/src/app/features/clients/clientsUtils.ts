@@ -5,7 +5,10 @@ import type {
   AdminMetaAdsSyncLogsResponse,
   AdminMetaAdsClientListItem,
   AdminMetaAdsClientListResponse,
+  AdminClientAmazonAdsConnection,
   AdminClientMetaAdsConnection,
+  AmazonAdsConnectionStatus,
+  AmazonAdsRegion,
   BackendPurchasedServiceKey,
   BackendPurchasedServiceStatus,
   ClientProfile,
@@ -359,6 +362,42 @@ export function getMetaAdsConnectionStatusBadgeClass(status: MetaAdsConnectionSt
   return "border-white/[0.12] bg-white/[0.04] text-[#A0A0A0]";
 }
 
+export function getAmazonAdsConnectionStatusLabel(status: AmazonAdsConnectionStatus): string {
+  if (status === "CONNECTED") {
+    return "Connected";
+  }
+
+  if (status === "PENDING") {
+    return "Pending";
+  }
+
+  if (status === "ERROR") {
+    return "Error";
+  }
+
+  if (status === "DISCONNECTED") {
+    return "Disconnected";
+  }
+
+  return "Not Connected";
+}
+
+export function getAmazonAdsConnectionStatusBadgeClass(status: AmazonAdsConnectionStatus): string {
+  if (status === "CONNECTED") {
+    return "bg-[#AAFF01] text-[#131313]";
+  }
+
+  if (status === "PENDING") {
+    return "bg-amber-500/20 text-amber-300";
+  }
+
+  if (status === "ERROR") {
+    return "bg-red-600 text-white";
+  }
+
+  return "border-white/[0.12] bg-white/[0.04] text-[#A0A0A0]";
+}
+
 export function getServiceLabel(serviceKey: string | null | undefined): string {
   const normalizedServiceKey = normalizeToUiServiceKey(serviceKey);
   const service = SERVICE_CATALOG.find((item) => item.key === normalizedServiceKey);
@@ -439,6 +478,65 @@ export function normalizeAdminMetaAdsConnectionResponse(
         ? credential.tokenLastUpdatedAt
         : null,
       tokenExpiresAt: isStringOrNull(credential.tokenExpiresAt) ? credential.tokenExpiresAt : null,
+      grantedScopes: Array.isArray(credential.grantedScopes)
+        ? credential.grantedScopes.filter((item): item is string => typeof item === "string")
+        : [],
+    },
+  };
+}
+
+export function normalizeAdminAmazonAdsConnectionResponse(
+  response: unknown,
+): AdminClientAmazonAdsConnection {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  if (!isRecord(candidate)) {
+    throw new Error("Amazon Ads connection response could not be parsed.");
+  }
+
+  const ids = isRecord(candidate.ids) ? candidate.ids : {};
+  const account = isRecord(candidate.account) ? candidate.account : {};
+  const settings = isRecord(candidate.settings) ? candidate.settings : {};
+  const credential = isRecord(candidate.credential) ? candidate.credential : {};
+
+  return {
+    clientProfileId: typeof candidate.clientProfileId === "string" ? candidate.clientProfileId : "",
+    connectionStatus: normalizeAmazonAdsConnectionStatus(candidate.connectionStatus),
+    hasActiveService: typeof candidate.hasActiveService === "boolean" ? candidate.hasActiveService : false,
+    ids: {
+      profileId: isStringOrNull(ids.profileId) ? ids.profileId : null,
+      advertiserAccountId: isStringOrNull(ids.advertiserAccountId)
+        ? ids.advertiserAccountId
+        : null,
+      marketplaceId: isStringOrNull(ids.marketplaceId) ? ids.marketplaceId : null,
+    },
+    account: {
+      accountType: isStringOrNull(account.accountType) ? account.accountType : null,
+      accountName: isStringOrNull(account.accountName) ? account.accountName : null,
+      validPaymentMethod:
+        typeof account.validPaymentMethod === "boolean" ? account.validPaymentMethod : null,
+    },
+    settings: {
+      region: normalizeAmazonAdsRegion(settings.region),
+      countryCode: isStringOrNull(settings.countryCode) ? settings.countryCode : null,
+      currencyCode: isStringOrNull(settings.currencyCode) ? settings.currencyCode : null,
+      timezone: isStringOrNull(settings.timezone) ? settings.timezone : null,
+    },
+    lastSyncAt: isStringOrNull(candidate.lastSyncAt) ? candidate.lastSyncAt : null,
+    syncError: isStringOrNull(candidate.syncError) ? candidate.syncError : null,
+    credential: {
+      hasAccessToken:
+        typeof credential.hasAccessToken === "boolean" ? credential.hasAccessToken : false,
+      hasRefreshToken:
+        typeof credential.hasRefreshToken === "boolean" ? credential.hasRefreshToken : false,
+      tokenLastUpdatedAt: isStringOrNull(credential.tokenLastUpdatedAt)
+        ? credential.tokenLastUpdatedAt
+        : null,
+      accessTokenExpiresAt: isStringOrNull(credential.accessTokenExpiresAt)
+        ? credential.accessTokenExpiresAt
+        : null,
+      refreshTokenExpiresAt: isStringOrNull(credential.refreshTokenExpiresAt)
+        ? credential.refreshTokenExpiresAt
+        : null,
       grantedScopes: Array.isArray(credential.grantedScopes)
         ? credential.grantedScopes.filter((item): item is string => typeof item === "string")
         : [],
@@ -1281,6 +1379,34 @@ function normalizeMetaAdsConnectionStatus(value: unknown): MetaAdsConnectionStat
   }
 
   return "NOT_CONNECTED";
+}
+
+function normalizeAmazonAdsConnectionStatus(value: unknown): AmazonAdsConnectionStatus {
+  if (value === "CONNECTED") {
+    return "CONNECTED";
+  }
+
+  if (value === "PENDING") {
+    return "PENDING";
+  }
+
+  if (value === "ERROR") {
+    return "ERROR";
+  }
+
+  if (value === "DISCONNECTED") {
+    return "DISCONNECTED";
+  }
+
+  return "NOT_CONNECTED";
+}
+
+function normalizeAmazonAdsRegion(value: unknown): AmazonAdsRegion | null {
+  if (value === "NA" || value === "EU" || value === "FE") {
+    return value;
+  }
+
+  return null;
 }
 
 function normalizeMetaAdsSyncStatus(value: unknown): MetaAdsSyncStatus {

@@ -1,5 +1,35 @@
 # Architecture Decisions
 
+## 2026-05-27 - Amazon Ads Faz 1 Backend Foundation
+
+Context:
+Amazon Ads Faz 0 contract ile V1 scope, official LwA OAuth/profile/account yaklaşımı ve `advertiserAccountId` isimlendirmesi sabitlendi. Uygulamaya geçiş için önce config/credential veri temeli, permission-gated endpointler ve mock-free UI durumları gerekiyordu.
+
+Decision:
+
+- Prisma’ya Amazon Ads config foundation eklendi: `AmazonAdsConnectionStatus`, `AmazonAdsRegion`, `ClientAmazonAdsConfig`, `ClientAmazonAdsCredential`.
+- Faz 1 kapsamı bilinçli olarak config/credential temelinde tutuldu; reporting snapshot/report lifecycle tabloları Amazon Ads Faz 3/9’a bırakıldı.
+- `server/src/amazon-ads/` modülü eklendi; admin read/update, assigned read ve own client safe config endpointleri permission + purchased-service kontrolüyle çalışır.
+- Seed permission kataloğu `amazonAds.config.*`, reporting/sync/approval/note/product-collaboration slug’larıyla genişletildi; admin, assigned employee ve client own role mapping’leri eklendi.
+- Admin Clients create/edit akışında `AMAZON_ADS` seçilince Amazon config alanları görünür ve config payload’ı ayrı endpointten kaydedilir.
+- Admin ClientDetail’e Amazon Ads config/status kartı eklendi; client panel Amazon Ads dashboard artık bağlantı/config yokken mock metrik göstermeyip empty state döndürür.
+
+Reason:
+Bu yaklaşım, Amazon Ads OAuth/reporting gibi daha riskli işleri başlatmadan önce müşteri bazlı profile/account/marketplace sözleşmesini, erişim sınırlarını ve UI state davranışını üretim mimarisine yerleştirir. Meta/TikTok pattern’i korunur; Amazon’a özgü `profileId`, `advertiserAccountId`, `marketplaceId`, `region` ayrımı ilk fazdan itibaren net kalır.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/src/amazon-ads/*`
+- `server/prisma/seed.ts`
+- `adminandemployeePanel/src/app/features/clients/*`
+- `adminandemployeePanel/src/app/pages/Clients.tsx`
+- `adminandemployeePanel/src/app/pages/ClientDetail.tsx`
+- `clientPanel/src/app/features/amazonAds/*`
+- `clientPanel/src/app/pages/services/amazon-ads-dashboard.tsx`
+- `server/test/amazon-ads-authz.e2e-spec.ts`
+
+---
+
 ## 2026-05-27 - Amazon Ads Faz 0: Discovery Contract ve Teknik Sözleşme
 
 Context:

@@ -190,6 +190,15 @@ export type MetaAdsConnectionStatus =
   | "ERROR"
   | "DISCONNECTED";
 
+export type AmazonAdsConnectionStatus =
+  | "NOT_CONNECTED"
+  | "PENDING"
+  | "CONNECTED"
+  | "ERROR"
+  | "DISCONNECTED";
+
+export type AmazonAdsRegion = "NA" | "EU" | "FE";
+
 export type MetaAdsSyncStatus =
   | "RUNNING"
   | "SUCCESS"
@@ -233,6 +242,52 @@ export type ConnectManualMetaAdsRequest = {
   timezone?: string;
   tokenExpiresAt?: string;
   grantedScopes?: string[];
+};
+
+export type AdminClientAmazonAdsConnection = {
+  clientProfileId: string;
+  connectionStatus: AmazonAdsConnectionStatus;
+  hasActiveService: boolean;
+  ids: {
+    profileId: string | null;
+    advertiserAccountId: string | null;
+    marketplaceId: string | null;
+  };
+  account: {
+    accountType: string | null;
+    accountName: string | null;
+    validPaymentMethod: boolean | null;
+  };
+  settings: {
+    region: AmazonAdsRegion | null;
+    countryCode: string | null;
+    currencyCode: string | null;
+    timezone: string | null;
+  };
+  lastSyncAt: string | null;
+  syncError: string | null;
+  credential: {
+    hasAccessToken: boolean;
+    hasRefreshToken: boolean;
+    tokenLastUpdatedAt: string | null;
+    accessTokenExpiresAt: string | null;
+    refreshTokenExpiresAt: string | null;
+    grantedScopes: string[];
+  };
+};
+
+export type UpdateAdminClientAmazonAdsConfigRequest = {
+  profileId?: string | null;
+  advertiserAccountId?: string | null;
+  marketplaceId?: string | null;
+  region?: AmazonAdsRegion | null;
+  countryCode?: string | null;
+  currencyCode?: string | null;
+  timezone?: string | null;
+  accountType?: string | null;
+  accountName?: string | null;
+  validPaymentMethod?: boolean | null;
+  connectionStatus?: AmazonAdsConnectionStatus;
 };
 
 export type TestMetaAdsConnectionRequest = {

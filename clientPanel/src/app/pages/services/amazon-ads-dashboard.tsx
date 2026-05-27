@@ -1,4 +1,5 @@
-import { ShoppingCart, DollarSign, TrendingUp, Package, Star, AlertCircle, CheckCircle, Target, Search, Eye } from 'lucide-react';
+import { ShoppingCart, DollarSign, TrendingUp, Package, Star, AlertCircle, CheckCircle, Target, Search, Eye, RefreshCw } from 'lucide-react';
+import { useGetOwnAmazonAdsConfigQuery } from '../../features/amazonAds/amazonAdsApi';
 
 const stats = [
   { title: 'ACOS', value: '18%', change: '-4%', icon: Target, color: 'green' },
@@ -64,11 +65,60 @@ const clientActions = [
 ];
 
 export function AmazonAdsDashboard() {
+  const {
+    data: amazonAdsConfig,
+    isError: isAmazonAdsConfigError,
+    isFetching: isAmazonAdsConfigFetching,
+    isLoading: isAmazonAdsConfigLoading,
+    refetch: refetchAmazonAdsConfig,
+  } = useGetOwnAmazonAdsConfigQuery();
+
+  if (isAmazonAdsConfigLoading) {
+    return (
+      <div className="p-8">
+        <div className="bg-[#1A1A1A] rounded-xl p-6 border border-white/[0.08] text-[#A0A0A0]">
+          Amazon Ads bağlantı durumu yükleniyor...
+        </div>
+      </div>
+    );
+  }
+
+  if (isAmazonAdsConfigError) {
+    return (
+      <AmazonAdsUnavailableState
+        title="Amazon Ads bağlantı durumu alınamadı"
+        description="Ajans ekibi bağlantı durumunu kontrol edene kadar performans verileri gösterilmiyor."
+        actionLabel={isAmazonAdsConfigFetching ? "Yenileniyor..." : "Tekrar Dene"}
+        onAction={() => refetchAmazonAdsConfig()}
+        disabled={isAmazonAdsConfigFetching}
+      />
+    );
+  }
+
+  if (!amazonAdsConfig?.hasConfig || amazonAdsConfig.connectionStatus !== "CONNECTED") {
+    return (
+      <AmazonAdsUnavailableState
+        title="Amazon Ads henüz bağlı değil"
+        description="Amazon Ads hesabı bağlandığında kampanya ve retail readiness verileri burada görünecek."
+        actionLabel={isAmazonAdsConfigFetching ? "Yenileniyor..." : "Durumu Yenile"}
+        onAction={() => refetchAmazonAdsConfig()}
+        disabled={isAmazonAdsConfigFetching}
+        detail={
+          amazonAdsConfig
+            ? `${amazonAdsConfig.connectionStatus} • ${amazonAdsConfig.marketplaceId ?? "Marketplace yok"}`
+            : undefined
+        }
+      />
+    );
+  }
+
   return (
     <div className="p-8 space-y-6">
       <div>
         <h1 className="text-3xl text-white mb-2">Amazon Ads</h1>
-        <p className="text-[#A0A0A0]">Amazon Sponsored Products, Brands ve Display</p>
+        <p className="text-[#A0A0A0]">
+          {amazonAdsConfig.accountName ?? "Amazon Sponsored Products, Brands ve Display"}
+        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -276,6 +326,50 @@ export function AmazonAdsDashboard() {
               })}
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AmazonAdsUnavailableState({
+  title,
+  description,
+  actionLabel,
+  onAction,
+  disabled = false,
+  detail,
+}: {
+  title: string;
+  description: string;
+  actionLabel: string;
+  onAction: () => void;
+  disabled?: boolean;
+  detail?: string;
+}) {
+  return (
+    <div className="p-8">
+      <div className="bg-[#1A1A1A] rounded-xl p-6 border border-white/[0.08]">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex gap-3">
+            <div className="w-10 h-10 rounded-lg bg-[#FFA726]/10 flex items-center justify-center flex-shrink-0">
+              <AlertCircle className="w-5 h-5 text-[#FFA726]" />
+            </div>
+            <div>
+              <h1 className="text-2xl text-white mb-2">{title}</h1>
+              <p className="text-sm text-[#A0A0A0]">{description}</p>
+              {detail ? <p className="mt-3 text-xs text-[#d8ff8f]">{detail}</p> : null}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onAction}
+            disabled={disabled}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-white/[0.12] px-4 text-sm text-white transition hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <RefreshCw className="w-4 h-4" />
+            {actionLabel}
+          </button>
         </div>
       </div>
     </div>
