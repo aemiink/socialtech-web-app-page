@@ -278,6 +278,7 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 
 - `server/src/tiktok-ads/tiktok-ads.module.ts`
 - `server/src/tiktok-ads/tiktok-ads.controller.ts`
+  - admin global client list endpoint (`GET /api/v1/admin/tiktok-ads/clients`)
   - admin config/connection/manual connect/test/disconnect/sync endpoints
   - admin summary/campaigns/insights reporting endpoints
   - assigned employee config/summary/campaigns/insights read endpoints
@@ -287,6 +288,7 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - active purchased-service check for connection management
   - encrypted credential persistence and client-safe own summary
   - daily insight aggregation, manual reporting sync, sync log writes, and client-safe sync errors
+  - admin global client list aggregation with connection status, spend/video/conversion summary, pending approval count, and assigned employees
 - `server/src/tiktok-ads/tiktok-ads-api.service.ts`
   - TikTok API for Business advertiser info connection test
   - reporting snapshot fetch for account/campaign/adgroup/ad levels plus campaign catalog metadata
@@ -301,16 +303,24 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 - `server/src/tiktok-ads/dto/update-tiktok-ads-config.dto.ts`
 - `server/prisma/migrations/20260527003000_add_tiktok_ads_reporting_snapshot/migration.sql`
 - `server/test/tiktok-ads-authz.e2e-spec.ts`
-  - admin/employee/client authz, manual connect, test, sync, reporting reads, disconnect, sensitive-token response safety
+  - admin/employee/client authz, global admin clients list, manual connect, test, sync, reporting reads, disconnect, sensitive-token response safety
 
 ### TikTok Ads Admin Frontend
 
 - `adminandemployeePanel/src/app/features/tiktokAds/tiktokAdsApi.ts`
-  - admin connection summary/manual connect/test/sync/disconnect and reporting RTK Query hooks
+  - admin global clients list, connection summary/manual connect/test/sync/disconnect and reporting RTK Query hooks
 - `adminandemployeePanel/src/app/features/tiktokAds/tiktokAdsTypes.ts`
-  - connection, reporting, sync, request/response, and status badge types/helpers
+  - admin global client list, connection, reporting, sync, request/response, and status badge types/helpers
+- `adminandemployeePanel/src/app/pages/TikTokAdsAdmin.tsx`
+  - admin `/tiktok-ads` global management screen with KPI, client table, config edit, test, sync, and disconnect actions
+- `adminandemployeePanel/src/app/routes.tsx`
+  - `/tiktok-ads` admin route
+- `adminandemployeePanel/src/app/components/RootLayout.tsx`
+  - TikTok Ads admin sidebar entry
 - `adminandemployeePanel/src/app/pages/ClientDetail.tsx`
   - TikTok Ads connection management + performance summary/manual sync card in admin client detail
+- `adminandemployeePanel/src/app/pages/__tests__/TikTokAdsAdmin.test.tsx`
+  - admin global TikTok Ads page render/state/action/permission regression coverage
 - `adminandemployeePanel/src/app/pages/__tests__/ClientDetail.test.tsx`
   - TikTok Ads connection/reporting hook mocks with ClientDetail regression coverage
 

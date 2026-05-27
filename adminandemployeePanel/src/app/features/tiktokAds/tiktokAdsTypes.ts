@@ -1,3 +1,5 @@
+import type { ClientStatus, PurchasedServiceStatus } from "../clients/clientsTypes";
+
 export type TikTokAdsConnectionStatus =
   | "NOT_CONNECTED"
   | "PENDING"
@@ -57,12 +59,12 @@ export interface AdminTikTokAdsConnection {
 }
 
 export interface UpdateTikTokAdsConfigPayload {
-  advertiserId?: string;
-  businessCenterId?: string;
-  pixelId?: string;
-  advertiserName?: string;
-  currency?: string;
-  timezone?: string;
+  advertiserId?: string | null;
+  businessCenterId?: string | null;
+  pixelId?: string | null;
+  advertiserName?: string | null;
+  currency?: string | null;
+  timezone?: string | null;
   connectionStatus?: TikTokAdsConnectionStatus;
 }
 
@@ -99,6 +101,66 @@ export interface TestTikTokAdsConnectionResponse {
 export type TikTokAdsDateRangeQuery = {
   since?: string;
   until?: string;
+};
+
+export type AdminTikTokAdsClientListItem = {
+  client: {
+    id: string;
+    slug: string;
+    companyName: string;
+    status: ClientStatus;
+  };
+  serviceStatus: PurchasedServiceStatus;
+  connectionStatus: TikTokAdsConnectionStatus;
+  hasToken: boolean;
+  ids: {
+    advertiserId: string | null;
+    businessCenterId: string | null;
+    pixelId: string | null;
+  };
+  account: {
+    advertiserName: string | null;
+  };
+  settings: {
+    currency: string | null;
+    timezone: string | null;
+  };
+  lastSyncAt: string | null;
+  syncError: string | null;
+  spendSummary: {
+    spend: number;
+    impressions: number;
+    clicks: number;
+    videoViews: number;
+    conversions: number;
+    costPerConversion: number;
+    purchaseValue: number;
+  };
+  pendingApprovals: number;
+  assignedEmployees: Array<{
+    userId: string;
+    email: string;
+    displayName: string | null;
+    role: string;
+    scope: string;
+  }>;
+  actionContext: {
+    tiktokAdsProjectId: string | null;
+  };
+};
+
+export type AdminTikTokAdsClientListResponse = {
+  data: AdminTikTokAdsClientListItem[];
+  dateRange: {
+    since: string;
+    until: string;
+  };
+  meta: {
+    total: number;
+    connected: number;
+    error: number;
+    pendingApprovals: number;
+  };
 };
 
 export type TikTokAdsCampaignsQuery = TikTokAdsDateRangeQuery & {

@@ -4,27 +4,27 @@ import { TikTokAdsConnectionStatus } from "@prisma/client";
 export class UpdateTikTokAdsConfigDto {
   @IsOptional()
   @IsString()
-  advertiserId?: string;
+  advertiserId?: string | null;
 
   @IsOptional()
   @IsString()
-  businessCenterId?: string;
+  businessCenterId?: string | null;
 
   @IsOptional()
   @IsString()
-  pixelId?: string;
+  pixelId?: string | null;
 
   @IsOptional()
   @IsString()
-  advertiserName?: string;
+  advertiserName?: string | null;
 
   @IsOptional()
   @IsString()
-  currency?: string;
+  currency?: string | null;
 
   @IsOptional()
   @IsString()
-  timezone?: string;
+  timezone?: string | null;
 
   @IsOptional()
   @IsEnum(TikTokAdsConnectionStatus)

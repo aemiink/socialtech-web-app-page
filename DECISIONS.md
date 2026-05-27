@@ -2464,3 +2464,35 @@ Affected files:
 **Rationale:** Ghost tint active state is visually lighter, aligns all three panels, and matches the pattern the client portal already used. Full-fill was high contrast but inconsistent.
 
 **Affected files:** `adminandemployeePanel/src/styles/theme.css`, `clientPanel/src/styles/theme.css`, `RootLayout.tsx`, `EmployeeLayout.tsx`
+
+## 2026-05-27 - TikTok Ads Faz 5 Admin Global Panel
+
+Context:
+TikTok Ads Faz 0-4 ile backend foundation, connection management, reporting sync ve client portal API-driven workspace tamamlandı. Admin tarafında müşteri detay ekranı vardı ancak tüm TikTok Ads müşterilerini tek yerden gözlemleyen ve bağlantı aksiyonlarını çalıştıran global panel yoktu.
+
+Decision:
+TikTok Ads Faz 5, Meta Ads Faz 5 pattern'inin daha dar V1 karşılığı olarak uygulanacak:
+- Backend `GET /api/v1/admin/tiktok-ads/clients` endpointi eklendi.
+- Endpoint yalnızca `tiktokAds.config.read.any` iznine açık.
+- Response müşteri, purchased service status, connection status, token varlığı, TikTok account IDs, settings, last sync, sync error, 7 günlük spend/video/conversion summary, pending approval count, assigned employees ve `tiktokAdsProjectId` action context içerir.
+- Admin panelde `/tiktok-ads` route/page eklendi.
+- Global ekrandan config update, connection test, manual sync ve disconnect aksiyonları çalıştırılır.
+- TikTok Faz 5'e rapor draft/publish veya approval collaboration eklenmedi; bunlar Faz 7/9 kapsamına bırakıldı.
+
+Reason:
+Bu karar admin operasyonlarını tekil ClientDetail ekranından çıkarıp global TikTok Ads gözlem ve müdahale ekranına taşır. Meta Ads ile yapısal simetri korunurken TikTok V1 kapsamı read-only reporting ve connection operations sınırında tutulur.
+
+Affected files:
+- `server/src/tiktok-ads/tiktok-ads.controller.ts`
+- `server/src/tiktok-ads/dto/update-tiktok-ads-config.dto.ts`
+- `server/src/tiktok-ads/tiktok-ads.service.ts`
+- `server/test/tiktok-ads-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/tiktokAds/tiktokAdsApi.ts`
+- `adminandemployeePanel/src/app/features/tiktokAds/tiktokAdsTypes.ts`
+- `adminandemployeePanel/src/app/pages/TikTokAdsAdmin.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/TikTokAdsAdmin.test.tsx`
+- `adminandemployeePanel/src/app/routes.tsx`
+- `adminandemployeePanel/src/app/components/RootLayout.tsx`
+- `PROJECT_CONTEXT.md`
+- `REPO_MAP.md`
+- `ROAD_MAP.md`

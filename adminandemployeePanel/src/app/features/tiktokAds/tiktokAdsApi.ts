@@ -1,5 +1,6 @@
 import { baseApi } from "../../services/baseApi";
 import type {
+  AdminTikTokAdsClientListResponse,
   AdminTikTokAdsConnection,
   ConnectManualTikTokAdsPayload,
   TestTikTokAdsConnectionPayload,
@@ -15,6 +16,8 @@ import type {
   UpdateTikTokAdsConfigPayload,
 } from "./tiktokAdsTypes";
 
+const TIKTOK_ADS_ADMIN_CLIENTS_LIST_ID = "ADMIN_CLIENTS_LIST";
+
 type AdminClientTikTokAdsQueryArg<TQuery = void> = {
   clientId: string;
   query?: TQuery;
@@ -22,6 +25,26 @@ type AdminClientTikTokAdsQueryArg<TQuery = void> = {
 
 const tiktokAdsApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
+    getAdminTikTokAdsClients: build.query<
+      AdminTikTokAdsClientListResponse,
+      TikTokAdsDateRangeQuery | void
+    >({
+      query: (query) => ({
+        url: "/admin/tiktok-ads/clients",
+        method: "GET",
+        params: serializeDateRangeQuery(query),
+      }),
+      providesTags: (result) => [
+        { type: "TikTokAdsConfig", id: TIKTOK_ADS_ADMIN_CLIENTS_LIST_ID },
+        ...(result
+          ? result.data.map((item) => ({
+              type: "TikTokAdsConfig" as const,
+              id: item.client.id,
+            }))
+          : []),
+      ],
+    }),
+
     getAdminClientTikTokAdsConfig: build.query<TikTokAdsConfig, string>({
       query: (clientId) => `/admin/clients/${clientId}/tiktok-ads/config`,
       providesTags: (_result, _error, clientId) => [
@@ -89,6 +112,7 @@ const tiktokAdsApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { clientId }) => [
         { type: "TikTokAdsConfig", id: clientId },
+        { type: "TikTokAdsConfig", id: TIKTOK_ADS_ADMIN_CLIENTS_LIST_ID },
         { type: "Clients", id: clientId },
       ],
     }),
@@ -104,6 +128,7 @@ const tiktokAdsApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { clientId }) => [
         { type: "TikTokAdsConfig", id: clientId },
+        { type: "TikTokAdsConfig", id: TIKTOK_ADS_ADMIN_CLIENTS_LIST_ID },
         { type: "Clients", id: clientId },
       ],
     }),
@@ -119,6 +144,7 @@ const tiktokAdsApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { clientId }) => [
         { type: "TikTokAdsConfig", id: clientId },
+        { type: "TikTokAdsConfig", id: TIKTOK_ADS_ADMIN_CLIENTS_LIST_ID },
         { type: "Clients", id: clientId },
       ],
     }),
@@ -134,6 +160,7 @@ const tiktokAdsApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { clientId }) => [
         { type: "TikTokAdsConfig", id: clientId },
+        { type: "TikTokAdsConfig", id: TIKTOK_ADS_ADMIN_CLIENTS_LIST_ID },
         { type: "Clients", id: clientId },
       ],
     }),
@@ -145,6 +172,7 @@ const tiktokAdsApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { clientId }) => [
         { type: "TikTokAdsConfig", id: clientId },
+        { type: "TikTokAdsConfig", id: TIKTOK_ADS_ADMIN_CLIENTS_LIST_ID },
         { type: "Clients", id: clientId },
       ],
     }),
@@ -154,6 +182,7 @@ const tiktokAdsApi = baseApi.injectEndpoints({
 export const {
   useConnectAdminClientTikTokAdsManualMutation,
   useDisconnectAdminClientTikTokAdsMutation,
+  useGetAdminTikTokAdsClientsQuery,
   useGetAdminClientTikTokAdsCampaignsQuery,
   useGetAdminClientTikTokAdsConfigQuery,
   useGetAdminClientTikTokAdsConnectionQuery,
@@ -164,7 +193,9 @@ export const {
   useUpdateAdminClientTikTokAdsConfigMutation,
 } = tiktokAdsApi;
 
-function serializeDateRangeQuery(query?: TikTokAdsDateRangeQuery): Record<string, string> | undefined {
+function serializeDateRangeQuery(
+  query: TikTokAdsDateRangeQuery | void,
+): Record<string, string> | undefined {
   if (!query) {
     return undefined;
   }

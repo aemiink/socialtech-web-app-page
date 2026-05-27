@@ -422,7 +422,9 @@ Uygulama durumu:
 - TikTok Ads Faz 2 tamamlandı: admin manual connect, encrypted token storage, connection summary, official advertiser info based connection test, disconnect, service-level permission checks, and admin ClientDetail connection management UI.
 - TikTok Ads Faz 3 tamamlandı: `TikTokAdsDailyInsight` + `TikTokAdsSyncLog` snapshot modeli, manual sync, account/campaign/adgroup/ad insight ingestion, admin/assigned/client summary-campaign-insights read API, TTL-gated own client refresh, and admin ClientDetail performance summary integration.
 - TikTok Ads Faz 4 tamamlandı: client portal TikTok dashboard ve service tab workspace mock/static datadan API-driven akışa taşındı; campaigns, video creatives, hook tests, audiences, pixel/events safe-state, UGC script tasks ve optimization notes sekmeleri own-client endpointleri ve client-visible tasks ile besleniyor.
+- TikTok Ads Faz 5 tamamlandı: backend global admin client list endpointi ve admin panel `/tiktok-ads` ekranı eklendi; connection/config/test/sync/disconnect aksiyonları global müşteri listesi üzerinden yönetiliyor.
 - Active admin endpoints:
+  - `GET /api/v1/admin/tiktok-ads/clients`
   - `GET /api/v1/admin/clients/:clientId/tiktok-ads/config`
   - `PATCH /api/v1/admin/clients/:clientId/tiktok-ads/config`
   - `GET /api/v1/admin/clients/:clientId/tiktok-ads/connection`
@@ -447,7 +449,7 @@ Uygulama durumu:
 - Reporting sync uses TikTok API for Business reporting + campaign catalog reads, stores daily rows by level (`ACCOUNT`, `CAMPAIGN`, `ADGROUP`, `AD`), and exposes read-only aggregates for V1 dashboards.
 
 Planned next backend phases:
-- TikTok Ads Faz 5: Admin global panel (`/tiktok-ads`)
+- TikTok Ads Faz 6: Employee role workspaces (`TiktokAdsWorkspace` component)
 - Broader domain endpoint authorization rollout (beyond users/clients/admin-assignments/projects/tasks)
 - Forced password change on first login flow
 - Frontend audit log view integration for admin panel

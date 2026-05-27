@@ -358,6 +358,50 @@ describe("TikTok Ads Config Authz (e2e)", () => {
       expectResponseHasNoSensitiveTokenData(campaignsRes.body);
     });
 
+    it("admin can read global tiktok ads client list with reporting summary", async () => {
+      if (!clientProfileId) return;
+      const res = await request(app.getHttpServer())
+        .get("/api/v1/admin/tiktok-ads/clients")
+        .set("Authorization", `Bearer ${adminToken}`)
+        .query({ since: "2026-05-20", until: "2026-05-20" });
+
+      expect(res.status).toBe(200);
+      expect(res.body.meta.total).toBeGreaterThanOrEqual(1);
+      expect(res.body.meta.connected).toBeGreaterThanOrEqual(1);
+      expect(res.body.dateRange).toEqual({ since: "2026-05-20", until: "2026-05-20" });
+
+      const clientRow = res.body.data.find(
+        (item: { client?: { id?: string } }) => item.client?.id === clientProfileId,
+      );
+      expect(clientRow).toBeDefined();
+      expect(clientRow.connectionStatus).toBe("CONNECTED");
+      expect(clientRow.hasToken).toBe(true);
+      expect(clientRow.ids.advertiserId).toBe("1234567890");
+      expect(clientRow.account.advertiserName).toBe("TikTok Test Advertiser");
+      expect(clientRow.spendSummary.spend).toBe(210);
+      expect(clientRow.spendSummary.videoViews).toBe(18000);
+      expect(clientRow.spendSummary.conversions).toBe(42);
+      expect(clientRow.assignedEmployees).toEqual(expect.any(Array));
+      expectResponseHasNoSensitiveTokenData(res.body);
+    });
+
+    it("non-admin users cannot read global tiktok ads client list", async () => {
+      const unauthenticatedRes = await request(app.getHttpServer()).get(
+        "/api/v1/admin/tiktok-ads/clients",
+      );
+      expect(unauthenticatedRes.status).toBe(401);
+
+      const employeeRes = await request(app.getHttpServer())
+        .get("/api/v1/admin/tiktok-ads/clients")
+        .set("Authorization", `Bearer ${employeeToken}`);
+      expect(employeeRes.status).toBe(403);
+
+      const clientRes = await request(app.getHttpServer())
+        .get("/api/v1/admin/tiktok-ads/clients")
+        .set("Authorization", `Bearer ${clientToken}`);
+      expect(clientRes.status).toBe(403);
+    });
+
     it("admin can disconnect and clear credential summary", async () => {
       if (!clientProfileId) return;
       const res = await request(app.getHttpServer())

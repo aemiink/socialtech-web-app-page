@@ -30,6 +30,15 @@ export class TikTokAdsController {
 
   // ─── Admin endpoints ───────────────────────────────────────────────────────
 
+  @Get("admin/tiktok-ads/clients")
+  @RequirePermissions("tiktokAds.config.read.any")
+  getAdminTikTokAdsClients(
+    @Query() query: TikTokAdsDateRangeQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.tikTokAdsService.getAdminTikTokAdsClients(query, actor);
+  }
+
   @Get("admin/clients/:clientId/tiktok-ads/config")
   @RequirePermissions("tiktokAds.config.read.any")
   getAdminClientConfig(

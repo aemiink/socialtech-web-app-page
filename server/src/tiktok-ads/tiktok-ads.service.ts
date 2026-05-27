@@ -1,8 +1,12 @@
 import {
   AccountType,
+  DeliveryReleaseApprovalStatus,
+  MetaAdsApprovalStatus,
   Prisma,
   PurchasedServiceKey,
   PurchasedServiceStatus,
+  TaskStatus,
+  TaskType,
   TikTokAdsConnectionStatus,
   TikTokAdsInsightLevel,
   TikTokAdsSyncStatus,
@@ -171,6 +175,66 @@ type AdminTikTokAdsConnectionTestResponse = {
   grantedScopes: string[];
 };
 
+type AdminTikTokAdsClientListItem = {
+  client: {
+    id: string;
+    slug: string;
+    companyName: string;
+    status: string;
+  };
+  serviceStatus: PurchasedServiceStatus;
+  connectionStatus: TikTokAdsConnectionStatus;
+  hasToken: boolean;
+  ids: {
+    advertiserId: string | null;
+    businessCenterId: string | null;
+    pixelId: string | null;
+  };
+  account: {
+    advertiserName: string | null;
+  };
+  settings: {
+    currency: string | null;
+    timezone: string | null;
+  };
+  lastSyncAt: Date | null;
+  syncError: string | null;
+  spendSummary: {
+    spend: number;
+    impressions: number;
+    clicks: number;
+    videoViews: number;
+    conversions: number;
+    costPerConversion: number;
+    purchaseValue: number;
+  };
+  pendingApprovals: number;
+  assignedEmployees: Array<{
+    userId: string;
+    email: string;
+    displayName: string | null;
+    role: UserRole;
+    scope: string;
+  }>;
+  actionContext: {
+    tiktokAdsProjectId: string | null;
+  };
+};
+
+type AdminTikTokAdsClientListResponse = {
+  data: AdminTikTokAdsClientListItem[];
+  dateRange: {
+    since: string;
+    until: string;
+  };
+  meta: {
+    total: number;
+    connected: number;
+    error: number;
+    pendingApprovals: number;
+  };
+};
+
 type TikTokAdsReportDateRange = {
   since: Date;
   until: Date;
@@ -323,6 +387,276 @@ export class TikTokAdsService {
     this.assertCanReadAnyConfig(actor);
     await this.assertClientExists(clientId);
     return this.getConnectionSummaryByClientProfileId(clientId);
+  }
+
+  async getAdminTikTokAdsClients(
+    query: TikTokAdsDateRangeQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<AdminTikTokAdsClientListResponse> {
+    this.assertCanReadAnyConfig(actor);
+    const dateRange = this.resolveReportDateRange(query);
+
+    const clients = await this.prisma.clientProfile.findMany({
+      where: {
+        purchasedServices: {
+          some: {
+            serviceKey: PurchasedServiceKey.TIKTOK_ADS,
+          },
+        },
+      },
+      select: {
+        id: true,
+        slug: true,
+        companyName: true,
+        status: true,
+        purchasedServices: {
+          where: {
+            serviceKey: PurchasedServiceKey.TIKTOK_ADS,
+          },
+          select: {
+            status: true,
+          },
+          orderBy: {
+            updatedAt: "desc",
+          },
+          take: 1,
+        },
+        tikTokAdsConfig: {
+          select: adminTikTokAdsConfigSelect,
+        },
+        tikTokAdsCredential: {
+          select: tikTokAdsCredentialSummarySelect,
+        },
+        employeeAssignments: {
+          where: {
+            isActive: true,
+          },
+          select: {
+            scope: true,
+            employeeUser: {
+              select: {
+                id: true,
+                email: true,
+                displayName: true,
+                role: true,
+                status: true,
+              },
+            },
+          },
+        },
+        projects: {
+          where: {
+            serviceKey: PurchasedServiceKey.TIKTOK_ADS,
+          },
+          select: {
+            id: true,
+          },
+          orderBy: {
+            createdAt: "asc",
+          },
+          take: 1,
+        },
+      },
+      orderBy: {
+        companyName: "asc",
+      },
+    });
+
+    const clientProfileIds = clients.map((client) => client.id);
+    if (clientProfileIds.length === 0) {
+      return {
+        data: [],
+        dateRange: {
+          since: dateRange.sinceIsoDate,
+          until: dateRange.untilIsoDate,
+        },
+        meta: {
+          total: 0,
+          connected: 0,
+          error: 0,
+          pendingApprovals: 0,
+        },
+      };
+    }
+
+    const [insightsByClient, pendingTasks, pendingReleaseApprovals] = await Promise.all([
+      this.prisma.tikTokAdsDailyInsight.groupBy({
+        by: ["clientProfileId"],
+        where: {
+          clientProfileId: {
+            in: clientProfileIds,
+          },
+          level: TikTokAdsInsightLevel.ACCOUNT,
+          date: {
+            gte: dateRange.since,
+            lte: dateRange.until,
+          },
+        },
+        _sum: {
+          spend: true,
+          impressions: true,
+          clicks: true,
+          videoViews: true,
+          conversions: true,
+          purchaseValue: true,
+        },
+      }),
+      this.prisma.task.findMany({
+        where: {
+          OR: [
+            {
+              approvalRequired: true,
+              approvalStatus: MetaAdsApprovalStatus.PENDING,
+            },
+            {
+              status: TaskStatus.REVIEW,
+              type: TaskType.REVISION,
+            },
+          ],
+          project: {
+            clientProfileId: {
+              in: clientProfileIds,
+            },
+            serviceKey: PurchasedServiceKey.TIKTOK_ADS,
+          },
+        },
+        select: {
+          project: {
+            select: {
+              clientProfileId: true,
+            },
+          },
+        },
+      }),
+      this.prisma.deliveryRelease.findMany({
+        where: {
+          approvalStatus: DeliveryReleaseApprovalStatus.PENDING,
+          project: {
+            clientProfileId: {
+              in: clientProfileIds,
+            },
+            serviceKey: PurchasedServiceKey.TIKTOK_ADS,
+          },
+        },
+        select: {
+          project: {
+            select: {
+              clientProfileId: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    const insightTotalsByClientId = new Map<
+      string,
+      {
+        spend: number;
+        impressions: number;
+        clicks: number;
+        videoViews: number;
+        conversions: number;
+        purchaseValue: number;
+      }
+    >();
+    for (const row of insightsByClient) {
+      insightTotalsByClientId.set(row.clientProfileId, {
+        spend: this.readDecimalAsNumber(row._sum.spend),
+        impressions: row._sum.impressions ?? 0,
+        clicks: row._sum.clicks ?? 0,
+        videoViews: row._sum.videoViews ?? 0,
+        conversions: row._sum.conversions ?? 0,
+        purchaseValue: this.readDecimalAsNumber(row._sum.purchaseValue),
+      });
+    }
+
+    const pendingApprovalsByClientId = new Map<string, number>();
+    for (const pendingTask of pendingTasks) {
+      const clientProfileId = pendingTask.project.clientProfileId;
+      pendingApprovalsByClientId.set(
+        clientProfileId,
+        (pendingApprovalsByClientId.get(clientProfileId) ?? 0) + 1,
+      );
+    }
+    for (const pendingRelease of pendingReleaseApprovals) {
+      const clientProfileId = pendingRelease.project.clientProfileId;
+      pendingApprovalsByClientId.set(
+        clientProfileId,
+        (pendingApprovalsByClientId.get(clientProfileId) ?? 0) + 1,
+      );
+    }
+
+    const data: AdminTikTokAdsClientListItem[] = clients.map((client) => {
+      const config = client.tikTokAdsConfig;
+      const insightTotals = insightTotalsByClientId.get(client.id);
+      const spend = insightTotals?.spend ?? 0;
+      const conversions = insightTotals?.conversions ?? 0;
+
+      return {
+        client: {
+          id: client.id,
+          slug: client.slug,
+          companyName: client.companyName,
+          status: client.status,
+        },
+        serviceStatus: client.purchasedServices[0]?.status ?? PurchasedServiceStatus.INACTIVE,
+        connectionStatus: config?.connectionStatus ?? TikTokAdsConnectionStatus.NOT_CONNECTED,
+        hasToken: Boolean(client.tikTokAdsCredential?.tokenHash),
+        ids: {
+          advertiserId: config?.advertiserId ?? null,
+          businessCenterId: config?.businessCenterId ?? null,
+          pixelId: config?.pixelId ?? null,
+        },
+        account: {
+          advertiserName: config?.advertiserName ?? null,
+        },
+        settings: {
+          currency: config?.currency ?? null,
+          timezone: config?.timezone ?? null,
+        },
+        lastSyncAt: config?.lastSyncAt ?? null,
+        syncError: config?.syncError ?? null,
+        spendSummary: {
+          spend: this.round(spend),
+          impressions: insightTotals?.impressions ?? 0,
+          clicks: insightTotals?.clicks ?? 0,
+          videoViews: insightTotals?.videoViews ?? 0,
+          conversions,
+          costPerConversion: this.roundDivision(spend, conversions),
+          purchaseValue: this.round(insightTotals?.purchaseValue ?? 0),
+        },
+        pendingApprovals: pendingApprovalsByClientId.get(client.id) ?? 0,
+        assignedEmployees: client.employeeAssignments
+          .filter((assignment) => assignment.employeeUser.status === "ACTIVE")
+          .map((assignment) => ({
+            userId: assignment.employeeUser.id,
+            email: assignment.employeeUser.email,
+            displayName: assignment.employeeUser.displayName,
+            role: assignment.employeeUser.role,
+            scope: assignment.scope,
+          })),
+        actionContext: {
+          tiktokAdsProjectId: client.projects[0]?.id ?? null,
+        },
+      };
+    });
+
+    return {
+      data,
+      dateRange: {
+        since: dateRange.sinceIsoDate,
+        until: dateRange.untilIsoDate,
+      },
+      meta: {
+        total: data.length,
+        connected: data.filter(
+          (item) => item.connectionStatus === TikTokAdsConnectionStatus.CONNECTED,
+        ).length,
+        error: data.filter((item) => item.connectionStatus === TikTokAdsConnectionStatus.ERROR)
+          .length,
+        pendingApprovals: data.reduce((total, item) => total + item.pendingApprovals, 0),
+      },
+    };
   }
 
   async updateAdminClientConfig(
