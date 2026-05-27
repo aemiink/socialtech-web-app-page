@@ -17,11 +17,14 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { TikTokAdsService } from "./tiktok-ads.service";
 import { ConnectManualTikTokAdsDto } from "./dto/connect-manual-tiktok-ads.dto";
+import { CreateTikTokAdsReportDto } from "./dto/create-tiktok-ads-report.dto";
 import { TestTikTokAdsConnectionDto } from "./dto/test-tiktok-ads-connection.dto";
 import { TikTokAdsCampaignsQueryDto } from "./dto/tiktok-ads-campaigns-query.dto";
 import { TikTokAdsDateRangeQueryDto } from "./dto/tiktok-ads-date-range-query.dto";
 import { TikTokAdsInsightsQueryDto } from "./dto/tiktok-ads-insights-query.dto";
+import { TikTokAdsReportsQueryDto } from "./dto/tiktok-ads-reports-query.dto";
 import { TikTokAdsSyncLogsQueryDto } from "./dto/tiktok-ads-sync-logs-query.dto";
+import { UpdateTikTokAdsReportDto } from "./dto/update-tiktok-ads-report.dto";
 import { UpdateTikTokAdsConfigDto } from "./dto/update-tiktok-ads-config.dto";
 
 @Controller()
@@ -156,6 +159,36 @@ export class TikTokAdsController {
     return this.tikTokAdsService.retryAdminClientInsights(clientId, query, actor);
   }
 
+  @Get("admin/clients/:clientId/tiktok-ads/reports")
+  @RequirePermissions("reports.read")
+  getAdminClientReports(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: TikTokAdsReportsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.tikTokAdsService.getAdminClientReports(clientId, query, actor);
+  }
+
+  @Post("admin/clients/:clientId/tiktok-ads/reports")
+  @RequirePermissions("reports.manage")
+  createAdminClientReport(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Body() dto: CreateTikTokAdsReportDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.tikTokAdsService.createAdminClientReport(clientId, dto, actor);
+  }
+
+  @Patch("admin/tiktok-ads/reports/:reportId")
+  @RequirePermissions("reports.manage")
+  updateAdminReport(
+    @Param("reportId", ParseUUIDPipe) reportId: string,
+    @Body() dto: UpdateTikTokAdsReportDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.tikTokAdsService.updateAdminReport(reportId, dto, actor);
+  }
+
   // ─── Assigned employee endpoints ───────────────────────────────────────────
 
   @Get("tiktok-ads/clients/:clientId/config")
@@ -207,6 +240,36 @@ export class TikTokAdsController {
     return this.tikTokAdsService.syncAssignedClientInsights(clientId, query, actor);
   }
 
+  @Get("tiktok-ads/clients/:clientId/reports")
+  @RequirePermissions("tiktokAds.config.read.assigned", "tiktokAds.reporting.read.assigned")
+  getAssignedClientReports(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: TikTokAdsReportsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.tikTokAdsService.getAssignedClientReports(clientId, query, actor);
+  }
+
+  @Post("tiktok-ads/clients/:clientId/reports")
+  @RequirePermissions("tiktokAds.config.read.assigned", "tiktokAds.notes.manage.assigned")
+  createAssignedClientReport(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Body() dto: CreateTikTokAdsReportDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.tikTokAdsService.createAssignedClientReport(clientId, dto, actor);
+  }
+
+  @Patch("tiktok-ads/reports/:reportId")
+  @RequirePermissions("tiktokAds.config.read.assigned", "tiktokAds.notes.manage.assigned")
+  updateAssignedReport(
+    @Param("reportId", ParseUUIDPipe) reportId: string,
+    @Body() dto: UpdateTikTokAdsReportDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.tikTokAdsService.updateAssignedReport(reportId, dto, actor);
+  }
+
   // ─── Own client endpoint ────────────────────────────────────────────────────
 
   @Get("clients/me/tiktok-ads/config")
@@ -249,5 +312,14 @@ export class TikTokAdsController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.tikTokAdsService.syncOwnClientInsights(query, actor);
+  }
+
+  @Get("clients/me/tiktok-ads/reports")
+  @RequirePermissions("tiktokAds.config.read.own", "reports.read.own", "tiktokAds.reporting.read.own")
+  getOwnClientReports(
+    @Query() query: TikTokAdsReportsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.tikTokAdsService.getOwnClientReports(query, actor);
   }
 }

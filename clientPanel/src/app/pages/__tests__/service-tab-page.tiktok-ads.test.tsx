@@ -6,6 +6,7 @@ const mockUseGetOwnTikTokAdsConfigQuery = vi.fn();
 const mockUseGetOwnTikTokAdsSummaryQuery = vi.fn();
 const mockUseGetOwnTikTokAdsCampaignsQuery = vi.fn();
 const mockUseGetOwnTikTokAdsInsightsQuery = vi.fn();
+const mockUseGetOwnTikTokAdsReportsQuery = vi.fn();
 const mockUseGetClientTasksQuery = vi.fn();
 const mockUpdateClientTaskApproval = vi.fn();
 
@@ -14,6 +15,7 @@ vi.mock("../../features/tiktokAds/tiktokAdsApi", () => ({
   useGetOwnTikTokAdsSummaryQuery: (...args: unknown[]) => mockUseGetOwnTikTokAdsSummaryQuery(...args),
   useGetOwnTikTokAdsCampaignsQuery: (...args: unknown[]) => mockUseGetOwnTikTokAdsCampaignsQuery(...args),
   useGetOwnTikTokAdsInsightsQuery: (...args: unknown[]) => mockUseGetOwnTikTokAdsInsightsQuery(...args),
+  useGetOwnTikTokAdsReportsQuery: (...args: unknown[]) => mockUseGetOwnTikTokAdsReportsQuery(...args),
 }));
 
 vi.mock("../../features/metaAds/metaAdsApi", () => ({
@@ -133,12 +135,35 @@ const tiktokApprovalTask = {
   approvalStatus: "PENDING",
 };
 
+const tiktokReport = {
+  id: "report-1",
+  clientProfileId: "client-1",
+  projectId: "project-1",
+  projectName: "TikTok Ads Ops",
+  periodStart: "2026-05-20T00:00:00.000Z",
+  periodEnd: "2026-05-26T23:59:59.999Z",
+  type: "WEEKLY",
+  status: "PUBLISHED",
+  summary: "TikTok haftalık rapor müşteri özeti.",
+  metricsSnapshot: { spend: 210 },
+  clientVisible: true,
+  publishedAt: "2026-05-27T12:00:00.000Z",
+  acknowledgementRequestedAt: "2026-05-27T12:00:00.000Z",
+  acknowledgedAt: null,
+  acknowledgementStatus: "PENDING",
+  acknowledgementTaskId: "approval-task-1",
+  acknowledgementTaskUpdatedAt: "2026-05-27T12:00:00.000Z",
+  createdAt: "2026-05-27T11:00:00.000Z",
+  updatedAt: "2026-05-27T12:00:00.000Z",
+} as const;
+
 describe("ServiceTabPage TikTok Ads tabs", () => {
   beforeEach(() => {
     mockUseGetOwnTikTokAdsConfigQuery.mockReset();
     mockUseGetOwnTikTokAdsSummaryQuery.mockReset();
     mockUseGetOwnTikTokAdsCampaignsQuery.mockReset();
     mockUseGetOwnTikTokAdsInsightsQuery.mockReset();
+    mockUseGetOwnTikTokAdsReportsQuery.mockReset();
     mockUseGetClientTasksQuery.mockReset();
     mockUpdateClientTaskApproval.mockReset();
     mockUpdateClientTaskApproval.mockReturnValue({
@@ -244,6 +269,19 @@ describe("ServiceTabPage TikTok Ads tabs", () => {
       isLoading: false,
       isError: false,
     }));
+    mockUseGetOwnTikTokAdsReportsQuery.mockReturnValue({
+      data: {
+        data: [tiktokReport],
+        meta: {
+          total: 1,
+          draft: 0,
+          published: 1,
+          clientVisible: 1,
+        },
+      },
+      isLoading: false,
+      isError: false,
+    });
     mockUseGetClientTasksQuery.mockImplementation((query?: { type?: string }) => ({
       data: query?.type === "REVISION" ? [] : [tiktokTask],
       isLoading: false,
@@ -315,5 +353,12 @@ describe("ServiceTabPage TikTok Ads tabs", () => {
         body: { approvalStatus: "APPROVED", approvalResponseNote: undefined },
       }),
     );
+  });
+
+  it("renders published TikTok Ads reports on optimization notes tab", () => {
+    render(<ServiceTabPage serviceId="tiktok-ads" tabId="optimization-notes" />);
+
+    expect(screen.getByText("TikTok haftalık rapor müşteri özeti.")).toBeInTheDocument();
+    expect(screen.getByText(/Müşteri Onayı Bekliyor/)).toBeInTheDocument();
   });
 });

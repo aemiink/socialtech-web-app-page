@@ -7,7 +7,6 @@
 
 ## Planned
 
-- TikTok Ads Faz 9: Reporting/export foundation
 - TikTok Ads Faz 10: Production hardening
 - Remaining employee role pages API migration (mock/static -> backend)
 - Remaining admin mock/static pages API migration
@@ -160,6 +159,7 @@
 - TikTok Ads Faz 6: Employee role workspaces (`/employee/tiktok-ads` + `TikTokAdsWorkspace` + role-aware sections/actions + assigned endpoint coverage)
 - TikTok Ads Faz 7: Approval + creative collaboration (task approval type'ları + assigned create permission + client own response + UGC/script approval queue + creative preview)
 - TikTok Ads Faz 8: Sync automation hardening (admin sync logs + retry + assigned TTL-safe sync + normalized error catalog + admin/employee UI observability)
+- TikTok Ads Faz 9: Reporting/export foundation (`TikTokAdsReport` entity, admin/assigned draft-publish endpoints, client own report visibility, publish->ack task bridge)
 
 ## Blocked
 
@@ -217,6 +217,17 @@ None identified.
   - `adminandemployeePanel`: `npm run test:run -- src/app/pages/__tests__/TikTokAdsAdmin.test.tsx src/app/employee/pages/__tests__/TikTokAdsWorkspace.test.tsx` ✅ (`16/16`)
   - `adminandemployeePanel`: `npm run check` ✅
   - Browser smoke: admin/employee TikTok routes auth redirect, console error yok ✅
+- Latest TikTok Ads Faz 9 validation checkpoint:
+  - `server`: `npm run prisma:generate` ✅
+  - `server`: `npm run typecheck` ✅
+  - `server`: `npm run typecheck:spec` ✅
+  - `server`: `npm run typecheck:seed` ✅
+  - `server`: `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true node ./test/run-e2e.cjs tiktok-ads-authz.e2e-spec.ts` ✅ (`27/27`)
+  - `adminandemployeePanel`: `npm run typecheck` ✅
+  - `adminandemployeePanel`: `npm run test:run -- src/app/pages/__tests__/TikTokAdsAdmin.test.tsx src/app/employee/pages/__tests__/TikTokAdsWorkspace.test.tsx` ✅ (`20/20`)
+  - `clientPanel`: `npm run typecheck` ✅
+  - `clientPanel`: `npm test -- src/app/pages/__tests__/service-tab-page.tiktok-ads.test.tsx` ✅ (`7/7`)
+  - Browser smoke: admin/employee/client local targets loaded without blocking runtime error ✅
 - Latest admin/employee frontend validation checkpoint: `25` test files, `153/153` tests.
 - Latest client portal frontend validation checkpoint: `4` test files, `17/17` tests.
 - Latest FAZ-05 validation checkpoint:

@@ -2598,3 +2598,45 @@ Affected files:
 - `PROJECT_CONTEXT.md`
 - `REPO_MAP.md`
 - `ROAD_MAP.md`
+
+## 2026-05-27 - TikTok Ads Faz 9 Reporting + Export Foundation
+
+Context:
+TikTok Ads Faz 8 ile sync automation hardening tamamlandı. Sıradaki ihtiyaç, TikTok Ads raporlarının task/not akışından ayrı domain entity olarak tutulması, admin/assigned ekip tarafından taslak hazırlanıp yayınlanması ve client panelde yalnızca yayınlanmış/client-visible raporların görünmesiydi.
+
+Decision:
+TikTok Ads Faz 9, Meta Ads Faz 9 pattern'inin TikTok V1 karşılığı olarak uygulanacak:
+- Yeni `TikTokAdsReport` modeli, report type/status enum'ları, Prisma migration ve seed permission genişletmeleri eklendi.
+- Admin için `GET/POST /api/v1/admin/clients/:clientId/tiktok-ads/reports` ve `PATCH /api/v1/admin/tiktok-ads/reports/:reportId` endpointleri eklendi.
+- Assigned employee için `GET/POST /api/v1/tiktok-ads/clients/:clientId/reports` ve `PATCH /api/v1/tiktok-ads/reports/:reportId` endpointleri eklendi.
+- Own client için `GET /api/v1/clients/me/tiktok-ads/reports` endpointi yalnızca `PUBLISHED + clientVisible` raporları döndürür.
+- Publish sırasında opsiyonel acknowledgement task bridge'i mevcut shared ad approval/task altyapısı üzerinden kuruldu (`TIKTOK_ADS_REPORT_ACKNOWLEDGEMENT`).
+- Admin global TikTok paneli, employee TikTok workspace'i ve client portal TikTok optimization notes sekmesi report entity akışına bağlandı.
+- Faz 9 kapsamı gerçek dosya/PDF/CSV export üretimi değil, rapor lifecycle + client-visible export foundation olarak sınırlandı.
+
+Reason:
+Bu karar TikTok raporlamasını workspace mesajı veya QA task'ına gömmek yerine sorgulanabilir, permission-aware ve client-visible bir entity haline getirir. Meta Ads ile simetri korunur, publish/ack lifecycle'ı mevcut task altyapısına bağlandığı için yeni approval modülü açmadan üretim riskini düşük tutar.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260527170000_add_tiktok_ads_reports/migration.sql`
+- `server/prisma/seed.ts`
+- `server/src/tiktok-ads/dto/create-tiktok-ads-report.dto.ts`
+- `server/src/tiktok-ads/dto/tiktok-ads-reports-query.dto.ts`
+- `server/src/tiktok-ads/dto/update-tiktok-ads-report.dto.ts`
+- `server/src/tiktok-ads/tiktok-ads.controller.ts`
+- `server/src/tiktok-ads/tiktok-ads.service.ts`
+- `server/test/tiktok-ads-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/tiktokAds/tiktokAdsApi.ts`
+- `adminandemployeePanel/src/app/features/tiktokAds/tiktokAdsTypes.ts`
+- `adminandemployeePanel/src/app/pages/TikTokAdsAdmin.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/TikTokAdsAdmin.test.tsx`
+- `adminandemployeePanel/src/app/employee/components/TikTokAdsWorkspace.tsx`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/TikTokAdsWorkspace.test.tsx`
+- `clientPanel/src/app/features/tiktokAds/tiktokAdsApi.ts`
+- `clientPanel/src/app/features/tiktokAds/tiktokAdsTypes.ts`
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+- `clientPanel/src/app/pages/__tests__/service-tab-page.tiktok-ads.test.tsx`
+- `PROJECT_CONTEXT.md`
+- `REPO_MAP.md`
+- `ROAD_MAP.md`

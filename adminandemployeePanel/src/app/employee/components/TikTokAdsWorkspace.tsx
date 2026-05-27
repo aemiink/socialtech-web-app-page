@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { type Dispatch, type FormEvent, type SetStateAction, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import {
   AlertCircle,
@@ -23,16 +23,22 @@ import type { ClientProfile, ClientsListQuery } from "../../features/clients/cli
 import { extractApiErrorMessage, formatClientDateTime } from "../../features/clients/clientsUtils";
 import { useCreateProjectWorkspaceMessageMutation, useGetProjectsQuery, useGetProjectWorkspaceMessagesQuery } from "../../features/projects/projectsApi";
 import {
+  useCreateAssignedClientTikTokAdsReportMutation,
   useGetAssignedClientTikTokAdsCampaignsQuery,
   useGetAssignedClientTikTokAdsConfigQuery,
   useGetAssignedClientTikTokAdsInsightsQuery,
+  useGetAssignedClientTikTokAdsReportsQuery,
   useGetAssignedClientTikTokAdsSummaryQuery,
   useSyncAssignedClientTikTokAdsMutation,
+  useUpdateAssignedTikTokAdsReportMutation,
 } from "../../features/tiktokAds/tiktokAdsApi";
 import type {
   TikTokAdsCampaign,
   TikTokAdsConfig,
   TikTokAdsInsightItem,
+  TikTokAdsReportItem,
+  TikTokAdsReportStatus,
+  TikTokAdsReportType,
 } from "../../features/tiktokAds/tiktokAdsTypes";
 import { useCreateTaskMutation, useGetTasksQuery, useToggleTaskTodoMutation, useUpdateTaskMutation } from "../../features/tasks/tasksApi";
 import type { CreateTaskRequest, Task, TaskTodo } from "../../features/tasks/tasksTypes";
@@ -65,7 +71,7 @@ const VIEW_LABELS: Record<TikTokAdsWorkspaceView, string> = {
   campaigns: "Kampanyalar",
   performance: "Performans",
   "video-creatives": "Video Kreatifler",
-  reports: "Rapor Notları",
+  reports: "Raporlar",
   approvals: "Onaylar",
   pixel: "Pixel",
 };
@@ -94,6 +100,32 @@ const ROLE_APPROVAL_TYPE: Record<WorkspaceMode, CreateTaskRequest["approvalType"
   designer: "TIKTOK_ADS_VIDEO_CREATIVE_APPROVAL",
 };
 
+type ReportFormState = {
+  periodStart: string;
+  periodEnd: string;
+  type: TikTokAdsReportType;
+  summary: string;
+  publishNow: boolean;
+  requestAcknowledgement: boolean;
+};
+
+const initialReportForm: ReportFormState = {
+  periodStart: "",
+  periodEnd: "",
+  type: "WEEKLY",
+  summary: "",
+  publishNow: false,
+  requestAcknowledgement: false,
+};
+
+const reportTypeOptions: Array<{ value: TikTokAdsReportType; label: string }> = [
+  { value: "WEEKLY", label: "Weekly" },
+  { value: "MONTHLY", label: "Monthly" },
+  { value: "CAMPAIGN_PERFORMANCE", label: "Campaign" },
+  { value: "CREATIVE_PERFORMANCE", label: "Creative" },
+  { value: "BUDGET_RECOMMENDATION", label: "Budget" },
+];
+
 export function TikTokAdsWorkspace({ initialView = "overview" }: TikTokAdsWorkspaceProps) {
   const currentUser = useAppSelector(selectCurrentUser);
   const workspaceMode = resolveWorkspaceMode(currentUser?.role);
@@ -102,6 +134,14 @@ export function TikTokAdsWorkspace({ initialView = "overview" }: TikTokAdsWorksp
   const canRunTikTokAdsSync = hasUserPermission(currentUser, ["tiktokAds.sync.read.assigned"]);
   const canCreateTikTokAdsApprovals = hasUserPermission(currentUser, ["tiktokAds.approvals.create.assigned"]);
   const canManageTikTokAdsCreatives = hasUserPermission(currentUser, ["tiktokAds.creatives.manage.assigned"]);
+  const canReadTikTokAdsReports = hasUserPermission(currentUser, [
+    "tiktokAds.reporting.read.assigned",
+    "reports.read",
+  ]);
+  const canManageTikTokAdsReports = hasUserPermission(currentUser, [
+    "tiktokAds.notes.manage.assigned",
+    "reports.manage",
+  ]);
   const canReadTasks = hasUserPermission(currentUser, ["tasks.read.assigned"]);
   const canCreateTask = hasUserPermission(currentUser, ["tasks.manage.assigned"]);
   const canUpdateTask = hasUserPermission(currentUser, ["tasks.update.assigned", "tasks.update.own"]);
@@ -121,6 +161,9 @@ export function TikTokAdsWorkspace({ initialView = "overview" }: TikTokAdsWorksp
   const [taskDescription, setTaskDescription] = useState("");
   const [noteBody, setNoteBody] = useState("");
   const [replyBody, setReplyBody] = useState("");
+  const [reportStatusFilter, setReportStatusFilter] = useState<TikTokAdsReportStatus | "ALL">("ALL");
+  const [reportTypeFilter, setReportTypeFilter] = useState<TikTokAdsReportType | "ALL">("ALL");
+  const [reportForm, setReportForm] = useState<ReportFormState>(initialReportForm);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [activeAction, setActiveAction] = useState<string | null>(null);
 
@@ -187,6 +230,24 @@ export function TikTokAdsWorkspace({ initialView = "overview" }: TikTokAdsWorksp
       { clientId: selectedClientId, query: { level: "AD", limit: 8 } },
       { skip: shouldSkipTikTokQueries },
     );
+  const reportsQuery = useMemo(
+    () => ({
+      ...(reportStatusFilter !== "ALL" ? { status: reportStatusFilter } : {}),
+      ...(reportTypeFilter !== "ALL" ? { type: reportTypeFilter } : {}),
+      limit: 30,
+    }),
+    [reportStatusFilter, reportTypeFilter],
+  );
+  const {
+    data: reportsResponse,
+    error: reportsError,
+    isError: isReportsError,
+    isLoading: isReportsLoading,
+    isFetching: isReportsFetching,
+  } = useGetAssignedClientTikTokAdsReportsQuery(
+    { clientId: selectedClientId, query: reportsQuery },
+    { skip: shouldSkipTikTokQueries || !canReadTikTokAdsReports },
+  );
 
   const { data: projectsResponse } = useGetProjectsQuery(
     selectedClientId.length > 0 ? { clientProfileId: selectedClientId } : undefined,
@@ -235,6 +296,10 @@ export function TikTokAdsWorkspace({ initialView = "overview" }: TikTokAdsWorksp
     useCreateProjectWorkspaceMessageMutation();
   const [syncAssignedTikTokAds, { isLoading: isSyncingAssignedTikTokAds }] =
     useSyncAssignedClientTikTokAdsMutation();
+  const [createTikTokAdsReport, { isLoading: isCreatingReport }] =
+    useCreateAssignedClientTikTokAdsReportMutation();
+  const [updateTikTokAdsReport, { isLoading: isUpdatingReport }] =
+    useUpdateAssignedTikTokAdsReportMutation();
 
   if (!workspaceMode) {
     return (
@@ -265,12 +330,16 @@ export function TikTokAdsWorkspace({ initialView = "overview" }: TikTokAdsWorksp
     ? activeView
     : ROLE_DEFAULT_VIEW[workspaceMode];
   const hasTikTokAdsProject = Boolean(tikTokAdsProjectId);
+  const reportRows = reportsResponse?.data ?? [];
+  const reportMeta = reportsResponse?.meta;
   const isActionBusy =
     isCreatingTask ||
     isUpdatingTask ||
     isTogglingTodo ||
     isCreatingMessage ||
-    isSyncingAssignedTikTokAds;
+    isSyncingAssignedTikTokAds ||
+    isCreatingReport ||
+    isUpdatingReport;
 
   async function handleSyncAssignedTikTokAds() {
     if (!selectedClientId) {
@@ -299,6 +368,117 @@ export function TikTokAdsWorkspace({ initialView = "overview" }: TikTokAdsWorksp
       setFeedback({
         type: "error",
         text: extractApiErrorMessage(error, "TikTok Ads sync çalıştırılamadı."),
+      });
+    } finally {
+      setActiveAction(null);
+    }
+  }
+
+  function normalizeOptionalText(value: string): string | undefined {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  function toReportPeriodStartIso(value: string): string {
+    return new Date(`${value}T00:00:00.000Z`).toISOString();
+  }
+
+  function toReportPeriodEndIso(value: string): string {
+    return new Date(`${value}T23:59:59.999Z`).toISOString();
+  }
+
+  async function handleCreateReportDraft(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedClientId || !canManageTikTokAdsReports || isActionBusy) {
+      return;
+    }
+
+    if (reportForm.requestAcknowledgement && !canCreateTikTokAdsApprovals) {
+      setFeedback({
+        type: "error",
+        text: "Rapor acknowledgement task'ı için `tiktokAds.approvals.create.assigned` izni gereklidir.",
+      });
+      return;
+    }
+
+    if (!reportForm.periodStart || !reportForm.periodEnd) {
+      setFeedback({
+        type: "error",
+        text: "Rapor başlangıç ve bitiş tarihi zorunludur.",
+      });
+      return;
+    }
+
+    if (reportForm.periodStart > reportForm.periodEnd) {
+      setFeedback({
+        type: "error",
+        text: "Rapor başlangıç tarihi bitiş tarihinden sonra olamaz.",
+      });
+      return;
+    }
+
+    setFeedback(null);
+    setActiveAction("report-draft");
+    try {
+      await createTikTokAdsReport({
+        clientId: selectedClientId,
+        body: {
+          periodStart: toReportPeriodStartIso(reportForm.periodStart),
+          periodEnd: toReportPeriodEndIso(reportForm.periodEnd),
+          type: reportForm.type,
+          summary: normalizeOptionalText(reportForm.summary),
+          clientVisible: reportForm.publishNow || undefined,
+          requestAcknowledgement: reportForm.requestAcknowledgement || undefined,
+        },
+      }).unwrap();
+      setReportForm(initialReportForm);
+      setFeedback({
+        type: "success",
+        text: "TikTok Ads rapor taslağı kaydedildi.",
+      });
+    } catch (error) {
+      setFeedback({
+        type: "error",
+        text: extractApiErrorMessage(error, "TikTok Ads raporu kaydedilemedi."),
+      });
+    } finally {
+      setActiveAction(null);
+    }
+  }
+
+  async function handlePublishReport(reportId: string) {
+    if (!selectedClientId || !canManageTikTokAdsReports || isActionBusy) {
+      return;
+    }
+
+    if (!canCreateTikTokAdsApprovals) {
+      setFeedback({
+        type: "error",
+        text: "Rapor publish acknowledgement task'ı için `tiktokAds.approvals.create.assigned` izni gereklidir.",
+      });
+      return;
+    }
+
+    setFeedback(null);
+    setActiveAction(reportId);
+    try {
+      await updateTikTokAdsReport({
+        reportId,
+        clientId: selectedClientId,
+        body: {
+          status: "PUBLISHED",
+          clientVisible: true,
+          requestAcknowledgement: true,
+        },
+      }).unwrap();
+      setFeedback({
+        type: "success",
+        text: "TikTok Ads raporu yayına alındı ve müşteri acknowledgement task'ı açıldı.",
+      });
+    } catch (error) {
+      setFeedback({
+        type: "error",
+        text: extractApiErrorMessage(error, "TikTok Ads raporu yayınlanamadı."),
       });
     } finally {
       setActiveAction(null);
@@ -714,14 +894,30 @@ export function TikTokAdsWorkspace({ initialView = "overview" }: TikTokAdsWorksp
                 summaryDateLabel={
                   summary ? `${summary.dateRange.since} - ${summary.dateRange.until}` : "—"
                 }
+                reportRows={reportRows}
+                reportMeta={reportMeta}
+                reportsError={reportsError}
+                isReportsLoading={isReportsLoading || isReportsFetching}
+                isReportsError={isReportsError}
+                reportStatusFilter={reportStatusFilter}
+                setReportStatusFilter={setReportStatusFilter}
+                reportTypeFilter={reportTypeFilter}
+                setReportTypeFilter={setReportTypeFilter}
+                reportForm={reportForm}
+                setReportForm={setReportForm}
                 noteBody={noteBody}
                 setNoteBody={setNoteBody}
+                canReadTikTokAdsReports={canReadTikTokAdsReports}
+                canManageTikTokAdsReports={canManageTikTokAdsReports}
+                canCreateTikTokAdsApprovals={canCreateTikTokAdsApprovals}
                 canInteractWorkspace={canInteractWorkspace}
                 canCreateTask={canCreateTask}
                 hasTikTokAdsProject={hasTikTokAdsProject}
                 isActionBusy={isActionBusy}
                 activeAction={activeAction}
                 reportTasks={tikTokAdsTasks.filter((task) => task.type === "QA")}
+                onCreateReportDraft={(event) => void handleCreateReportDraft(event)}
+                onPublishReport={(reportId) => void handlePublishReport(reportId)}
                 onCreateInternalNote={() => void handleCreateInternalNote()}
                 onCreateReportTask={() => void handleCreateRoleTask("report")}
               />
@@ -1131,33 +1327,287 @@ function VideoCreativeSection({
 
 function ReportsSection({
   summaryDateLabel,
+  reportRows,
+  reportMeta,
+  reportsError,
+  isReportsLoading,
+  isReportsError,
+  reportStatusFilter,
+  setReportStatusFilter,
+  reportTypeFilter,
+  setReportTypeFilter,
+  reportForm,
+  setReportForm,
   noteBody,
   setNoteBody,
+  canReadTikTokAdsReports,
+  canManageTikTokAdsReports,
+  canCreateTikTokAdsApprovals,
   canInteractWorkspace,
   canCreateTask,
   hasTikTokAdsProject,
   isActionBusy,
   activeAction,
   reportTasks,
+  onCreateReportDraft,
+  onPublishReport,
   onCreateInternalNote,
   onCreateReportTask,
 }: {
   summaryDateLabel: string;
+  reportRows: TikTokAdsReportItem[];
+  reportMeta: { total: number; draft: number; published: number; clientVisible: number } | undefined;
+  reportsError: unknown;
+  isReportsLoading: boolean;
+  isReportsError: boolean;
+  reportStatusFilter: TikTokAdsReportStatus | "ALL";
+  setReportStatusFilter: (value: TikTokAdsReportStatus | "ALL") => void;
+  reportTypeFilter: TikTokAdsReportType | "ALL";
+  setReportTypeFilter: (value: TikTokAdsReportType | "ALL") => void;
+  reportForm: ReportFormState;
+  setReportForm: Dispatch<SetStateAction<ReportFormState>>;
   noteBody: string;
   setNoteBody: (value: string) => void;
+  canReadTikTokAdsReports: boolean;
+  canManageTikTokAdsReports: boolean;
+  canCreateTikTokAdsApprovals: boolean;
   canInteractWorkspace: boolean;
   canCreateTask: boolean;
   hasTikTokAdsProject: boolean;
   isActionBusy: boolean;
   activeAction: string | null;
   reportTasks: Task[];
+  onCreateReportDraft: (event: FormEvent<HTMLFormElement>) => void;
+  onPublishReport: (reportId: string) => void;
   onCreateInternalNote: () => void;
   onCreateReportTask: () => void;
 }) {
   return (
     <div className="space-y-4">
-      <h3 className="text-sm font-semibold text-white">Rapor Notları</h3>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold text-white">Raporlar</h3>
+          <p className="text-xs text-[#A0A0A0]">Rapor aralığı: {summaryDateLabel}</p>
+        </div>
+        {reportMeta ? (
+          <p className="text-xs text-[#A0A0A0]">
+            Toplam: {reportMeta.total} · Draft: {reportMeta.draft} · Published: {reportMeta.published}
+          </p>
+        ) : null}
+      </div>
+
+      {!canReadTikTokAdsReports ? (
+        <p className="rounded border border-orange-500/25 bg-orange-500/10 p-3 text-sm text-orange-200">
+          TikTok Ads raporlarını okumak için `tiktokAds.reporting.read.assigned` ve `reports.read`
+          izinleri gerekir.
+        </p>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="employee-tiktok-report-status">Status</Label>
+              <select
+                id="employee-tiktok-report-status"
+                className="h-10 rounded-md border border-white/[0.12] bg-[#131313] px-3 text-sm text-white"
+                value={reportStatusFilter}
+                onChange={(event) => setReportStatusFilter(event.target.value as TikTokAdsReportStatus | "ALL")}
+              >
+                <option value="ALL">All</option>
+                <option value="DRAFT">Draft</option>
+                <option value="PUBLISHED">Published</option>
+                <option value="ARCHIVED">Archived</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="employee-tiktok-report-type">Tip</Label>
+              <select
+                id="employee-tiktok-report-type"
+                className="h-10 rounded-md border border-white/[0.12] bg-[#131313] px-3 text-sm text-white"
+                value={reportTypeFilter}
+                onChange={(event) => setReportTypeFilter(event.target.value as TikTokAdsReportType | "ALL")}
+              >
+                <option value="ALL">All</option>
+                {reportTypeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-end">
+              <p className="text-xs text-[#A0A0A0]">
+                Yayınlanan raporlar müşteri panelinde görünür; ack istenirse müşteri task akışına düşer.
+              </p>
+            </div>
+          </div>
+
+          <form
+            className="grid grid-cols-1 gap-3 rounded-lg border border-white/[0.08] p-4"
+            onSubmit={onCreateReportDraft}
+          >
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="employee-tiktok-report-period-start">Dönem Başlangıç</Label>
+                <Input
+                  id="employee-tiktok-report-period-start"
+                  type="date"
+                  value={reportForm.periodStart}
+                  onChange={(event) =>
+                    setReportForm((prev) => ({
+                      ...prev,
+                      periodStart: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="employee-tiktok-report-period-end">Dönem Bitiş</Label>
+                <Input
+                  id="employee-tiktok-report-period-end"
+                  type="date"
+                  value={reportForm.periodEnd}
+                  onChange={(event) =>
+                    setReportForm((prev) => ({
+                      ...prev,
+                      periodEnd: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="employee-tiktok-report-create-type">Rapor Tipi</Label>
+                <select
+                  id="employee-tiktok-report-create-type"
+                  className="h-10 rounded-md border border-white/[0.12] bg-[#131313] px-3 text-sm text-white"
+                  value={reportForm.type}
+                  onChange={(event) =>
+                    setReportForm((prev) => ({
+                      ...prev,
+                      type: event.target.value as TikTokAdsReportType,
+                    }))
+                  }
+                >
+                  {reportTypeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-end gap-4 text-sm text-[#DADADA]">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-[#AAFF01]"
+                    checked={reportForm.publishNow}
+                    onChange={(event) =>
+                      setReportForm((prev) => ({
+                        ...prev,
+                        publishNow: event.target.checked,
+                      }))
+                    }
+                  />
+                  Hemen yayınla
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-[#AAFF01]"
+                    checked={reportForm.requestAcknowledgement}
+                    onChange={(event) =>
+                      setReportForm((prev) => ({
+                        ...prev,
+                        requestAcknowledgement: event.target.checked,
+                      }))
+                    }
+                  />
+                  Ack iste
+                </label>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="employee-tiktok-report-summary">Özet</Label>
+              <Input
+                id="employee-tiktok-report-summary"
+                value={reportForm.summary}
+                onChange={(event) =>
+                  setReportForm((prev) => ({
+                    ...prev,
+                    summary: event.target.value,
+                  }))
+                }
+                placeholder="Haftalık TikTok Ads performans özeti..."
+              />
+            </div>
+            <Button
+              type="submit"
+              size="sm"
+              className="w-fit bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
+              disabled={!canManageTikTokAdsReports || !hasTikTokAdsProject || isActionBusy}
+            >
+              {activeAction === "report-draft" ? "Kaydediliyor..." : "Taslak Kaydet"}
+            </Button>
+          </form>
+
+          {isReportsLoading ? <p className="text-sm text-[#A0A0A0]">Raporlar yükleniyor...</p> : null}
+          {isReportsError ? (
+            <p className="text-sm text-red-300">
+              {extractApiErrorMessage(reportsError, "TikTok Ads raporları alınamadı.")}
+            </p>
+          ) : null}
+          {!isReportsLoading && !isReportsError && reportRows.length === 0 ? (
+            <p className="text-sm text-[#A0A0A0]">Seçili filtre için rapor kaydı bulunmuyor.</p>
+          ) : null}
+          {!isReportsLoading && !isReportsError && reportRows.length > 0 ? (
+            <div className="space-y-2">
+              {reportRows.map((report) => (
+                <div
+                  key={report.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded border border-white/[0.08] bg-white/5 p-3"
+                >
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-medium text-white">
+                        {formatReportPeriod(report.periodStart, report.periodEnd)}
+                      </span>
+                      <span className="rounded-md bg-white/[0.08] px-2 py-1 text-xs text-[#DADADA]">
+                        {formatReportTypeLabel(report.type)}
+                      </span>
+                      <span className={`rounded-md px-2 py-1 text-xs ${getReportStatusClassName(report.status)}`}>
+                        {report.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#DADADA]">{report.summary ?? "Rapor özeti girilmedi."}</p>
+                    <p className="text-xs text-[#A0A0A0]">Ack: {report.acknowledgementStatus}</p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onPublishReport(report.id)}
+                    disabled={
+                      report.status === "PUBLISHED" ||
+                      !canManageTikTokAdsReports ||
+                      !canCreateTikTokAdsApprovals ||
+                      isActionBusy
+                    }
+                    title={
+                      canCreateTikTokAdsApprovals
+                        ? undefined
+                        : "Publish acknowledgement için approval oluşturma izni gerekir."
+                    }
+                  >
+                    {activeAction === report.id ? "Yayınlanıyor..." : "Publish + Ack"}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </>
+      )}
+
       <p className="text-xs text-[#A0A0A0]">Rapor aralığı: {summaryDateLabel}</p>
+      <h4 className="text-sm font-semibold text-white">Ajans Notları ve Rapor Task'ları</h4>
       <Textarea
         placeholder="Kampanya değerlendirme notu..."
         value={noteBody}
@@ -1344,6 +1794,36 @@ function resolveNextTaskStatus(status: Task["status"]): Task["status"] | null {
 
 function formatApprovalType(value: string): string {
   return value.replace("TIKTOK_ADS_", "").replace("META_ADS_", "").replace(/_/g, " ");
+}
+
+function getReportStatusClassName(status: TikTokAdsReportStatus): string {
+  const classes: Record<TikTokAdsReportStatus, string> = {
+    DRAFT: "bg-white/[0.08] text-[#DADADA]",
+    PUBLISHED: "bg-[#AAFF01]/15 text-[#AAFF01]",
+    ARCHIVED: "bg-orange-500/15 text-orange-200",
+  };
+  return classes[status] ?? "bg-white/[0.08] text-[#DADADA]";
+}
+
+function formatReportTypeLabel(type: TikTokAdsReportType): string {
+  const labels: Record<TikTokAdsReportType, string> = {
+    WEEKLY: "Weekly",
+    MONTHLY: "Monthly",
+    CAMPAIGN_PERFORMANCE: "Campaign",
+    CREATIVE_PERFORMANCE: "Creative",
+    BUDGET_RECOMMENDATION: "Budget",
+  };
+  return labels[type] ?? type;
+}
+
+function formatReportPeriod(periodStart: string, periodEnd: string): string {
+  const start = new Date(periodStart);
+  const end = new Date(periodEnd);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return "—";
+  }
+
+  return `${start.toLocaleDateString("tr-TR")} - ${end.toLocaleDateString("tr-TR")}`;
 }
 
 function formatCurrency(value: number): string {

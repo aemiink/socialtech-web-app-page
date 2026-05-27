@@ -50,9 +50,10 @@ import {
   useGetOwnTikTokAdsCampaignsQuery,
   useGetOwnTikTokAdsConfigQuery,
   useGetOwnTikTokAdsInsightsQuery,
+  useGetOwnTikTokAdsReportsQuery,
   useGetOwnTikTokAdsSummaryQuery,
 } from '../features/tiktokAds/tiktokAdsApi';
-import type { TikTokAdsCampaign, TikTokAdsInsightItem } from '../features/tiktokAds/tiktokAdsTypes';
+import type { TikTokAdsCampaign, TikTokAdsInsightItem, TikTokAdsReportItem } from '../features/tiktokAds/tiktokAdsTypes';
 import type { ProjectFile } from '../features/projectFiles/projectFilesTypes';
 import { useGetClientProjectFilesQuery } from '../features/projectFiles/projectFilesApi';
 import { useGetClientTasksQuery, useUpdateClientTaskApprovalMutation } from '../features/tasks/tasksApi';
@@ -1369,6 +1370,14 @@ function TikTokAdsServiceTab({
     { skip: shouldSkipReportingQueries },
   );
   const {
+    data: tiktokReportsResponse,
+    isLoading: isTikTokReportsLoading,
+    isError: isTikTokReportsError,
+  } = useGetOwnTikTokAdsReportsQuery(
+    { limit: 20 },
+    { skip: !isConnected || tabId !== "optimization-notes" },
+  );
+  const {
     data: ugcTasks = [],
     isLoading: isUgcTasksLoading,
     isError: isUgcTasksError,
@@ -1380,6 +1389,7 @@ function TikTokAdsServiceTab({
   const campaigns = campaignsResponse?.data ?? [];
   const adGroups = adGroupInsightsResponse?.data ?? [];
   const ads = adInsightsResponse?.data ?? [];
+  const tiktokReports = tiktokReportsResponse?.data ?? [];
   const tiktokTasks = useMemo(
     () =>
       ugcTasks
@@ -1575,7 +1585,14 @@ function TikTokAdsServiceTab({
       ) : null}
 
       {tabId === "optimization-notes" ? (
-        <TikTokOptimizationNotesPanel notes={notes} loading={isCampaignsLoading || isAdsLoading || isSummaryLoading} />
+        <div className="space-y-6">
+          <TikTokAdsReportPanel
+            rows={tiktokReports}
+            loading={isTikTokReportsLoading}
+            isError={isTikTokReportsError}
+          />
+          <TikTokOptimizationNotesPanel notes={notes} loading={isCampaignsLoading || isAdsLoading || isSummaryLoading} />
+        </div>
       ) : null}
     </div>
   );
@@ -2194,6 +2211,67 @@ function MetaAdsReportPanel({
   );
 }
 
+function TikTokAdsReportPanel({
+  rows,
+  loading,
+  isError,
+}: {
+  rows: TikTokAdsReportItem[];
+  loading: boolean;
+  isError: boolean;
+}) {
+  if (loading) {
+    return <MetaAdsStatePanel title="TikTok Ads rapor listesi yükleniyor..." />;
+  }
+
+  if (isError) {
+    return (
+      <MetaAdsStatePanel
+        title="TikTok Ads raporları alınamadı"
+        description="TikTok Ads rapor listesi şu anda ulaşılamıyor."
+        tone="error"
+      />
+    );
+  }
+
+  if (rows.length === 0) {
+    return <MetaAdsStatePanel title="Yayınlanmış TikTok Ads raporu bulunamadı." tone="muted" />;
+  }
+
+  return (
+    <div className="space-y-3">
+      {rows.map((row) => {
+        const hasMetricsSnapshot = row.metricsSnapshot !== null;
+
+        return (
+          <div key={row.id} className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded border border-[#00D4FF]/20 bg-[#00D4FF]/10 px-2 py-1 text-[11px] text-[#00D4FF]">
+                  {getTikTokAdsReportTypeLabel(row.type)}
+                </span>
+                <span className="rounded border border-[#AAFF01]/20 bg-[#AAFF01]/10 px-2 py-1 text-[11px] text-[#AAFF01]">
+                  {getTikTokAdsReportStatusLabel(row.status)}
+                </span>
+              </div>
+              <span className="text-xs text-[#A0A0A0]">
+                {new Date(row.periodStart).toLocaleDateString("tr-TR")} -{" "}
+                {new Date(row.periodEnd).toLocaleDateString("tr-TR")}
+              </span>
+            </div>
+            <p className="text-sm text-white">{row.summary ?? "Rapor özeti girilmedi."}</p>
+            <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-[#A0A0A0] md:grid-cols-3">
+              <p>Yayın: {row.publishedAt ? new Date(row.publishedAt).toLocaleString("tr-TR") : "Taslak"}</p>
+              <p>Onay: {getTikTokAdsReportAcknowledgementLabel(row.acknowledgementStatus)}</p>
+              <p>Snapshot: {hasMetricsSnapshot ? "Var" : "Yok"}</p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function getMetaAdsReportTypeLabel(type: MetaAdsReportItem["type"]): string {
   if (type === "WEEKLY") {
     return "Haftalık";
@@ -2228,6 +2306,56 @@ function getMetaAdsReportStatusLabel(status: MetaAdsReportItem["status"]): strin
 
 function getMetaAdsReportAcknowledgementLabel(
   status: MetaAdsReportItem["acknowledgementStatus"],
+): string {
+  if (status === "NOT_REQUESTED") {
+    return "Talep Yok";
+  }
+  if (status === "PENDING") {
+    return "Müşteri Onayı Bekliyor";
+  }
+  if (status === "ACKNOWLEDGED") {
+    return "Onaylandı";
+  }
+  if (status === "CHANGES_REQUESTED") {
+    return "Revizyon İstendi";
+  }
+  return status;
+}
+
+function getTikTokAdsReportTypeLabel(type: TikTokAdsReportItem["type"]): string {
+  if (type === "WEEKLY") {
+    return "Haftalık";
+  }
+  if (type === "MONTHLY") {
+    return "Aylık";
+  }
+  if (type === "CAMPAIGN_PERFORMANCE") {
+    return "Kampanya Performansı";
+  }
+  if (type === "CREATIVE_PERFORMANCE") {
+    return "Kreatif Performansı";
+  }
+  if (type === "BUDGET_RECOMMENDATION") {
+    return "Bütçe Önerisi";
+  }
+  return type;
+}
+
+function getTikTokAdsReportStatusLabel(status: TikTokAdsReportItem["status"]): string {
+  if (status === "DRAFT") {
+    return "Taslak";
+  }
+  if (status === "PUBLISHED") {
+    return "Yayında";
+  }
+  if (status === "ARCHIVED") {
+    return "Arşiv";
+  }
+  return status;
+}
+
+function getTikTokAdsReportAcknowledgementLabel(
+  status: TikTokAdsReportItem["acknowledgementStatus"],
 ): string {
   if (status === "NOT_REQUESTED") {
     return "Talep Yok";

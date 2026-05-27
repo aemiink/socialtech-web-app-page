@@ -1,9 +1,13 @@
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import {
+  MetaAdsApprovalType,
   PrismaClient,
   PurchasedServiceKey,
   PurchasedServiceStatus,
+  TikTokAdsReportStatus,
+  TikTokAdsReportType,
+  UserRole,
 } from "@prisma/client";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
@@ -18,6 +22,7 @@ const SENSITIVE_RESPONSE_TOKENS = [
   "tokenHash",
   "refreshTokenEnc",
 ] as const;
+const CLIENT_OWN_TIKTOK_ADS_REPORTS_PATH = "/api/v1/clients/me/tiktok-ads/reports";
 
 describe("TikTok Ads Config Authz (e2e)", () => {
   let app: INestApplication;
@@ -26,6 +31,7 @@ describe("TikTok Ads Config Authz (e2e)", () => {
   let employeeToken: string;
   let clientToken: string;
   let clientProfileId: string;
+  let tikTokAdsProjectId: string;
   let previousTikTokTokenEncryptionKey: string | undefined;
 
   beforeAll(async () => {
@@ -159,6 +165,26 @@ describe("TikTok Ads Config Authz (e2e)", () => {
           status: PurchasedServiceStatus.ACTIVE,
         },
       });
+
+      const project = await prisma.project.upsert({
+        where: {
+          clientProfileId_slug: {
+            clientProfileId,
+            slug: "tiktok-ads-e2e-project",
+          },
+        },
+        update: {
+          serviceKey: PurchasedServiceKey.TIKTOK_ADS,
+        },
+        create: {
+          clientProfileId,
+          serviceKey: PurchasedServiceKey.TIKTOK_ADS,
+          name: "TikTok Ads E2E Project",
+          slug: "tiktok-ads-e2e-project",
+        },
+        select: { id: true },
+      });
+      tikTokAdsProjectId = project.id;
     }
   });
 
@@ -503,6 +529,209 @@ describe("TikTok Ads Config Authz (e2e)", () => {
       expect(clientRes.status).toBe(403);
     });
 
+    it("admin can create TikTok Ads report draft", async () => {
+      if (!clientProfileId) return;
+      const res = await request(app.getHttpServer())
+        .post(adminTikTokAdsReportsPath(clientProfileId))
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({
+          periodStart: "2026-05-01T00:00:00.000Z",
+          periodEnd: "2026-05-07T23:59:59.000Z",
+          type: TikTokAdsReportType.WEEKLY,
+          summary: "TikTok haftalık performans özeti",
+        });
+
+      expect([200, 201]).toContain(res.status);
+      expect(res.body).toEqual(
+        expect.objectContaining({
+          clientProfileId,
+          type: TikTokAdsReportType.WEEKLY,
+          status: TikTokAdsReportStatus.DRAFT,
+          clientVisible: false,
+          acknowledgementStatus: "NOT_REQUESTED",
+        }),
+      );
+      expectResponseHasNoSensitiveTokenData(res.body);
+    });
+
+    it("assigned employee can create TikTok report and request acknowledgement", async () => {
+      if (!clientProfileId) return;
+      const res = await request(app.getHttpServer())
+        .post(assignedTikTokAdsReportsPath(clientProfileId))
+        .set("Authorization", `Bearer ${employeeToken}`)
+        .send({
+          projectId: tikTokAdsProjectId,
+          periodStart: "2026-05-01T00:00:00.000Z",
+          periodEnd: "2026-05-07T23:59:59.000Z",
+          type: TikTokAdsReportType.CAMPAIGN_PERFORMANCE,
+          summary: "TikTok kampanya performans raporu",
+          requestAcknowledgement: true,
+        });
+
+      expect([200, 201]).toContain(res.status);
+      expect(res.body).toEqual(
+        expect.objectContaining({
+          clientProfileId,
+          status: TikTokAdsReportStatus.PUBLISHED,
+          clientVisible: true,
+          acknowledgementStatus: "PENDING",
+          acknowledgementTaskId: expect.any(String),
+        }),
+      );
+
+      const acknowledgementTask = await prisma.task.findUnique({
+        where: { id: res.body.acknowledgementTaskId },
+        select: {
+          approvalType: true,
+          approvalStatus: true,
+          project: {
+            select: {
+              clientProfileId: true,
+            },
+          },
+        },
+      });
+
+      expect(acknowledgementTask?.approvalType).toBe(
+        MetaAdsApprovalType.TIKTOK_ADS_REPORT_ACKNOWLEDGEMENT,
+      );
+      expect(acknowledgementTask?.approvalStatus).toBe("PENDING");
+      expect(acknowledgementTask?.project.clientProfileId).toBe(clientProfileId);
+      expectResponseHasNoSensitiveTokenData(res.body);
+    });
+
+    it("assigned report read requires tiktokAds.reporting.read.assigned permission", async () => {
+      if (!clientProfileId) return;
+      const permission = await prisma.permission.findUnique({
+        where: { slug: "tiktokAds.reporting.read.assigned" },
+        select: { id: true },
+      });
+      if (!permission) {
+        throw new Error("Expected tiktokAds.reporting.read.assigned permission to exist.");
+      }
+
+      await prisma.rolePermission.deleteMany({
+        where: {
+          role: UserRole.PERFORMANCE_SPECIALIST,
+          permissionId: permission.id,
+        },
+      });
+
+      try {
+        await request(app.getHttpServer())
+          .get(assignedTikTokAdsReportsPath(clientProfileId))
+          .set("Authorization", `Bearer ${employeeToken}`)
+          .expect(403);
+      } finally {
+        await prisma.rolePermission.createMany({
+          data: [{ role: UserRole.PERFORMANCE_SPECIALIST, permissionId: permission.id }],
+          skipDuplicates: true,
+        });
+      }
+    });
+
+    it("draft TikTok report is not visible in client own reports endpoint", async () => {
+      if (!clientProfileId) return;
+      const draftReport = await prisma.tikTokAdsReport.create({
+        data: {
+          clientProfileId,
+          periodStart: new Date("2026-05-01T00:00:00.000Z"),
+          periodEnd: new Date("2026-05-07T23:59:59.000Z"),
+          type: TikTokAdsReportType.WEEKLY,
+          status: TikTokAdsReportStatus.DRAFT,
+          summary: "TikTok draft report",
+          clientVisible: false,
+        },
+        select: { id: true },
+      });
+
+      const res = await request(app.getHttpServer())
+        .get(CLIENT_OWN_TIKTOK_ADS_REPORTS_PATH)
+        .set("Authorization", `Bearer ${clientToken}`);
+
+      expect(res.status).toBe(200);
+      const rowIds = Array.isArray(res.body.data)
+        ? res.body.data.map((row: { id?: string }) => row.id).filter(Boolean)
+        : [];
+      expect(rowIds).not.toContain(draftReport.id);
+      expectResponseHasNoSensitiveTokenData(res.body);
+    });
+
+    it("clientVisible TikTok report is visible in own client reports endpoint", async () => {
+      if (!clientProfileId) return;
+      const visibleReport = await prisma.tikTokAdsReport.create({
+        data: {
+          clientProfileId,
+          periodStart: new Date("2026-05-08T00:00:00.000Z"),
+          periodEnd: new Date("2026-05-14T23:59:59.000Z"),
+          type: TikTokAdsReportType.MONTHLY,
+          status: TikTokAdsReportStatus.PUBLISHED,
+          summary: "TikTok visible monthly report",
+          clientVisible: true,
+          publishedAt: new Date("2026-05-15T09:00:00.000Z"),
+        },
+        select: { id: true },
+      });
+
+      const res = await request(app.getHttpServer())
+        .get(CLIENT_OWN_TIKTOK_ADS_REPORTS_PATH)
+        .set("Authorization", `Bearer ${clientToken}`);
+
+      expect(res.status).toBe(200);
+      const rowIds = Array.isArray(res.body.data)
+        ? res.body.data.map((row: { id?: string }) => row.id).filter(Boolean)
+        : [];
+      expect(rowIds).toContain(visibleReport.id);
+      expectResponseHasNoSensitiveTokenData(res.body);
+    });
+
+    it("publish TikTok report can request acknowledgement task", async () => {
+      if (!clientProfileId) return;
+      const report = await prisma.tikTokAdsReport.create({
+        data: {
+          clientProfileId,
+          projectId: tikTokAdsProjectId,
+          periodStart: new Date("2026-05-01T00:00:00.000Z"),
+          periodEnd: new Date("2026-05-07T23:59:59.000Z"),
+          type: TikTokAdsReportType.BUDGET_RECOMMENDATION,
+          status: TikTokAdsReportStatus.DRAFT,
+          summary: "TikTok bütçe öneri raporu",
+          clientVisible: false,
+        },
+        select: { id: true },
+      });
+
+      const res = await request(app.getHttpServer())
+        .patch(adminTikTokAdsReportPath(report.id))
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({
+          status: TikTokAdsReportStatus.PUBLISHED,
+          requestAcknowledgement: true,
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual(
+        expect.objectContaining({
+          id: report.id,
+          status: TikTokAdsReportStatus.PUBLISHED,
+          clientVisible: true,
+          acknowledgementStatus: "PENDING",
+          acknowledgementTaskId: expect.any(String),
+        }),
+      );
+
+      const linkedTask = await prisma.task.findUnique({
+        where: { id: res.body.acknowledgementTaskId },
+        select: {
+          approvalType: true,
+          approvalStatus: true,
+        },
+      });
+      expect(linkedTask?.approvalType).toBe(MetaAdsApprovalType.TIKTOK_ADS_REPORT_ACKNOWLEDGEMENT);
+      expect(linkedTask?.approvalStatus).toBe("PENDING");
+      expectResponseHasNoSensitiveTokenData(res.body);
+    });
+
     it("non-admin users cannot read global tiktok ads client list", async () => {
       const unauthenticatedRes = await request(app.getHttpServer()).get(
         "/api/v1/admin/tiktok-ads/clients",
@@ -583,6 +812,18 @@ function expectResponseHasNoSensitiveTokenData(payload: unknown): void {
   for (const sensitiveToken of SENSITIVE_RESPONSE_TOKENS) {
     expect(serializedPayload).not.toContain(sensitiveToken);
   }
+}
+
+function adminTikTokAdsReportsPath(clientId: string): string {
+  return `/api/v1/admin/clients/${clientId}/tiktok-ads/reports`;
+}
+
+function adminTikTokAdsReportPath(reportId: string): string {
+  return `/api/v1/admin/tiktok-ads/reports/${reportId}`;
+}
+
+function assignedTikTokAdsReportsPath(clientId: string): string {
+  return `/api/v1/tiktok-ads/clients/${clientId}/reports`;
 }
 
 function createTikTokInsightRow(overrides: {

@@ -2,6 +2,7 @@ import {
   AccountType,
   DeliveryReleaseApprovalStatus,
   MetaAdsApprovalStatus,
+  MetaAdsApprovalType,
   Prisma,
   PurchasedServiceKey,
   PurchasedServiceStatus,
@@ -9,6 +10,8 @@ import {
   TaskType,
   TikTokAdsConnectionStatus,
   TikTokAdsInsightLevel,
+  TikTokAdsReportStatus,
+  TikTokAdsReportType,
   TikTokAdsSyncStatus,
   UserRole,
 } from "@prisma/client";
@@ -23,11 +26,14 @@ import { ConfigService } from "@nestjs/config";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { PrismaService } from "../database/prisma.service";
 import { ConnectManualTikTokAdsDto } from "./dto/connect-manual-tiktok-ads.dto";
+import { CreateTikTokAdsReportDto } from "./dto/create-tiktok-ads-report.dto";
 import { TestTikTokAdsConnectionDto } from "./dto/test-tiktok-ads-connection.dto";
 import { TikTokAdsCampaignsQueryDto } from "./dto/tiktok-ads-campaigns-query.dto";
 import { TikTokAdsDateRangeQueryDto } from "./dto/tiktok-ads-date-range-query.dto";
 import { TikTokAdsInsightsQueryDto } from "./dto/tiktok-ads-insights-query.dto";
+import { TikTokAdsReportsQueryDto } from "./dto/tiktok-ads-reports-query.dto";
 import { TikTokAdsSyncLogsQueryDto } from "./dto/tiktok-ads-sync-logs-query.dto";
+import { UpdateTikTokAdsReportDto } from "./dto/update-tiktok-ads-report.dto";
 import { UpdateTikTokAdsConfigDto } from "./dto/update-tiktok-ads-config.dto";
 import {
   NormalizedTikTokAdsApiError,
@@ -43,7 +49,14 @@ const TIKTOK_ADS_CONFIG_READ_ANY_PERMISSION = "tiktokAds.config.read.any";
 const TIKTOK_ADS_CONFIG_MANAGE_ANY_PERMISSION = "tiktokAds.config.manage.any";
 const TIKTOK_ADS_CONFIG_READ_ASSIGNED_PERMISSION = "tiktokAds.config.read.assigned";
 const TIKTOK_ADS_CONFIG_READ_OWN_PERMISSION = "tiktokAds.config.read.own";
+const TIKTOK_ADS_REPORTING_READ_ASSIGNED_PERMISSION = "tiktokAds.reporting.read.assigned";
+const TIKTOK_ADS_REPORTING_READ_OWN_PERMISSION = "tiktokAds.reporting.read.own";
+const TIKTOK_ADS_NOTES_MANAGE_ASSIGNED_PERMISSION = "tiktokAds.notes.manage.assigned";
+const TIKTOK_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION = "tiktokAds.approvals.create.assigned";
 const TIKTOK_ADS_SYNC_READ_ASSIGNED_PERMISSION = "tiktokAds.sync.read.assigned";
+const REPORTS_READ_PERMISSION = "reports.read";
+const REPORTS_MANAGE_PERMISSION = "reports.manage";
+const REPORTS_READ_OWN_PERMISSION = "reports.read.own";
 const DEFAULT_TIKTOK_TOKEN_LIFETIME_DAYS = 365;
 const DEFAULT_REPORTING_RANGE_DAYS = 7;
 const MAX_REPORTING_RANGE_DAYS = 90;
@@ -119,6 +132,38 @@ const tikTokAdsSyncLogSelect = {
   createdAt: true,
 } satisfies Prisma.TikTokAdsSyncLogSelect;
 
+const tikTokAdsReportSelect = {
+  id: true,
+  clientProfileId: true,
+  projectId: true,
+  periodStart: true,
+  periodEnd: true,
+  type: true,
+  status: true,
+  summary: true,
+  metricsSnapshot: true,
+  clientVisible: true,
+  publishedAt: true,
+  acknowledgementRequestedAt: true,
+  acknowledgedAt: true,
+  createdAt: true,
+  updatedAt: true,
+  project: {
+    select: {
+      id: true,
+      name: true,
+    },
+  },
+  acknowledgementTask: {
+    select: {
+      id: true,
+      approvalStatus: true,
+      status: true,
+      updatedAt: true,
+    },
+  },
+} satisfies Prisma.TikTokAdsReportSelect;
+
 type AdminTikTokAdsConfigModel = Prisma.ClientTikTokAdsConfigGetPayload<{
   select: typeof adminTikTokAdsConfigSelect;
 }>;
@@ -129,6 +174,10 @@ type TikTokAdsCredentialSummaryModel = Prisma.ClientTikTokAdsCredentialGetPayloa
 
 type TikTokAdsDailyInsightModel = Prisma.TikTokAdsDailyInsightGetPayload<{
   select: typeof tikTokAdsDailyInsightSelect;
+}>;
+
+type TikTokAdsReportModel = Prisma.TikTokAdsReportGetPayload<{
+  select: typeof tikTokAdsReportSelect;
 }>;
 
 type TikTokAdsConfigPatchData = {
@@ -409,6 +458,44 @@ type AdminTikTokAdsSyncLogsResponse = {
     failed: number;
     running: number;
     skipped: number;
+  };
+};
+
+type TikTokAdsReportAcknowledgementStatus =
+  | "NOT_REQUESTED"
+  | "PENDING"
+  | "ACKNOWLEDGED"
+  | "CHANGES_REQUESTED";
+
+type TikTokAdsReportItem = {
+  id: string;
+  clientProfileId: string;
+  projectId: string | null;
+  projectName: string | null;
+  periodStart: string;
+  periodEnd: string;
+  type: TikTokAdsReportType;
+  status: TikTokAdsReportStatus;
+  summary: string | null;
+  metricsSnapshot: Prisma.JsonValue | null;
+  clientVisible: boolean;
+  publishedAt: string | null;
+  acknowledgementRequestedAt: string | null;
+  acknowledgedAt: string | null;
+  acknowledgementStatus: TikTokAdsReportAcknowledgementStatus;
+  acknowledgementTaskId: string | null;
+  acknowledgementTaskUpdatedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type TikTokAdsReportsResponse = {
+  data: TikTokAdsReportItem[];
+  meta: {
+    total: number;
+    draft: number;
+    published: number;
+    clientVisible: number;
   };
 };
 
@@ -1074,6 +1161,45 @@ export class TikTokAdsService {
     });
   }
 
+  async getAdminClientReports(
+    clientId: string,
+    query: TikTokAdsReportsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<TikTokAdsReportsResponse> {
+    this.assertCanReadAnyConfig(actor);
+    this.assertCanReadReports(actor);
+    await this.assertClientExists(clientId);
+    await this.assertClientHasActiveTikTokAdsService(clientId);
+
+    return this.getReportsByClientProfileId(clientId, query, {
+      onlyClientVisible: false,
+    });
+  }
+
+  async createAdminClientReport(
+    clientId: string,
+    dto: CreateTikTokAdsReportDto,
+    actor: AuthenticatedUser,
+  ): Promise<TikTokAdsReportItem> {
+    this.assertCanManageAnyConfig(actor);
+    this.assertCanManageReports(actor);
+    await this.assertClientExists(clientId);
+    await this.assertClientHasActiveTikTokAdsService(clientId);
+
+    return this.createReportByClientProfileId(actor, clientId, dto);
+  }
+
+  async updateAdminReport(
+    reportId: string,
+    dto: UpdateTikTokAdsReportDto,
+    actor: AuthenticatedUser,
+  ): Promise<TikTokAdsReportItem> {
+    this.assertCanManageAnyConfig(actor);
+    this.assertCanManageReports(actor);
+
+    return this.updateReportById(actor, reportId, dto, { scope: "ANY" });
+  }
+
   // ─── Assigned employee: read config ─────────────────────────────────────────
 
   async getAssignedClientConfig(clientId: string, actor: AuthenticatedUser) {
@@ -1132,6 +1258,54 @@ export class TikTokAdsService {
       trigger: "ON_DEMAND_ASSIGNED_REFRESH",
       applySyncTtl: true,
       revealDetailedError: true,
+    });
+  }
+
+  async getAssignedClientReports(
+    clientId: string,
+    query: TikTokAdsReportsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<TikTokAdsReportsResponse> {
+    this.assertCanReadAssignedConfig(actor);
+    this.assertCanReadAssignedReporting(actor);
+    await this.assertActiveAssignment(clientId, actor.id);
+    await this.assertClientHasActiveTikTokAdsService(clientId);
+
+    return this.getReportsByClientProfileId(clientId, query, {
+      onlyClientVisible: false,
+    });
+  }
+
+  async createAssignedClientReport(
+    clientId: string,
+    dto: CreateTikTokAdsReportDto,
+    actor: AuthenticatedUser,
+  ): Promise<TikTokAdsReportItem> {
+    this.assertCanReadAssignedConfig(actor);
+    this.assertCanManageAssignedNotes(actor);
+    if (dto.requestAcknowledgement === true) {
+      this.assertCanCreateAssignedApprovals(actor);
+    }
+    await this.assertActiveAssignment(clientId, actor.id);
+    await this.assertClientHasActiveTikTokAdsService(clientId);
+
+    return this.createReportByClientProfileId(actor, clientId, dto);
+  }
+
+  async updateAssignedReport(
+    reportId: string,
+    dto: UpdateTikTokAdsReportDto,
+    actor: AuthenticatedUser,
+  ): Promise<TikTokAdsReportItem> {
+    this.assertCanReadAssignedConfig(actor);
+    this.assertCanManageAssignedNotes(actor);
+    if (dto.requestAcknowledgement === true) {
+      this.assertCanCreateAssignedApprovals(actor);
+    }
+
+    return this.updateReportById(actor, reportId, dto, {
+      scope: "ASSIGNED",
+      employeeUserId: actor.id,
     });
   }
 
@@ -1218,6 +1392,21 @@ export class TikTokAdsService {
       trigger: "ON_DEMAND_CLIENT_REFRESH",
       applySyncTtl: true,
       revealDetailedError: false,
+    });
+  }
+
+  async getOwnClientReports(
+    query: TikTokAdsReportsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<TikTokAdsReportsResponse> {
+    this.assertCanReadOwnConfig(actor);
+    this.assertCanReadOwnReports(actor);
+    const clientProfileId = this.getClientProfileIdOrFail(actor);
+    await this.assertClientExists(clientProfileId);
+    await this.assertClientHasActiveTikTokAdsService(clientProfileId);
+
+    return this.getReportsByClientProfileId(clientProfileId, query, {
+      onlyClientVisible: true,
     });
   }
 
@@ -1607,6 +1796,478 @@ export class TikTokAdsService {
       throw this.toConnectionTestException(connectionErrorInfo, {
         revealDetailedError: options.revealDetailedError,
       });
+    }
+  }
+
+  private async getReportsByClientProfileId(
+    clientId: string,
+    query: TikTokAdsReportsQueryDto,
+    options: {
+      onlyClientVisible: boolean;
+    },
+  ): Promise<TikTokAdsReportsResponse> {
+    const where: Prisma.TikTokAdsReportWhereInput = {
+      clientProfileId: clientId,
+    };
+
+    if (options.onlyClientVisible) {
+      where.clientVisible = true;
+    } else if (query.clientVisible !== undefined) {
+      where.clientVisible = query.clientVisible;
+    }
+
+    if (query.status !== undefined) {
+      where.status = query.status;
+    }
+
+    if (query.type !== undefined) {
+      where.type = query.type;
+    }
+
+    const statsWhere: Prisma.TikTokAdsReportWhereInput = {
+      clientProfileId: clientId,
+      ...(options.onlyClientVisible ? { clientVisible: true } : {}),
+    };
+    const limit = query.limit ?? 30;
+
+    const [reports, total, draft, published, clientVisible] = await this.prisma.$transaction([
+      this.prisma.tikTokAdsReport.findMany({
+        where,
+        select: tikTokAdsReportSelect,
+        orderBy: [{ periodEnd: "desc" }, { createdAt: "desc" }],
+        take: limit,
+      }),
+      this.prisma.tikTokAdsReport.count({ where }),
+      this.prisma.tikTokAdsReport.count({
+        where: {
+          ...statsWhere,
+          status: TikTokAdsReportStatus.DRAFT,
+        },
+      }),
+      this.prisma.tikTokAdsReport.count({
+        where: {
+          ...statsWhere,
+          status: TikTokAdsReportStatus.PUBLISHED,
+        },
+      }),
+      this.prisma.tikTokAdsReport.count({
+        where: {
+          ...statsWhere,
+          clientVisible: true,
+        },
+      }),
+    ]);
+
+    return {
+      data: reports.map((report) => this.toTikTokAdsReportItem(report)),
+      meta: {
+        total,
+        draft,
+        published,
+        clientVisible,
+      },
+    };
+  }
+
+  private async createReportByClientProfileId(
+    actor: AuthenticatedUser,
+    clientId: string,
+    dto: CreateTikTokAdsReportDto,
+  ): Promise<TikTokAdsReportItem> {
+    const period = this.resolveTikTokAdsReportPeriod(dto.periodStart, dto.periodEnd);
+    const summary = this.normalizeTikTokAdsReportSummary(dto.summary);
+    const projectId = await this.resolveTikTokAdsReportProjectId(clientId, dto.projectId ?? null);
+    const acknowledgementProjectId =
+      dto.requestAcknowledgement === true ? projectId ?? undefined : undefined;
+    const shouldPublish = dto.clientVisible === true || dto.requestAcknowledgement === true;
+    const now = new Date();
+
+    if (dto.requestAcknowledgement === true && !acknowledgementProjectId) {
+      throw new BadRequestException(
+        "A TIKTOK_ADS project is required to request report acknowledgement.",
+      );
+    }
+
+    const report = await this.prisma.$transaction(async (tx) => {
+      const createdReport = await tx.tikTokAdsReport.create({
+        data: {
+          clientProfileId: clientId,
+          projectId,
+          periodStart: period.periodStart,
+          periodEnd: period.periodEnd,
+          type: dto.type,
+          status: shouldPublish ? TikTokAdsReportStatus.PUBLISHED : TikTokAdsReportStatus.DRAFT,
+          summary,
+          metricsSnapshot: dto.metricsSnapshot as Prisma.InputJsonValue | undefined,
+          createdByUserId: actor.id,
+          publishedByUserId: shouldPublish ? actor.id : null,
+          clientVisible: shouldPublish,
+          publishedAt: shouldPublish ? now : null,
+        },
+        select: tikTokAdsReportSelect,
+      });
+
+      if (dto.requestAcknowledgement !== true || !acknowledgementProjectId) {
+        return createdReport;
+      }
+
+      const task = await tx.task.create({
+        data: {
+          projectId: acknowledgementProjectId,
+          title: this.buildTikTokReportAcknowledgementTaskTitle(
+            createdReport.type,
+            createdReport.periodStart,
+            createdReport.periodEnd,
+          ),
+          description: this.buildTikTokReportAcknowledgementTaskDescription(summary),
+          status: TaskStatus.REVIEW,
+          type: TaskType.REVISION,
+          approvalRequired: true,
+          approvalType: MetaAdsApprovalType.TIKTOK_ADS_REPORT_ACKNOWLEDGEMENT,
+          approvalStatus: MetaAdsApprovalStatus.PENDING,
+          approvalRequestedAt: now,
+          approvalContext: {
+            reportId: createdReport.id,
+            reportType: createdReport.type,
+            periodStart: createdReport.periodStart.toISOString(),
+            periodEnd: createdReport.periodEnd.toISOString(),
+          },
+        },
+        select: { id: true },
+      });
+
+      return tx.tikTokAdsReport.update({
+        where: {
+          id: createdReport.id,
+        },
+        data: {
+          acknowledgementRequestedAt: now,
+          acknowledgementTaskId: task.id,
+        },
+        select: tikTokAdsReportSelect,
+      });
+    });
+
+    return this.toTikTokAdsReportItem(report);
+  }
+
+  private async updateReportById(
+    actor: AuthenticatedUser,
+    reportId: string,
+    dto: UpdateTikTokAdsReportDto,
+    options: {
+      scope: "ANY" | "ASSIGNED";
+      employeeUserId?: string;
+    },
+  ): Promise<TikTokAdsReportItem> {
+    this.assertHasTikTokAdsReportUpdatePayload(dto);
+
+    const existing = await this.prisma.tikTokAdsReport.findUnique({
+      where: { id: reportId },
+      select: {
+        id: true,
+        clientProfileId: true,
+        projectId: true,
+        type: true,
+        periodStart: true,
+        periodEnd: true,
+        summary: true,
+        status: true,
+        clientVisible: true,
+        publishedAt: true,
+        publishedByUserId: true,
+        acknowledgementTaskId: true,
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundException("TikTok Ads report not found.");
+    }
+
+    if (options.scope === "ASSIGNED") {
+      if (!options.employeeUserId) {
+        throw new ForbiddenException("Missing employee context for assigned report update.");
+      }
+      await this.assertActiveAssignment(existing.clientProfileId, options.employeeUserId);
+    }
+
+    await this.assertClientHasActiveTikTokAdsService(existing.clientProfileId);
+
+    const now = new Date();
+    const updateData: Prisma.TikTokAdsReportUpdateInput = {};
+    const normalizedSummary =
+      dto.summary !== undefined ? this.normalizeTikTokAdsReportSummary(dto.summary) : undefined;
+
+    if (dto.summary !== undefined) {
+      updateData.summary = normalizedSummary;
+    }
+
+    if (dto.metricsSnapshot !== undefined) {
+      updateData.metricsSnapshot = dto.metricsSnapshot as Prisma.InputJsonValue;
+    }
+
+    if (dto.clientVisible !== undefined) {
+      updateData.clientVisible = dto.clientVisible;
+    }
+
+    if (dto.status !== undefined) {
+      updateData.status = dto.status;
+      if (
+        dto.status === TikTokAdsReportStatus.DRAFT ||
+        dto.status === TikTokAdsReportStatus.ARCHIVED
+      ) {
+        updateData.clientVisible = false;
+      }
+    }
+
+    if (dto.status === TikTokAdsReportStatus.PUBLISHED && dto.clientVisible === false) {
+      throw new BadRequestException("Published report cannot be hidden from client.");
+    }
+
+    const shouldPublish =
+      dto.requestAcknowledgement === true ||
+      dto.clientVisible === true ||
+      dto.status === TikTokAdsReportStatus.PUBLISHED;
+
+    if (shouldPublish) {
+      if (!existing.publishedAt) {
+        updateData.publishedAt = now;
+      }
+      if (!existing.publishedByUserId) {
+        updateData.publishedBy = {
+          connect: {
+            id: actor.id,
+          },
+        };
+      }
+      if (dto.status === undefined) {
+        updateData.status = TikTokAdsReportStatus.PUBLISHED;
+      }
+      if (dto.clientVisible === undefined) {
+        updateData.clientVisible = true;
+      }
+    }
+
+    if (
+      dto.requestAcknowledgement === true &&
+      (dto.status === TikTokAdsReportStatus.DRAFT || dto.status === TikTokAdsReportStatus.ARCHIVED)
+    ) {
+      throw new BadRequestException(
+        "Acknowledgement request cannot be created for DRAFT or ARCHIVED report status.",
+      );
+    }
+
+    const fallbackProjectId =
+      existing.projectId ??
+      (await this.resolveTikTokAdsReportProjectId(existing.clientProfileId, null));
+
+    if (dto.requestAcknowledgement === true && !fallbackProjectId) {
+      throw new BadRequestException(
+        "A TIKTOK_ADS project is required to request report acknowledgement.",
+      );
+    }
+
+    if (dto.requestAcknowledgement === true && fallbackProjectId && !existing.projectId) {
+      updateData.project = {
+        connect: {
+          id: fallbackProjectId,
+        },
+      };
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      let acknowledgementTaskId = existing.acknowledgementTaskId;
+
+      if (dto.requestAcknowledgement === true && fallbackProjectId) {
+        const taskPayload: Prisma.TaskUncheckedCreateInput = {
+          projectId: fallbackProjectId,
+          title: this.buildTikTokReportAcknowledgementTaskTitle(
+            existing.type,
+            existing.periodStart,
+            existing.periodEnd,
+          ),
+          description: this.buildTikTokReportAcknowledgementTaskDescription(
+            normalizedSummary ?? existing.summary ?? null,
+          ),
+          status: TaskStatus.REVIEW,
+          type: TaskType.REVISION,
+          approvalRequired: true,
+          approvalType: MetaAdsApprovalType.TIKTOK_ADS_REPORT_ACKNOWLEDGEMENT,
+          approvalStatus: MetaAdsApprovalStatus.PENDING,
+          approvalRequestedAt: now,
+          approvalContext: {
+            reportId: existing.id,
+          },
+        };
+
+        if (acknowledgementTaskId) {
+          await tx.task.update({
+            where: { id: acknowledgementTaskId },
+            data: {
+              title: taskPayload.title,
+              description: taskPayload.description,
+              status: TaskStatus.REVIEW,
+              approvalRequired: true,
+              approvalType: MetaAdsApprovalType.TIKTOK_ADS_REPORT_ACKNOWLEDGEMENT,
+              approvalStatus: MetaAdsApprovalStatus.PENDING,
+              approvalRequestedAt: now,
+              approvalRespondedAt: null,
+              approvalRespondedByUserId: null,
+              approvalResponseNote: null,
+              approvalContext: taskPayload.approvalContext,
+            },
+          });
+        } else {
+          const createdTask = await tx.task.create({
+            data: taskPayload,
+            select: { id: true },
+          });
+          acknowledgementTaskId = createdTask.id;
+        }
+
+        updateData.acknowledgementRequestedAt = now;
+        if (acknowledgementTaskId) {
+          updateData.acknowledgementTask = {
+            connect: {
+              id: acknowledgementTaskId,
+            },
+          };
+        }
+      }
+
+      return tx.tikTokAdsReport.update({
+        where: { id: existing.id },
+        data: updateData,
+        select: tikTokAdsReportSelect,
+      });
+    });
+
+    return this.toTikTokAdsReportItem(updated);
+  }
+
+  private toTikTokAdsReportItem(report: TikTokAdsReportModel): TikTokAdsReportItem {
+    const acknowledgementStatus =
+      report.acknowledgementRequestedAt === null
+        ? "NOT_REQUESTED"
+        : report.acknowledgementTask?.approvalStatus === MetaAdsApprovalStatus.ACKNOWLEDGED ||
+            report.acknowledgementTask?.approvalStatus === MetaAdsApprovalStatus.APPROVED
+          ? "ACKNOWLEDGED"
+          : report.acknowledgementTask?.approvalStatus === MetaAdsApprovalStatus.CHANGES_REQUESTED ||
+              report.acknowledgementTask?.approvalStatus === MetaAdsApprovalStatus.REJECTED
+            ? "CHANGES_REQUESTED"
+            : "PENDING";
+
+    return {
+      id: report.id,
+      clientProfileId: report.clientProfileId,
+      projectId: report.projectId ?? null,
+      projectName: report.project?.name ?? null,
+      periodStart: report.periodStart.toISOString(),
+      periodEnd: report.periodEnd.toISOString(),
+      type: report.type,
+      status: report.status,
+      summary: report.summary ?? null,
+      metricsSnapshot: (report.metricsSnapshot as Prisma.JsonValue | null) ?? null,
+      clientVisible: report.clientVisible,
+      publishedAt: report.publishedAt?.toISOString() ?? null,
+      acknowledgementRequestedAt: report.acknowledgementRequestedAt?.toISOString() ?? null,
+      acknowledgedAt: report.acknowledgedAt?.toISOString() ?? null,
+      acknowledgementStatus,
+      acknowledgementTaskId: report.acknowledgementTask?.id ?? null,
+      acknowledgementTaskUpdatedAt: report.acknowledgementTask?.updatedAt.toISOString() ?? null,
+      createdAt: report.createdAt.toISOString(),
+      updatedAt: report.updatedAt.toISOString(),
+    };
+  }
+
+  private resolveTikTokAdsReportPeriod(periodStartRaw: string, periodEndRaw: string): {
+    periodStart: Date;
+    periodEnd: Date;
+  } {
+    const periodStart = new Date(periodStartRaw);
+    const periodEnd = new Date(periodEndRaw);
+
+    if (Number.isNaN(periodStart.getTime()) || Number.isNaN(periodEnd.getTime())) {
+      throw new BadRequestException("Report periodStart and periodEnd must be valid ISO date values.");
+    }
+
+    if (periodStart > periodEnd) {
+      throw new BadRequestException("Report periodStart cannot be greater than periodEnd.");
+    }
+
+    return { periodStart, periodEnd };
+  }
+
+  private normalizeTikTokAdsReportSummary(summary: string | undefined): string | null {
+    if (summary === undefined) {
+      return null;
+    }
+
+    const normalized = summary.trim();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  private async resolveTikTokAdsReportProjectId(
+    clientProfileId: string,
+    projectId: string | null,
+  ): Promise<string | null> {
+    if (projectId) {
+      const project = await this.prisma.project.findFirst({
+        where: {
+          id: projectId,
+          clientProfileId,
+          serviceKey: PurchasedServiceKey.TIKTOK_ADS,
+        },
+        select: { id: true },
+      });
+
+      if (!project) {
+        throw new BadRequestException(
+          "Provided projectId is not a TIKTOK_ADS project for this client.",
+        );
+      }
+
+      return project.id;
+    }
+
+    const project = await this.prisma.project.findFirst({
+      where: {
+        clientProfileId,
+        serviceKey: PurchasedServiceKey.TIKTOK_ADS,
+      },
+      select: { id: true },
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+    });
+
+    return project?.id ?? null;
+  }
+
+  private buildTikTokReportAcknowledgementTaskTitle(
+    reportType: TikTokAdsReportType,
+    periodStart: Date,
+    periodEnd: Date,
+  ): string {
+    const start = periodStart.toISOString().slice(0, 10);
+    const end = periodEnd.toISOString().slice(0, 10);
+    return `TikTok Ads Rapor Onayı · ${reportType} (${start} - ${end})`;
+  }
+
+  private buildTikTokReportAcknowledgementTaskDescription(summary: string | null): string {
+    if (summary) {
+      return `TikTok Ads raporu müşteri onayına açıldı. Özet: ${summary}`;
+    }
+    return "TikTok Ads raporu müşteri onayına açıldı.";
+  }
+
+  private assertHasTikTokAdsReportUpdatePayload(dto: UpdateTikTokAdsReportDto): void {
+    if (
+      dto.status === undefined &&
+      dto.summary === undefined &&
+      dto.metricsSnapshot === undefined &&
+      dto.clientVisible === undefined &&
+      dto.requestAcknowledgement === undefined
+    ) {
+      throw new BadRequestException("Provide at least one report field to update.");
     }
   }
 
@@ -2440,6 +3101,43 @@ export class TikTokAdsService {
     }
 
     this.assertHasPermission(actor, TIKTOK_ADS_CONFIG_READ_OWN_PERMISSION);
+  }
+
+  private assertCanReadReports(actor: AuthenticatedUser): void {
+    this.assertHasPermission(actor, REPORTS_READ_PERMISSION);
+  }
+
+  private assertCanManageReports(actor: AuthenticatedUser): void {
+    this.assertHasPermission(actor, REPORTS_MANAGE_PERMISSION);
+  }
+
+  private assertCanReadOwnReports(actor: AuthenticatedUser): void {
+    this.assertHasPermission(actor, REPORTS_READ_OWN_PERMISSION);
+    this.assertHasPermission(actor, TIKTOK_ADS_REPORTING_READ_OWN_PERMISSION);
+  }
+
+  private assertCanReadAssignedReporting(actor: AuthenticatedUser): void {
+    if (actor.accountType !== AccountType.EMPLOYEE) {
+      throw new ForbiddenException("Bu endpoint yalnızca çalışan hesapları içindir.");
+    }
+
+    this.assertHasPermission(actor, TIKTOK_ADS_REPORTING_READ_ASSIGNED_PERMISSION);
+  }
+
+  private assertCanManageAssignedNotes(actor: AuthenticatedUser): void {
+    if (actor.accountType !== AccountType.EMPLOYEE) {
+      throw new ForbiddenException("Bu endpoint yalnızca çalışan hesapları içindir.");
+    }
+
+    this.assertHasPermission(actor, TIKTOK_ADS_NOTES_MANAGE_ASSIGNED_PERMISSION);
+  }
+
+  private assertCanCreateAssignedApprovals(actor: AuthenticatedUser): void {
+    if (actor.accountType !== AccountType.EMPLOYEE) {
+      throw new ForbiddenException("Bu endpoint yalnızca çalışan hesapları içindir.");
+    }
+
+    this.assertHasPermission(actor, TIKTOK_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION);
   }
 
   private assertHasPermission(actor: AuthenticatedUser, permission: string): void {

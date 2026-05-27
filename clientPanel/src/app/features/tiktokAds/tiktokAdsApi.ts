@@ -6,6 +6,11 @@ import type {
   TikTokAdsInsightItem,
   TikTokAdsInsightLevel,
   TikTokAdsInsightsResponse,
+  TikTokAdsReportItem,
+  TikTokAdsReportsQuery,
+  TikTokAdsReportsResponse,
+  TikTokAdsReportStatus,
+  TikTokAdsReportType,
   TikTokAdsSummaryResponse,
   TikTokAdsSyncResponse,
 } from "./tiktokAdsTypes";
@@ -61,6 +66,15 @@ const tiktokAdsApi = baseApi.injectEndpoints({
       transformResponse: (response: unknown) => normalizeOwnTikTokAdsInsightsResponse(response),
       providesTags: ["TikTokAdsConfig"],
     }),
+    getOwnTikTokAdsReports: build.query<TikTokAdsReportsResponse, TikTokAdsReportsQuery | void>({
+      query: (query) => ({
+        url: "/clients/me/tiktok-ads/reports",
+        method: "GET",
+        params: serializeReportsQuery(query),
+      }),
+      transformResponse: (response: unknown) => normalizeOwnTikTokAdsReportsResponse(response),
+      providesTags: ["TikTokAdsConfig"],
+    }),
     syncOwnTikTokAds: build.mutation<TikTokAdsSyncResponse, TikTokAdsDateRangeQuery | void>({
       query: (query) => ({
         url: "/clients/me/tiktok-ads/sync",
@@ -78,6 +92,7 @@ export const {
   useGetOwnTikTokAdsSummaryQuery,
   useGetOwnTikTokAdsCampaignsQuery,
   useGetOwnTikTokAdsInsightsQuery,
+  useGetOwnTikTokAdsReportsQuery,
   useSyncOwnTikTokAdsMutation,
 } = tiktokAdsApi;
 
@@ -188,6 +203,22 @@ function normalizeOwnTikTokAdsSyncResponse(response: unknown): TikTokAdsSyncResp
   };
 }
 
+function normalizeOwnTikTokAdsReportsResponse(response: unknown): TikTokAdsReportsResponse {
+  const candidate = isRecord(response) && isRecord(response.data) ? response.data : response;
+  const rows = isRecord(candidate) && Array.isArray(candidate.data) ? candidate.data : [];
+  const meta = isRecord(candidate) && isRecord(candidate.meta) ? candidate.meta : {};
+
+  return {
+    data: rows.map(normalizeReportRow).filter((item): item is TikTokAdsReportItem => item !== null),
+    meta: {
+      total: readNumber(meta, "total", 0, true),
+      draft: readNumber(meta, "draft", 0, true),
+      published: readNumber(meta, "published", 0, true),
+      clientVisible: readNumber(meta, "clientVisible", 0, true),
+    },
+  };
+}
+
 function normalizeCampaignRow(value: unknown): TikTokAdsCampaign | null {
   if (!isRecord(value)) {
     return null;
@@ -245,6 +276,40 @@ function normalizeInsightRow(value: unknown): TikTokAdsInsightItem | null {
   };
 }
 
+function normalizeReportRow(value: unknown): TikTokAdsReportItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (typeof value.id !== "string") {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    clientProfileId: typeof value.clientProfileId === "string" ? value.clientProfileId : "",
+    projectId: typeof value.projectId === "string" ? value.projectId : null,
+    projectName: typeof value.projectName === "string" ? value.projectName : null,
+    periodStart: typeof value.periodStart === "string" ? value.periodStart : "",
+    periodEnd: typeof value.periodEnd === "string" ? value.periodEnd : "",
+    type: normalizeReportType(value.type),
+    status: normalizeReportStatus(value.status),
+    summary: typeof value.summary === "string" ? value.summary : null,
+    metricsSnapshot: isRecord(value.metricsSnapshot) ? value.metricsSnapshot : null,
+    clientVisible: value.clientVisible === true,
+    publishedAt: typeof value.publishedAt === "string" ? value.publishedAt : null,
+    acknowledgementRequestedAt:
+      typeof value.acknowledgementRequestedAt === "string" ? value.acknowledgementRequestedAt : null,
+    acknowledgedAt: typeof value.acknowledgedAt === "string" ? value.acknowledgedAt : null,
+    acknowledgementStatus: normalizeReportAcknowledgementStatus(value.acknowledgementStatus),
+    acknowledgementTaskId: typeof value.acknowledgementTaskId === "string" ? value.acknowledgementTaskId : null,
+    acknowledgementTaskUpdatedAt:
+      typeof value.acknowledgementTaskUpdatedAt === "string" ? value.acknowledgementTaskUpdatedAt : null,
+    createdAt: typeof value.createdAt === "string" ? value.createdAt : "",
+    updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : "",
+  };
+}
+
 function serializeDateRangeQuery(query: TikTokAdsDateRangeQuery | void): Record<string, string> {
   if (!query) {
     return {};
@@ -284,6 +349,27 @@ function serializeInsightsQuery(query: TikTokAdsInsightsQuery | void): Record<st
   return params;
 }
 
+function serializeReportsQuery(
+  query: TikTokAdsReportsQuery | void,
+): Record<string, string | number> {
+  if (!query) {
+    return {};
+  }
+
+  const params: Record<string, string | number> = {};
+  if (typeof query.status === "string" && query.status.trim().length > 0) {
+    params.status = query.status.trim().toUpperCase();
+  }
+  if (typeof query.type === "string" && query.type.trim().length > 0) {
+    params.type = query.type.trim().toUpperCase();
+  }
+  if (typeof query.limit === "number" && Number.isFinite(query.limit)) {
+    params.limit = Math.trunc(query.limit);
+  }
+
+  return params;
+}
+
 function normalizeConnectionStatus(value: unknown): OwnTikTokAdsConfigResponse["connectionStatus"] {
   if (
     value === "CONNECTED" ||
@@ -303,6 +389,43 @@ function normalizeInsightLevel(value: unknown): TikTokAdsInsightLevel {
   }
 
   return "ACCOUNT";
+}
+
+function normalizeReportType(value: unknown): TikTokAdsReportType {
+  if (
+    value === "WEEKLY" ||
+    value === "MONTHLY" ||
+    value === "CAMPAIGN_PERFORMANCE" ||
+    value === "CREATIVE_PERFORMANCE" ||
+    value === "BUDGET_RECOMMENDATION"
+  ) {
+    return value;
+  }
+
+  return "WEEKLY";
+}
+
+function normalizeReportStatus(value: unknown): TikTokAdsReportStatus {
+  if (value === "DRAFT" || value === "PUBLISHED" || value === "ARCHIVED") {
+    return value;
+  }
+
+  return "DRAFT";
+}
+
+function normalizeReportAcknowledgementStatus(
+  value: unknown,
+): TikTokAdsReportItem["acknowledgementStatus"] {
+  if (
+    value === "NOT_REQUESTED" ||
+    value === "PENDING" ||
+    value === "ACKNOWLEDGED" ||
+    value === "CHANGES_REQUESTED"
+  ) {
+    return value;
+  }
+
+  return "NOT_REQUESTED";
 }
 
 function normalizeSyncStatus(value: unknown): TikTokAdsSyncResponse["syncStatus"] {

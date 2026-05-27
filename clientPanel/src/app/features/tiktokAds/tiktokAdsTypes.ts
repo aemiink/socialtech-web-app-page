@@ -14,6 +14,21 @@ export type TikTokAdsSyncStatus =
 
 export type TikTokAdsInsightLevel = "ACCOUNT" | "CAMPAIGN" | "ADGROUP" | "AD";
 
+export type TikTokAdsReportType =
+  | "WEEKLY"
+  | "MONTHLY"
+  | "CAMPAIGN_PERFORMANCE"
+  | "CREATIVE_PERFORMANCE"
+  | "BUDGET_RECOMMENDATION";
+
+export type TikTokAdsReportStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
+
+export type TikTokAdsReportAcknowledgementStatus =
+  | "NOT_REQUESTED"
+  | "PENDING"
+  | "ACKNOWLEDGED"
+  | "CHANGES_REQUESTED";
+
 export type OwnTikTokAdsConfigResponse = {
   connectionStatus: TikTokAdsConnectionStatus;
   hasConfig: boolean;
@@ -103,6 +118,44 @@ export type TikTokAdsInsightsResponse = {
     until: string;
   };
   lastSyncAt: string | null;
+};
+
+export type TikTokAdsReportItem = {
+  id: string;
+  clientProfileId: string;
+  projectId: string | null;
+  projectName: string | null;
+  periodStart: string;
+  periodEnd: string;
+  type: TikTokAdsReportType;
+  status: TikTokAdsReportStatus;
+  summary: string | null;
+  metricsSnapshot: Record<string, unknown> | null;
+  clientVisible: boolean;
+  publishedAt: string | null;
+  acknowledgementRequestedAt: string | null;
+  acknowledgedAt: string | null;
+  acknowledgementStatus: TikTokAdsReportAcknowledgementStatus;
+  acknowledgementTaskId: string | null;
+  acknowledgementTaskUpdatedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TikTokAdsReportsResponse = {
+  data: TikTokAdsReportItem[];
+  meta: {
+    total: number;
+    draft: number;
+    published: number;
+    clientVisible: number;
+  };
+};
+
+export type TikTokAdsReportsQuery = {
+  status?: TikTokAdsReportStatus;
+  type?: TikTokAdsReportType;
+  limit?: number;
 };
 
 export type TikTokAdsSyncResponse = {

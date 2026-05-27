@@ -1,4 +1,4 @@
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Link2Off,
@@ -29,16 +29,21 @@ import {
   getClientStatusLabel,
 } from "../features/clients/clientsUtils";
 import {
+  useCreateAdminClientTikTokAdsReportMutation,
   useDisconnectAdminClientTikTokAdsMutation,
+  useGetAdminClientTikTokAdsReportsQuery,
   useGetAdminTikTokAdsClientsQuery,
   useGetAdminTikTokAdsSyncLogsQuery,
   useRetryAdminClientTikTokAdsSyncMutation,
   useSyncAdminClientTikTokAdsMutation,
   useTestAdminClientTikTokAdsConnectionMutation,
+  useUpdateAdminTikTokAdsReportMutation,
   useUpdateAdminClientTikTokAdsConfigMutation,
 } from "../features/tiktokAds/tiktokAdsApi";
 import type {
   AdminTikTokAdsClientListItem,
+  TikTokAdsReportStatus,
+  TikTokAdsReportType,
   TikTokAdsSyncStatus,
 } from "../features/tiktokAds/tiktokAdsTypes";
 import {
@@ -56,6 +61,15 @@ type ConfigFormState = {
   timezone: string;
 };
 
+type ReportFormState = {
+  periodStart: string;
+  periodEnd: string;
+  type: TikTokAdsReportType;
+  summary: string;
+  publishNow: boolean;
+  requestAcknowledgement: boolean;
+};
+
 const initialConfigForm: ConfigFormState = {
   advertiserId: "",
   businessCenterId: "",
@@ -65,10 +79,29 @@ const initialConfigForm: ConfigFormState = {
   timezone: "",
 };
 
+const initialReportForm: ReportFormState = {
+  periodStart: "",
+  periodEnd: "",
+  type: "WEEKLY",
+  summary: "",
+  publishNow: false,
+  requestAcknowledgement: false,
+};
+
+const reportTypeOptions: Array<{ value: TikTokAdsReportType; label: string }> = [
+  { value: "WEEKLY", label: "Weekly" },
+  { value: "MONTHLY", label: "Monthly" },
+  { value: "CAMPAIGN_PERFORMANCE", label: "Campaign" },
+  { value: "CREATIVE_PERFORMANCE", label: "Creative" },
+  { value: "BUDGET_RECOMMENDATION", label: "Budget" },
+];
+
 export function TikTokAdsAdmin() {
   const currentUser = useAppSelector(selectCurrentUser);
   const canReadTikTokAds = hasAdminPermission(currentUser, ["tiktokAds.config.read.any"]);
   const canManageTikTokAds = hasAdminPermission(currentUser, ["tiktokAds.config.manage.any"]);
+  const canReadReports = hasAdminPermission(currentUser, ["reports.read"]);
+  const canManageReports = hasAdminPermission(currentUser, ["reports.manage"]);
 
   const {
     data: response,
@@ -100,23 +133,86 @@ export function TikTokAdsAdmin() {
     useRetryAdminClientTikTokAdsSyncMutation();
   const [disconnectTikTokAds, { isLoading: isDisconnecting }] =
     useDisconnectAdminClientTikTokAdsMutation();
+  const [createTikTokAdsReport, { isLoading: isCreatingReport }] =
+    useCreateAdminClientTikTokAdsReportMutation();
+  const [updateTikTokAdsReport, { isLoading: isUpdatingReport }] =
+    useUpdateAdminTikTokAdsReportMutation();
 
   const [pageMessage, setPageMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [configTarget, setConfigTarget] = useState<AdminTikTokAdsClientListItem | null>(null);
   const [configForm, setConfigForm] = useState<ConfigFormState>(initialConfigForm);
   const [activeClientActionId, setActiveClientActionId] = useState<string | null>(null);
+  const [selectedReportClientId, setSelectedReportClientId] = useState("");
+  const [reportStatusFilter, setReportStatusFilter] = useState<TikTokAdsReportStatus | "ALL">("ALL");
+  const [reportTypeFilter, setReportTypeFilter] = useState<TikTokAdsReportType | "ALL">("ALL");
+  const [reportForm, setReportForm] = useState<ReportFormState>(initialReportForm);
+  const [publishAckToggle, setPublishAckToggle] = useState(false);
 
   const listItems = response?.data ?? [];
+  const selectedReportClient = useMemo(
+    () => listItems.find((item) => item.client.id === selectedReportClientId) ?? null,
+    [listItems, selectedReportClientId],
+  );
+  const selectedReportClientName = selectedReportClient?.client.companyName ?? "Müşteri";
+  const reportsQuery = useMemo(
+    () => ({
+      ...(reportStatusFilter !== "ALL" ? { status: reportStatusFilter } : {}),
+      ...(reportTypeFilter !== "ALL" ? { type: reportTypeFilter } : {}),
+      limit: 50,
+    }),
+    [reportStatusFilter, reportTypeFilter],
+  );
+  const {
+    data: reportsResponse,
+    error: reportsError,
+    isError: isReportsError,
+    isLoading: isReportsLoading,
+    isFetching: isReportsFetching,
+  } = useGetAdminClientTikTokAdsReportsQuery(
+    {
+      clientId: selectedReportClientId,
+      query: reportsQuery,
+    },
+    {
+      skip: !canReadReports || selectedReportClientId.length === 0,
+    },
+  );
   const meta = response?.meta;
   const dateRange = response?.dateRange;
   const syncLogs = syncLogsResponse?.data ?? [];
   const syncLogsMeta = syncLogsResponse?.meta;
+  const reportRows = reportsResponse?.data ?? [];
+  const reportMeta = reportsResponse?.meta;
   const failedClients = useMemo(
     () => listItems.filter((item) => item.connectionStatus === "ERROR" || Boolean(item.syncError)),
     [listItems],
   );
   const isMutating =
-    isUpdatingConfig || isTestingConnection || isSyncing || isRetryingSync || isDisconnecting;
+    isUpdatingConfig ||
+    isTestingConnection ||
+    isSyncing ||
+    isRetryingSync ||
+    isDisconnecting ||
+    isCreatingReport ||
+    isUpdatingReport;
+
+  useEffect(() => {
+    if (listItems.length === 0) {
+      if (selectedReportClientId.length > 0) {
+        setSelectedReportClientId("");
+      }
+      return;
+    }
+
+    if (selectedReportClientId.length === 0) {
+      setSelectedReportClientId(listItems[0].client.id);
+      return;
+    }
+
+    if (!listItems.some((item) => item.client.id === selectedReportClientId)) {
+      setSelectedReportClientId(listItems[0].client.id);
+    }
+  }, [listItems, selectedReportClientId]);
 
   const kpis = useMemo(
     () => [
@@ -188,6 +284,92 @@ export function TikTokAdsAdmin() {
       setPageMessage({
         type: "error",
         text: extractApiErrorMessage(error, "TikTok Ads konfigürasyonu güncellenemedi."),
+      });
+    }
+  }
+
+  function toReportPeriodStartIso(value: string): string {
+    return new Date(`${value}T00:00:00.000Z`).toISOString();
+  }
+
+  function toReportPeriodEndIso(value: string): string {
+    return new Date(`${value}T23:59:59.999Z`).toISOString();
+  }
+
+  async function handleCreateReportDraft(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canManageReports || selectedReportClientId.length === 0 || isMutating) {
+      return;
+    }
+
+    if (!reportForm.periodStart || !reportForm.periodEnd) {
+      setPageMessage({
+        type: "error",
+        text: "Rapor başlangıç ve bitiş tarihi zorunludur.",
+      });
+      return;
+    }
+
+    if (reportForm.periodStart > reportForm.periodEnd) {
+      setPageMessage({
+        type: "error",
+        text: "Rapor başlangıç tarihi bitiş tarihinden sonra olamaz.",
+      });
+      return;
+    }
+
+    setPageMessage(null);
+    try {
+      await createTikTokAdsReport({
+        clientId: selectedReportClientId,
+        body: {
+          periodStart: toReportPeriodStartIso(reportForm.periodStart),
+          periodEnd: toReportPeriodEndIso(reportForm.periodEnd),
+          type: reportForm.type,
+          summary: normalizeOptionalText(reportForm.summary) ?? undefined,
+          clientVisible: reportForm.publishNow || undefined,
+          requestAcknowledgement: reportForm.requestAcknowledgement || undefined,
+        },
+      }).unwrap();
+
+      setReportForm(initialReportForm);
+      setPageMessage({
+        type: "success",
+        text: "TikTok Ads rapor taslağı kaydedildi.",
+      });
+    } catch (error) {
+      setPageMessage({
+        type: "error",
+        text: extractApiErrorMessage(error, "TikTok Ads raporu kaydedilemedi."),
+      });
+    }
+  }
+
+  async function handlePublishReport(reportId: string) {
+    if (!canManageReports || selectedReportClientId.length === 0 || isMutating) {
+      return;
+    }
+
+    setPageMessage(null);
+    try {
+      await updateTikTokAdsReport({
+        reportId,
+        clientId: selectedReportClientId,
+        body: {
+          status: "PUBLISHED",
+          clientVisible: true,
+          requestAcknowledgement: publishAckToggle || undefined,
+        },
+      }).unwrap();
+
+      setPageMessage({
+        type: "success",
+        text: `${selectedReportClientName} için TikTok Ads raporu yayınlandı.`,
+      });
+    } catch (error) {
+      setPageMessage({
+        type: "error",
+        text: extractApiErrorMessage(error, "TikTok Ads raporu yayınlanamadı."),
       });
     }
   }
@@ -621,6 +803,251 @@ export function TikTokAdsAdmin() {
         ) : null}
       </Card>
 
+      <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-white">TikTok Ads Rapor Draft / Publish</h2>
+            <p className="text-xs text-[#A0A0A0]">
+              Filtreleyin, taslak oluşturun ve client-visible TikTok Ads raporu yayınlayın.
+            </p>
+          </div>
+          {reportMeta ? (
+            <p className="text-xs text-[#A0A0A0]">
+              Toplam: {reportMeta.total} · Draft: {reportMeta.draft} · Published: {reportMeta.published}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="tiktok-ads-report-client">Müşteri</Label>
+            <select
+              id="tiktok-ads-report-client"
+              className="h-10 rounded-md border border-white/[0.12] bg-black/20 px-3 text-sm text-white"
+              value={selectedReportClientId}
+              onChange={(event) => setSelectedReportClientId(event.target.value)}
+            >
+              {listItems.map((item) => (
+                <option key={item.client.id} value={item.client.id}>
+                  {item.client.companyName}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="tiktok-ads-report-status-filter">Status</Label>
+            <select
+              id="tiktok-ads-report-status-filter"
+              className="h-10 rounded-md border border-white/[0.12] bg-black/20 px-3 text-sm text-white"
+              value={reportStatusFilter}
+              onChange={(event) => setReportStatusFilter(event.target.value as TikTokAdsReportStatus | "ALL")}
+            >
+              <option value="ALL">All</option>
+              <option value="DRAFT">Draft</option>
+              <option value="PUBLISHED">Published</option>
+              <option value="ARCHIVED">Archived</option>
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="tiktok-ads-report-type-filter">Tip</Label>
+            <select
+              id="tiktok-ads-report-type-filter"
+              className="h-10 rounded-md border border-white/[0.12] bg-black/20 px-3 text-sm text-white"
+              value={reportTypeFilter}
+              onChange={(event) => setReportTypeFilter(event.target.value as TikTokAdsReportType | "ALL")}
+            >
+              <option value="ALL">All</option>
+              {reportTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <label className="flex items-end gap-2 text-sm text-[#DADADA]">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-[#AAFF01]"
+              checked={publishAckToggle}
+              onChange={(event) => setPublishAckToggle(event.target.checked)}
+            />
+            Yayında onay iste
+          </label>
+        </div>
+
+        <form
+          className="mt-5 grid grid-cols-1 gap-3 rounded-xl border border-white/[0.08] p-4"
+          onSubmit={handleCreateReportDraft}
+        >
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="tiktok-ads-report-period-start">Dönem Başlangıç</Label>
+              <Input
+                id="tiktok-ads-report-period-start"
+                type="date"
+                value={reportForm.periodStart}
+                onChange={(event) =>
+                  setReportForm((prev) => ({
+                    ...prev,
+                    periodStart: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="tiktok-ads-report-period-end">Dönem Bitiş</Label>
+              <Input
+                id="tiktok-ads-report-period-end"
+                type="date"
+                value={reportForm.periodEnd}
+                onChange={(event) =>
+                  setReportForm((prev) => ({
+                    ...prev,
+                    periodEnd: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="tiktok-ads-report-type">Rapor Tipi</Label>
+              <select
+                id="tiktok-ads-report-type"
+                className="h-10 rounded-md border border-white/[0.12] bg-black/20 px-3 text-sm text-white"
+                value={reportForm.type}
+                onChange={(event) =>
+                  setReportForm((prev) => ({
+                    ...prev,
+                    type: event.target.value as TikTokAdsReportType,
+                  }))
+                }
+              >
+                {reportTypeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-end gap-4 text-sm text-[#DADADA]">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[#AAFF01]"
+                  checked={reportForm.publishNow}
+                  onChange={(event) =>
+                    setReportForm((prev) => ({
+                      ...prev,
+                      publishNow: event.target.checked,
+                    }))
+                  }
+                />
+                Hemen yayınla
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[#AAFF01]"
+                  checked={reportForm.requestAcknowledgement}
+                  onChange={(event) =>
+                    setReportForm((prev) => ({
+                      ...prev,
+                      requestAcknowledgement: event.target.checked,
+                    }))
+                  }
+                />
+                Ack iste
+              </label>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="tiktok-ads-report-summary">Özet</Label>
+            <Input
+              id="tiktok-ads-report-summary"
+              value={reportForm.summary}
+              onChange={(event) =>
+                setReportForm((prev) => ({
+                  ...prev,
+                  summary: event.target.value,
+                }))
+              }
+              placeholder="Haftalık TikTok Ads rapor özeti..."
+            />
+          </div>
+          <div>
+            <Button
+              type="submit"
+              className="bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
+              disabled={!canManageReports || selectedReportClientId.length === 0 || isMutating}
+            >
+              {isCreatingReport ? "Kaydediliyor..." : "Taslak Kaydet"}
+            </Button>
+          </div>
+        </form>
+
+        <div className="mt-5">
+          {isReportsLoading || isReportsFetching ? (
+            <p className="text-sm text-[#A0A0A0]">Raporlar yükleniyor...</p>
+          ) : null}
+          {isReportsError ? (
+            <p className="text-sm text-red-300">
+              {extractApiErrorMessage(reportsError, "TikTok Ads raporları alınamadı.")}
+            </p>
+          ) : null}
+          {!isReportsLoading && !isReportsError && reportRows.length === 0 ? (
+            <p className="text-sm text-[#A0A0A0]">Seçili filtre için rapor kaydı bulunmuyor.</p>
+          ) : null}
+
+          {!isReportsLoading && !isReportsError && reportRows.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[980px]">
+                <thead className="border-b border-white/[0.06] text-left text-xs text-[#A0A0A0]">
+                  <tr>
+                    <th className="py-3 pr-3">Dönem</th>
+                    <th className="py-3 pr-3">Tip</th>
+                    <th className="py-3 pr-3">Status</th>
+                    <th className="py-3 pr-3">Ack</th>
+                    <th className="py-3 pr-3">Özet</th>
+                    <th className="py-3">Aksiyon</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reportRows.map((report) => (
+                    <tr key={report.id} className="border-b border-white/[0.04] align-top">
+                      <td className="py-3 pr-3 text-xs text-[#DADADA]">
+                        {formatReportPeriod(report.periodStart, report.periodEnd)}
+                      </td>
+                      <td className="py-3 pr-3 text-xs text-[#DADADA]">
+                        {formatReportTypeLabel(report.type)}
+                      </td>
+                      <td className="py-3 pr-3">
+                        <span className={`rounded-md px-2 py-1 text-xs ${getReportStatusClassName(report.status)}`}>
+                          {report.status}
+                        </span>
+                      </td>
+                      <td className="py-3 pr-3 text-xs text-[#DADADA]">{report.acknowledgementStatus}</td>
+                      <td className="py-3 pr-3 text-xs text-[#DADADA]">{report.summary ?? "—"}</td>
+                      <td className="py-3">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            void handlePublishReport(report.id);
+                          }}
+                          disabled={report.status === "PUBLISHED" || !canManageReports || isMutating}
+                        >
+                          {isUpdatingReport ? "Yayınlanıyor..." : "Publish"}
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </div>
+      </Card>
+
       <Dialog open={configTarget !== null} onOpenChange={(open) => (!open ? closeConfigDialog() : undefined)}>
         <DialogContent className="border-white/[0.08] bg-[#1A1A1A] text-white">
           <DialogHeader>
@@ -739,6 +1166,36 @@ function getSyncStatusClassName(status: TikTokAdsSyncStatus): string {
     SKIPPED: "bg-white/[0.08] text-[#DADADA]",
   };
   return classes[status] ?? "bg-white/[0.08] text-[#DADADA]";
+}
+
+function getReportStatusClassName(status: TikTokAdsReportStatus): string {
+  const classes: Record<TikTokAdsReportStatus, string> = {
+    DRAFT: "bg-white/[0.08] text-[#DADADA]",
+    PUBLISHED: "bg-[#AAFF01]/15 text-[#AAFF01]",
+    ARCHIVED: "bg-orange-500/15 text-orange-200",
+  };
+  return classes[status] ?? "bg-white/[0.08] text-[#DADADA]";
+}
+
+function formatReportTypeLabel(type: TikTokAdsReportType): string {
+  const labels: Record<TikTokAdsReportType, string> = {
+    WEEKLY: "Weekly",
+    MONTHLY: "Monthly",
+    CAMPAIGN_PERFORMANCE: "Campaign",
+    CREATIVE_PERFORMANCE: "Creative",
+    BUDGET_RECOMMENDATION: "Budget",
+  };
+  return labels[type] ?? type;
+}
+
+function formatReportPeriod(periodStart: string, periodEnd: string): string {
+  const start = new Date(periodStart);
+  const end = new Date(periodEnd);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return "—";
+  }
+
+  return `${start.toLocaleDateString("tr-TR")} - ${end.toLocaleDateString("tr-TR")}`;
 }
 
 function formatSyncTrigger(trigger: string | null): string {

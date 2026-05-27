@@ -13,7 +13,10 @@ const mockUseGetAssignedClientTikTokAdsConfigQuery = vi.fn();
 const mockUseGetAssignedClientTikTokAdsSummaryQuery = vi.fn();
 const mockUseGetAssignedClientTikTokAdsCampaignsQuery = vi.fn();
 const mockUseGetAssignedClientTikTokAdsInsightsQuery = vi.fn();
+const mockUseGetAssignedClientTikTokAdsReportsQuery = vi.fn();
 const mockUseSyncAssignedClientTikTokAdsMutation = vi.fn();
+const mockUseCreateAssignedClientTikTokAdsReportMutation = vi.fn();
+const mockUseUpdateAssignedTikTokAdsReportMutation = vi.fn();
 const mockUseGetProjectsQuery = vi.fn();
 const mockUseGetProjectWorkspaceMessagesQuery = vi.fn();
 const mockUseCreateProjectWorkspaceMessageMutation = vi.fn();
@@ -23,6 +26,8 @@ const mockUseUpdateTaskMutation = vi.fn();
 const mockUseToggleTaskTodoMutation = vi.fn();
 const mockCreateTask = vi.fn();
 const mockSyncAssignedTikTokAds = vi.fn();
+const mockCreateTikTokAdsReport = vi.fn();
+const mockUpdateTikTokAdsReport = vi.fn();
 
 vi.mock("../../../store/hooks", () => ({
   useAppSelector: (selector: (state: unknown) => unknown) =>
@@ -51,8 +56,14 @@ vi.mock("../../../features/tiktokAds/tiktokAdsApi", () => ({
     mockUseGetAssignedClientTikTokAdsCampaignsQuery(...args),
   useGetAssignedClientTikTokAdsInsightsQuery: (...args: unknown[]) =>
     mockUseGetAssignedClientTikTokAdsInsightsQuery(...args),
+  useGetAssignedClientTikTokAdsReportsQuery: (...args: unknown[]) =>
+    mockUseGetAssignedClientTikTokAdsReportsQuery(...args),
   useSyncAssignedClientTikTokAdsMutation: (...args: unknown[]) =>
     mockUseSyncAssignedClientTikTokAdsMutation(...args),
+  useCreateAssignedClientTikTokAdsReportMutation: (...args: unknown[]) =>
+    mockUseCreateAssignedClientTikTokAdsReportMutation(...args),
+  useUpdateAssignedTikTokAdsReportMutation: (...args: unknown[]) =>
+    mockUseUpdateAssignedTikTokAdsReportMutation(...args),
 }));
 
 vi.mock("../../../features/projects/projectsApi", () => ({
@@ -87,10 +98,36 @@ const baseEmployeeUser: AuthUserProfile = {
     "projects.files.manage.assigned",
     "tiktokAds.approvals.create.assigned",
     "tiktokAds.creatives.manage.assigned",
+    "tiktokAds.reporting.read.assigned",
+    "tiktokAds.notes.manage.assigned",
     "tiktokAds.sync.read.assigned",
+    "reports.read",
+    "reports.manage",
   ],
   clientProfile: null,
 };
+
+const tikTokReport = {
+  id: "report-1",
+  clientProfileId: "client-tiktok",
+  projectId: "project-tiktok-1",
+  projectName: "TikTok Ads Project",
+  periodStart: "2026-05-20T00:00:00.000Z",
+  periodEnd: "2026-05-26T23:59:59.999Z",
+  type: "WEEKLY",
+  status: "DRAFT",
+  summary: "TikTok çalışan haftalık rapor taslağı.",
+  metricsSnapshot: null,
+  clientVisible: false,
+  publishedAt: null,
+  acknowledgementRequestedAt: null,
+  acknowledgedAt: null,
+  acknowledgementStatus: "NOT_REQUESTED",
+  acknowledgementTaskId: null,
+  acknowledgementTaskUpdatedAt: null,
+  createdAt: "2026-05-27T12:00:00.000Z",
+  updatedAt: "2026-05-27T12:00:00.000Z",
+} as const;
 
 function setupBaseMocks() {
   mockUseGetClientsQuery.mockReturnValue({
@@ -228,6 +265,22 @@ function setupBaseMocks() {
     isError: false,
   });
 
+  mockUseGetAssignedClientTikTokAdsReportsQuery.mockReturnValue({
+    data: {
+      data: [tikTokReport],
+      meta: {
+        total: 1,
+        draft: 1,
+        published: 0,
+        clientVisible: 0,
+      },
+    },
+    error: undefined,
+    isLoading: false,
+    isFetching: false,
+    isError: false,
+  });
+
   mockUseGetProjectsQuery.mockReturnValue({
     data: {
       data: [
@@ -315,6 +368,18 @@ function setupBaseMocks() {
     mockSyncAssignedTikTokAds,
     { isLoading: false },
   ]);
+  mockCreateTikTokAdsReport.mockReturnValue({ unwrap: () => Promise.resolve(tikTokReport) });
+  mockUpdateTikTokAdsReport.mockReturnValue({
+    unwrap: () => Promise.resolve({ ...tikTokReport, status: "PUBLISHED" }),
+  });
+  mockUseCreateAssignedClientTikTokAdsReportMutation.mockReturnValue([
+    mockCreateTikTokAdsReport,
+    { isLoading: false },
+  ]);
+  mockUseUpdateAssignedTikTokAdsReportMutation.mockReturnValue([
+    mockUpdateTikTokAdsReport,
+    { isLoading: false },
+  ]);
 }
 
 function renderWorkspace(initialView?: Parameters<typeof TikTokAdsWorkspace>[0]["initialView"]) {
@@ -391,7 +456,7 @@ describe("TikTokAdsWorkspace", () => {
 
     expect(screen.getByRole("button", { name: "Kampanyalar" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Video Kreatifler" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Rapor Notları" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Raporlar" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Performans" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Pixel" })).not.toBeInTheDocument();
   });
@@ -418,6 +483,51 @@ describe("TikTokAdsWorkspace", () => {
         "TikTok Ads raporlarını görüntülemek için `tiktokAds.config.read.assigned` izni gereklidir.",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("renders TikTok Ads reports and creates a report draft", async () => {
+    renderWorkspace("reports");
+
+    expect(screen.getByText("TikTok çalışan haftalık rapor taslağı.")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Dönem Başlangıç"), {
+      target: { value: "2026-05-20" },
+    });
+    fireEvent.change(screen.getByLabelText("Dönem Bitiş"), {
+      target: { value: "2026-05-26" },
+    });
+    fireEvent.change(screen.getByLabelText("Özet"), {
+      target: { value: "Çalışan rapor özeti" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Taslak Kaydet" }));
+
+    await waitFor(() =>
+      expect(mockCreateTikTokAdsReport).toHaveBeenCalledWith({
+        clientId: "client-tiktok",
+        body: expect.objectContaining({
+          type: "WEEKLY",
+          summary: "Çalışan rapor özeti",
+        }),
+      }),
+    );
+  });
+
+  it("publishes TikTok Ads report with acknowledgement", async () => {
+    renderWorkspace("reports");
+
+    fireEvent.click(screen.getByRole("button", { name: "Publish + Ack" }));
+
+    await waitFor(() =>
+      expect(mockUpdateTikTokAdsReport).toHaveBeenCalledWith({
+        reportId: "report-1",
+        clientId: "client-tiktok",
+        body: {
+          status: "PUBLISHED",
+          clientVisible: true,
+          requestAcknowledgement: true,
+        },
+      }),
+    );
   });
 
   it("disables task create action when manage permission is missing", () => {

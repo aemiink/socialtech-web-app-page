@@ -8,6 +8,7 @@ import type { AuthUserProfile } from "../../features/auth/authTypes";
 import type {
   AdminTikTokAdsClientListResponse,
   AdminTikTokAdsSyncLogsResponse,
+  TikTokAdsReportsResponse,
 } from "../../features/tiktokAds/tiktokAdsTypes";
 import { TikTokAdsAdmin } from "../TikTokAdsAdmin";
 
@@ -32,11 +33,14 @@ const mockUseGetAdminTikTokAdsClientsQuery = vi.fn<
   (query?: unknown, options?: QueryOptions) => TikTokAdsListQueryResult
 >();
 const mockUseGetAdminTikTokAdsSyncLogsQuery = vi.fn();
+const mockUseGetAdminClientTikTokAdsReportsQuery = vi.fn();
 const mockUseUpdateAdminClientTikTokAdsConfigMutation = vi.fn();
 const mockUseTestAdminClientTikTokAdsConnectionMutation = vi.fn();
 const mockUseSyncAdminClientTikTokAdsMutation = vi.fn();
 const mockUseRetryAdminClientTikTokAdsSyncMutation = vi.fn();
 const mockUseDisconnectAdminClientTikTokAdsMutation = vi.fn();
+const mockUseCreateAdminClientTikTokAdsReportMutation = vi.fn();
+const mockUseUpdateAdminTikTokAdsReportMutation = vi.fn();
 
 let currentUser: AuthUserProfile | null = null;
 
@@ -49,6 +53,8 @@ vi.mock("../../features/tiktokAds/tiktokAdsApi", () => ({
     mockUseGetAdminTikTokAdsClientsQuery(query, options),
   useGetAdminTikTokAdsSyncLogsQuery: (query?: unknown, options?: QueryOptions) =>
     mockUseGetAdminTikTokAdsSyncLogsQuery(query, options),
+  useGetAdminClientTikTokAdsReportsQuery: (query?: unknown, options?: QueryOptions) =>
+    mockUseGetAdminClientTikTokAdsReportsQuery(query, options),
   useUpdateAdminClientTikTokAdsConfigMutation: () =>
     mockUseUpdateAdminClientTikTokAdsConfigMutation(),
   useTestAdminClientTikTokAdsConnectionMutation: () =>
@@ -57,6 +63,10 @@ vi.mock("../../features/tiktokAds/tiktokAdsApi", () => ({
   useRetryAdminClientTikTokAdsSyncMutation: () => mockUseRetryAdminClientTikTokAdsSyncMutation(),
   useDisconnectAdminClientTikTokAdsMutation: () =>
     mockUseDisconnectAdminClientTikTokAdsMutation(),
+  useCreateAdminClientTikTokAdsReportMutation: () =>
+    mockUseCreateAdminClientTikTokAdsReportMutation(),
+  useUpdateAdminTikTokAdsReportMutation: () =>
+    mockUseUpdateAdminTikTokAdsReportMutation(),
 }));
 
 const adminUser: AuthUserProfile = {
@@ -66,7 +76,12 @@ const adminUser: AuthUserProfile = {
   accountType: "ADMIN",
   role: "ADMIN",
   status: "ACTIVE",
-  permissions: ["tiktokAds.config.read.any", "tiktokAds.config.manage.any"],
+  permissions: [
+    "tiktokAds.config.read.any",
+    "tiktokAds.config.manage.any",
+    "reports.read",
+    "reports.manage",
+  ],
   clientProfile: null,
 };
 
@@ -159,6 +174,38 @@ const syncLogsResponse: AdminTikTokAdsSyncLogsResponse = {
   },
 };
 
+const reportsResponse: TikTokAdsReportsResponse = {
+  data: [
+    {
+      id: "report-1",
+      clientProfileId: "11111111-1111-4111-8111-111111111111",
+      projectId: "22222222-2222-4222-8222-222222222222",
+      projectName: "TikTok Ads Project",
+      periodStart: "2026-05-20T00:00:00.000Z",
+      periodEnd: "2026-05-26T23:59:59.999Z",
+      type: "WEEKLY",
+      status: "DRAFT",
+      summary: "TikTok haftalık rapor taslağı.",
+      metricsSnapshot: null,
+      clientVisible: false,
+      publishedAt: null,
+      acknowledgementRequestedAt: null,
+      acknowledgedAt: null,
+      acknowledgementStatus: "NOT_REQUESTED",
+      acknowledgementTaskId: null,
+      acknowledgementTaskUpdatedAt: null,
+      createdAt: "2026-05-27T12:00:00.000Z",
+      updatedAt: "2026-05-27T12:00:00.000Z",
+    },
+  ],
+  meta: {
+    total: 1,
+    draft: 1,
+    published: 0,
+    clientVisible: 0,
+  },
+};
+
 function createResolvedMutation<T>(value: T) {
   return vi.fn((): MutationResponse<T> => ({
     unwrap: async () => value,
@@ -186,6 +233,13 @@ describe("TikTokAdsAdmin", () => {
       isError: false,
       isLoading: false,
     });
+    mockUseGetAdminClientTikTokAdsReportsQuery.mockReturnValue({
+      data: reportsResponse,
+      error: undefined,
+      isError: false,
+      isLoading: false,
+      isFetching: false,
+    });
     mockUseUpdateAdminClientTikTokAdsConfigMutation.mockReturnValue([
       createResolvedMutation({}),
       { isLoading: false },
@@ -206,6 +260,14 @@ describe("TikTokAdsAdmin", () => {
       createResolvedMutation({}),
       { isLoading: false },
     ]);
+    mockUseCreateAdminClientTikTokAdsReportMutation.mockReturnValue([
+      createResolvedMutation(reportsResponse.data[0]),
+      { isLoading: false },
+    ]);
+    mockUseUpdateAdminTikTokAdsReportMutation.mockReturnValue([
+      createResolvedMutation({ ...reportsResponse.data[0], status: "PUBLISHED" }),
+      { isLoading: false },
+    ]);
   });
 
   it("renders success, loading, error, and empty states", () => {
@@ -215,6 +277,8 @@ describe("TikTokAdsAdmin", () => {
     expect(screen.getByText("Performance Specialist (PERFORMANCE)")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Sync Logları" })).toBeInTheDocument();
     expect(screen.getByText(/TikTok Ads API rate limit sınırına ulaşıldı/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "TikTok Ads Rapor Draft / Publish" })).toBeInTheDocument();
+    expect(screen.getByText("TikTok haftalık rapor taslağı.")).toBeInTheDocument();
 
     mockUseGetAdminTikTokAdsClientsQuery.mockReturnValueOnce({
       data: undefined,
@@ -248,6 +312,61 @@ describe("TikTokAdsAdmin", () => {
     });
     render(<TikTokAdsAdmin />, { wrapper: MemoryRouter });
     expect(screen.getByText("TikTok Ads hizmeti olan müşteri bulunmuyor.")).toBeInTheDocument();
+  });
+
+  it("creates a TikTok Ads report draft", async () => {
+    const createReportMutation = createResolvedMutation(reportsResponse.data[0]);
+    mockUseCreateAdminClientTikTokAdsReportMutation.mockReturnValue([
+      createReportMutation,
+      { isLoading: false },
+    ]);
+
+    render(<TikTokAdsAdmin />, { wrapper: MemoryRouter });
+
+    fireEvent.change(screen.getByLabelText("Dönem Başlangıç"), {
+      target: { value: "2026-05-20" },
+    });
+    fireEvent.change(screen.getByLabelText("Dönem Bitiş"), {
+      target: { value: "2026-05-26" },
+    });
+    fireEvent.change(screen.getByLabelText("Özet"), {
+      target: { value: "TikTok haftalık rapor özeti" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Taslak Kaydet" }));
+
+    await waitFor(() =>
+      expect(createReportMutation).toHaveBeenCalledWith({
+        clientId: "11111111-1111-4111-8111-111111111111",
+        body: expect.objectContaining({
+          type: "WEEKLY",
+          summary: "TikTok haftalık rapor özeti",
+        }),
+      }),
+    );
+  });
+
+  it("publishes a TikTok Ads report", async () => {
+    const updateReportMutation = createResolvedMutation({ ...reportsResponse.data[0], status: "PUBLISHED" });
+    mockUseUpdateAdminTikTokAdsReportMutation.mockReturnValue([
+      updateReportMutation,
+      { isLoading: false },
+    ]);
+
+    render(<TikTokAdsAdmin />, { wrapper: MemoryRouter });
+
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+
+    await waitFor(() =>
+      expect(updateReportMutation).toHaveBeenCalledWith({
+        reportId: "report-1",
+        clientId: "11111111-1111-4111-8111-111111111111",
+        body: {
+          status: "PUBLISHED",
+          clientVisible: true,
+          requestAcknowledgement: undefined,
+        },
+      }),
+    );
   });
 
   it("submits config update action", async () => {
