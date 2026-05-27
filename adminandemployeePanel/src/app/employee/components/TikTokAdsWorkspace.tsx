@@ -87,11 +87,19 @@ const ROLE_DEFAULT_VIEW: Record<WorkspaceMode, TikTokAdsWorkspaceView> = {
   designer: "video-creatives",
 };
 
+const ROLE_APPROVAL_TYPE: Record<WorkspaceMode, CreateTaskRequest["approvalType"]> = {
+  social: "TIKTOK_ADS_UGC_SCRIPT_APPROVAL",
+  performance: "TIKTOK_ADS_BUDGET_CHANGE_APPROVAL",
+  designer: "TIKTOK_ADS_VIDEO_CREATIVE_APPROVAL",
+};
+
 export function TikTokAdsWorkspace({ initialView = "overview" }: TikTokAdsWorkspaceProps) {
   const currentUser = useAppSelector(selectCurrentUser);
   const workspaceMode = resolveWorkspaceMode(currentUser?.role);
   const canReadAssignedClients = hasUserPermission(currentUser, ["clients.read.assigned"]);
   const canReadTikTokAds = hasUserPermission(currentUser, ["tiktokAds.config.read.assigned"]);
+  const canCreateTikTokAdsApprovals = hasUserPermission(currentUser, ["tiktokAds.approvals.create.assigned"]);
+  const canManageTikTokAdsCreatives = hasUserPermission(currentUser, ["tiktokAds.creatives.manage.assigned"]);
   const canReadTasks = hasUserPermission(currentUser, ["tasks.read.assigned"]);
   const canCreateTask = hasUserPermission(currentUser, ["tasks.manage.assigned"]);
   const canUpdateTask = hasUserPermission(currentUser, ["tasks.update.assigned", "tasks.update.own"]);
@@ -264,10 +272,18 @@ export function TikTokAdsWorkspace({ initialView = "overview" }: TikTokAdsWorksp
       return;
     }
 
-    if (!canCreateTask) {
+    if (action !== "approval" && !canCreateTask) {
       setFeedback({
         type: "error",
         text: "Görev oluşturma yetkiniz yok. `tasks.manage.assigned` izni gereklidir.",
+      });
+      return;
+    }
+
+    if (action === "approval" && !canCreateTikTokAdsApprovals) {
+      setFeedback({
+        type: "error",
+        text: "Approval talebi oluşturmak için `tiktokAds.approvals.create.assigned` izni gereklidir.",
       });
       return;
     }
@@ -278,6 +294,7 @@ export function TikTokAdsWorkspace({ initialView = "overview" }: TikTokAdsWorksp
       report: "TikTok Ads Rapor Hazırlığı",
       approval: "TikTok Ads Onay Talebi",
     };
+    const approvalType = workspaceMode ? ROLE_APPROVAL_TYPE[workspaceMode] : "TIKTOK_ADS_CAMPAIGN_APPROVAL";
 
     const taskBody: CreateTaskRequest = {
       projectId: tikTokAdsProjectId,
@@ -287,6 +304,7 @@ export function TikTokAdsWorkspace({ initialView = "overview" }: TikTokAdsWorksp
       priority: action === "approval" ? "HIGH" : "MEDIUM",
       type: action === "approval" ? "REVISION" : action === "report" ? "QA" : "FEATURE",
       approvalRequired: action === "approval",
+      approvalType: action === "approval" ? approvalType : undefined,
       approvalStatus: action === "approval" ? "PENDING" : undefined,
       workstream:
         action === "creative"
@@ -628,7 +646,7 @@ export function TikTokAdsWorkspace({ initialView = "overview" }: TikTokAdsWorksp
                 adInsights={adInsights?.data ?? []}
                 tasks={tikTokAdsTasks}
                 isLoading={isAdsLoading}
-                canManageFiles={canManageFiles}
+                canManageFiles={canManageFiles && canManageTikTokAdsCreatives}
                 canCreateTask={canCreateTask}
                 hasTikTokAdsProject={hasTikTokAdsProject}
                 tikTokAdsProjectId={tikTokAdsProjectId}
@@ -659,7 +677,7 @@ export function TikTokAdsWorkspace({ initialView = "overview" }: TikTokAdsWorksp
             {currentView === "approvals" ? (
               <ApprovalsSection
                 approvalTasks={approvalTasks}
-                canCreateTask={canCreateTask && hasTikTokAdsProject}
+                canCreateTask={canCreateTikTokAdsApprovals && hasTikTokAdsProject}
                 canUpdateTask={canUpdateTask}
                 isActionBusy={isActionBusy}
                 activeAction={activeAction}
@@ -785,7 +803,7 @@ export function TikTokAdsWorkspace({ initialView = "overview" }: TikTokAdsWorksp
                     variant="outline"
                     className="gap-2"
                     onClick={() => void handleCreateRoleTask("approval")}
-                    disabled={!canCreateTask || !hasTikTokAdsProject || isActionBusy}
+                    disabled={!canCreateTikTokAdsApprovals || !hasTikTokAdsProject || isActionBusy}
                   >
                     <AlertCircle className="h-4 w-4" />
                     Onay Talebi Oluştur
@@ -807,7 +825,7 @@ export function TikTokAdsWorkspace({ initialView = "overview" }: TikTokAdsWorksp
                   type="button"
                   size="sm"
                   className="bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
-                  disabled={!canManageFiles}
+                  disabled={!canManageFiles || !canManageTikTokAdsCreatives}
                 >
                   <Link
                     to={tikTokAdsProjectId
@@ -823,7 +841,7 @@ export function TikTokAdsWorkspace({ initialView = "overview" }: TikTokAdsWorksp
                   type="button"
                   size="sm"
                   variant="outline"
-                  disabled={!canManageFiles}
+                  disabled={!canManageFiles || !canManageTikTokAdsCreatives}
                 >
                   <Link to="/employee/teslim-dosyalari">Client Visible Paylaş</Link>
                 </Button>
@@ -832,7 +850,7 @@ export function TikTokAdsWorkspace({ initialView = "overview" }: TikTokAdsWorksp
                   size="sm"
                   variant="outline"
                   onClick={() => void handleCreateRoleTask("approval")}
-                  disabled={!canCreateTask || !hasTikTokAdsProject || isActionBusy}
+                  disabled={!canCreateTikTokAdsApprovals || !hasTikTokAdsProject || isActionBusy}
                 >
                   Video Approval Task
                 </Button>
@@ -1167,8 +1185,14 @@ function ApprovalsSection({
             <div>
               <p className="text-sm text-white">{task.title}</p>
               <p className="text-xs text-[#A0A0A0]">{task.status}</p>
+              {task.approvalType ? (
+                <p className="text-xs text-[#A0A0A0]">{formatApprovalType(task.approvalType)}</p>
+              ) : null}
               {task.approvalStatus ? (
                 <p className="text-xs text-[#A0A0A0]">Approval: {task.approvalStatus}</p>
+              ) : null}
+              {task.approvalResponseNote ? (
+                <p className="text-xs text-orange-200">Not: {task.approvalResponseNote}</p>
               ) : null}
             </div>
             <Button
@@ -1263,6 +1287,10 @@ function resolveNextTaskStatus(status: Task["status"]): Task["status"] | null {
   }
 
   return null;
+}
+
+function formatApprovalType(value: string): string {
+  return value.replace("TIKTOK_ADS_", "").replace("META_ADS_", "").replace(/_/g, " ");
 }
 
 function formatCurrency(value: number): string {

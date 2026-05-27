@@ -2526,3 +2526,40 @@ Affected files:
 - `PROJECT_CONTEXT.md`
 - `REPO_MAP.md`
 - `ROAD_MAP.md`
+
+## 2026-05-27 - TikTok Ads Faz 7 Approval + Creative Collaboration
+
+Context:
+TikTok Ads Faz 6 ile employee workspace tamamlandi. Bir sonraki ihtiyac, employee tarafindan TikTok'a ozel onay taleplerinin dogru metadata ile olusturulmasi, kreatif dosya paylasiminin permission-aware hale gelmesi ve client portal UGC/script sekmesinde bekleyen onaylarin yanitlanabilmesiydi.
+
+Decision:
+TikTok Ads Faz 7, Meta Ads approval + creative collaboration pattern'inin TikTok V1 karsiligi olarak uygulanacak:
+- Ayrı bir approval request modulu acilmadi; mevcut task-centric approval akisi yeniden kullanildi.
+- Mevcut `MetaAdsApprovalType` enum'u TikTok Ads approval type'lariyla genisletildi. Bu isim legacy/shared ad approval enum'u olarak korunacak; mevcut Google Ads genisletmesiyle ayni pattern izlenir.
+- Employee approval task creation icin `tiktokAds.approvals.create.assigned`, TikTok kreatif dosya yonetimi icin `tiktokAds.creatives.manage.assigned` permission'lari eklendi.
+- Backend task service, assigned employee'lerin TikTok Ads projelerinde platform permission'i ile approval task olusturmasina izin verir.
+- Client own approval response akisi `META_ADS` ile birlikte `TIKTOK_ADS` projelerini de destekler.
+- Client portal TikTok UGC/script sekmesi bekleyen approval queue, approval history ve creative preview dosyalarini gosterir; approve/revision aksiyonlari mevcut client task approval mutation'ini kullanir.
+- Report draft/publish Faz 9'a, sync automation hardening Faz 8'e birakildi.
+
+Reason:
+Bu karar TikTok Ads onay/kreatif is akisini mevcut proje, task ve dosya contract'lari uzerinde tutarak dusuk riskli, permission-aware ve Meta Ads ile simetrik bir V1 saglar. Yeni domain modeli acmadan platforma ozel izinler ve approval type'lariyla ayrim netlestirildi.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260527143000_add_tiktok_ads_approval_types/migration.sql`
+- `server/prisma/seed.ts`
+- `server/src/tasks/tasks.service.ts`
+- `server/src/project-files/project-files.service.ts`
+- `server/test/projects-tasks-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/tasks/tasksTypes.ts`
+- `adminandemployeePanel/src/app/employee/components/TikTokAdsWorkspace.tsx`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/TikTokAdsWorkspace.test.tsx`
+- `clientPanel/src/app/features/tasks/tasksTypes.ts`
+- `clientPanel/src/app/features/tasks/tasksUtils.ts`
+- `clientPanel/src/app/features/projectFiles/projectFilesTypes.ts`
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+- `clientPanel/src/app/pages/__tests__/service-tab-page.tiktok-ads.test.tsx`
+- `PROJECT_CONTEXT.md`
+- `REPO_MAP.md`
+- `ROAD_MAP.md`

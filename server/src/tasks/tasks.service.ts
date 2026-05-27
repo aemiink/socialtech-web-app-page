@@ -206,6 +206,7 @@ const TASK_UPDATE_ASSIGNED_PERMISSION = "tasks.update.assigned";
 const TASK_UPDATE_OWN_FALLBACK_PERMISSION = "tasks.update.own";
 const APPROVAL_RESPOND_OWN_PERMISSION = "approvals.respond.own";
 const META_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION = "metaAds.approvals.create.assigned";
+const TIKTOK_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION = "tiktokAds.approvals.create.assigned";
 
 @Injectable()
 export class TasksService {
@@ -262,14 +263,17 @@ export class TasksService {
   ): Promise<TaskResponse> {
     this.assertBodyObject(dto);
     const project = await this.getProjectAssignmentContextOrBadRequest(dto.projectId);
-    await this.assertCanManageTaskProject(currentUser, project.clientProfileId);
+    if (this.isAdsApprovalTask(project, dto)) {
+      await this.assertCanCreateAdsApprovalTask(currentUser, project);
+    } else {
+      await this.assertCanManageTaskProject(currentUser, project.clientProfileId);
+    }
     if (dto.assigneeUserId) {
       this.assertCanAssignTaskWithinScope(currentUser);
     }
     await this.assertAssigneeIsValidForProject(dto.assigneeUserId, project.clientProfileId);
     await this.assertSprintBelongsToProject(dto.sprintId, project.id);
     await this.assertReferenceProjectFileBelongsToProject(dto.referenceProjectFileId, project.id);
-    this.assertCanCreateMetaAdsApprovalTask(currentUser, project, dto);
     const generatedCode = dto.code?.trim() || (await this.generateTaskCode(dto.type ?? TaskType.FEATURE));
     const approvalStatus =
       dto.approvalStatus ?? (dto.approvalRequired ? MetaAdsApprovalStatus.PENDING : null);
@@ -783,7 +787,7 @@ export class TasksService {
         approvalStatus: MetaAdsApprovalStatus.PENDING,
         project: {
           clientProfileId,
-          serviceKey: PurchasedServiceKey.META_ADS,
+          serviceKey: { in: [PurchasedServiceKey.META_ADS, PurchasedServiceKey.TIKTOK_ADS] },
         },
       },
       select: {
@@ -820,8 +824,8 @@ export class TasksService {
         await tx.task.create({
           data: {
             projectId: task.projectId,
-            title: this.buildMetaAdsRevisionTaskTitle(task.title),
-            description: this.buildMetaAdsRevisionTaskDescription(dto.approvalResponseNote),
+            title: this.buildAdsRevisionTaskTitle(task.title),
+            description: this.buildAdsRevisionTaskDescription(dto.approvalResponseNote),
             status: TaskStatus.TODO,
             priority: task.priority,
             type: TaskType.REVISION,
@@ -1415,24 +1419,59 @@ export class TasksService {
     this.assertHasPermission(currentUser, TASK_ASSIGN_ASSIGNED_PERMISSION);
   }
 
-  private assertCanCreateMetaAdsApprovalTask(
-    currentUser: AuthenticatedUser,
+  private isAdsApprovalTask(
     project: ProjectAssignmentContext,
     dto: CreateTaskDto,
-  ): void {
-    if (project.serviceKey !== PurchasedServiceKey.META_ADS || !dto.approvalRequired) {
+  ): boolean {
+    return Boolean(dto.approvalRequired && this.getAdsApprovalCreatePermission(project.serviceKey));
+  }
+
+  private async assertCanCreateAdsApprovalTask(
+    currentUser: AuthenticatedUser,
+    project: ProjectAssignmentContext,
+  ): Promise<void> {
+    const permission = this.getAdsApprovalCreatePermission(project.serviceKey);
+    if (!permission) {
+      throw new ForbiddenException("Unsupported ads approval project scope.");
+    }
+
+    if (this.isAdmin(currentUser)) {
+      this.assertHasPermission(
+        currentUser,
+        TASK_MANAGE_ANY_PERMISSION,
+        TASK_MANAGE_FALLBACK_PERMISSION,
+      );
       return;
     }
 
     if (!this.isEmployee(currentUser)) {
-      return;
+      throw new ForbiddenException("Only admin or assigned employee users can create ads approval tasks.");
     }
 
-    if (!currentUser.permissions.includes(META_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION)) {
-      throw new ForbiddenException(
-        `Missing required permission: ${META_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION}.`,
-      );
+    this.assertHasPermission(currentUser, permission);
+    const assignment = await this.prisma.employeeClientAssignment.findFirst({
+      where: {
+        employeeUserId: currentUser.id,
+        clientProfileId: project.clientProfileId,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    if (!assignment) {
+      throw new NotFoundException("Task not found.");
     }
+  }
+
+  private getAdsApprovalCreatePermission(projectServiceKey: PurchasedServiceKey | null): string | null {
+    if (projectServiceKey === PurchasedServiceKey.META_ADS) {
+      return META_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION;
+    }
+
+    if (projectServiceKey === PurchasedServiceKey.TIKTOK_ADS) {
+      return TIKTOK_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION;
+    }
+
+    return null;
   }
 
   private async assertCanManageTaskTodoScope(
@@ -1612,16 +1651,16 @@ export class TasksService {
     return currentUser.clientProfileId;
   }
 
-  private buildMetaAdsRevisionTaskTitle(sourceTitle: string): string {
+  private buildAdsRevisionTaskTitle(sourceTitle: string): string {
     const normalized = sourceTitle.trim();
     if (!normalized) {
-      return "Meta Ads Revizyon Takibi";
+      return "Reklam Revizyon Takibi";
     }
 
     return `Revizyon: ${normalized}`;
   }
 
-  private buildMetaAdsRevisionTaskDescription(approvalResponseNote: string | null | undefined): string {
+  private buildAdsRevisionTaskDescription(approvalResponseNote: string | null | undefined): string {
     const note = approvalResponseNote?.trim();
     if (note && note.length > 0) {
       return `Müşteri revizyon notu: ${note}`;

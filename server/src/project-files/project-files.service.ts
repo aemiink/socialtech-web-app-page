@@ -33,6 +33,7 @@ const READ_ASSIGNED_PERMISSION = "projects.files.read.assigned";
 const SHARE_ASSIGNED_PERMISSION = "projects.files.share.assigned";
 const READ_OWN_PERMISSION = "projects.files.read.own";
 const META_ADS_CREATIVES_MANAGE_ASSIGNED_PERMISSION = "metaAds.creatives.manage.assigned";
+const TIKTOK_ADS_CREATIVES_MANAGE_ASSIGNED_PERMISSION = "tiktokAds.creatives.manage.assigned";
 
 const projectFileReadSelect = {
   id: true,
@@ -715,6 +716,14 @@ export class ProjectFilesService {
       !this.hasPermission(currentUser, [META_ADS_CREATIVES_MANAGE_ASSIGNED_PERMISSION])
     ) {
       throw new ForbiddenException("Missing required Meta Ads creative permissions.");
+    }
+
+    if (
+      currentUser.accountType === AccountType.EMPLOYEE &&
+      projectServiceKey === PurchasedServiceKey.TIKTOK_ADS &&
+      !this.hasPermission(currentUser, [TIKTOK_ADS_CREATIVES_MANAGE_ASSIGNED_PERMISSION])
+    ) {
+      throw new ForbiddenException("Missing required TikTok Ads creative permissions.");
     }
 
     if (currentUser.accountType === AccountType.ADMIN) {

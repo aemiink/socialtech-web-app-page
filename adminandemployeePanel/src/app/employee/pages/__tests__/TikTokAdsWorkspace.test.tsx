@@ -1,7 +1,7 @@
 /// <reference types="vitest" />
 /// <reference types="@testing-library/jest-dom" />
 
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthUserProfile } from "../../../features/auth/authTypes";
@@ -20,6 +20,7 @@ const mockUseGetTasksQuery = vi.fn();
 const mockUseCreateTaskMutation = vi.fn();
 const mockUseUpdateTaskMutation = vi.fn();
 const mockUseToggleTaskTodoMutation = vi.fn();
+const mockCreateTask = vi.fn();
 
 vi.mock("../../../store/hooks", () => ({
   useAppSelector: (selector: (state: unknown) => unknown) =>
@@ -80,6 +81,8 @@ const baseEmployeeUser: AuthUserProfile = {
     "tasks.update.assigned",
     "webapp.workspace.interact.assigned",
     "projects.files.manage.assigned",
+    "tiktokAds.approvals.create.assigned",
+    "tiktokAds.creatives.manage.assigned",
   ],
   clientProfile: null,
 };
@@ -281,10 +284,8 @@ function setupBaseMocks() {
     ],
   });
 
-  mockUseCreateTaskMutation.mockReturnValue([
-    vi.fn(() => ({ unwrap: () => Promise.resolve({ id: "task-new" }) })),
-    { isLoading: false },
-  ]);
+  mockCreateTask.mockReturnValue({ unwrap: () => Promise.resolve({ id: "task-new" }) });
+  mockUseCreateTaskMutation.mockReturnValue([mockCreateTask, { isLoading: false }]);
   mockUseUpdateTaskMutation.mockReturnValue([
     vi.fn(() => ({ unwrap: () => Promise.resolve({ id: "task-1" }) })),
     { isLoading: false },
@@ -334,6 +335,24 @@ describe("TikTokAdsWorkspace", () => {
     renderWorkspace("video-creatives");
 
     expect(screen.getByRole("link", { name: "Video Dosyası Yükle" })).toBeInTheDocument();
+  });
+
+  it("creates approval task with TikTok approval metadata", async () => {
+    currentUser = { ...baseEmployeeUser, role: "DESIGNER" };
+    renderWorkspace("approvals");
+
+    fireEvent.click(screen.getByRole("button", { name: "Onay Talebi Oluştur" }));
+
+    await waitFor(() =>
+      expect(mockCreateTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectId: "project-tiktok-1",
+          approvalRequired: true,
+          approvalType: "TIKTOK_ADS_VIDEO_CREATIVE_APPROVAL",
+          approvalStatus: "PENDING",
+        }),
+      ),
+    );
   });
 
   it("hides performance-specific tabs for social media specialist", () => {

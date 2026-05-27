@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ServiceTabPage } from "../service-tab-page";
 
@@ -7,6 +7,7 @@ const mockUseGetOwnTikTokAdsSummaryQuery = vi.fn();
 const mockUseGetOwnTikTokAdsCampaignsQuery = vi.fn();
 const mockUseGetOwnTikTokAdsInsightsQuery = vi.fn();
 const mockUseGetClientTasksQuery = vi.fn();
+const mockUpdateClientTaskApproval = vi.fn();
 
 vi.mock("../../features/tiktokAds/tiktokAdsApi", () => ({
   useGetOwnTikTokAdsConfigQuery: (...args: unknown[]) => mockUseGetOwnTikTokAdsConfigQuery(...args),
@@ -65,11 +66,33 @@ vi.mock("../../features/auth/authSelectors", () => ({
 
 vi.mock("../../features/tasks/tasksApi", () => ({
   useGetClientTasksQuery: (...args: unknown[]) => mockUseGetClientTasksQuery(...args),
-  useUpdateClientTaskApprovalMutation: () => [vi.fn(), { isLoading: false }],
+  useUpdateClientTaskApprovalMutation: () => [mockUpdateClientTaskApproval, { isLoading: false }],
 }));
 
 vi.mock("../../features/projectFiles/projectFilesApi", () => ({
-  useGetClientProjectFilesQuery: () => ({ data: { data: [] }, isLoading: false, isError: false }),
+  useGetClientProjectFilesQuery: () => ({
+    data: {
+      data: [
+        {
+          id: "file-1",
+          projectId: "project-1",
+          category: "ADS_CREATIVE",
+          visibility: "CLIENT_VISIBLE",
+          title: "UGC Storyboard",
+          secureUrl: "https://cdn.example.com/ugc-storyboard.mp4",
+          originalFileName: "ugc-storyboard.mp4",
+          bytes: 1024,
+          mimeType: "video/mp4",
+          approvalRequired: true,
+          approvalType: "TIKTOK_ADS_VIDEO_CREATIVE_APPROVAL",
+          approvalStatus: "PENDING",
+          createdAt: "2026-05-27T10:00:00.000Z",
+        },
+      ],
+    },
+    isLoading: false,
+    isError: false,
+  }),
 }));
 
 const tiktokTask = {
@@ -100,6 +123,16 @@ const tiktokTask = {
   progressPercent: 50,
 };
 
+const tiktokApprovalTask = {
+  ...tiktokTask,
+  id: "approval-task-1",
+  title: "UGC script müşteri onayı",
+  description: "Script ve storyboard onayı bekleniyor",
+  approvalRequired: true,
+  approvalType: "TIKTOK_ADS_UGC_SCRIPT_APPROVAL",
+  approvalStatus: "PENDING",
+};
+
 describe("ServiceTabPage TikTok Ads tabs", () => {
   beforeEach(() => {
     mockUseGetOwnTikTokAdsConfigQuery.mockReset();
@@ -107,6 +140,10 @@ describe("ServiceTabPage TikTok Ads tabs", () => {
     mockUseGetOwnTikTokAdsCampaignsQuery.mockReset();
     mockUseGetOwnTikTokAdsInsightsQuery.mockReset();
     mockUseGetClientTasksQuery.mockReset();
+    mockUpdateClientTaskApproval.mockReset();
+    mockUpdateClientTaskApproval.mockReturnValue({
+      unwrap: () => Promise.resolve({ ...tiktokApprovalTask, approvalStatus: "APPROVED" }),
+    });
 
     mockUseGetOwnTikTokAdsConfigQuery.mockReturnValue({
       data: {
@@ -257,5 +294,26 @@ describe("ServiceTabPage TikTok Ads tabs", () => {
 
     expect(screen.getByText("UGC script revizyonu")).toBeInTheDocument();
     expect(screen.getByText("Hook ve CTA akışı müşteri kontrolünde")).toBeInTheDocument();
+  });
+
+  it("renders TikTok approval queue and sends approval decisions", async () => {
+    mockUseGetClientTasksQuery.mockReturnValue({
+      data: [tiktokTask, tiktokApprovalTask],
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<ServiceTabPage serviceId="tiktok-ads" tabId="ugc-scripts" />);
+
+    expect(screen.getByText("Bekleyen TikTok Ads onayı: 1")).toBeInTheDocument();
+    expect(screen.getByText("UGC Storyboard")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Onayla" }));
+
+    await waitFor(() =>
+      expect(mockUpdateClientTaskApproval).toHaveBeenCalledWith({
+        taskId: "approval-task-1",
+        body: { approvalStatus: "APPROVED", approvalResponseNote: undefined },
+      }),
+    );
   });
 });

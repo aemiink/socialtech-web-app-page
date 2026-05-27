@@ -424,6 +424,7 @@ Uygulama durumu:
 - TikTok Ads Faz 4 tamamlandı: client portal TikTok dashboard ve service tab workspace mock/static datadan API-driven akışa taşındı; campaigns, video creatives, hook tests, audiences, pixel/events safe-state, UGC script tasks ve optimization notes sekmeleri own-client endpointleri ve client-visible tasks ile besleniyor.
 - TikTok Ads Faz 5 tamamlandı: backend global admin client list endpointi ve admin panel `/tiktok-ads` ekranı eklendi; connection/config/test/sync/disconnect aksiyonları global müşteri listesi üzerinden yönetiliyor.
 - TikTok Ads Faz 6 tamamlandı: employee panelde `/employee/tiktok-ads` assigned-scope workspace eklendi; Social/Performance/Designer rolleri için campaigns, performance, video creatives, report notes, approvals ve pixel safe-state sekmeleri backend assigned TikTok endpointleri + project/task/workspace mesaj contract'ı ile çalışıyor.
+- TikTok Ads Faz 7 tamamlandı: task-merkezli TikTok approval type'ları, `tiktokAds.approvals.create.assigned` / `tiktokAds.creatives.manage.assigned` permission kontrolleri, client own approval response ve client portal UGC/script approval queue + creative preview akışı eklendi.
 - Active admin endpoints:
   - `GET /api/v1/admin/tiktok-ads/clients`
   - `GET /api/v1/admin/clients/:clientId/tiktok-ads/config`
@@ -450,7 +451,7 @@ Uygulama durumu:
 - Reporting sync uses TikTok API for Business reporting + campaign catalog reads, stores daily rows by level (`ACCOUNT`, `CAMPAIGN`, `ADGROUP`, `AD`), and exposes read-only aggregates for V1 dashboards.
 
 Planned next backend phases:
-- TikTok Ads Faz 7: Approval + creative collaboration
+- TikTok Ads Faz 8: Sync automation hardening
 - Broader domain endpoint authorization rollout (beyond users/clients/admin-assignments/projects/tasks)
 - Forced password change on first login flow
 - Frontend audit log view integration for admin panel

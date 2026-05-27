@@ -26,6 +26,7 @@ const TASKS_PATH = "/api/v1/tasks";
 const E2E_PROJECT_NAME_PREFIX = "Authz E2E Project";
 const E2E_TODO_TITLE_PREFIX = "Authz E2E Todo";
 const E2E_META_APPROVAL_TASK_PREFIX = "Authz E2E Meta Approval";
+const E2E_TIKTOK_APPROVAL_TASK_PREFIX = "Authz E2E TikTok Approval";
 
 type LoginBody = {
   accessToken: string;
@@ -129,6 +130,7 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
   let employeeOutOfScopeTaskTodoId = "";
   let clientVisibleTodoId = "";
   let clientOwnMetaAdsProjectId = "";
+  let clientOwnTikTokAdsProjectId = "";
   let createdProjectId = "";
   const taskStatusRestores: TaskStatusRestore[] = [];
   const taskTodoRestores: TaskTodoRestore[] = [];
@@ -667,6 +669,70 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
     }
   });
 
+  it("assigned specialist can create TikTok Ads approval task with TikTok approval permission", async () => {
+    const response = await request(app.getHttpServer())
+      .post(TASKS_PATH)
+      .set("Authorization", `Bearer ${employeeToken}`)
+      .send({
+        projectId: clientOwnTikTokAdsProjectId,
+        title: `${E2E_TIKTOK_APPROVAL_TASK_PREFIX} Specialist ${Date.now()}`,
+        status: TaskStatus.REVIEW,
+        priority: Priority.HIGH,
+        type: TaskType.REVISION,
+        approvalRequired: true,
+        approvalType: MetaAdsApprovalType.TIKTOK_ADS_BUDGET_CHANGE_APPROVAL,
+      })
+      .expect(201);
+
+    const task = expectTaskResponse(response.body) as TaskListItem & {
+      approvalRequired?: boolean;
+      approvalType?: MetaAdsApprovalType | null;
+      approvalStatus?: MetaAdsApprovalStatus | null;
+    };
+    expect(task.projectId).toBe(clientOwnTikTokAdsProjectId);
+    expect(task.approvalRequired).toBe(true);
+    expect(task.approvalType).toBe(MetaAdsApprovalType.TIKTOK_ADS_BUDGET_CHANGE_APPROVAL);
+    expect(task.approvalStatus).toBe(MetaAdsApprovalStatus.PENDING);
+  });
+
+  it("TikTok Ads approval task creation requires tiktokAds.approvals.create.assigned permission", async () => {
+    const permission = await prisma.permission.findUnique({
+      where: { slug: "tiktokAds.approvals.create.assigned" },
+      select: { id: true },
+    });
+    if (!permission) {
+      throw new Error("Expected tiktokAds.approvals.create.assigned permission to exist.");
+    }
+
+    await prisma.rolePermission.deleteMany({
+      where: {
+        role: UserRole.PERFORMANCE_SPECIALIST,
+        permissionId: permission.id,
+      },
+    });
+
+    try {
+      await request(app.getHttpServer())
+        .post(TASKS_PATH)
+        .set("Authorization", `Bearer ${employeeToken}`)
+        .send({
+          projectId: clientOwnTikTokAdsProjectId,
+          title: `${E2E_TIKTOK_APPROVAL_TASK_PREFIX} Permission ${Date.now()}`,
+          status: TaskStatus.REVIEW,
+          priority: Priority.HIGH,
+          type: TaskType.REVISION,
+          approvalRequired: true,
+          approvalType: MetaAdsApprovalType.TIKTOK_ADS_BUDGET_CHANGE_APPROVAL,
+        })
+        .expect(403);
+    } finally {
+      await prisma.rolePermission.createMany({
+        data: [{ role: UserRole.PERFORMANCE_SPECIALIST, permissionId: permission.id }],
+        skipDuplicates: true,
+      });
+    }
+  });
+
   it("project manager cannot assign task to employee outside client assignment scope", async () => {
     const scopedProject = await prisma.project.findUnique({
       where: { id: projectManagerAssignedProjectId },
@@ -729,6 +795,47 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
 
     const updated = await prisma.task.findUnique({
       where: { id: clientOwnMetaApprovalTaskId },
+      select: {
+        approvalStatus: true,
+        approvalResponseNote: true,
+        approvalRespondedAt: true,
+        status: true,
+      },
+    });
+    expect(updated).toEqual(
+      expect.objectContaining({
+        approvalStatus: MetaAdsApprovalStatus.APPROVED,
+        approvalResponseNote: null,
+        status: TaskStatus.DONE,
+      }),
+    );
+    expect(updated?.approvalRespondedAt).toBeTruthy();
+  });
+
+  it("client can approve own TikTok Ads approval task", async () => {
+    const pendingApproval = await prisma.task.create({
+      data: {
+        projectId: clientOwnTikTokAdsProjectId,
+        title: `${E2E_TIKTOK_APPROVAL_TASK_PREFIX} Own ${Date.now()}`,
+        status: TaskStatus.REVIEW,
+        priority: Priority.HIGH,
+        type: TaskType.REVISION,
+        approvalRequired: true,
+        approvalType: MetaAdsApprovalType.TIKTOK_ADS_UGC_SCRIPT_APPROVAL,
+        approvalStatus: MetaAdsApprovalStatus.PENDING,
+        approvalRequestedAt: new Date(),
+      },
+      select: { id: true },
+    });
+
+    await request(app.getHttpServer())
+      .patch(`${TASKS_PATH}/${pendingApproval.id}`)
+      .set("Authorization", `Bearer ${clientToken}`)
+      .send({ approvalStatus: MetaAdsApprovalStatus.APPROVED })
+      .expect(200);
+
+    const updated = await prisma.task.findUnique({
+      where: { id: pendingApproval.id },
       select: {
         approvalStatus: true,
         approvalResponseNote: true,
@@ -909,6 +1016,7 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
     }
     clientOwnProfileId = clientUser.clientProfileId;
     clientOwnMetaAdsProjectId = await resolveClientMetaAdsProjectId(clientOwnProfileId);
+    clientOwnTikTokAdsProjectId = await resolveClientTikTokAdsProjectId(clientOwnProfileId);
 
     const otherClientMetaAdsProject = await prisma.project.findFirst({
       where: {
@@ -1210,6 +1318,34 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
         serviceKey: PurchasedServiceKey.META_ADS,
         name: `${E2E_PROJECT_NAME_PREFIX} Meta Ads ${Date.now()}`,
         slug: `authz-meta-ads-${Date.now()}`,
+        status: ProjectStatus.IN_PROGRESS,
+        priority: Priority.HIGH,
+      },
+      select: { id: true },
+    });
+
+    return createdProject.id;
+  }
+
+  async function resolveClientTikTokAdsProjectId(clientProfileId: string): Promise<string> {
+    const existingTikTokAdsProject = await prisma.project.findFirst({
+      where: {
+        clientProfileId,
+        serviceKey: PurchasedServiceKey.TIKTOK_ADS,
+      },
+      select: { id: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    if (existingTikTokAdsProject) {
+      return existingTikTokAdsProject.id;
+    }
+
+    const createdProject = await prisma.project.create({
+      data: {
+        clientProfileId,
+        serviceKey: PurchasedServiceKey.TIKTOK_ADS,
+        name: `${E2E_PROJECT_NAME_PREFIX} TikTok Ads ${Date.now()}`,
+        slug: `authz-tiktok-ads-${Date.now()}`,
         status: ProjectStatus.IN_PROGRESS,
         priority: Priority.HIGH,
       },

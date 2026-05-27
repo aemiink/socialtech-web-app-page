@@ -1373,13 +1373,55 @@ function TikTokAdsServiceTab({
     isLoading: isUgcTasksLoading,
     isError: isUgcTasksError,
   } = useGetClientTasksQuery(undefined, { skip: !isConnected || tabId !== "ugc-scripts" });
+  const [updateClientTaskApproval, { isLoading: isUpdatingApproval }] =
+    useUpdateClientTaskApprovalMutation();
+  const [activeApprovalTaskId, setActiveApprovalTaskId] = useState<string | null>(null);
 
   const campaigns = campaignsResponse?.data ?? [];
   const adGroups = adGroupInsightsResponse?.data ?? [];
   const ads = adInsightsResponse?.data ?? [];
   const tiktokTasks = useMemo(
-    () => ugcTasks.filter((task) => task.projectServiceId === "tiktok-ads").slice(0, 12),
+    () =>
+      ugcTasks
+        .filter((task) => task.projectServiceId === "tiktok-ads" && !task.approvalRequired)
+        .slice(0, 12),
     [ugcTasks],
+  );
+  const tiktokApprovalTasks = useMemo(
+    () => ugcTasks.filter((task) => task.projectServiceId === "tiktok-ads" && task.approvalRequired),
+    [ugcTasks],
+  );
+  const pendingTikTokApprovalRows = useMemo(
+    () => tiktokApprovalTasks.filter((task) => task.approvalStatus === "PENDING").slice(0, 10),
+    [tiktokApprovalTasks],
+  );
+  const tiktokApprovalHistoryRows = useMemo(
+    () =>
+      tiktokApprovalTasks
+        .filter((task) => task.approvalStatus && task.approvalStatus !== "PENDING")
+        .slice(0, 10),
+    [tiktokApprovalTasks],
+  );
+  const tiktokApprovalProjectId =
+    pendingTikTokApprovalRows[0]?.projectId ?? tiktokApprovalTasks[0]?.projectId ?? null;
+  const {
+    data: tiktokApprovalCreativeFilesResponse,
+    isLoading: isTikTokApprovalCreativeFilesLoading,
+    isError: isTikTokApprovalCreativeFilesError,
+  } = useGetClientProjectFilesQuery(
+    {
+      projectId: tiktokApprovalProjectId ?? "",
+      category: "ADS_CREATIVE",
+      approvalRequired: true,
+    },
+    { skip: tabId !== "ugc-scripts" || !tiktokApprovalProjectId },
+  );
+  const pendingTikTokApprovalCreativeFiles = useMemo(
+    () =>
+      (tiktokApprovalCreativeFilesResponse?.data ?? [])
+        .filter((file) => file.approvalStatus === "PENDING")
+        .slice(0, 6),
+    [tiktokApprovalCreativeFilesResponse?.data],
   );
   const notes = useMemo(
     () => buildTikTokAgencyNotes(summary, campaigns, ads),
@@ -1391,6 +1433,35 @@ function TikTokAdsServiceTab({
     campaignInsightsResponse?.lastSyncAt ??
     config?.lastSyncAt ??
     null;
+
+  const handleTikTokApprovalDecision = async (
+    task: ClientTask,
+    approvalStatus: ClientTaskMetaAdsApprovalStatus,
+    approvalResponseNote?: string,
+  ) => {
+    if (isUpdatingApproval) {
+      return;
+    }
+
+    setActiveApprovalTaskId(task.id);
+    try {
+      await updateClientTaskApproval({
+        taskId: task.id,
+        body: {
+          approvalStatus,
+          approvalResponseNote: approvalResponseNote?.trim() || undefined,
+        },
+      }).unwrap();
+      runClientAction(
+        `${task.title} ${approvalStatus === "APPROVED" ? "onaylandı" : "revizyona gönderildi"}`,
+        approvalStatus === "APPROVED" ? "approve" : "revision",
+      );
+    } catch {
+      runClientAction(`${task.title} onayı güncellenemedi`, "comment");
+    } finally {
+      setActiveApprovalTaskId(null);
+    }
+  };
 
   if (isConfigLoading) {
     return (
@@ -1483,11 +1554,24 @@ function TikTokAdsServiceTab({
       ) : null}
 
       {tabId === "ugc-scripts" ? (
-        <TikTokUgcScriptsPanel
-          rows={tiktokTasks}
-          loading={isUgcTasksLoading}
-          isError={isUgcTasksError}
-        />
+        <div className="space-y-6">
+          <TikTokUgcScriptsPanel
+            rows={tiktokTasks}
+            loading={isUgcTasksLoading}
+            isError={isUgcTasksError}
+          />
+          <MetaAdsApprovalsPanel
+            serviceLabel="TikTok Ads"
+            tasks={pendingTikTokApprovalRows}
+            history={tiktokApprovalHistoryRows}
+            creativeFiles={pendingTikTokApprovalCreativeFiles}
+            loading={isUgcTasksLoading || isTikTokApprovalCreativeFilesLoading}
+            isError={isUgcTasksError || isTikTokApprovalCreativeFilesError}
+            isActionLoading={isUpdatingApproval}
+            activeTaskId={activeApprovalTaskId}
+            onDecision={handleTikTokApprovalDecision}
+          />
+        </div>
       ) : null}
 
       {tabId === "optimization-notes" ? (
@@ -2187,6 +2271,7 @@ function MetaAdsAgencyNotesPanel({
 }
 
 function MetaAdsApprovalsPanel({
+  serviceLabel = "Meta Ads",
   tasks,
   history,
   creativeFiles,
@@ -2196,6 +2281,7 @@ function MetaAdsApprovalsPanel({
   activeTaskId,
   onDecision,
 }: {
+  serviceLabel?: string;
   tasks: ClientTask[];
   history: ClientTask[];
   creativeFiles: ProjectFile[];
@@ -2225,14 +2311,14 @@ function MetaAdsApprovalsPanel({
     );
   }
 
-  if (tasks.length === 0 && creativeFiles.length === 0) {
+  if (tasks.length === 0 && creativeFiles.length === 0 && history.length === 0) {
     return <MetaAdsStatePanel title="Bekleyen onay bulunmuyor." tone="muted" />;
   }
 
   return (
     <div className="space-y-3">
       <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-4">
-        <p className="text-sm text-white">Bekleyen Meta Ads onayı: {tasks.length}</p>
+        <p className="text-sm text-white">Bekleyen {serviceLabel} onayı: {tasks.length}</p>
       </div>
       {creativeFiles.length > 0 ? (
         <div className="space-y-2">
@@ -2277,11 +2363,11 @@ function MetaAdsApprovalsPanel({
               {getClientTaskStatusLabel(task.status)}
             </span>
           </div>
-              {task.approvalType ? (
-                <p className="mb-2 text-xs text-[#A0A0A0]">
-                  Onay tipi: {task.approvalType.replace("META_ADS_", "").replace(/_/g, " ")}
-                </p>
-              ) : null}
+          {task.approvalType ? (
+            <p className="mb-2 text-xs text-[#A0A0A0]">
+              Onay tipi: {formatAdsApprovalType(task.approvalType)}
+            </p>
+          ) : null}
           {task.description ? <p className="text-sm text-[#A0A0A0]">{task.description}</p> : null}
           <textarea
             className="mt-3 min-h-20 w-full rounded-xl border border-white/[0.08] bg-[#151515] p-3 text-sm text-white outline-none focus:border-[#AAFF01]/40"
@@ -2519,6 +2605,10 @@ function formatMetaInteger(value: number): string {
 
 function formatMetaPercent(value: number): string {
   return `${value.toFixed(2)}%`;
+}
+
+function formatAdsApprovalType(value: string): string {
+  return value.replace("META_ADS_", "").replace("TIKTOK_ADS_", "").replace(/_/g, " ");
 }
 
 function getClientTaskStatusLabel(status: ClientTaskStatus): string {
