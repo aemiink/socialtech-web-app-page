@@ -816,6 +816,7 @@ export function MetaAdsWorkspace({ initialView = "overview" }: MetaAdsWorkspaceP
                 canManageFiles={canManageFiles && canManageMetaAdsCreatives}
                 canCreateTask={canCreateTask}
                 hasMetaAdsProject={hasMetaAdsProject}
+                metaAdsProjectId={metaAdsProjectId}
                 tasks={metaAdsTasks}
                 isActionBusy={isActionBusy}
                 activeAction={activeAction}
@@ -1207,6 +1208,7 @@ function CreativeSection({
   canManageFiles,
   canCreateTask,
   hasMetaAdsProject,
+  metaAdsProjectId,
   tasks,
   isActionBusy,
   activeAction,
@@ -1215,6 +1217,7 @@ function CreativeSection({
   canManageFiles: boolean;
   canCreateTask: boolean;
   hasMetaAdsProject: boolean;
+  metaAdsProjectId: string | null;
   tasks: Task[];
   isActionBusy: boolean;
   activeAction: string | null;

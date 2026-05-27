@@ -15,6 +15,7 @@ import { CrmModule } from "./crm/crm.module";
 import { HealthModule } from "./health/health.module";
 import { GithubModule } from "./integrations/github/github.module";
 import { MetaAdsModule } from "./meta-ads/meta-ads.module";
+import { TikTokAdsModule } from "./tiktok-ads/tiktok-ads.module";
 import { ProjectFilesModule } from "./project-files/project-files.module";
 import { ProjectsModule } from "./projects/projects.module";
 import { TasksModule } from "./tasks/tasks.module";
@@ -41,6 +42,7 @@ import { WebAppWorkspaceModule } from "./web-app-workspace/web-app-workspace.mod
     CrmModule,
     GithubModule,
     MetaAdsModule,
+    TikTokAdsModule,
     ProjectFilesModule,
     DeliveryModule,
     AdminSummaryModule,

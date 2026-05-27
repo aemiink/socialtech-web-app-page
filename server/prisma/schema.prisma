@@ -83,6 +83,21 @@ enum MetaAdsSyncStatus {
   SKIPPED
 }
 
+enum TikTokAdsConnectionStatus {
+  NOT_CONNECTED
+  PENDING
+  CONNECTED
+  ERROR
+  DISCONNECTED
+}
+
+enum TikTokAdsInsightLevel {
+  ACCOUNT
+  CAMPAIGN
+  ADGROUP
+  AD
+}
+
 enum MetaAdsReportType {
   WEEKLY
   MONTHLY
@@ -410,6 +425,8 @@ model ClientProfile {
   metaAdsInsights     MetaAdsDailyInsight[]
   metaAdsSyncLogs     MetaAdsSyncLog[]
   metaAdsReports      MetaAdsReport[]
+  tikTokAdsConfig     ClientTikTokAdsConfig?
+  tikTokAdsCredential ClientTikTokAdsCredential?
   projects            Project[]
   files               ProjectFile[]
   convertedCrmLeads   CrmLead[]                  @relation("CrmLeadConvertedClient")
@@ -544,6 +561,44 @@ model MetaAdsReport {
   @@index([publishedByUserId])
   @@index([acknowledgedByUserId])
   @@index([acknowledgementTaskId])
+}
+
+model ClientTikTokAdsConfig {
+  id               String                    @id @default(uuid()) @db.Uuid
+  clientProfileId  String                    @unique @db.Uuid
+  advertiserId     String?
+  businessCenterId String?
+  pixelId          String?
+  advertiserName   String?
+  currency         String?
+  timezone         String?
+  connectionStatus TikTokAdsConnectionStatus @default(NOT_CONNECTED)
+  lastSyncAt       DateTime?
+  syncError        String?
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@index([connectionStatus])
+  @@index([lastSyncAt])
+}
+
+model ClientTikTokAdsCredential {
+  id              String    @id @default(uuid()) @db.Uuid
+  clientProfileId String    @unique @db.Uuid
+  accessTokenEnc  String?
+  refreshTokenEnc String?
+  tokenHash       String?
+  tokenExpiresAt  DateTime?
+  grantedScopes   String[]  @default([])
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@index([tokenHash])
+  @@index([tokenExpiresAt])
 }
 
 model ClientPurchasedService {

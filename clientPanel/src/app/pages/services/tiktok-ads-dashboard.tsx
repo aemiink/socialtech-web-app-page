@@ -1,6 +1,7 @@
 import { Eye, MousePointerClick, DollarSign, Users, Play, TrendingUp, Video, Clock, Target, AlertCircle } from 'lucide-react';
 import { AutomationPreview } from '../../components/automation-preview';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { useGetOwnTikTokAdsConfigQuery } from '../../features/tiktokAds/tiktokAdsApi';
 
 const stats = [
   { title: 'Video Görüntüleme', value: '284K', change: '+34%', icon: Eye, color: 'blue' },
@@ -76,6 +77,27 @@ const chartData = [
 ];
 
 export function TikTokAdsDashboard() {
+  const { data: tikTokConfig, isLoading: configLoading } = useGetOwnTikTokAdsConfigQuery();
+
+  if (configLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p className="text-[#A0A0A0] text-sm">Yükleniyor…</p>
+      </div>
+    );
+  }
+
+  if (!tikTokConfig || tikTokConfig.connectionStatus === "NOT_CONNECTED") {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-3">
+        <p className="text-white text-base font-medium">TikTok Ads hesabınız henüz bağlanmadı.</p>
+        <p className="text-[#A0A0A0] text-sm text-center max-w-sm">
+          Ekibimiz yapılandırmayı tamamladığında verileriniz burada görünecek.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="p-8 space-y-6">
       <div>

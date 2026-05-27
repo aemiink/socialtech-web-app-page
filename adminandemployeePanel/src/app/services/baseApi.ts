@@ -80,6 +80,7 @@ export const baseApi = createApi({
     "TaskTodos",
     "CrmLeads",
     "CrmActivities",
+    "TikTokAdsConfig",
   ],
   endpoints: () => ({}),
 });

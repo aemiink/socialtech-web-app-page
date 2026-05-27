@@ -17,6 +17,11 @@ import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { useGetAdminAssignmentsQuery } from "../features/adminAssignments/adminAssignmentsApi";
+import { useGetAdminClientTikTokAdsConfigQuery } from "../features/tiktokAds/tiktokAdsApi";
+import {
+  getTikTokAdsConnectionStatusBadgeClass,
+  getTikTokAdsConnectionStatusLabel,
+} from "../features/tiktokAds/tiktokAdsTypes";
 import {
   useConnectAdminClientMetaAdsManualMutation,
   useDisconnectAdminClientMetaAdsMutation,
@@ -104,6 +109,13 @@ export function ClientDetail() {
     isLoading: isMetaAdsSummaryLoading,
     refetch: refetchMetaAdsSummary,
   } = useGetAdminClientMetaAdsSummaryQuery(clientProfileId ?? "", {
+    skip: !isValidId,
+  });
+  const {
+    data: tikTokAdsConfig,
+    error: tikTokAdsConfigError,
+    isLoading: tikTokAdsConfigLoading,
+  } = useGetAdminClientTikTokAdsConfigQuery(clientProfileId ?? "", {
     skip: !isValidId,
   });
 
@@ -501,6 +513,39 @@ export function ClientDetail() {
         {metaConnectionFeedback ? (
           <p className="mt-3 text-sm text-[#d8ff8f]">{metaConnectionFeedback}</p>
         ) : null}
+      </Card>
+
+      <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-white">TikTok Ads Yapılandırması</h2>
+          {tikTokAdsConfig && (
+            <Badge className={getTikTokAdsConnectionStatusBadgeClass(tikTokAdsConfig.connectionStatus)}>
+              {getTikTokAdsConnectionStatusLabel(tikTokAdsConfig.connectionStatus)}
+            </Badge>
+          )}
+        </div>
+        {tikTokAdsConfigLoading && (
+          <p className="text-xs text-[#A0A0A0]">Yükleniyor…</p>
+        )}
+        {tikTokAdsConfigError && (
+          <p className="text-xs text-red-400">TikTok Ads yapılandırması alınamadı.</p>
+        )}
+        {tikTokAdsConfig && (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <DetailRow label="Advertiser ID" value={tikTokAdsConfig.advertiserId ?? "—"} mono />
+            <DetailRow label="Business Center ID" value={tikTokAdsConfig.businessCenterId ?? "—"} />
+            <DetailRow label="Pixel ID" value={tikTokAdsConfig.pixelId ?? "—"} mono />
+            <DetailRow label="Advertiser Adı" value={tikTokAdsConfig.advertiserName ?? "—"} />
+            <DetailRow label="Para Birimi" value={tikTokAdsConfig.currency ?? "—"} />
+            <DetailRow label="Saat Dilimi" value={tikTokAdsConfig.timezone ?? "—"} />
+            {tikTokAdsConfig.lastSyncAt && (
+              <DetailRow
+                label="Son Sync"
+                value={new Date(tikTokAdsConfig.lastSyncAt).toLocaleString("tr-TR")}
+              />
+            )}
+          </div>
+        )}
       </Card>
 
       <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
