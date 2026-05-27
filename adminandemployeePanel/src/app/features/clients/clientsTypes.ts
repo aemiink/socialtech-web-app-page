@@ -199,6 +199,13 @@ export type AmazonAdsConnectionStatus =
 
 export type AmazonAdsRegion = "NA" | "EU" | "FE";
 
+export type AmazonAdsSyncStatus =
+  | "RUNNING"
+  | "SUCCESS"
+  | "FAILED"
+  | "PARTIAL"
+  | "SKIPPED";
+
 export type MetaAdsSyncStatus =
   | "RUNNING"
   | "SUCCESS"
@@ -347,6 +354,113 @@ export type ExchangeAmazonAdsOAuthCodeRequest = {
   code: string;
   profileId?: string;
   region?: AmazonAdsRegion;
+};
+
+export type AmazonAdsDateRangeQuery = {
+  since?: string;
+  until?: string;
+};
+
+export type AmazonAdsSummaryResponse = {
+  spend: number;
+  impressions: number;
+  clicks: number;
+  sales: number;
+  orders: number;
+  unitsSold: number;
+  ctr: number;
+  cpc: number;
+  acos: number;
+  roas: number;
+  conversionRate: number;
+  dateRange: {
+    since: string;
+    until: string;
+  };
+  lastSyncAt: string | null;
+};
+
+export type AmazonAdsSyncResponse = {
+  success: true;
+  syncedAt: string;
+  dateRange: {
+    since: string;
+    until: string;
+  };
+  inserted: {
+    account: number;
+    campaigns: number;
+    products: number;
+    searchTerms: number;
+    total: number;
+  };
+  connectionStatus: AmazonAdsConnectionStatus;
+  lastSyncAt: string | null;
+  syncStatus: AmazonAdsSyncStatus;
+};
+
+export type AdminAmazonAdsClientListItem = {
+  client: {
+    id: string;
+    slug: string;
+    companyName: string;
+    status: ClientStatus;
+  };
+  serviceStatus: PurchasedServiceStatus;
+  connectionStatus: AmazonAdsConnectionStatus;
+  hasRefreshToken: boolean;
+  ids: {
+    profileId: string | null;
+    advertiserAccountId: string | null;
+    marketplaceId: string | null;
+  };
+  account: {
+    accountType: string | null;
+    accountName: string | null;
+    validPaymentMethod: boolean | null;
+  };
+  settings: {
+    region: AmazonAdsRegion | null;
+    countryCode: string | null;
+    currencyCode: string | null;
+    timezone: string | null;
+  };
+  lastSyncAt: string | null;
+  syncError: string | null;
+  spendSummary: {
+    spend: number;
+    sales: number;
+    impressions: number;
+    clicks: number;
+    orders: number;
+    acos: number;
+    roas: number;
+  };
+  pendingApprovals: number;
+  assignedEmployees: Array<{
+    userId: string;
+    email: string;
+    displayName: string | null;
+    role: string;
+    scope: string;
+  }>;
+  actionContext: {
+    amazonAdsProjectId: string | null;
+  };
+};
+
+export type AdminAmazonAdsClientListResponse = {
+  data: AdminAmazonAdsClientListItem[];
+  dateRange: {
+    since: string;
+    until: string;
+  };
+  meta: {
+    total: number;
+    connected: number;
+    error: number;
+    pendingApprovals: number;
+  };
 };
 
 export type TestMetaAdsConnectionRequest = {

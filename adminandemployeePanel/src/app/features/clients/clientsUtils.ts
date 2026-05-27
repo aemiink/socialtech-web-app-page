@@ -1,16 +1,21 @@
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { extractApiErrorMessage } from "../adminUsers/adminUsersUtils";
 import type {
+  AdminAmazonAdsClientListItem,
+  AdminAmazonAdsClientListResponse,
   AdminMetaAdsSyncLogItem,
   AdminMetaAdsSyncLogsResponse,
   AdminMetaAdsClientListItem,
   AdminMetaAdsClientListResponse,
   AdminClientAmazonAdsConnection,
   AdminClientMetaAdsConnection,
+  AmazonAdsSummaryResponse,
   AmazonAdsOAuthStartResponse,
   AmazonAdsProfileSummary,
   AmazonAdsConnectionStatus,
   AmazonAdsRegion,
+  AmazonAdsSyncResponse,
+  AmazonAdsSyncStatus,
   BackendPurchasedServiceKey,
   BackendPurchasedServiceStatus,
   ClientProfile,
@@ -643,6 +648,31 @@ export function normalizeMetaAdsSummaryResponse(response: unknown): MetaAdsSumma
   };
 }
 
+export function normalizeAmazonAdsSummaryResponse(response: unknown): AmazonAdsSummaryResponse {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  const dateRange = isRecord(candidate) && isRecord(candidate.dateRange) ? candidate.dateRange : {};
+
+  return {
+    spend: readNumber(isRecord(candidate) ? candidate.spend : undefined, 0),
+    impressions: Math.trunc(readNumber(isRecord(candidate) ? candidate.impressions : undefined, 0)),
+    clicks: Math.trunc(readNumber(isRecord(candidate) ? candidate.clicks : undefined, 0)),
+    sales: readNumber(isRecord(candidate) ? candidate.sales : undefined, 0),
+    orders: Math.trunc(readNumber(isRecord(candidate) ? candidate.orders : undefined, 0)),
+    unitsSold: Math.trunc(readNumber(isRecord(candidate) ? candidate.unitsSold : undefined, 0)),
+    ctr: readNumber(isRecord(candidate) ? candidate.ctr : undefined, 0),
+    cpc: readNumber(isRecord(candidate) ? candidate.cpc : undefined, 0),
+    acos: readNumber(isRecord(candidate) ? candidate.acos : undefined, 0),
+    roas: readNumber(isRecord(candidate) ? candidate.roas : undefined, 0),
+    conversionRate: readNumber(isRecord(candidate) ? candidate.conversionRate : undefined, 0),
+    dateRange: {
+      since: typeof dateRange.since === "string" ? dateRange.since : "",
+      until: typeof dateRange.until === "string" ? dateRange.until : "",
+    },
+    lastSyncAt:
+      isRecord(candidate) && isStringOrNull(candidate.lastSyncAt) ? candidate.lastSyncAt : null,
+  };
+}
+
 export function normalizeMetaAdsSyncResponse(response: unknown): MetaAdsSyncResponse {
   const candidate = isRecord(response) && "data" in response ? response.data : response;
   const dateRange = isRecord(candidate) && isRecord(candidate.dateRange) ? candidate.dateRange : {};
@@ -675,6 +705,38 @@ export function normalizeMetaAdsSyncResponse(response: unknown): MetaAdsSyncResp
   };
 }
 
+export function normalizeAmazonAdsSyncResponse(response: unknown): AmazonAdsSyncResponse {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  const dateRange = isRecord(candidate) && isRecord(candidate.dateRange) ? candidate.dateRange : {};
+  const inserted = isRecord(candidate) && isRecord(candidate.inserted) ? candidate.inserted : {};
+
+  return {
+    success: true,
+    syncedAt: isRecord(candidate) && typeof candidate.syncedAt === "string" ? candidate.syncedAt : "",
+    dateRange: {
+      since: typeof dateRange.since === "string" ? dateRange.since : "",
+      until: typeof dateRange.until === "string" ? dateRange.until : "",
+    },
+    inserted: {
+      account: readNumber(inserted.account, 0),
+      campaigns: readNumber(inserted.campaigns, 0),
+      products: readNumber(inserted.products, 0),
+      searchTerms: readNumber(inserted.searchTerms, 0),
+      total: readNumber(inserted.total, 0),
+    },
+    connectionStatus:
+      isRecord(candidate) && candidate.connectionStatus
+        ? normalizeAmazonAdsConnectionStatus(candidate.connectionStatus)
+        : "NOT_CONNECTED",
+    lastSyncAt:
+      isRecord(candidate) && isStringOrNull(candidate.lastSyncAt) ? candidate.lastSyncAt : null,
+    syncStatus:
+      isRecord(candidate) && candidate.syncStatus
+        ? normalizeAmazonAdsSyncStatus(candidate.syncStatus)
+        : "SUCCESS",
+  };
+}
+
 export function normalizeAdminMetaAdsClientListResponse(
   response: unknown,
 ): AdminMetaAdsClientListResponse {
@@ -688,6 +750,33 @@ export function normalizeAdminMetaAdsClientListResponse(
   return {
     data: Array.isArray(rowsSource)
       ? rowsSource.map((row) => normalizeAdminMetaAdsClientListItem(row)).filter(isDefined)
+      : [],
+    dateRange: {
+      since: typeof dateRangeSource.since === "string" ? dateRangeSource.since : "",
+      until: typeof dateRangeSource.until === "string" ? dateRangeSource.until : "",
+    },
+    meta: {
+      total: readNumber(metaSource.total, 0),
+      connected: readNumber(metaSource.connected, 0),
+      error: readNumber(metaSource.error, 0),
+      pendingApprovals: readNumber(metaSource.pendingApprovals, 0),
+    },
+  };
+}
+
+export function normalizeAdminAmazonAdsClientListResponse(
+  response: unknown,
+): AdminAmazonAdsClientListResponse {
+  const candidate = isRecord(response) && "data" in response && isRecord(response.data)
+    ? response.data
+    : response;
+  const rowsSource = isRecord(candidate) ? candidate.data : undefined;
+  const dateRangeSource = isRecord(candidate) && isRecord(candidate.dateRange) ? candidate.dateRange : {};
+  const metaSource = isRecord(candidate) && isRecord(candidate.meta) ? candidate.meta : {};
+
+  return {
+    data: Array.isArray(rowsSource)
+      ? rowsSource.map((row) => normalizeAdminAmazonAdsClientListItem(row)).filter(isDefined)
       : [],
     dateRange: {
       since: typeof dateRangeSource.since === "string" ? dateRangeSource.since : "",
@@ -1162,6 +1251,102 @@ function normalizeAdminMetaAdsClientListItem(value: unknown): AdminMetaAdsClient
   };
 }
 
+function normalizeAdminAmazonAdsClientListItem(value: unknown): AdminAmazonAdsClientListItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const client = isRecord(value.client) ? value.client : {};
+  const ids = isRecord(value.ids) ? value.ids : {};
+  const account = isRecord(value.account) ? value.account : {};
+  const settings = isRecord(value.settings) ? value.settings : {};
+  const spendSummary = isRecord(value.spendSummary) ? value.spendSummary : {};
+  const actionContext = isRecord(value.actionContext) ? value.actionContext : {};
+  const assignedEmployeesSource = Array.isArray(value.assignedEmployees) ? value.assignedEmployees : [];
+
+  if (
+    typeof client.id !== "string" ||
+    typeof client.slug !== "string" ||
+    typeof client.companyName !== "string"
+  ) {
+    return null;
+  }
+
+  const assignedEmployees = assignedEmployeesSource
+    .map((item) => {
+      if (!isRecord(item)) {
+        return null;
+      }
+
+      if (
+        typeof item.userId !== "string" ||
+        typeof item.email !== "string" ||
+        typeof item.role !== "string" ||
+        typeof item.scope !== "string"
+      ) {
+        return null;
+      }
+
+      return {
+        userId: item.userId,
+        email: item.email,
+        displayName: isStringOrNull(item.displayName) ? item.displayName : null,
+        role: item.role,
+        scope: item.scope,
+      };
+    })
+    .filter(isDefined);
+
+  return {
+    client: {
+      id: client.id,
+      slug: client.slug,
+      companyName: client.companyName,
+      status: normalizeClientStatus(client.status),
+    },
+    serviceStatus: normalizeMetaAdsServiceStatus(value.serviceStatus),
+    connectionStatus: normalizeAmazonAdsConnectionStatus(value.connectionStatus),
+    hasRefreshToken: typeof value.hasRefreshToken === "boolean" ? value.hasRefreshToken : false,
+    ids: {
+      profileId: isStringOrNull(ids.profileId) ? ids.profileId : null,
+      advertiserAccountId: isStringOrNull(ids.advertiserAccountId)
+        ? ids.advertiserAccountId
+        : null,
+      marketplaceId: isStringOrNull(ids.marketplaceId) ? ids.marketplaceId : null,
+    },
+    account: {
+      accountType: isStringOrNull(account.accountType) ? account.accountType : null,
+      accountName: isStringOrNull(account.accountName) ? account.accountName : null,
+      validPaymentMethod:
+        typeof account.validPaymentMethod === "boolean" ? account.validPaymentMethod : null,
+    },
+    settings: {
+      region: normalizeAmazonAdsRegion(settings.region),
+      countryCode: isStringOrNull(settings.countryCode) ? settings.countryCode : null,
+      currencyCode: isStringOrNull(settings.currencyCode) ? settings.currencyCode : null,
+      timezone: isStringOrNull(settings.timezone) ? settings.timezone : null,
+    },
+    lastSyncAt: isStringOrNull(value.lastSyncAt) ? value.lastSyncAt : null,
+    syncError: isStringOrNull(value.syncError) ? value.syncError : null,
+    spendSummary: {
+      spend: readNumber(spendSummary.spend, 0),
+      sales: readNumber(spendSummary.sales, 0),
+      impressions: readNumber(spendSummary.impressions, 0),
+      clicks: readNumber(spendSummary.clicks, 0),
+      orders: readNumber(spendSummary.orders, 0),
+      acos: readNumber(spendSummary.acos, 0),
+      roas: readNumber(spendSummary.roas, 0),
+    },
+    pendingApprovals: readNumber(value.pendingApprovals, 0),
+    assignedEmployees,
+    actionContext: {
+      amazonAdsProjectId: isStringOrNull(actionContext.amazonAdsProjectId)
+        ? actionContext.amazonAdsProjectId
+        : null,
+    },
+  };
+}
+
 function normalizeAdminMetaAdsSyncLogItem(value: unknown): AdminMetaAdsSyncLogItem | null {
   if (!isRecord(value)) {
     return null;
@@ -1487,6 +1672,20 @@ function normalizeAmazonAdsRegion(value: unknown): AmazonAdsRegion | null {
 }
 
 function normalizeMetaAdsSyncStatus(value: unknown): MetaAdsSyncStatus {
+  if (
+    value === "RUNNING" ||
+    value === "SUCCESS" ||
+    value === "FAILED" ||
+    value === "PARTIAL" ||
+    value === "SKIPPED"
+  ) {
+    return value;
+  }
+
+  return "SUCCESS";
+}
+
+function normalizeAmazonAdsSyncStatus(value: unknown): AmazonAdsSyncStatus {
   if (
     value === "RUNNING" ||
     value === "SUCCESS" ||

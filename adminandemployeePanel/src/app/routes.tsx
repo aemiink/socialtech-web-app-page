@@ -45,6 +45,7 @@ export const router = createBrowserRouter([
       { path: "kampanyalar", lazy: lazyComponent(() => import("./pages/Campaigns"), "Campaigns") },
       { path: "meta-ads", lazy: lazyComponent(() => import("./pages/MetaAdsAdmin"), "MetaAdsAdmin") },
       { path: "tiktok-ads", lazy: lazyComponent(() => import("./pages/TikTokAdsAdmin"), "TikTokAdsAdmin") },
+      { path: "amazon-ads", lazy: lazyComponent(() => import("./pages/AmazonAdsAdmin"), "AmazonAdsAdmin") },
       { path: "icerikler", lazy: lazyComponent(() => import("./pages/Contents"), "Contents") },
       { path: "raporlar", lazy: lazyComponent(() => import("./pages/Reports"), "Reports") },
       { path: "raporlar/:id", lazy: lazyComponent(() => import("./pages/ReportDetail"), "ReportDetail") },

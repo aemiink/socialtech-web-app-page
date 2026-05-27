@@ -15,7 +15,11 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { AmazonAdsService } from "./amazon-ads.service";
+import { AmazonAdsCampaignsQueryDto } from "./dto/amazon-ads-campaigns-query.dto";
+import { AmazonAdsDateRangeQueryDto } from "./dto/amazon-ads-date-range-query.dto";
+import { AmazonAdsInsightsQueryDto } from "./dto/amazon-ads-insights-query.dto";
 import { AmazonAdsOAuthStartQueryDto } from "./dto/amazon-ads-oauth-start-query.dto";
+import { AmazonAdsProductsQueryDto } from "./dto/amazon-ads-products-query.dto";
 import { ConnectManualAmazonAdsDto } from "./dto/connect-manual-amazon-ads.dto";
 import { ExchangeAmazonAdsOAuthCodeDto } from "./dto/exchange-amazon-ads-oauth-code.dto";
 import { TestAmazonAdsConnectionDto } from "./dto/test-amazon-ads-connection.dto";
@@ -25,6 +29,15 @@ import { UpdateAmazonAdsConfigDto } from "./dto/update-amazon-ads-config.dto";
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class AmazonAdsController {
   constructor(private readonly amazonAdsService: AmazonAdsService) {}
+
+  @Get("admin/amazon-ads/clients")
+  @RequirePermissions("amazonAds.config.read.any")
+  getAdminAmazonAdsClients(
+    @Query() query: AmazonAdsDateRangeQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.amazonAdsService.getAdminAmazonAdsClients(query, actor);
+  }
 
   @Get("admin/clients/:clientId/amazon-ads/config")
   @RequirePermissions("amazonAds.config.read.any")
@@ -103,6 +116,56 @@ export class AmazonAdsController {
     return this.amazonAdsService.disconnectAdminClient(clientId, actor);
   }
 
+  @Get("admin/clients/:clientId/amazon-ads/summary")
+  @RequirePermissions("amazonAds.config.read.any", "amazonAds.reporting.read.any")
+  getAdminClientSummary(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: AmazonAdsDateRangeQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.amazonAdsService.getAdminClientSummary(clientId, query, actor);
+  }
+
+  @Get("admin/clients/:clientId/amazon-ads/campaigns")
+  @RequirePermissions("amazonAds.config.read.any", "amazonAds.reporting.read.any")
+  getAdminClientCampaigns(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: AmazonAdsCampaignsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.amazonAdsService.getAdminClientCampaigns(clientId, query, actor);
+  }
+
+  @Get("admin/clients/:clientId/amazon-ads/products")
+  @RequirePermissions("amazonAds.config.read.any", "amazonAds.reporting.read.any")
+  getAdminClientProducts(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: AmazonAdsProductsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.amazonAdsService.getAdminClientProducts(clientId, query, actor);
+  }
+
+  @Get("admin/clients/:clientId/amazon-ads/insights")
+  @RequirePermissions("amazonAds.config.read.any", "amazonAds.reporting.read.any")
+  getAdminClientInsights(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: AmazonAdsInsightsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.amazonAdsService.getAdminClientInsights(clientId, query, actor);
+  }
+
+  @Post("admin/clients/:clientId/amazon-ads/sync")
+  @RequirePermissions("amazonAds.config.manage.any", "amazonAds.sync.run.any")
+  syncAdminClientInsights(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: AmazonAdsDateRangeQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.amazonAdsService.syncAdminClientInsights(clientId, query, actor);
+  }
+
   @Get("amazon-ads/clients/:clientId/config")
   @RequirePermissions("amazonAds.config.read.assigned")
   getAssignedClientConfig(
@@ -112,9 +175,95 @@ export class AmazonAdsController {
     return this.amazonAdsService.getAssignedClientConfig(clientId, actor);
   }
 
+  @Get("amazon-ads/clients/:clientId/summary")
+  @RequirePermissions("amazonAds.config.read.assigned", "amazonAds.reporting.read.assigned")
+  getAssignedClientSummary(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: AmazonAdsDateRangeQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.amazonAdsService.getAssignedClientSummary(clientId, query, actor);
+  }
+
+  @Get("amazon-ads/clients/:clientId/campaigns")
+  @RequirePermissions("amazonAds.config.read.assigned", "amazonAds.reporting.read.assigned")
+  getAssignedClientCampaigns(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: AmazonAdsCampaignsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.amazonAdsService.getAssignedClientCampaigns(clientId, query, actor);
+  }
+
+  @Get("amazon-ads/clients/:clientId/products")
+  @RequirePermissions("amazonAds.config.read.assigned", "amazonAds.reporting.read.assigned")
+  getAssignedClientProducts(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: AmazonAdsProductsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.amazonAdsService.getAssignedClientProducts(clientId, query, actor);
+  }
+
+  @Get("amazon-ads/clients/:clientId/insights")
+  @RequirePermissions("amazonAds.config.read.assigned", "amazonAds.reporting.read.assigned")
+  getAssignedClientInsights(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: AmazonAdsInsightsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.amazonAdsService.getAssignedClientInsights(clientId, query, actor);
+  }
+
+  @Post("amazon-ads/clients/:clientId/sync")
+  @RequirePermissions("amazonAds.config.read.assigned", "amazonAds.sync.read.assigned")
+  syncAssignedClientInsights(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: AmazonAdsDateRangeQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.amazonAdsService.syncAssignedClientInsights(clientId, query, actor);
+  }
+
   @Get("clients/me/amazon-ads/config")
   @RequirePermissions("amazonAds.config.read.own")
   getOwnClientConfig(@CurrentUser() actor: AuthenticatedUser) {
     return this.amazonAdsService.getOwnClientConfig(actor);
+  }
+
+  @Get("clients/me/amazon-ads/summary")
+  @RequirePermissions("amazonAds.config.read.own", "amazonAds.reporting.read.own")
+  getOwnClientSummary(
+    @Query() query: AmazonAdsDateRangeQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.amazonAdsService.getOwnClientSummary(query, actor);
+  }
+
+  @Get("clients/me/amazon-ads/campaigns")
+  @RequirePermissions("amazonAds.config.read.own", "amazonAds.reporting.read.own")
+  getOwnClientCampaigns(
+    @Query() query: AmazonAdsCampaignsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.amazonAdsService.getOwnClientCampaigns(query, actor);
+  }
+
+  @Get("clients/me/amazon-ads/products")
+  @RequirePermissions("amazonAds.config.read.own", "amazonAds.reporting.read.own")
+  getOwnClientProducts(
+    @Query() query: AmazonAdsProductsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.amazonAdsService.getOwnClientProducts(query, actor);
+  }
+
+  @Get("clients/me/amazon-ads/insights")
+  @RequirePermissions("amazonAds.config.read.own", "amazonAds.reporting.read.own")
+  getOwnClientInsights(
+    @Query() query: AmazonAdsInsightsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.amazonAdsService.getOwnClientInsights(query, actor);
   }
 }

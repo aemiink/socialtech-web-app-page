@@ -5,9 +5,13 @@ import {
   AmazonAdsProductType,
   AmazonAdsRegion,
   AmazonAdsSyncStatus,
+  DeliveryReleaseApprovalStatus,
+  MetaAdsApprovalStatus,
   Prisma,
   PurchasedServiceKey,
   PurchasedServiceStatus,
+  TaskStatus,
+  TaskType,
   UserRole,
 } from "@prisma/client";
 import {
@@ -333,6 +337,70 @@ type AmazonAdsSyncResponse = {
   syncStatus: AmazonAdsSyncStatus;
 };
 
+type AdminAmazonAdsClientListItem = {
+  client: {
+    id: string;
+    slug: string;
+    companyName: string;
+    status: string;
+  };
+  serviceStatus: PurchasedServiceStatus;
+  connectionStatus: AmazonAdsConnectionStatus;
+  hasRefreshToken: boolean;
+  ids: {
+    profileId: string | null;
+    advertiserAccountId: string | null;
+    marketplaceId: string | null;
+  };
+  account: {
+    accountType: string | null;
+    accountName: string | null;
+    validPaymentMethod: boolean | null;
+  };
+  settings: {
+    region: AmazonAdsRegion | null;
+    countryCode: string | null;
+    currencyCode: string | null;
+    timezone: string | null;
+  };
+  lastSyncAt: Date | null;
+  syncError: string | null;
+  spendSummary: {
+    spend: number;
+    sales: number;
+    impressions: number;
+    clicks: number;
+    orders: number;
+    acos: number;
+    roas: number;
+  };
+  pendingApprovals: number;
+  assignedEmployees: Array<{
+    userId: string;
+    email: string;
+    displayName: string | null;
+    role: UserRole;
+    scope: string;
+  }>;
+  actionContext: {
+    amazonAdsProjectId: string | null;
+  };
+};
+
+type AdminAmazonAdsClientListResponse = {
+  data: AdminAmazonAdsClientListItem[];
+  dateRange: {
+    since: string;
+    until: string;
+  };
+  meta: {
+    total: number;
+    connected: number;
+    error: number;
+    pendingApprovals: number;
+  };
+};
+
 type AmazonAdsReportingConnection = {
   refreshToken: string;
   profileId: string;
@@ -367,6 +435,277 @@ export class AmazonAdsService {
     this.assertCanReadAnyConfig(actor);
     await this.assertClientExists(clientId);
     return this.getConnectionSummaryByClientProfileId(clientId);
+  }
+
+  async getAdminAmazonAdsClients(
+    query: AmazonAdsDateRangeQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<AdminAmazonAdsClientListResponse> {
+    this.assertCanReadAnyConfig(actor);
+    const dateRange = this.resolveReportDateRange(query);
+
+    const clients = await this.prisma.clientProfile.findMany({
+      where: {
+        purchasedServices: {
+          some: {
+            serviceKey: PurchasedServiceKey.AMAZON_ADS,
+          },
+        },
+      },
+      select: {
+        id: true,
+        slug: true,
+        companyName: true,
+        status: true,
+        purchasedServices: {
+          where: {
+            serviceKey: PurchasedServiceKey.AMAZON_ADS,
+          },
+          select: {
+            status: true,
+          },
+          orderBy: {
+            updatedAt: "desc",
+          },
+          take: 1,
+        },
+        amazonAdsConfig: {
+          select: adminAmazonAdsConfigSelect,
+        },
+        amazonAdsCredential: {
+          select: amazonAdsCredentialSummarySelect,
+        },
+        employeeAssignments: {
+          where: {
+            isActive: true,
+          },
+          select: {
+            scope: true,
+            employeeUser: {
+              select: {
+                id: true,
+                email: true,
+                displayName: true,
+                role: true,
+                status: true,
+              },
+            },
+          },
+        },
+        projects: {
+          where: {
+            serviceKey: PurchasedServiceKey.AMAZON_ADS,
+          },
+          select: {
+            id: true,
+          },
+          orderBy: {
+            createdAt: "asc",
+          },
+          take: 1,
+        },
+      },
+      orderBy: {
+        companyName: "asc",
+      },
+    });
+
+    const clientProfileIds = clients.map((client) => client.id);
+    if (clientProfileIds.length === 0) {
+      return {
+        data: [],
+        dateRange: {
+          since: dateRange.sinceIsoDate,
+          until: dateRange.untilIsoDate,
+        },
+        meta: {
+          total: 0,
+          connected: 0,
+          error: 0,
+          pendingApprovals: 0,
+        },
+      };
+    }
+
+    const [insightsByClient, pendingTasks, pendingReleaseApprovals] = await Promise.all([
+      this.prisma.amazonAdsDailyInsight.groupBy({
+        by: ["clientProfileId"],
+        where: {
+          clientProfileId: {
+            in: clientProfileIds,
+          },
+          level: AmazonAdsInsightLevel.ACCOUNT,
+          date: {
+            gte: dateRange.since,
+            lte: dateRange.until,
+          },
+        },
+        _sum: {
+          spend: true,
+          sales: true,
+          impressions: true,
+          clicks: true,
+          orders: true,
+        },
+      }),
+      this.prisma.task.findMany({
+        where: {
+          OR: [
+            {
+              approvalRequired: true,
+              approvalStatus: MetaAdsApprovalStatus.PENDING,
+            },
+            {
+              status: TaskStatus.REVIEW,
+              type: TaskType.REVISION,
+            },
+          ],
+          project: {
+            clientProfileId: {
+              in: clientProfileIds,
+            },
+            serviceKey: PurchasedServiceKey.AMAZON_ADS,
+          },
+        },
+        select: {
+          project: {
+            select: {
+              clientProfileId: true,
+            },
+          },
+        },
+      }),
+      this.prisma.deliveryRelease.findMany({
+        where: {
+          approvalStatus: DeliveryReleaseApprovalStatus.PENDING,
+          project: {
+            clientProfileId: {
+              in: clientProfileIds,
+            },
+            serviceKey: PurchasedServiceKey.AMAZON_ADS,
+          },
+        },
+        select: {
+          project: {
+            select: {
+              clientProfileId: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    const insightTotalsByClientId = new Map<
+      string,
+      {
+        spend: number;
+        sales: number;
+        impressions: number;
+        clicks: number;
+        orders: number;
+      }
+    >();
+    for (const row of insightsByClient) {
+      insightTotalsByClientId.set(row.clientProfileId, {
+        spend: this.readDecimalAsNumber(row._sum.spend),
+        sales: this.readDecimalAsNumber(row._sum.sales),
+        impressions: row._sum.impressions ?? 0,
+        clicks: row._sum.clicks ?? 0,
+        orders: row._sum.orders ?? 0,
+      });
+    }
+
+    const pendingApprovalsByClientId = new Map<string, number>();
+    for (const pendingTask of pendingTasks) {
+      const clientProfileId = pendingTask.project.clientProfileId;
+      pendingApprovalsByClientId.set(
+        clientProfileId,
+        (pendingApprovalsByClientId.get(clientProfileId) ?? 0) + 1,
+      );
+    }
+    for (const pendingRelease of pendingReleaseApprovals) {
+      const clientProfileId = pendingRelease.project.clientProfileId;
+      pendingApprovalsByClientId.set(
+        clientProfileId,
+        (pendingApprovalsByClientId.get(clientProfileId) ?? 0) + 1,
+      );
+    }
+
+    const data: AdminAmazonAdsClientListItem[] = clients.map((client) => {
+      const config = client.amazonAdsConfig;
+      const insightTotals = insightTotalsByClientId.get(client.id);
+      const spend = insightTotals?.spend ?? 0;
+      const sales = insightTotals?.sales ?? 0;
+
+      return {
+        client: {
+          id: client.id,
+          slug: client.slug,
+          companyName: client.companyName,
+          status: client.status,
+        },
+        serviceStatus: client.purchasedServices[0]?.status ?? PurchasedServiceStatus.INACTIVE,
+        connectionStatus: config?.connectionStatus ?? AmazonAdsConnectionStatus.NOT_CONNECTED,
+        hasRefreshToken: Boolean(client.amazonAdsCredential?.refreshTokenEnc),
+        ids: {
+          profileId: config?.profileId ?? null,
+          advertiserAccountId: config?.advertiserAccountId ?? null,
+          marketplaceId: config?.marketplaceId ?? null,
+        },
+        account: {
+          accountType: config?.accountType ?? null,
+          accountName: config?.accountName ?? null,
+          validPaymentMethod: config?.validPaymentMethod ?? null,
+        },
+        settings: {
+          region: config?.region ?? null,
+          countryCode: config?.countryCode ?? null,
+          currencyCode: config?.currencyCode ?? null,
+          timezone: config?.timezone ?? null,
+        },
+        lastSyncAt: config?.lastSyncAt ?? null,
+        syncError: config?.syncError ?? null,
+        spendSummary: {
+          spend: this.round(spend),
+          sales: this.round(sales),
+          impressions: insightTotals?.impressions ?? 0,
+          clicks: insightTotals?.clicks ?? 0,
+          orders: insightTotals?.orders ?? 0,
+          acos: this.roundPercentageByValue(spend, sales),
+          roas: this.roundDivision(sales, spend),
+        },
+        pendingApprovals: pendingApprovalsByClientId.get(client.id) ?? 0,
+        assignedEmployees: client.employeeAssignments
+          .filter((assignment) => assignment.employeeUser.status === "ACTIVE")
+          .map((assignment) => ({
+            userId: assignment.employeeUser.id,
+            email: assignment.employeeUser.email,
+            displayName: assignment.employeeUser.displayName,
+            role: assignment.employeeUser.role,
+            scope: assignment.scope,
+          })),
+        actionContext: {
+          amazonAdsProjectId: client.projects[0]?.id ?? null,
+        },
+      };
+    });
+
+    return {
+      data,
+      dateRange: {
+        since: dateRange.sinceIsoDate,
+        until: dateRange.untilIsoDate,
+      },
+      meta: {
+        total: data.length,
+        connected: data.filter(
+          (item) => item.connectionStatus === AmazonAdsConnectionStatus.CONNECTED,
+        ).length,
+        error: data.filter((item) => item.connectionStatus === AmazonAdsConnectionStatus.ERROR)
+          .length,
+        pendingApprovals: data.reduce((total, item) => total + item.pendingApprovals, 0),
+      },
+    };
   }
 
   async updateAdminClientConfig(

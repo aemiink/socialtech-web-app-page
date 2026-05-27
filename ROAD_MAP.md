@@ -165,6 +165,7 @@
 - Amazon Ads Faz 2: LwA OAuth/token connection management (encrypted refresh token storage, OAuth URL/code exchange, profile selection/test connection, disconnect, admin/client connection UI)
 - Amazon Ads Faz 3: Reporting v3 async sync (daily snapshot tables + manual sync + summary/campaign/product/insight API + admin/client dashboard read-model integration)
 - Amazon Ads Faz 4: Client panel API-driven tab workspace (sponsored product/brand/display + campaigns/products/keywords/targeting/search terms + approvals/agency notes + report-ready tab + config-aware states)
+- Amazon Ads Faz 5: Admin global panel (`/amazon-ads`) + backend global clients list endpoint + config/test/sync/disconnect/onay talebi merkezi yönetim ekranı
 
 ## Blocked
 
@@ -282,6 +283,14 @@ None identified.
   - `clientPanel`: `npm run build` ✅
   - `git diff --check` ✅
   - `server`: `npm run test:e2e -- amazon-ads-authz.e2e-spec.ts` çalıştırılmak istendi; local `DATABASE_URL` test DB olmadığı için e2e runner güvenlik guard’ı ile reddetti (`socialtech_server` test DB adı değil).
+- Latest Amazon Ads Faz 5 checkpoint:
+  - `server`: `npm run typecheck` ✅
+  - `server`: `npm run typecheck:spec` ✅
+  - `server`: `npm run check` ✅
+  - `server`: `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true node ./test/run-e2e.cjs amazon-ads-authz.e2e-spec.ts` ✅ (`12/12`)
+  - `adminandemployeePanel`: `npm run test:run -- src/app/pages/__tests__/AmazonAdsAdmin.test.tsx` ✅ (`6/6`)
+  - `adminandemployeePanel`: `npm run typecheck` ✅
+  - `adminandemployeePanel`: `npm run check` ✅
 - Latest admin/employee frontend validation checkpoint: `25` test files, `153/153` tests.
 - Latest client portal frontend validation checkpoint: `4` test files, `17/17` tests.
 - Latest FAZ-05 validation checkpoint:

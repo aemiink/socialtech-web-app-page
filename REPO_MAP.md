@@ -331,6 +331,8 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - admin config/connection read endpoints
   - admin config update endpoint
   - admin OAuth start/code exchange, manual connect, test connection, and disconnect endpoints
+  - admin/assigned/client reporting read endpoints for summary, campaigns, products, insights
+  - admin/assigned manual reporting sync endpoints
   - assigned employee read-only config endpoint
   - own client safe config endpoint
 - `server/src/amazon-ads/amazon-ads.service.ts`
@@ -338,8 +340,10 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - active `AMAZON_ADS` purchased-service checks
   - safe config/connection response shaping without credential secret leakage
   - encrypted credential persistence, profile metadata config updates, and normalized connection error state handling
+  - snapshot sync orchestration, account-level aggregation, read-model summaries, and sync log persistence
 - `server/src/amazon-ads/amazon-ads-api.service.ts`
   - LwA OAuth URL/code exchange/refresh grant, regional `/v2/profiles` lookup, profile selection, and Amazon Ads API error normalization
+  - Reporting v3 async create/poll/download flow and report-row normalization for campaign, product, and search-term insights
 - `server/src/amazon-ads/amazon-ads-token.service.ts`
   - AES-256-GCM token encryption/decryption plus SHA-256 token hashing using `AMAZON_ADS_TOKEN_ENCRYPTION_KEY`
 - `server/src/amazon-ads/dto/update-amazon-ads-config.dto.ts`
@@ -347,9 +351,14 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 - `server/src/amazon-ads/dto/exchange-amazon-ads-oauth-code.dto.ts`
 - `server/src/amazon-ads/dto/connect-manual-amazon-ads.dto.ts`
 - `server/src/amazon-ads/dto/test-amazon-ads-connection.dto.ts`
+- `server/src/amazon-ads/dto/amazon-ads-date-range-query.dto.ts`
+- `server/src/amazon-ads/dto/amazon-ads-campaigns-query.dto.ts`
+- `server/src/amazon-ads/dto/amazon-ads-products-query.dto.ts`
+- `server/src/amazon-ads/dto/amazon-ads-insights-query.dto.ts`
 - `server/prisma/migrations/20260527180000_add_amazon_ads_foundation/migration.sql`
+- `server/prisma/migrations/20260527193000_add_amazon_ads_reporting_snapshot/migration.sql`
 - `server/test/amazon-ads-authz.e2e-spec.ts`
-  - admin read/update, assigned/own read, admin endpoint denial for client accounts, encrypted manual connect, test connection, OAuth exchange, disconnect, normalized permission failure, and sensitive-token response safety
+  - admin read/update, assigned/own read, admin endpoint denial for client accounts, encrypted manual connect, test connection, OAuth exchange, reporting sync/read, disconnect, normalized permission failure, and sensitive-token response safety
 
 ### TikTok Ads Admin Frontend
 
@@ -373,15 +382,23 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 ### Amazon Ads Admin Frontend Foundation
 
 - `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
-  - admin Amazon Ads connection query plus config update, OAuth URL/code exchange, manual connect, test connection, and disconnect mutations under existing Clients API slice
+  - admin Amazon Ads global client list query (`GET /api/v1/admin/amazon-ads/clients`) + connection/summary queries and config update, OAuth URL/code exchange, manual connect, test connection, manual sync, disconnect mutations under existing Clients API slice
 - `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`
-  - Amazon Ads connection/config/OAuth/manual-connect/test request/response types and `AmazonAdsRegion`
+  - Amazon Ads global client list + connection/config/OAuth/manual-connect/test/reporting request/response types and `AmazonAdsRegion`
 - `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
-  - Amazon Ads connection/test/OAuth response normalizers and status badge helpers
+  - Amazon Ads global client list + connection/test/OAuth/reporting response normalizers and status badge helpers
+- `adminandemployeePanel/src/app/pages/AmazonAdsAdmin.tsx`
+  - admin `/amazon-ads` merkezi yönetim ekranı: KPI, global müşteri listesi, config edit, test connection, manual sync, disconnect, onay talebi, hata odaklı sync tekrar aksiyonları
+- `adminandemployeePanel/src/app/routes.tsx`
+  - `/amazon-ads` admin route
+- `adminandemployeePanel/src/app/components/RootLayout.tsx`
+  - Amazon Ads admin sidebar entry
+- `adminandemployeePanel/src/app/pages/__tests__/AmazonAdsAdmin.test.tsx`
+  - admin Amazon Ads global panel render/state/action/permission regression coverage
 - `adminandemployeePanel/src/app/pages/Clients.tsx`
   - `AMAZON_ADS` service selection reveals Amazon profile/account/marketplace config fields in create/edit forms
 - `adminandemployeePanel/src/app/pages/ClientDetail.tsx`
-  - Amazon Ads config/status card with OAuth URL/code, manual refresh token, test connection, disconnect, and config edit actions
+  - Amazon Ads config/status card with OAuth URL/code, manual refresh token, test connection, reporting summary, manual sync, disconnect, and config edit actions
 
 ### TikTok Ads Employee Frontend
 
@@ -415,11 +432,11 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 ### Amazon Ads Client Frontend Foundation
 
 - `clientPanel/src/app/features/amazonAds/amazonAdsApi.ts`
-  - own-client Amazon Ads config RTK Query hook
+  - own-client Amazon Ads config, summary, campaigns, products, and insights RTK Query hooks
 - `clientPanel/src/app/features/amazonAds/amazonAdsTypes.ts`
-  - own-client Amazon Ads config/status response types
+  - own-client Amazon Ads config/status/reporting response types
 - `clientPanel/src/app/pages/services/amazon-ads-dashboard.tsx`
-  - connection-aware empty/error state; mock metrics are hidden unless config status is `CONNECTED`; connected view includes readonly profile/advertiser/marketplace/region status
+  - connection-aware empty/error state; connected view includes readonly profile/advertiser/marketplace/region status plus API-driven summary/campaign/product/search-term read model
 
 ## 2026-05-05 Incremental Map Update
 

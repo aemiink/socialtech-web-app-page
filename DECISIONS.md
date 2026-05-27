@@ -1,5 +1,35 @@
 # Architecture Decisions
 
+## 2026-05-28 - Amazon Ads Faz 5 Admin Global Panel ve Merkezi Yönetim
+
+Context:
+Amazon Ads Faz 4 sonrası client panel API-first hale geldi ancak admin tarafında tüm Amazon Ads müşterilerini tek ekranda yönetebilecek global bir panel yoktu. Bağlantı/test/sync/disconnect ve onay talebi gibi operasyonel aksiyonların merkezi hale getirilmesi gerekiyordu.
+
+Decision:
+
+- Backend’e `GET /api/v1/admin/amazon-ads/clients` endpointi eklendi; Amazon Ads hizmeti alan müşteriler için connection status, spend/sales/ACOS/ROAS summary, last sync, pending approvals, assigned employees ve action context tek response modelinde toplandı.
+- Endpoint authorization’ı admin + `amazonAds.config.read.any` ile korundu; response token-safe tutuldu (credential secret alanları dışarı verilmedi).
+- Admin panelde yeni `/amazon-ads` sayfası eklendi (`AmazonAdsAdmin`): global müşteri listesi, config edit modal, test connection, manual sync, disconnect ve onay talebi oluşturma aksiyonları permission-aware şekilde bağlandı.
+- Router ve admin sidebar Amazon Ads global sayfayı içerecek şekilde güncellendi.
+- Frontend contract’ı için `AdminAmazonAdsClientListResponse` tipi, normalizer ve RTK Query endpoint/hook eklendi; Amazon aksiyon mutasyonları global liste cache’ini invalidate edecek şekilde genişletildi.
+
+Reason:
+Bu yaklaşım Meta/TikTok admin yönetim pattern’iyle uyumlu bir Amazon Ads operasyon yüzeyi sağlar, günlük bağlantı/sync aksiyonlarını müşteri detay sayfasına bağımlı olmadan merkezileştirir ve Faz 6+ iş adımlarına (employee workspace, approval/export katmanları) daha temiz bir yönetim zemini bırakır.
+
+Affected files:
+- `server/src/amazon-ads/amazon-ads.controller.ts`
+- `server/src/amazon-ads/amazon-ads.service.ts`
+- `server/test/amazon-ads-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
+- `adminandemployeePanel/src/app/pages/AmazonAdsAdmin.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/AmazonAdsAdmin.test.tsx`
+- `adminandemployeePanel/src/app/routes.tsx`
+- `adminandemployeePanel/src/app/components/RootLayout.tsx`
+
+---
+
 ## 2026-05-27 - Amazon Ads Faz 4 Client Panel API-Driven Tab Workspace
 
 Context:

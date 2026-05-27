@@ -2,7 +2,10 @@ import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import {
   AmazonAdsConnectionStatus,
+  AmazonAdsInsightLevel,
+  AmazonAdsProductType,
   AmazonAdsRegion,
+  AmazonAdsSyncStatus,
   EmployeeClientAssignmentScope,
   PrismaClient,
   PurchasedServiceKey,
@@ -98,6 +101,92 @@ describe("Amazon Ads Config Authz (e2e)", () => {
           profiles: [mockProfile],
         };
       }),
+      fetchReportingSnapshot: jest.fn(async () => ({
+        rows: [
+          {
+            date: "2026-05-01",
+            level: AmazonAdsInsightLevel.CAMPAIGN,
+            entityId: "campaign-1",
+            entityName: "Sponsored Products Test",
+            adProduct: AmazonAdsProductType.SPONSORED_PRODUCTS,
+            spend: 100,
+            impressions: 10000,
+            clicks: 200,
+            sales: 500,
+            orders: 25,
+            unitsSold: 30,
+            ctr: 2,
+            cpc: 0.5,
+            acos: 20,
+            roas: 5,
+            conversionRate: 12.5,
+            raw: {
+              campaignId: "campaign-1",
+              campaignName: "Sponsored Products Test",
+              campaignStatus: "ENABLED",
+            },
+          },
+          {
+            date: "2026-05-01",
+            level: AmazonAdsInsightLevel.SEARCH_TERM,
+            entityId: "search-term-1",
+            entityName: "wireless headphones",
+            adProduct: AmazonAdsProductType.SPONSORED_PRODUCTS,
+            spend: 10,
+            impressions: 1000,
+            clicks: 20,
+            sales: 60,
+            orders: 3,
+            unitsSold: 3,
+            ctr: 2,
+            cpc: 0.5,
+            acos: 16.67,
+            roas: 6,
+            conversionRate: 15,
+            raw: { searchTerm: "wireless headphones" },
+          },
+          {
+            date: "2026-05-01",
+            level: AmazonAdsInsightLevel.PRODUCT,
+            entityId: "B000TESTASIN",
+            entityName: "Test ASIN",
+            adProduct: AmazonAdsProductType.SPONSORED_PRODUCTS,
+            spend: 25,
+            impressions: 2500,
+            clicks: 50,
+            sales: 200,
+            orders: 10,
+            unitsSold: 12,
+            ctr: 2,
+            cpc: 0.5,
+            acos: 12.5,
+            roas: 8,
+            conversionRate: 20,
+            raw: {
+              advertisedAsin: "B000TESTASIN",
+              advertisedSku: "SKU-TEST",
+              productName: "Test ASIN",
+            },
+          },
+        ],
+        reportRequests: [
+          {
+            key: "spCampaigns",
+            reportTypeId: "spCampaigns",
+            reportId: "report-1",
+            status: "REQUESTED",
+          },
+        ],
+        reportStatuses: [
+          {
+            key: "spCampaigns",
+            reportId: "report-1",
+            status: "COMPLETED",
+            rows: 3,
+          },
+        ],
+        apiCallCount: 3,
+      })),
       normalizeError: jest.fn((error: unknown) => {
         if (mockAmazonAdsConnectionError) {
           return mockAmazonAdsConnectionError;
@@ -254,6 +343,13 @@ describe("Amazon Ads Config Authz (e2e)", () => {
     expect(res.status).toBe(403);
   });
 
+  it("client cannot access admin amazon ads global clients endpoint", async () => {
+    const res = await request(app.getHttpServer())
+      .get("/api/v1/admin/amazon-ads/clients")
+      .set("Authorization", `Bearer ${clientToken}`);
+    expect(res.status).toBe(403);
+  });
+
   it("rejects manual amazon ads connection when token encryption key is missing", async () => {
     if (!clientProfileId) return;
 
@@ -378,6 +474,94 @@ describe("Amazon Ads Config Authz (e2e)", () => {
     );
     expect(exchangeRes.body.profile.profileId).toBe(mockProfile.profileId);
     expectResponseHasNoSensitiveTokenData(exchangeRes.body);
+  });
+
+  it("admin can sync amazon ads reporting snapshots and safe readers can query them", async () => {
+    if (!clientProfileId) return;
+
+    const syncRes = await request(app.getHttpServer())
+      .post(
+        `/api/v1/admin/clients/${clientProfileId}/amazon-ads/sync?since=2026-05-01&until=2026-05-01`,
+      )
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    expect(syncRes.status).toBe(201);
+    expect(syncRes.body.success).toBe(true);
+    expect(syncRes.body.syncStatus).toBe(AmazonAdsSyncStatus.SUCCESS);
+    expect(syncRes.body.inserted).toEqual({
+      account: 1,
+      campaigns: 1,
+      products: 1,
+      searchTerms: 1,
+      total: 4,
+    });
+    expectResponseHasNoSensitiveTokenData(syncRes.body);
+
+    const adminSummaryRes = await request(app.getHttpServer())
+      .get(
+        `/api/v1/admin/clients/${clientProfileId}/amazon-ads/summary?since=2026-05-01&until=2026-05-01`,
+      )
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(adminSummaryRes.status).toBe(200);
+    expect(adminSummaryRes.body.spend).toBe(100);
+    expect(adminSummaryRes.body.sales).toBe(500);
+    expect(adminSummaryRes.body.orders).toBe(25);
+    expect(adminSummaryRes.body.acos).toBe(20);
+    expect(adminSummaryRes.body.roas).toBe(5);
+    expectResponseHasNoSensitiveTokenData(adminSummaryRes.body);
+
+    const adminCampaignsRes = await request(app.getHttpServer())
+      .get(
+        `/api/v1/admin/clients/${clientProfileId}/amazon-ads/campaigns?since=2026-05-01&until=2026-05-01`,
+      )
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(adminCampaignsRes.status).toBe(200);
+    expect(adminCampaignsRes.body.data).toHaveLength(1);
+    expect(adminCampaignsRes.body.data[0].name).toBe("Sponsored Products Test");
+
+    const employeeSummaryRes = await request(app.getHttpServer())
+      .get(
+        `/api/v1/amazon-ads/clients/${clientProfileId}/summary?since=2026-05-01&until=2026-05-01`,
+      )
+      .set("Authorization", `Bearer ${employeeToken}`);
+    expect(employeeSummaryRes.status).toBe(200);
+    expect(employeeSummaryRes.body.spend).toBe(100);
+    expectResponseHasNoSensitiveTokenData(employeeSummaryRes.body);
+
+    const clientSummaryRes = await request(app.getHttpServer())
+      .get("/api/v1/clients/me/amazon-ads/summary?since=2026-05-01&until=2026-05-01")
+      .set("Authorization", `Bearer ${clientToken}`);
+    expect(clientSummaryRes.status).toBe(200);
+    expect(clientSummaryRes.body.clicks).toBe(200);
+    expectResponseHasNoSensitiveTokenData(clientSummaryRes.body);
+
+    const snapshotCount = await prisma.amazonAdsDailyInsight.count({
+      where: { clientProfileId },
+    });
+    expect(snapshotCount).toBeGreaterThanOrEqual(4);
+  });
+
+  it("admin can read amazon ads global clients list without token leakage", async () => {
+    if (!clientProfileId) return;
+
+    const res = await request(app.getHttpServer())
+      .get("/api/v1/admin/amazon-ads/clients?since=2026-05-01&until=2026-05-01")
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.data)).toBe(true);
+    expect(res.body.meta.total).toBeGreaterThanOrEqual(1);
+
+    const targetRow = res.body.data.find(
+      (row: { client: { id: string } }) => row.client.id === clientProfileId,
+    );
+    expect(targetRow).toBeDefined();
+    expect(targetRow.connectionStatus).toBe(AmazonAdsConnectionStatus.CONNECTED);
+    expect(targetRow.spendSummary.spend).toBe(100);
+    expect(targetRow.spendSummary.sales).toBe(500);
+    expect(targetRow.spendSummary.acos).toBe(20);
+    expect(targetRow.spendSummary.roas).toBe(5);
+    expectResponseHasNoSensitiveTokenData(res.body);
   });
 
   it("admin can disconnect amazon ads credentials", async () => {
