@@ -59,12 +59,33 @@ const tiktokAdsApi = baseApi.injectEndpoints({
       ],
     }),
 
+    getAssignedClientTikTokAdsConfig: build.query<TikTokAdsConfig, { clientId: string }>({
+      query: ({ clientId }) => `/tiktok-ads/clients/${clientId}/config`,
+      providesTags: (_result, _error, { clientId }) => [
+        { type: "TikTokAdsConfig", id: clientId },
+      ],
+    }),
+
     getAdminClientTikTokAdsSummary: build.query<
       TikTokAdsSummaryResponse,
       AdminClientTikTokAdsQueryArg<TikTokAdsDateRangeQuery>
     >({
       query: ({ clientId, query }) => ({
         url: `/admin/clients/${clientId}/tiktok-ads/summary`,
+        method: "GET",
+        params: serializeDateRangeQuery(query),
+      }),
+      providesTags: (_result, _error, { clientId }) => [
+        { type: "TikTokAdsConfig", id: clientId },
+      ],
+    }),
+
+    getAssignedClientTikTokAdsSummary: build.query<
+      TikTokAdsSummaryResponse,
+      AdminClientTikTokAdsQueryArg<TikTokAdsDateRangeQuery>
+    >({
+      query: ({ clientId, query }) => ({
+        url: `/tiktok-ads/clients/${clientId}/summary`,
         method: "GET",
         params: serializeDateRangeQuery(query),
       }),
@@ -87,12 +108,40 @@ const tiktokAdsApi = baseApi.injectEndpoints({
       ],
     }),
 
+    getAssignedClientTikTokAdsCampaigns: build.query<
+      TikTokAdsCampaignsResponse,
+      AdminClientTikTokAdsQueryArg<TikTokAdsCampaignsQuery>
+    >({
+      query: ({ clientId, query }) => ({
+        url: `/tiktok-ads/clients/${clientId}/campaigns`,
+        method: "GET",
+        params: serializeCampaignsQuery(query),
+      }),
+      providesTags: (_result, _error, { clientId }) => [
+        { type: "TikTokAdsConfig", id: clientId },
+      ],
+    }),
+
     getAdminClientTikTokAdsInsights: build.query<
       TikTokAdsInsightsResponse,
       AdminClientTikTokAdsQueryArg<TikTokAdsInsightsQuery>
     >({
       query: ({ clientId, query }) => ({
         url: `/admin/clients/${clientId}/tiktok-ads/insights`,
+        method: "GET",
+        params: serializeInsightsQuery(query),
+      }),
+      providesTags: (_result, _error, { clientId }) => [
+        { type: "TikTokAdsConfig", id: clientId },
+      ],
+    }),
+
+    getAssignedClientTikTokAdsInsights: build.query<
+      TikTokAdsInsightsResponse,
+      AdminClientTikTokAdsQueryArg<TikTokAdsInsightsQuery>
+    >({
+      query: ({ clientId, query }) => ({
+        url: `/tiktok-ads/clients/${clientId}/insights`,
         method: "GET",
         params: serializeInsightsQuery(query),
       }),
@@ -188,6 +237,10 @@ export const {
   useGetAdminClientTikTokAdsConnectionQuery,
   useGetAdminClientTikTokAdsInsightsQuery,
   useGetAdminClientTikTokAdsSummaryQuery,
+  useGetAssignedClientTikTokAdsCampaignsQuery,
+  useGetAssignedClientTikTokAdsConfigQuery,
+  useGetAssignedClientTikTokAdsInsightsQuery,
+  useGetAssignedClientTikTokAdsSummaryQuery,
   useSyncAdminClientTikTokAdsMutation,
   useTestAdminClientTikTokAdsConnectionMutation,
   useUpdateAdminClientTikTokAdsConfigMutation,

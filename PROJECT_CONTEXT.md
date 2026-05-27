@@ -53,7 +53,7 @@ Developer/Delivery is now a backend-native operations module built on top of `Pr
 Role-based sidebar. Common pages: Dashboard, Gorevlerim, Musterilerim, Takvim, Bildirimler, Dosyalar, Ayarlar. Specialist pages vary per role (see routes.tsx).
 `CRM_SPECIALIST` employees receive CRM Leadleri and Bugünkü Takipler routes and only see assigned CRM leads.
 `DEVELOPER` employees now use API-driven Dashboard, Frontend, Backend/API, Buglar, Revizyonlar, Sprintler, Test & Yayın, and Projeler pages backed by delivery/task/repository endpoints.
-`SOCIAL_MEDIA_SPECIALIST`, `PERFORMANCE_SPECIALIST`, and `DESIGNER` now have an assigned-scope Meta Ads employee workspace (`/employee/meta-ads`) and role-specific workspace sections/actions via `MetaAdsWorkspace`.
+`SOCIAL_MEDIA_SPECIALIST`, `PERFORMANCE_SPECIALIST`, and `DESIGNER` now have assigned-scope Meta Ads (`/employee/meta-ads`) and TikTok Ads (`/employee/tiktok-ads`) employee workspaces with role-specific sections/actions via `MetaAdsWorkspace` and `TikTokAdsWorkspace`.
 
 ### Client Portal
 Separate Vite + React SPA at `clientPanel/`. It is a customer-facing visibility panel, not a public SaaS product.
@@ -423,6 +423,7 @@ Uygulama durumu:
 - TikTok Ads Faz 3 tamamlandı: `TikTokAdsDailyInsight` + `TikTokAdsSyncLog` snapshot modeli, manual sync, account/campaign/adgroup/ad insight ingestion, admin/assigned/client summary-campaign-insights read API, TTL-gated own client refresh, and admin ClientDetail performance summary integration.
 - TikTok Ads Faz 4 tamamlandı: client portal TikTok dashboard ve service tab workspace mock/static datadan API-driven akışa taşındı; campaigns, video creatives, hook tests, audiences, pixel/events safe-state, UGC script tasks ve optimization notes sekmeleri own-client endpointleri ve client-visible tasks ile besleniyor.
 - TikTok Ads Faz 5 tamamlandı: backend global admin client list endpointi ve admin panel `/tiktok-ads` ekranı eklendi; connection/config/test/sync/disconnect aksiyonları global müşteri listesi üzerinden yönetiliyor.
+- TikTok Ads Faz 6 tamamlandı: employee panelde `/employee/tiktok-ads` assigned-scope workspace eklendi; Social/Performance/Designer rolleri için campaigns, performance, video creatives, report notes, approvals ve pixel safe-state sekmeleri backend assigned TikTok endpointleri + project/task/workspace mesaj contract'ı ile çalışıyor.
 - Active admin endpoints:
   - `GET /api/v1/admin/tiktok-ads/clients`
   - `GET /api/v1/admin/clients/:clientId/tiktok-ads/config`
@@ -449,7 +450,7 @@ Uygulama durumu:
 - Reporting sync uses TikTok API for Business reporting + campaign catalog reads, stores daily rows by level (`ACCOUNT`, `CAMPAIGN`, `ADGROUP`, `AD`), and exposes read-only aggregates for V1 dashboards.
 
 Planned next backend phases:
-- TikTok Ads Faz 6: Employee role workspaces (`TiktokAdsWorkspace` component)
+- TikTok Ads Faz 7: Approval + creative collaboration
 - Broader domain endpoint authorization rollout (beyond users/clients/admin-assignments/projects/tasks)
 - Forced password change on first login flow
 - Frontend audit log view integration for admin panel

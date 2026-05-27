@@ -2496,3 +2496,33 @@ Affected files:
 - `PROJECT_CONTEXT.md`
 - `REPO_MAP.md`
 - `ROAD_MAP.md`
+
+## 2026-05-27 - TikTok Ads Faz 6 Employee Workspace
+
+Context:
+TikTok Ads Faz 5 ile admin global panel ve operasyon aksiyonlari tamamlandi. Social Media, Performance ve Designer rollerinin ise atandiklari TikTok Ads musterileri icin tek bir employee workspace uzerinden kampanya, performans, kreatif, rapor notu, onay talebi ve pixel guvenli durumlarini yonetmesi gerekiyordu.
+
+Decision:
+TikTok Ads Faz 6, Meta Ads Faz 6 pattern'inin TikTok V1 kapsamli employee karsiligi olarak uygulanacak:
+- Employee panelde `/employee/tiktok-ads` route'u ve `TikTokAdsWorkspace` eklendi.
+- `SOCIAL_MEDIA_SPECIALIST`, `PERFORMANCE_SPECIALIST` ve `DESIGNER` rolleri icin sidebar girisi role-aware hale getirildi.
+- Workspace yalnizca atanmis ve aktif `tiktok-ads` purchased service sahibi musterileri listeler.
+- Config, summary, campaigns ve insights okumalarinda `/api/v1/tiktok-ads/clients/:clientId/*` assigned employee endpointleri kullanilir.
+- Project/task/workspace-message contract'i `serviceKey === "tiktok-ads"` ile yeniden kullanilir.
+- Performance ve pixel sekmeleri yalnizca performance rolune acilir; creative aksiyonlar designer rolune, report/message/onay aksiyonlari ilgili employee izinlerine baglanir.
+- TikTok'a ozel approval metadata, rapor draft/publish ve dedicated pixel endpointi eklenmedi. Approval metadata Faz 7, report publish/export Faz 9, pixel endpoint hardening sonraki TikTok fazlarinda ele alinacak.
+
+Reason:
+Bu karar employee tarafinda yeni backend yuzeyi acmadan mevcut assigned TikTok read endpointlerini ve genel project/task/message altyapisini kullanarak hizli, dusuk riskli ve permission-aware bir workspace saglar. Meta Ads ile UX ve mimari simetri korunur, TikTok'a ozel is akislari ise sonraki fazlara kontrollu bicimde birakilir.
+
+Affected files:
+- `adminandemployeePanel/src/app/features/tiktokAds/tiktokAdsApi.ts`
+- `adminandemployeePanel/src/app/employee/components/TikTokAdsWorkspace.tsx`
+- `adminandemployeePanel/src/app/employee/pages/TikTokAdsCalismaAlani.tsx`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/TikTokAdsWorkspace.test.tsx`
+- `adminandemployeePanel/src/app/employee/EmployeeLayout.tsx`
+- `adminandemployeePanel/src/app/routes.tsx`
+- `server/test/tiktok-ads-authz.e2e-spec.ts`
+- `PROJECT_CONTEXT.md`
+- `REPO_MAP.md`
+- `ROAD_MAP.md`

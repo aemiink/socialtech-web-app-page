@@ -331,6 +331,58 @@ describe("TikTok Ads Config Authz (e2e)", () => {
       expectResponseHasNoSensitiveTokenData(insightsRes.body);
     });
 
+    it("assigned employee can read tiktok ads reporting snapshots without token data", async () => {
+      if (!clientProfileId) return;
+      const configRes = await request(app.getHttpServer())
+        .get(`/api/v1/tiktok-ads/clients/${clientProfileId}/config`)
+        .set("Authorization", `Bearer ${employeeToken}`);
+
+      expect(configRes.status).toBe(200);
+      expect(configRes.body.clientProfileId).toBe(clientProfileId);
+      expect(configRes.body.advertiserId).toBe("1234567890");
+      expect(configRes.body).not.toHaveProperty("accessTokenEnc");
+      expectResponseHasNoSensitiveTokenData(configRes.body);
+
+      const summaryRes = await request(app.getHttpServer())
+        .get(`/api/v1/tiktok-ads/clients/${clientProfileId}/summary`)
+        .set("Authorization", `Bearer ${employeeToken}`)
+        .query({ since: "2026-05-20", until: "2026-05-20" });
+
+      expect(summaryRes.status).toBe(200);
+      expect(summaryRes.body.spend).toBe(210);
+      expect(summaryRes.body.videoViews).toBe(18000);
+      expectResponseHasNoSensitiveTokenData(summaryRes.body);
+
+      const campaignsRes = await request(app.getHttpServer())
+        .get(`/api/v1/tiktok-ads/clients/${clientProfileId}/campaigns`)
+        .set("Authorization", `Bearer ${employeeToken}`)
+        .query({ since: "2026-05-20", until: "2026-05-20" });
+
+      expect(campaignsRes.status).toBe(200);
+      expect(campaignsRes.body.data[0].id).toBe("campaign-123");
+      expectResponseHasNoSensitiveTokenData(campaignsRes.body);
+
+      const insightsRes = await request(app.getHttpServer())
+        .get(`/api/v1/tiktok-ads/clients/${clientProfileId}/insights`)
+        .set("Authorization", `Bearer ${employeeToken}`)
+        .query({ since: "2026-05-20", until: "2026-05-20", level: "ADGROUP" });
+
+      expect(insightsRes.status).toBe(200);
+      expect(insightsRes.body.level).toBe("ADGROUP");
+      expect(insightsRes.body.data[0].entityId).toBe("adgroup-123");
+      expectResponseHasNoSensitiveTokenData(insightsRes.body);
+    });
+
+    it("client cannot read assigned employee tiktok ads endpoints", async () => {
+      if (!clientProfileId) return;
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/tiktok-ads/clients/${clientProfileId}/summary`)
+        .set("Authorization", `Bearer ${clientToken}`)
+        .query({ since: "2026-05-20", until: "2026-05-20" });
+
+      expect(res.status).toBe(403);
+    });
+
     it("client can read own tiktok ads reporting snapshots without token data", async () => {
       const freshClientToken = await loginAndGetAccessToken(
         app,
