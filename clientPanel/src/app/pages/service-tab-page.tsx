@@ -46,6 +46,13 @@ import {
   useGetOwnMetaAdsSummaryQuery,
 } from '../features/metaAds/metaAdsApi';
 import type { MetaAdsCampaign, MetaAdsInsightItem, MetaAdsReportItem } from '../features/metaAds/metaAdsTypes';
+import {
+  useGetOwnTikTokAdsCampaignsQuery,
+  useGetOwnTikTokAdsConfigQuery,
+  useGetOwnTikTokAdsInsightsQuery,
+  useGetOwnTikTokAdsSummaryQuery,
+} from '../features/tiktokAds/tiktokAdsApi';
+import type { TikTokAdsCampaign, TikTokAdsInsightItem } from '../features/tiktokAds/tiktokAdsTypes';
 import type { ProjectFile } from '../features/projectFiles/projectFilesTypes';
 import { useGetClientProjectFilesQuery } from '../features/projectFiles/projectFilesApi';
 import { useGetClientTasksQuery, useUpdateClientTaskApprovalMutation } from '../features/tasks/tasksApi';
@@ -319,6 +326,10 @@ export function ServiceTabPage({ serviceId, tabId, projectId }: ServiceTabPagePr
 
   if (serviceId === "meta-ads" && tabId !== "service-dashboard") {
     return <MetaAdsServiceTab tabId={tabId} content={content} />;
+  }
+
+  if (serviceId === "tiktok-ads" && tabId !== "service-dashboard") {
+    return <TikTokAdsServiceTab tabId={tabId} content={content} />;
   }
 
   if (shouldUseTaskBasedRevisions) {
@@ -1310,6 +1321,530 @@ function MetaAdsServiceTab({
   );
 }
 
+function TikTokAdsServiceTab({
+  tabId,
+  content,
+}: {
+  tabId: string;
+  content: ServiceTabContent;
+}) {
+  const {
+    data: config,
+    isLoading: isConfigLoading,
+    isError: isConfigError,
+  } = useGetOwnTikTokAdsConfigQuery();
+  const isConnected = config?.connectionStatus === "CONNECTED";
+  const shouldSkipReportingQueries = !isConnected;
+
+  const {
+    data: summary,
+    isLoading: isSummaryLoading,
+    isError: isSummaryError,
+  } = useGetOwnTikTokAdsSummaryQuery(undefined, { skip: shouldSkipReportingQueries });
+  const {
+    data: campaignsResponse,
+    isLoading: isCampaignsLoading,
+    isError: isCampaignsError,
+  } = useGetOwnTikTokAdsCampaignsQuery({ limit: 24 }, { skip: shouldSkipReportingQueries });
+  const {
+    data: campaignInsightsResponse,
+  } = useGetOwnTikTokAdsInsightsQuery(
+    { level: "CAMPAIGN", limit: 60 },
+    { skip: shouldSkipReportingQueries },
+  );
+  const {
+    data: adGroupInsightsResponse,
+    isLoading: isAdGroupsLoading,
+    isError: isAdGroupsError,
+  } = useGetOwnTikTokAdsInsightsQuery(
+    { level: "ADGROUP", limit: 60 },
+    { skip: shouldSkipReportingQueries },
+  );
+  const {
+    data: adInsightsResponse,
+    isLoading: isAdsLoading,
+    isError: isAdsError,
+  } = useGetOwnTikTokAdsInsightsQuery(
+    { level: "AD", limit: 60 },
+    { skip: shouldSkipReportingQueries },
+  );
+  const {
+    data: ugcTasks = [],
+    isLoading: isUgcTasksLoading,
+    isError: isUgcTasksError,
+  } = useGetClientTasksQuery(undefined, { skip: !isConnected || tabId !== "ugc-scripts" });
+
+  const campaigns = campaignsResponse?.data ?? [];
+  const adGroups = adGroupInsightsResponse?.data ?? [];
+  const ads = adInsightsResponse?.data ?? [];
+  const tiktokTasks = useMemo(
+    () => ugcTasks.filter((task) => task.projectServiceId === "tiktok-ads").slice(0, 12),
+    [ugcTasks],
+  );
+  const notes = useMemo(
+    () => buildTikTokAgencyNotes(summary, campaigns, ads),
+    [summary, campaigns, ads],
+  );
+  const lastSyncAt =
+    summary?.lastSyncAt ??
+    campaignsResponse?.lastSyncAt ??
+    campaignInsightsResponse?.lastSyncAt ??
+    config?.lastSyncAt ??
+    null;
+
+  if (isConfigLoading) {
+    return (
+      <div className="p-8">
+        <MetaAdsStatePanel title="TikTok Ads bağlantısı kontrol ediliyor..." />
+      </div>
+    );
+  }
+
+  if (isConfigError) {
+    return (
+      <div className="p-8">
+        <MetaAdsStatePanel
+          title="TikTok Ads bağlantı bilgileri alınamadı"
+          description="Lütfen biraz sonra tekrar deneyin."
+          tone="error"
+        />
+      </div>
+    );
+  }
+
+  if (!isConnected) {
+    const connectionNotice = getClientTikTokAdsConnectionNotice(config?.connectionStatus);
+    return (
+      <div className="p-8 space-y-6">
+        <PageHero content={content} tabId={tabId} />
+        <MetaAdsStatePanel
+          title={connectionNotice.title}
+          description={connectionNotice.description}
+          tone={connectionNotice.tone}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-8 space-y-6">
+      <PageHero content={content} tabId={tabId} />
+
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+        <MetricPill label="Harcama" value={formatTikTokCurrency(summary?.spend ?? 0)} />
+        <MetricPill label="Video İzlenme" value={formatTikTokInteger(summary?.videoViews ?? 0)} />
+        <MetricPill label="Tıklama" value={formatTikTokInteger(summary?.clicks ?? 0)} />
+        <MetricPill label="CTR" value={formatTikTokPercent(summary?.ctr ?? 0)} />
+        <MetricPill label="VTR" value={formatTikTokPercent(summary?.vtr ?? 0)} />
+        <MetricPill label="Dönüşüm" value={formatTikTokInteger(summary?.conversions ?? 0)} />
+      </div>
+
+      <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-4 text-xs text-[#A0A0A0]">
+        Veriler TikTok Ads snapshot API yüzeyinden alınmıştır. Son senkron:{" "}
+        <span className="text-white">
+          {lastSyncAt ? new Date(lastSyncAt).toLocaleString("tr-TR") : "Henüz senkron yok"}
+        </span>
+      </div>
+
+      {tabId === "campaigns" ? (
+        <TikTokCampaignGrid
+          rows={campaigns}
+          loading={isCampaignsLoading || isSummaryLoading}
+          isError={isCampaignsError || isSummaryError}
+        />
+      ) : null}
+
+      {tabId === "video-creatives" ? (
+        <TikTokInsightGrid
+          title="Video Kreatifler"
+          rows={ads}
+          loading={isAdsLoading}
+          isError={isAdsError}
+          emptyMessage="Video kreatif verisi bulunamadı."
+        />
+      ) : null}
+
+      {tabId === "hook-tests" ? (
+        <TikTokHookPanel rows={ads} loading={isAdsLoading} isError={isAdsError} />
+      ) : null}
+
+      {tabId === "audiences" ? (
+        <TikTokAudiencePanel rows={adGroups} loading={isAdGroupsLoading} isError={isAdGroupsError} />
+      ) : null}
+
+      {tabId === "pixel-events" ? (
+        <TikTokPixelPanel
+          advertiserId={config?.advertiserId ?? null}
+          summary={summary}
+          lastSyncAt={lastSyncAt}
+          loading={isSummaryLoading}
+          isError={isSummaryError}
+        />
+      ) : null}
+
+      {tabId === "ugc-scripts" ? (
+        <TikTokUgcScriptsPanel
+          rows={tiktokTasks}
+          loading={isUgcTasksLoading}
+          isError={isUgcTasksError}
+        />
+      ) : null}
+
+      {tabId === "optimization-notes" ? (
+        <TikTokOptimizationNotesPanel notes={notes} loading={isCampaignsLoading || isAdsLoading || isSummaryLoading} />
+      ) : null}
+    </div>
+  );
+}
+
+function TikTokCampaignGrid({
+  rows,
+  loading,
+  isError,
+}: {
+  rows: TikTokAdsCampaign[];
+  loading: boolean;
+  isError: boolean;
+}) {
+  if (loading) {
+    return <MetaAdsStatePanel title="Kampanyalar yükleniyor..." />;
+  }
+
+  if (isError) {
+    return (
+      <MetaAdsStatePanel
+        title="Kampanyalar alınamadı"
+        description="TikTok Ads kampanya raporu şu anda ulaşılamıyor."
+        tone="error"
+      />
+    );
+  }
+
+  if (rows.length === 0) {
+    return <MetaAdsStatePanel title="Seçili tarih aralığında kampanya verisi bulunamadı." tone="muted" />;
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {rows.map((campaign) => (
+        <div key={campaign.id} className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-5">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="text-white">{campaign.name}</h3>
+            <span className="rounded border border-[#7B61FF]/20 bg-[#7B61FF]/10 px-2 py-1 text-xs text-[#7B61FF]">
+              {campaign.objective}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <MetricPill label="Spend" value={formatTikTokCurrency(campaign.spend)} />
+            <MetricPill label="CTR" value={formatTikTokPercent(campaign.ctr)} />
+            <MetricPill label="VTR" value={formatTikTokInteger(campaign.videoViews)} />
+            <MetricPill label="CPA" value={formatTikTokCurrency(campaign.costPerConversion)} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TikTokInsightGrid({
+  title,
+  rows,
+  loading,
+  isError,
+  emptyMessage,
+}: {
+  title: string;
+  rows: TikTokAdsInsightItem[];
+  loading: boolean;
+  isError: boolean;
+  emptyMessage: string;
+}) {
+  if (loading) {
+    return <MetaAdsStatePanel title={`${title} yükleniyor...`} />;
+  }
+
+  if (isError) {
+    return (
+      <MetaAdsStatePanel
+        title={`${title} alınamadı`}
+        description="TikTok Ads insight verisi şu anda ulaşılamıyor."
+        tone="error"
+      />
+    );
+  }
+
+  if (rows.length === 0) {
+    return <MetaAdsStatePanel title={emptyMessage} tone="muted" />;
+  }
+
+  return (
+    <div className="space-y-3">
+      {rows.slice(0, 14).map((row) => (
+        <div key={row.id} className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-4">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <p className="text-sm text-white">{row.entityName ?? row.entityId}</p>
+            <span className="text-xs text-[#A0A0A0]">{new Date(row.date).toLocaleDateString("tr-TR")}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+            <MetricPill label="İzlenme" value={formatTikTokInteger(row.videoViews)} />
+            <MetricPill label="CTR" value={formatTikTokPercent(row.ctr)} />
+            <MetricPill label="VTR" value={formatTikTokPercent(row.vtr)} />
+            <MetricPill label="Dönüşüm" value={formatTikTokInteger(row.conversions)} />
+            <MetricPill label="CPA" value={formatTikTokCurrency(row.costPerConversion)} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TikTokHookPanel({
+  rows,
+  loading,
+  isError,
+}: {
+  rows: TikTokAdsInsightItem[];
+  loading: boolean;
+  isError: boolean;
+}) {
+  if (loading) {
+    return <MetaAdsStatePanel title="Hook testleri yükleniyor..." />;
+  }
+
+  if (isError) {
+    return (
+      <MetaAdsStatePanel
+        title="Hook testleri alınamadı"
+        description="Ad-level insight verisi şu anda ulaşılamıyor."
+        tone="error"
+      />
+    );
+  }
+
+  const hookRows = [...rows]
+    .sort((left, right) => right.videoCompletionRate - left.videoCompletionRate)
+    .slice(0, 10);
+
+  if (hookRows.length === 0) {
+    return <MetaAdsStatePanel title="Hook testi için kreatif verisi bulunamadı." tone="muted" />;
+  }
+
+  return (
+    <div className="space-y-3">
+      {hookRows.map((row, index) => (
+        <div key={row.id} className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-white">{row.entityName ?? row.entityId}</p>
+            <span className={`rounded border px-2 py-1 text-[11px] ${
+              index === 0
+                ? "border-[#AAFF01]/20 bg-[#AAFF01]/10 text-[#AAFF01]"
+                : "border-[#00D4FF]/20 bg-[#00D4FF]/10 text-[#00D4FF]"
+            }`}>
+              {index === 0 ? "Winning hook" : "Test"}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <MetricPill label="6sn İzlenme" value={formatTikTokInteger(row.videoViews6s)} />
+            <MetricPill label="Tamamlama" value={formatTikTokPercent(row.videoCompletionRate)} />
+            <MetricPill label="VTR" value={formatTikTokPercent(row.vtr)} />
+            <MetricPill label="CTR" value={formatTikTokPercent(row.ctr)} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TikTokAudiencePanel({
+  rows,
+  loading,
+  isError,
+}: {
+  rows: TikTokAdsInsightItem[];
+  loading: boolean;
+  isError: boolean;
+}) {
+  if (loading) {
+    return <MetaAdsStatePanel title="Kitle verileri yükleniyor..." />;
+  }
+
+  if (isError) {
+    return (
+      <MetaAdsStatePanel
+        title="Kitle verileri alınamadı"
+        description="Ad group kırılımı şu anda ulaşılamıyor."
+        tone="error"
+      />
+    );
+  }
+
+  if (rows.length === 0) {
+    return <MetaAdsStatePanel title="Kitle/ad group verisi bulunamadı." tone="muted" />;
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {rows.slice(0, 10).map((row) => (
+        <div key={row.id} className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-4">
+          <p className="text-white">{row.entityName ?? "Audience Segment"}</p>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <MetricPill label="Reach" value={formatTikTokInteger(row.reach)} />
+            <MetricPill label="VTR" value={formatTikTokPercent(row.vtr)} />
+            <MetricPill label="Conversion" value={formatTikTokInteger(row.conversions)} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TikTokPixelPanel({
+  advertiserId,
+  summary,
+  lastSyncAt,
+  loading,
+  isError,
+}: {
+  advertiserId: string | null;
+  summary:
+    | {
+        conversions: number;
+        conversionRate: number;
+        lastSyncAt: string | null;
+      }
+    | undefined;
+  lastSyncAt: string | null;
+  loading: boolean;
+  isError: boolean;
+}) {
+  if (loading) {
+    return <MetaAdsStatePanel title="Pixel/Event durumu yükleniyor..." />;
+  }
+
+  if (isError) {
+    return (
+      <MetaAdsStatePanel
+        title="Pixel/Event durumu alınamadı"
+        description="TikTok Ads özet verisi şu anda ulaşılamıyor."
+        tone="error"
+      />
+    );
+  }
+
+  const hasConversionSignal = (summary?.conversions ?? 0) > 0;
+
+  return (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-5">
+        <h3 className="mb-3 text-white">Kurulum</h3>
+        <div className="space-y-2 text-sm">
+          <p className="text-[#A0A0A0]">Advertiser ID: <span className="text-white">{advertiserId ?? "—"}</span></p>
+          <p className="text-[#A0A0A0]">
+            Event Sinyali:{" "}
+            <span className={hasConversionSignal ? "text-[#AAFF01]" : "text-[#FFA726]"}>
+              {hasConversionSignal ? "Dönüşüm sinyali var" : "Dönüşüm sinyali bekleniyor"}
+            </span>
+          </p>
+          <p className="text-[#A0A0A0]">
+            Conversion Rate: <span className="text-white">{formatTikTokPercent(summary?.conversionRate ?? 0)}</span>
+          </p>
+        </div>
+      </div>
+      <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-5">
+        <h3 className="mb-3 text-white">Takip Durumu</h3>
+        <p className="text-sm text-[#A0A0A0]">
+          Son snapshot:{" "}
+          <span className="text-white">
+            {lastSyncAt ? new Date(lastSyncAt).toLocaleString("tr-TR") : "Henüz senkron yok"}
+          </span>
+        </p>
+        <p className="mt-2 text-sm text-[#A0A0A0]">
+          Dedicated pixel-status endpoint Faz 4 kapsamında yok; bu panel conversion snapshot sinyaliyle güvenli durum gösterir.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function TikTokUgcScriptsPanel({
+  rows,
+  loading,
+  isError,
+}: {
+  rows: ClientTask[];
+  loading: boolean;
+  isError: boolean;
+}) {
+  if (loading) {
+    return <MetaAdsStatePanel title="UGC/script görevleri yükleniyor..." />;
+  }
+
+  if (isError) {
+    return (
+      <MetaAdsStatePanel
+        title="UGC/script görevleri alınamadı"
+        description="Client-visible görevler şu anda okunamıyor."
+        tone="error"
+      />
+    );
+  }
+
+  if (rows.length === 0) {
+    return <MetaAdsStatePanel title="Bekleyen UGC/script görevi bulunmuyor." tone="muted" />;
+  }
+
+  return (
+    <div className="space-y-3">
+      {rows.map((task) => (
+        <div key={task.id} className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-4">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-white">{task.title}</p>
+            <span className={`rounded border px-2 py-1 text-[11px] ${getClientTaskStatusTone(task.status)}`}>
+              {getClientTaskStatusLabel(task.status)}
+            </span>
+          </div>
+          {task.description ? <p className="text-sm text-[#A0A0A0]">{task.description}</p> : null}
+          <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+            <MetricPill label="Öncelik" value={task.priority} />
+            <MetricPill
+              label="Bitiş"
+              value={task.dueDate ? new Date(task.dueDate).toLocaleDateString("tr-TR") : "—"}
+            />
+            <MetricPill label="İlerleme" value={`${task.progressPercent}%`} />
+            <MetricPill label="Todo" value={`${task.completion?.completedTodos ?? 0}/${task.completion?.totalTodos ?? 0}`} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TikTokOptimizationNotesPanel({
+  notes,
+  loading,
+}: {
+  notes: string[];
+  loading: boolean;
+}) {
+  if (loading) {
+    return <MetaAdsStatePanel title="Optimizasyon notları hazırlanıyor..." />;
+  }
+
+  if (notes.length === 0) {
+    return <MetaAdsStatePanel title="Optimizasyon notu için yeterli veri bulunamadı." tone="muted" />;
+  }
+
+  return (
+    <div className="space-y-3">
+      {notes.map((note) => (
+        <div key={note} className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-4 text-sm text-[#d7d7d7]">
+          {note}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function MetaAdsEntityGrid({
   title,
   loading,
@@ -1878,6 +2413,94 @@ function buildMetaAdsAgencyNotes(
   }
 
   return notes.slice(0, 4);
+}
+
+function getClientTikTokAdsConnectionNotice(connectionStatus: string | undefined): {
+  title: string;
+  description: string;
+  tone: "default" | "error" | "muted";
+} {
+  if (connectionStatus === "PENDING") {
+    return {
+      title: "Veriler hazırlanıyor",
+      description: "Veriler hazırlanıyor, kısa süre içinde dashboard güncellenecek.",
+      tone: "muted",
+    };
+  }
+
+  if (connectionStatus === "ERROR" || connectionStatus === "DISCONNECTED") {
+    return {
+      title: "Bağlantı problemi var",
+      description: "Bağlantı problemi var, ekibimiz ilgileniyor.",
+      tone: "error",
+    };
+  }
+
+  return {
+    title: "TikTok Ads bağlantısı aktif değil",
+    description: "Bu hizmetin verileri sadece aktif bağlantı sonrası görüntülenebilir.",
+    tone: "muted",
+  };
+}
+
+function buildTikTokAgencyNotes(
+  summary:
+    | {
+        spend: number;
+        videoViews: number;
+        ctr: number;
+        vtr: number;
+        conversions: number;
+        costPerConversion: number;
+      }
+    | undefined,
+  campaigns: TikTokAdsCampaign[],
+  ads: TikTokAdsInsightItem[],
+): string[] {
+  const notes: string[] = [];
+
+  if (summary) {
+    notes.push(
+      `${formatTikTokCurrency(summary.spend)} harcama ile ${formatTikTokInteger(summary.videoViews)} video izlenmesi ve ${formatTikTokInteger(summary.conversions)} dönüşüm üretildi.`,
+    );
+    notes.push(
+      `Ortalama VTR ${formatTikTokPercent(summary.vtr)}, CTR ${formatTikTokPercent(summary.ctr)} ve CPA ${formatTikTokCurrency(summary.costPerConversion)} seviyesinde.`,
+    );
+  }
+
+  const topCampaign = campaigns[0];
+  if (topCampaign) {
+    notes.push(
+      `${topCampaign.name} kampanyası ${formatTikTokCurrency(topCampaign.spend)} harcama ile en yüksek kampanya hacmini taşıyor.`,
+    );
+  }
+
+  const topCreative = [...ads].sort((left, right) => right.videoCompletionRate - left.videoCompletionRate)[0];
+  if (topCreative) {
+    notes.push(
+      `${topCreative.entityName ?? topCreative.entityId} kreatifi ${formatTikTokPercent(topCreative.videoCompletionRate)} video tamamlama oranıyla hook tarafında öne çıkıyor.`,
+    );
+  }
+
+  return notes.slice(0, 4);
+}
+
+function formatTikTokCurrency(value: number): string {
+  return new Intl.NumberFormat("tr-TR", {
+    style: "currency",
+    currency: "TRY",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function formatTikTokInteger(value: number): string {
+  return new Intl.NumberFormat("tr-TR", {
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function formatTikTokPercent(value: number): string {
+  return `${value.toFixed(2)}%`;
 }
 
 function formatMetaCurrency(value: number): string {

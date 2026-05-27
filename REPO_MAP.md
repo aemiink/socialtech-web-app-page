@@ -219,6 +219,13 @@ Additional portal pages exist under `clientPanel/src/app/pages/` and `clientPane
 - `clientPanel/src/app/App.tsx` keeps service-selection/page state behavior; auth state is Redux-managed.
 - `selectedService` restore purchased-service yetkisine göre doğrulanır; yetkisiz seçim otomatik temizlenir.
 - Client Portal auth flow is backend-integrated; Web APP service pages (`service-tab-page`, `reports`, `meetings`, `web-app-dashboard`) are API-first with empty-state rendering (no mock fallback).
+- TikTok Ads client portal Faz 4 touchpoints:
+  - `clientPanel/src/app/features/tiktokAds/tiktokAdsApi.ts` - own-client TikTok config/summary/campaigns/insights/sync RTK Query hooks
+  - `clientPanel/src/app/features/tiktokAds/tiktokAdsTypes.ts` - own-client TikTok reporting and sync response types
+  - `clientPanel/src/app/pages/services/tiktok-ads-dashboard.tsx` - API-driven TikTok Ads dashboard with TTL-gated refresh state
+  - `clientPanel/src/app/pages/service-tab-page.tsx` - API-driven TikTok Ads tab renderer for campaigns/video creatives/hook tests/audiences/pixel-events/UGC scripts/optimization notes
+  - `clientPanel/src/app/pages/__tests__/tiktok-ads-dashboard.test.tsx`
+  - `clientPanel/src/app/pages/__tests__/service-tab-page.tiktok-ads.test.tsx`
 
 ## Backend API
 

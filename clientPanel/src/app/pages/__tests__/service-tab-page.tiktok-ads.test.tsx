@@ -1,0 +1,261 @@
+import { render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ServiceTabPage } from "../service-tab-page";
+
+const mockUseGetOwnTikTokAdsConfigQuery = vi.fn();
+const mockUseGetOwnTikTokAdsSummaryQuery = vi.fn();
+const mockUseGetOwnTikTokAdsCampaignsQuery = vi.fn();
+const mockUseGetOwnTikTokAdsInsightsQuery = vi.fn();
+const mockUseGetClientTasksQuery = vi.fn();
+
+vi.mock("../../features/tiktokAds/tiktokAdsApi", () => ({
+  useGetOwnTikTokAdsConfigQuery: (...args: unknown[]) => mockUseGetOwnTikTokAdsConfigQuery(...args),
+  useGetOwnTikTokAdsSummaryQuery: (...args: unknown[]) => mockUseGetOwnTikTokAdsSummaryQuery(...args),
+  useGetOwnTikTokAdsCampaignsQuery: (...args: unknown[]) => mockUseGetOwnTikTokAdsCampaignsQuery(...args),
+  useGetOwnTikTokAdsInsightsQuery: (...args: unknown[]) => mockUseGetOwnTikTokAdsInsightsQuery(...args),
+}));
+
+vi.mock("../../features/metaAds/metaAdsApi", () => ({
+  useGetOwnMetaAdsConfigQuery: () => ({ data: undefined, isLoading: false, isError: false }),
+  useGetOwnMetaAdsSummaryQuery: () => ({ data: undefined, isLoading: false, isError: false }),
+  useGetOwnMetaAdsCampaignsQuery: () => ({ data: undefined, isLoading: false, isError: false }),
+  useGetOwnMetaAdsAdSetsQuery: () => ({ data: undefined, isLoading: false, isError: false }),
+  useGetOwnMetaAdsAdsQuery: () => ({ data: undefined, isLoading: false, isError: false }),
+  useGetOwnMetaAdsInsightsQuery: () => ({ data: undefined, isLoading: false, isError: false }),
+  useGetOwnMetaAdsPixelStatusQuery: () => ({ data: undefined, isLoading: false, isError: false }),
+  useGetOwnMetaAdsReportsQuery: () => ({ data: undefined, isLoading: false, isError: false }),
+}));
+
+vi.mock("../../features/webAppWorkspace/webAppWorkspaceApi", () => ({
+  webAppWorkspaceApi: {
+    util: {
+      updateQueryData: () => ({ type: "mock/updateQueryData" }),
+    },
+  },
+  useGetWebAppWorkspaceQuery: () => ({ data: undefined, isLoading: false }),
+  useCreateWebAppWorkspaceMessageMutation: () => [vi.fn(), { isLoading: false }],
+  useCreateWebAppWorkspaceRevisionMutation: () => [vi.fn(), { isLoading: false }],
+  useUpdateWebAppWorkspaceRevisionStatusMutation: () => [vi.fn(), { isLoading: false }],
+}));
+
+vi.mock("../../features/webAppWorkspace/workspaceSocket", () => ({
+  createWorkspaceSocket: () => ({
+    emit: vi.fn(),
+    on: vi.fn(),
+    off: vi.fn(),
+    disconnect: vi.fn(),
+  }),
+}));
+
+vi.mock("../../store/hooks", () => ({
+  useAppDispatch: () => vi.fn(),
+  useAppSelector: (selector: (state: unknown) => unknown) =>
+    selector({
+      auth: {
+        accessToken: "test-token",
+        currentUser: { id: "client-1" },
+      },
+    }),
+}));
+
+vi.mock("../../features/auth/authSelectors", () => ({
+  selectAccessToken: (state: { auth: { accessToken: string | null } }) => state.auth.accessToken,
+  selectCurrentUser: (state: { auth: { currentUser: { id: string } | null } }) => state.auth.currentUser,
+}));
+
+vi.mock("../../features/tasks/tasksApi", () => ({
+  useGetClientTasksQuery: (...args: unknown[]) => mockUseGetClientTasksQuery(...args),
+  useUpdateClientTaskApprovalMutation: () => [vi.fn(), { isLoading: false }],
+}));
+
+vi.mock("../../features/projectFiles/projectFilesApi", () => ({
+  useGetClientProjectFilesQuery: () => ({ data: { data: [] }, isLoading: false, isError: false }),
+}));
+
+const tiktokTask = {
+  id: "task-1",
+  projectId: "project-1",
+  title: "UGC script revizyonu",
+  description: "Hook ve CTA akışı müşteri kontrolünde",
+  status: "REVIEW",
+  visibility: "CLIENT_VISIBLE",
+  priority: "HIGH",
+  type: "REVISION",
+  workstream: "UI_INTEGRATION",
+  dueDate: "2026-05-30T00:00:00.000Z",
+  updatedAt: "2026-05-27T10:00:00.000Z",
+  projectName: "TikTok Ads Ops",
+  projectServiceId: "tiktok-ads",
+  approvalRequired: false,
+  approvalType: null,
+  approvalStatus: null,
+  sprint: null,
+  completion: {
+    totalTodos: 2,
+    completedTodos: 1,
+    remainingTodos: 1,
+    completionPercentage: 50,
+  },
+  todos: [],
+  progressPercent: 50,
+};
+
+describe("ServiceTabPage TikTok Ads tabs", () => {
+  beforeEach(() => {
+    mockUseGetOwnTikTokAdsConfigQuery.mockReset();
+    mockUseGetOwnTikTokAdsSummaryQuery.mockReset();
+    mockUseGetOwnTikTokAdsCampaignsQuery.mockReset();
+    mockUseGetOwnTikTokAdsInsightsQuery.mockReset();
+    mockUseGetClientTasksQuery.mockReset();
+
+    mockUseGetOwnTikTokAdsConfigQuery.mockReturnValue({
+      data: {
+        connectionStatus: "CONNECTED",
+        hasConfig: true,
+        advertiserId: "1234567890",
+        lastSyncAt: "2026-05-09T10:00:00.000Z",
+      },
+      isLoading: false,
+      isError: false,
+    });
+    mockUseGetOwnTikTokAdsSummaryQuery.mockReturnValue({
+      data: {
+        spend: 210,
+        impressions: 42000,
+        reach: 22000,
+        clicks: 840,
+        ctr: 2,
+        cpc: 0.25,
+        cpm: 5,
+        videoViews: 18000,
+        videoViews2s: 15000,
+        videoViews6s: 9000,
+        videoCompletionRate: 50,
+        vtr: 42.86,
+        conversions: 42,
+        costPerConversion: 5,
+        conversionRate: 5,
+        purchaseValue: 1200,
+        dateRange: { since: "2026-05-07", until: "2026-05-08" },
+        lastSyncAt: "2026-05-09T08:00:00.000Z",
+      },
+      isLoading: false,
+      isError: false,
+    });
+    mockUseGetOwnTikTokAdsCampaignsQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "campaign-1",
+            name: "UGC Launch",
+            objective: "REACH",
+            status: "ENABLE",
+            spend: 210,
+            impressions: 42000,
+            clicks: 840,
+            ctr: 2,
+            cpc: 0.25,
+            videoViews: 18000,
+            conversions: 42,
+            costPerConversion: 5,
+            purchaseValue: 1200,
+          },
+        ],
+        dateRange: { since: "2026-05-07", until: "2026-05-08" },
+        lastSyncAt: "2026-05-09T08:00:00.000Z",
+      },
+      isLoading: false,
+      isError: false,
+    });
+    mockUseGetOwnTikTokAdsInsightsQuery.mockImplementation((query?: { level?: string }) => ({
+      data: {
+        data: [
+          {
+            id: `${query?.level ?? "ACCOUNT"}-1`,
+            date: "2026-05-08T00:00:00.000Z",
+            level: query?.level ?? "ACCOUNT",
+            entityId: "entity-1",
+            entityName:
+              query?.level === "AD"
+                ? "UGC Creative 01"
+                : query?.level === "ADGROUP"
+                  ? "Broad Audience"
+                  : "UGC Launch",
+            spend: 90,
+            impressions: 18000,
+            reach: 9000,
+            clicks: 360,
+            ctr: 2,
+            cpc: 0.25,
+            cpm: 5,
+            videoViews: 8400,
+            videoViews2s: 7000,
+            videoViews6s: 4200,
+            videoCompletionRate: 50,
+            vtr: 46.67,
+            conversions: 18,
+            costPerConversion: 5,
+            conversionRate: 5,
+            purchaseValue: 600,
+            updatedAt: "2026-05-09T08:00:00.000Z",
+          },
+        ],
+        level: query?.level ?? "ACCOUNT",
+        dateRange: { since: "2026-05-07", until: "2026-05-08" },
+        lastSyncAt: "2026-05-09T08:00:00.000Z",
+      },
+      isLoading: false,
+      isError: false,
+    }));
+    mockUseGetClientTasksQuery.mockImplementation((query?: { type?: string }) => ({
+      data: query?.type === "REVISION" ? [] : [tiktokTask],
+      isLoading: false,
+      isError: false,
+    }));
+  });
+
+  it("shows connection state when TikTok Ads is not connected", () => {
+    mockUseGetOwnTikTokAdsConfigQuery.mockReturnValue({
+      data: {
+        connectionStatus: "NOT_CONNECTED",
+        hasConfig: false,
+        advertiserId: null,
+        lastSyncAt: null,
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<ServiceTabPage serviceId="tiktok-ads" tabId="campaigns" />);
+
+    expect(screen.getByText("TikTok Ads bağlantısı aktif değil")).toBeInTheDocument();
+  });
+
+  it("renders campaigns tab with API data", () => {
+    render(<ServiceTabPage serviceId="tiktok-ads" tabId="campaigns" />);
+
+    expect(screen.getByText("UGC Launch")).toBeInTheDocument();
+    expect(screen.getAllByText("REACH").length).toBeGreaterThan(0);
+  });
+
+  it("renders hook tests from ad-level insight data", () => {
+    render(<ServiceTabPage serviceId="tiktok-ads" tabId="hook-tests" />);
+
+    expect(screen.getByText("UGC Creative 01")).toBeInTheDocument();
+    expect(screen.getByText("Winning hook")).toBeInTheDocument();
+  });
+
+  it("renders pixel tab from connection and conversion snapshot data", () => {
+    render(<ServiceTabPage serviceId="tiktok-ads" tabId="pixel-events" />);
+
+    expect(screen.getByText(/Advertiser ID:/i)).toBeInTheDocument();
+    expect(screen.getByText("Dönüşüm sinyali var")).toBeInTheDocument();
+  });
+
+  it("renders UGC script tab from client-visible task data", () => {
+    render(<ServiceTabPage serviceId="tiktok-ads" tabId="ugc-scripts" />);
+
+    expect(screen.getByText("UGC script revizyonu")).toBeInTheDocument();
+    expect(screen.getByText("Hook ve CTA akışı müşteri kontrolünde")).toBeInTheDocument();
+  });
+});
