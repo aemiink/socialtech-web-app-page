@@ -163,6 +163,8 @@
 - Amazon Ads Faz 0: Discovery contract (official API research, LwA OAuth/profile/account/marketplace strategy, Reporting v3 read-only V1 scope, role-scope matrix, Faz 1 implementation contract)
 - Amazon Ads Faz 1: Backend foundation (Prisma config/credential models + NestJS module + permission seed + admin/client config-aware UI + authz e2e coverage)
 - Amazon Ads Faz 2: LwA OAuth/token connection management (encrypted refresh token storage, OAuth URL/code exchange, profile selection/test connection, disconnect, admin/client connection UI)
+- Amazon Ads Faz 3: Reporting v3 async sync (daily snapshot tables + manual sync + summary/campaign/product/insight API + admin/client dashboard read-model integration)
+- Amazon Ads Faz 4: Client panel API-driven tab workspace (sponsored product/brand/display + campaigns/products/keywords/targeting/search terms + approvals/agency notes + report-ready tab + config-aware states)
 
 ## Blocked
 
@@ -267,6 +269,19 @@ None identified.
   - `clientPanel`: `npm run typecheck` ✅
   - `clientPanel`: `npm run build` ✅
   - `server`: `npm run test:e2e -- amazon-ads-authz.e2e-spec.ts` çalıştırılmak istendi; local `DATABASE_URL` test DB olmadığı için e2e runner güvenlik guard’ı ile reddetti.
+- Latest Amazon Ads Faz 3 checkpoint:
+  - `server`: `npm run prisma:generate` ✅
+  - `server`: `npm run typecheck` ✅
+  - `server`: `npm run typecheck:seed` ✅
+  - `server`: `npm run typecheck:spec` ✅
+  - `server`: `npm run build` ✅
+  - `adminandemployeePanel`: `npm run typecheck` ✅
+  - `adminandemployeePanel`: `npm run test:run -- ClientDetail` ✅ (`10/10`)
+  - `adminandemployeePanel`: `npm run build` ✅
+  - `clientPanel`: `npm run typecheck` ✅
+  - `clientPanel`: `npm run build` ✅
+  - `git diff --check` ✅
+  - `server`: `npm run test:e2e -- amazon-ads-authz.e2e-spec.ts` çalıştırılmak istendi; local `DATABASE_URL` test DB olmadığı için e2e runner güvenlik guard’ı ile reddetti (`socialtech_server` test DB adı değil).
 - Latest admin/employee frontend validation checkpoint: `25` test files, `153/153` tests.
 - Latest client portal frontend validation checkpoint: `4` test files, `17/17` tests.
 - Latest FAZ-05 validation checkpoint:

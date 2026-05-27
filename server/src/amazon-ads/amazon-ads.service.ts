@@ -1,7 +1,10 @@
 import {
   AccountType,
   AmazonAdsConnectionStatus,
+  AmazonAdsInsightLevel,
+  AmazonAdsProductType,
   AmazonAdsRegion,
+  AmazonAdsSyncStatus,
   Prisma,
   PurchasedServiceKey,
   PurchasedServiceStatus,
@@ -21,11 +24,16 @@ import { PrismaService } from "../database/prisma.service";
 import {
   AmazonAdsAccessTokenResult,
   AmazonAdsApiService,
+  AmazonAdsApiInsightRow,
   AmazonAdsProfile,
   NormalizedAmazonAdsApiError,
 } from "./amazon-ads-api.service";
 import { AmazonAdsTokenService } from "./amazon-ads-token.service";
+import { AmazonAdsCampaignsQueryDto } from "./dto/amazon-ads-campaigns-query.dto";
+import { AmazonAdsDateRangeQueryDto } from "./dto/amazon-ads-date-range-query.dto";
+import { AmazonAdsInsightsQueryDto } from "./dto/amazon-ads-insights-query.dto";
 import { AmazonAdsOAuthStartQueryDto } from "./dto/amazon-ads-oauth-start-query.dto";
+import { AmazonAdsProductsQueryDto } from "./dto/amazon-ads-products-query.dto";
 import { ConnectManualAmazonAdsDto } from "./dto/connect-manual-amazon-ads.dto";
 import { ExchangeAmazonAdsOAuthCodeDto } from "./dto/exchange-amazon-ads-oauth-code.dto";
 import { TestAmazonAdsConnectionDto } from "./dto/test-amazon-ads-connection.dto";
@@ -35,6 +43,16 @@ const AMAZON_ADS_CONFIG_READ_ANY_PERMISSION = "amazonAds.config.read.any";
 const AMAZON_ADS_CONFIG_MANAGE_ANY_PERMISSION = "amazonAds.config.manage.any";
 const AMAZON_ADS_CONFIG_READ_ASSIGNED_PERMISSION = "amazonAds.config.read.assigned";
 const AMAZON_ADS_CONFIG_READ_OWN_PERMISSION = "amazonAds.config.read.own";
+const AMAZON_ADS_REPORTING_READ_ANY_PERMISSION = "amazonAds.reporting.read.any";
+const AMAZON_ADS_REPORTING_READ_ASSIGNED_PERMISSION = "amazonAds.reporting.read.assigned";
+const AMAZON_ADS_REPORTING_READ_OWN_PERMISSION = "amazonAds.reporting.read.own";
+const AMAZON_ADS_SYNC_RUN_ANY_PERMISSION = "amazonAds.sync.run.any";
+const AMAZON_ADS_SYNC_READ_ASSIGNED_PERMISSION = "amazonAds.sync.read.assigned";
+const DEFAULT_REPORTING_RANGE_DAYS = 7;
+const MAX_REPORTING_RANGE_DAYS = 31;
+const DEFAULT_CAMPAIGNS_LIMIT = 25;
+const DEFAULT_PRODUCTS_LIMIT = 25;
+const DEFAULT_INSIGHTS_LIMIT = 100;
 
 const adminAmazonAdsConfigSelect = {
   id: true,
@@ -66,12 +84,41 @@ const amazonAdsCredentialSummarySelect = {
   updatedAt: true,
 } satisfies Prisma.ClientAmazonAdsCredentialSelect;
 
+const amazonAdsDailyInsightSelect = {
+  id: true,
+  clientProfileId: true,
+  profileId: true,
+  marketplaceId: true,
+  date: true,
+  level: true,
+  entityId: true,
+  entityName: true,
+  adProduct: true,
+  spend: true,
+  impressions: true,
+  clicks: true,
+  sales: true,
+  orders: true,
+  unitsSold: true,
+  ctr: true,
+  cpc: true,
+  acos: true,
+  roas: true,
+  conversionRate: true,
+  raw: true,
+  updatedAt: true,
+} satisfies Prisma.AmazonAdsDailyInsightSelect;
+
 type AdminAmazonAdsConfigModel = Prisma.ClientAmazonAdsConfigGetPayload<{
   select: typeof adminAmazonAdsConfigSelect;
 }>;
 
 type AmazonAdsCredentialSummaryModel = Prisma.ClientAmazonAdsCredentialGetPayload<{
   select: typeof amazonAdsCredentialSummarySelect;
+}>;
+
+type AmazonAdsDailyInsightModel = Prisma.AmazonAdsDailyInsightGetPayload<{
+  select: typeof amazonAdsDailyInsightSelect;
 }>;
 
 type AmazonAdsConfigPatchData = {
@@ -168,6 +215,131 @@ type AmazonAdsPersistConnectionInput = {
 
 type AmazonAdsRefreshTokenResult = AmazonAdsAccessTokenResult & {
   refreshToken: string;
+};
+
+type AmazonAdsReportDateRange = {
+  since: Date;
+  until: Date;
+  sinceIsoDate: string;
+  untilIsoDate: string;
+};
+
+type AmazonAdsSummaryResponse = {
+  spend: number;
+  impressions: number;
+  clicks: number;
+  sales: number;
+  orders: number;
+  unitsSold: number;
+  ctr: number;
+  cpc: number;
+  acos: number;
+  roas: number;
+  conversionRate: number;
+  dateRange: { since: string; until: string };
+  lastSyncAt: Date | null;
+};
+
+type AmazonAdsCampaignSummary = {
+  id: string;
+  name: string;
+  adProduct: AmazonAdsProductType | null;
+  status: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  sales: number;
+  orders: number;
+  acos: number;
+  roas: number;
+};
+
+type AmazonAdsCampaignsResponse = {
+  data: AmazonAdsCampaignSummary[];
+  dateRange: { since: string; until: string };
+  lastSyncAt: Date | null;
+};
+
+type AmazonAdsProductSummary = {
+  asin: string | null;
+  sku: string | null;
+  title: string | null;
+  spend: number;
+  clicks: number;
+  sales: number;
+  orders: number;
+  acos: number;
+  roas: number;
+};
+
+type AmazonAdsProductsResponse = {
+  data: AmazonAdsProductSummary[];
+  dateRange: { since: string; until: string };
+  lastSyncAt: Date | null;
+};
+
+type AmazonAdsInsightItem = {
+  id: string;
+  date: string;
+  level: AmazonAdsInsightLevel;
+  entityId: string;
+  entityName: string | null;
+  adProduct: AmazonAdsProductType | null;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  sales: number;
+  orders: number;
+  unitsSold: number;
+  ctr: number;
+  cpc: number;
+  acos: number;
+  roas: number;
+  conversionRate: number;
+  campaignId: string | null;
+  campaignName: string | null;
+  adGroupId: string | null;
+  adGroupName: string | null;
+  keywordId: string | null;
+  keywordText: string | null;
+  keywordType: string | null;
+  matchType: string | null;
+  targeting: string | null;
+  searchTerm: string | null;
+  reportTypeId: string | null;
+  updatedAt: string;
+};
+
+type AmazonAdsInsightsResponse = {
+  data: AmazonAdsInsightItem[];
+  level: AmazonAdsInsightLevel;
+  dateRange: { since: string; until: string };
+  lastSyncAt: Date | null;
+};
+
+type AmazonAdsSyncResponse = {
+  success: true;
+  syncedAt: Date;
+  dateRange: { since: string; until: string };
+  inserted: {
+    account: number;
+    campaigns: number;
+    products: number;
+    searchTerms: number;
+    total: number;
+  };
+  connectionStatus: AmazonAdsConnectionStatus;
+  lastSyncAt: Date | null;
+  syncStatus: AmazonAdsSyncStatus;
+};
+
+type AmazonAdsReportingConnection = {
+  refreshToken: string;
+  profileId: string;
+  marketplaceId: string | null;
+  region: AmazonAdsRegion;
+  lastSyncAt: Date | null;
+  connectionStatus: AmazonAdsConnectionStatus;
 };
 
 @Injectable()
@@ -406,6 +578,71 @@ export class AmazonAdsService {
     return this.getConnectionSummaryByClientProfileId(clientId);
   }
 
+  async getAdminClientSummary(
+    clientId: string,
+    query: AmazonAdsDateRangeQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<AmazonAdsSummaryResponse> {
+    this.assertCanReadAnyConfig(actor);
+    this.assertCanReadAnyReporting(actor);
+    await this.assertClientExists(clientId);
+    await this.assertClientHasActiveAmazonAdsService(clientId);
+
+    return this.getSummaryByClientProfileId(clientId, query);
+  }
+
+  async getAdminClientCampaigns(
+    clientId: string,
+    query: AmazonAdsCampaignsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<AmazonAdsCampaignsResponse> {
+    this.assertCanReadAnyConfig(actor);
+    this.assertCanReadAnyReporting(actor);
+    await this.assertClientExists(clientId);
+    await this.assertClientHasActiveAmazonAdsService(clientId);
+
+    return this.getCampaignsByClientProfileId(clientId, query);
+  }
+
+  async getAdminClientProducts(
+    clientId: string,
+    query: AmazonAdsProductsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<AmazonAdsProductsResponse> {
+    this.assertCanReadAnyConfig(actor);
+    this.assertCanReadAnyReporting(actor);
+    await this.assertClientExists(clientId);
+    await this.assertClientHasActiveAmazonAdsService(clientId);
+
+    return this.getProductsByClientProfileId(clientId, query);
+  }
+
+  async getAdminClientInsights(
+    clientId: string,
+    query: AmazonAdsInsightsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<AmazonAdsInsightsResponse> {
+    this.assertCanReadAnyConfig(actor);
+    this.assertCanReadAnyReporting(actor);
+    await this.assertClientExists(clientId);
+    await this.assertClientHasActiveAmazonAdsService(clientId);
+
+    return this.getInsightsByClientProfileId(clientId, query);
+  }
+
+  async syncAdminClientInsights(
+    clientId: string,
+    query: AmazonAdsDateRangeQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<AmazonAdsSyncResponse> {
+    this.assertCanManageAnyConfig(actor);
+    this.assertCanRunAnySync(actor);
+    await this.assertClientExists(clientId);
+    await this.assertClientHasActiveAmazonAdsService(clientId);
+
+    return this.syncInsightsByClientProfileId(clientId, query, "MANUAL_SYNC");
+  }
+
   async getAssignedClientConfig(
     clientId: string,
     actor: AuthenticatedUser,
@@ -420,6 +657,71 @@ export class AmazonAdsService {
     });
 
     return this.toAdminConfigSummary(clientId, config);
+  }
+
+  async getAssignedClientSummary(
+    clientId: string,
+    query: AmazonAdsDateRangeQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<AmazonAdsSummaryResponse> {
+    this.assertCanReadAssignedConfig(actor);
+    this.assertCanReadAssignedReporting(actor);
+    await this.assertActiveAssignment(clientId, actor.id);
+    await this.assertClientHasActiveAmazonAdsService(clientId);
+
+    return this.getSummaryByClientProfileId(clientId, query);
+  }
+
+  async getAssignedClientCampaigns(
+    clientId: string,
+    query: AmazonAdsCampaignsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<AmazonAdsCampaignsResponse> {
+    this.assertCanReadAssignedConfig(actor);
+    this.assertCanReadAssignedReporting(actor);
+    await this.assertActiveAssignment(clientId, actor.id);
+    await this.assertClientHasActiveAmazonAdsService(clientId);
+
+    return this.getCampaignsByClientProfileId(clientId, query);
+  }
+
+  async getAssignedClientProducts(
+    clientId: string,
+    query: AmazonAdsProductsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<AmazonAdsProductsResponse> {
+    this.assertCanReadAssignedConfig(actor);
+    this.assertCanReadAssignedReporting(actor);
+    await this.assertActiveAssignment(clientId, actor.id);
+    await this.assertClientHasActiveAmazonAdsService(clientId);
+
+    return this.getProductsByClientProfileId(clientId, query);
+  }
+
+  async getAssignedClientInsights(
+    clientId: string,
+    query: AmazonAdsInsightsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<AmazonAdsInsightsResponse> {
+    this.assertCanReadAssignedConfig(actor);
+    this.assertCanReadAssignedReporting(actor);
+    await this.assertActiveAssignment(clientId, actor.id);
+    await this.assertClientHasActiveAmazonAdsService(clientId);
+
+    return this.getInsightsByClientProfileId(clientId, query);
+  }
+
+  async syncAssignedClientInsights(
+    clientId: string,
+    query: AmazonAdsDateRangeQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<AmazonAdsSyncResponse> {
+    this.assertCanReadAssignedConfig(actor);
+    this.assertCanReadAssignedSync(actor);
+    await this.assertActiveAssignment(clientId, actor.id);
+    await this.assertClientHasActiveAmazonAdsService(clientId);
+
+    return this.syncInsightsByClientProfileId(clientId, query, "ON_DEMAND_ASSIGNED_REFRESH");
   }
 
   async getOwnClientConfig(
@@ -472,6 +774,58 @@ export class AmazonAdsService {
       accountName: config.accountName ?? null,
       lastSyncAt: config.lastSyncAt ?? null,
     };
+  }
+
+  async getOwnClientSummary(
+    query: AmazonAdsDateRangeQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<AmazonAdsSummaryResponse> {
+    this.assertCanReadOwnConfig(actor);
+    this.assertCanReadOwnReporting(actor);
+    const clientProfileId = this.getClientProfileIdOrFail(actor);
+    await this.assertClientExists(clientProfileId);
+    await this.assertClientHasActiveAmazonAdsService(clientProfileId);
+
+    return this.getSummaryByClientProfileId(clientProfileId, query);
+  }
+
+  async getOwnClientCampaigns(
+    query: AmazonAdsCampaignsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<AmazonAdsCampaignsResponse> {
+    this.assertCanReadOwnConfig(actor);
+    this.assertCanReadOwnReporting(actor);
+    const clientProfileId = this.getClientProfileIdOrFail(actor);
+    await this.assertClientExists(clientProfileId);
+    await this.assertClientHasActiveAmazonAdsService(clientProfileId);
+
+    return this.getCampaignsByClientProfileId(clientProfileId, query);
+  }
+
+  async getOwnClientProducts(
+    query: AmazonAdsProductsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<AmazonAdsProductsResponse> {
+    this.assertCanReadOwnConfig(actor);
+    this.assertCanReadOwnReporting(actor);
+    const clientProfileId = this.getClientProfileIdOrFail(actor);
+    await this.assertClientExists(clientProfileId);
+    await this.assertClientHasActiveAmazonAdsService(clientProfileId);
+
+    return this.getProductsByClientProfileId(clientProfileId, query);
+  }
+
+  async getOwnClientInsights(
+    query: AmazonAdsInsightsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<AmazonAdsInsightsResponse> {
+    this.assertCanReadOwnConfig(actor);
+    this.assertCanReadOwnReporting(actor);
+    const clientProfileId = this.getClientProfileIdOrFail(actor);
+    await this.assertClientExists(clientProfileId);
+    await this.assertClientHasActiveAmazonAdsService(clientProfileId);
+
+    return this.getInsightsByClientProfileId(clientProfileId, query);
   }
 
   private async getOrCreateConfig(clientId: string): Promise<AdminAmazonAdsConfigModel> {
@@ -527,6 +881,378 @@ export class AmazonAdsService {
       credential,
       hasActiveService: serviceCount > 0,
     };
+  }
+
+  private async getSummaryByClientProfileId(
+    clientId: string,
+    query: AmazonAdsDateRangeQueryDto,
+  ): Promise<AmazonAdsSummaryResponse> {
+    const dateRange = this.resolveReportDateRange(query);
+    const [insights, config] = await this.prisma.$transaction([
+      this.prisma.amazonAdsDailyInsight.findMany({
+        where: {
+          clientProfileId: clientId,
+          level: AmazonAdsInsightLevel.ACCOUNT,
+          date: {
+            gte: dateRange.since,
+            lte: dateRange.until,
+          },
+        },
+        select: amazonAdsDailyInsightSelect,
+        orderBy: { date: "asc" },
+      }),
+      this.prisma.clientAmazonAdsConfig.findUnique({
+        where: { clientProfileId: clientId },
+        select: { lastSyncAt: true },
+      }),
+    ]);
+
+    return {
+      ...this.aggregateInsightRows(insights),
+      dateRange: {
+        since: dateRange.sinceIsoDate,
+        until: dateRange.untilIsoDate,
+      },
+      lastSyncAt: config?.lastSyncAt ?? null,
+    };
+  }
+
+  private async getCampaignsByClientProfileId(
+    clientId: string,
+    query: AmazonAdsCampaignsQueryDto,
+  ): Promise<AmazonAdsCampaignsResponse> {
+    const dateRange = this.resolveReportDateRange(query);
+    const limit = query.limit ?? DEFAULT_CAMPAIGNS_LIMIT;
+    const [insights, config] = await this.prisma.$transaction([
+      this.prisma.amazonAdsDailyInsight.findMany({
+        where: {
+          clientProfileId: clientId,
+          level: AmazonAdsInsightLevel.CAMPAIGN,
+          ...(query.adProduct ? { adProduct: query.adProduct } : {}),
+          date: {
+            gte: dateRange.since,
+            lte: dateRange.until,
+          },
+        },
+        select: amazonAdsDailyInsightSelect,
+      }),
+      this.prisma.clientAmazonAdsConfig.findUnique({
+        where: { clientProfileId: clientId },
+        select: { lastSyncAt: true },
+      }),
+    ]);
+
+    const campaignMap = new Map<string, AmazonAdsCampaignSummary>();
+    for (const insight of insights) {
+      const key = `${insight.adProduct ?? "UNKNOWN"}:${insight.entityId}`;
+      const existing = campaignMap.get(key);
+      const spend = this.readDecimalAsNumber(insight.spend);
+      const impressions = insight.impressions ?? 0;
+      const clicks = insight.clicks ?? 0;
+      const sales = this.readDecimalAsNumber(insight.sales);
+      const orders = insight.orders ?? 0;
+      const rawMeta = this.extractCampaignMetaFromRaw(insight.raw);
+
+      if (!existing) {
+        campaignMap.set(key, {
+          id: insight.entityId,
+          name: insight.entityName ?? insight.entityId,
+          adProduct: insight.adProduct,
+          status: rawMeta.status ?? "UNKNOWN",
+          spend,
+          impressions,
+          clicks,
+          sales,
+          orders,
+          acos: this.roundPercentageByValue(spend, sales),
+          roas: this.roundDivision(sales, spend),
+        });
+        continue;
+      }
+
+      existing.spend += spend;
+      existing.impressions += impressions;
+      existing.clicks += clicks;
+      existing.sales += sales;
+      existing.orders += orders;
+      existing.acos = this.roundPercentageByValue(existing.spend, existing.sales);
+      existing.roas = this.roundDivision(existing.sales, existing.spend);
+      existing.name = insight.entityName ?? existing.name;
+      existing.status = rawMeta.status ?? existing.status;
+    }
+
+    return {
+      data: Array.from(campaignMap.values())
+        .sort((left, right) => right.spend - left.spend)
+        .slice(0, limit)
+        .map((campaign) => ({
+          ...campaign,
+          spend: this.round(campaign.spend),
+          sales: this.round(campaign.sales),
+          acos: this.round(campaign.acos),
+          roas: this.round(campaign.roas),
+        })),
+      dateRange: {
+        since: dateRange.sinceIsoDate,
+        until: dateRange.untilIsoDate,
+      },
+      lastSyncAt: config?.lastSyncAt ?? null,
+    };
+  }
+
+  private async getProductsByClientProfileId(
+    clientId: string,
+    query: AmazonAdsProductsQueryDto,
+  ): Promise<AmazonAdsProductsResponse> {
+    const dateRange = this.resolveReportDateRange(query);
+    const limit = query.limit ?? DEFAULT_PRODUCTS_LIMIT;
+    const [insights, config] = await this.prisma.$transaction([
+      this.prisma.amazonAdsDailyInsight.findMany({
+        where: {
+          clientProfileId: clientId,
+          level: AmazonAdsInsightLevel.PRODUCT,
+          date: {
+            gte: dateRange.since,
+            lte: dateRange.until,
+          },
+        },
+        select: amazonAdsDailyInsightSelect,
+      }),
+      this.prisma.clientAmazonAdsConfig.findUnique({
+        where: { clientProfileId: clientId },
+        select: { lastSyncAt: true },
+      }),
+    ]);
+
+    const productMap = new Map<string, AmazonAdsProductSummary>();
+    for (const insight of insights) {
+      const rawMeta = this.extractProductMetaFromRaw(insight.raw);
+      const key = rawMeta.asin ?? rawMeta.sku ?? insight.entityId;
+      const existing = productMap.get(key);
+      const spend = this.readDecimalAsNumber(insight.spend);
+      const clicks = insight.clicks ?? 0;
+      const sales = this.readDecimalAsNumber(insight.sales);
+      const orders = insight.orders ?? 0;
+
+      if (!existing) {
+        productMap.set(key, {
+          asin: rawMeta.asin,
+          sku: rawMeta.sku,
+          title: rawMeta.title ?? insight.entityName,
+          spend,
+          clicks,
+          sales,
+          orders,
+          acos: this.roundPercentageByValue(spend, sales),
+          roas: this.roundDivision(sales, spend),
+        });
+        continue;
+      }
+
+      existing.spend += spend;
+      existing.clicks += clicks;
+      existing.sales += sales;
+      existing.orders += orders;
+      existing.acos = this.roundPercentageByValue(existing.spend, existing.sales);
+      existing.roas = this.roundDivision(existing.sales, existing.spend);
+      existing.title = existing.title ?? rawMeta.title ?? insight.entityName;
+      existing.asin = existing.asin ?? rawMeta.asin;
+      existing.sku = existing.sku ?? rawMeta.sku;
+    }
+
+    return {
+      data: Array.from(productMap.values())
+        .sort((left, right) => right.sales - left.sales)
+        .slice(0, limit)
+        .map((product) => ({
+          ...product,
+          spend: this.round(product.spend),
+          sales: this.round(product.sales),
+          acos: this.round(product.acos),
+          roas: this.round(product.roas),
+        })),
+      dateRange: {
+        since: dateRange.sinceIsoDate,
+        until: dateRange.untilIsoDate,
+      },
+      lastSyncAt: config?.lastSyncAt ?? null,
+    };
+  }
+
+  private async getInsightsByClientProfileId(
+    clientId: string,
+    query: AmazonAdsInsightsQueryDto,
+  ): Promise<AmazonAdsInsightsResponse> {
+    const dateRange = this.resolveReportDateRange(query);
+    const level = query.level ?? AmazonAdsInsightLevel.ACCOUNT;
+    const limit = query.limit ?? DEFAULT_INSIGHTS_LIMIT;
+    const [insights, config] = await this.prisma.$transaction([
+      this.prisma.amazonAdsDailyInsight.findMany({
+        where: {
+          clientProfileId: clientId,
+          level,
+          date: {
+            gte: dateRange.since,
+            lte: dateRange.until,
+          },
+        },
+        select: amazonAdsDailyInsightSelect,
+        orderBy: [{ date: "desc" }, { updatedAt: "desc" }],
+        take: limit,
+      }),
+      this.prisma.clientAmazonAdsConfig.findUnique({
+        where: { clientProfileId: clientId },
+        select: { lastSyncAt: true },
+      }),
+    ]);
+
+    return {
+      data: insights.map((insight) => this.toInsightItem(insight)),
+      level,
+      dateRange: {
+        since: dateRange.sinceIsoDate,
+        until: dateRange.untilIsoDate,
+      },
+      lastSyncAt: config?.lastSyncAt ?? null,
+    };
+  }
+
+  private async syncInsightsByClientProfileId(
+    clientId: string,
+    query: AmazonAdsDateRangeQueryDto,
+    trigger: string,
+  ): Promise<AmazonAdsSyncResponse> {
+    const dateRange = this.resolveReportDateRange(query);
+    const startedAt = new Date();
+    const syncLog = await this.prisma.amazonAdsSyncLog.create({
+      data: {
+        clientProfileId: clientId,
+        status: AmazonAdsSyncStatus.RUNNING,
+        trigger,
+        startedAt,
+      },
+      select: { id: true },
+    });
+
+    try {
+      const connection = await this.resolveReportingConnection(clientId);
+      await this.prisma.amazonAdsSyncLog.update({
+        where: { id: syncLog.id },
+        data: { profileId: connection.profileId },
+      });
+
+      const snapshot = await this.amazonAdsApiService.fetchReportingSnapshot({
+        refreshToken: connection.refreshToken,
+        profileId: connection.profileId,
+        region: connection.region,
+        since: dateRange.sinceIsoDate,
+        until: dateRange.untilIsoDate,
+      });
+      const mergedSnapshotRows = this.mergeApiInsightRows(snapshot.rows);
+      const detailRows = mergedSnapshotRows
+        .map((row) => this.toInsightCreateManyInput(clientId, connection, row))
+        .filter((row): row is Prisma.AmazonAdsDailyInsightCreateManyInput => row !== null);
+      const accountRows = this.buildAccountInsightRows(clientId, connection, mergedSnapshotRows);
+      const allRows = [...accountRows, ...detailRows];
+      const syncedAt = new Date();
+      const hasReportFailures = snapshot.reportStatuses.some(
+        (status) => status.status === "FAILED",
+      );
+      const syncStatus = hasReportFailures
+        ? AmazonAdsSyncStatus.PARTIAL
+        : AmazonAdsSyncStatus.SUCCESS;
+
+      await this.prisma.$transaction(async (tx) => {
+        await tx.amazonAdsDailyInsight.deleteMany({
+          where: {
+            clientProfileId: clientId,
+            date: {
+              gte: dateRange.since,
+              lte: dateRange.until,
+            },
+            level: {
+              in: [
+                AmazonAdsInsightLevel.ACCOUNT,
+                AmazonAdsInsightLevel.CAMPAIGN,
+                AmazonAdsInsightLevel.PRODUCT,
+                AmazonAdsInsightLevel.SEARCH_TERM,
+              ],
+            },
+          },
+        });
+
+        if (allRows.length > 0) {
+          await tx.amazonAdsDailyInsight.createMany({ data: allRows });
+        }
+
+        await tx.clientAmazonAdsConfig.upsert({
+          where: { clientProfileId: clientId },
+          update: {
+            connectionStatus: AmazonAdsConnectionStatus.CONNECTED,
+            syncError: null,
+            lastSyncAt: syncedAt,
+          },
+          create: {
+            clientProfileId: clientId,
+            profileId: connection.profileId,
+            marketplaceId: connection.marketplaceId,
+            region: connection.region,
+            connectionStatus: AmazonAdsConnectionStatus.CONNECTED,
+            syncError: null,
+            lastSyncAt: syncedAt,
+          },
+        });
+
+        await tx.amazonAdsSyncLog.update({
+          where: { id: syncLog.id },
+          data: {
+            status: syncStatus,
+            finishedAt: syncedAt,
+            recordsFetched: allRows.length,
+            apiCallCount: snapshot.apiCallCount,
+            reportRequests: snapshot.reportRequests as Prisma.InputJsonValue,
+            reportStatuses: snapshot.reportStatuses as Prisma.InputJsonValue,
+          },
+        });
+      });
+
+      return {
+        success: true,
+        syncedAt,
+        dateRange: {
+          since: dateRange.sinceIsoDate,
+          until: dateRange.untilIsoDate,
+        },
+        inserted: {
+          account: accountRows.length,
+          campaigns: detailRows.filter((row) => row.level === AmazonAdsInsightLevel.CAMPAIGN)
+            .length,
+          products: detailRows.filter((row) => row.level === AmazonAdsInsightLevel.PRODUCT)
+            .length,
+          searchTerms: detailRows.filter(
+            (row) => row.level === AmazonAdsInsightLevel.SEARCH_TERM,
+          ).length,
+          total: allRows.length,
+        },
+        connectionStatus: AmazonAdsConnectionStatus.CONNECTED,
+        lastSyncAt: syncedAt,
+        syncStatus,
+      };
+    } catch (error) {
+      const normalizedError = this.amazonAdsApiService.normalizeError(error);
+      const finishedAt = new Date();
+      await this.markConnectionAsError(clientId, normalizedError, finishedAt);
+      await this.prisma.amazonAdsSyncLog.update({
+        where: { id: syncLog.id },
+        data: {
+          status: AmazonAdsSyncStatus.FAILED,
+          finishedAt,
+          errorCode: normalizedError.category,
+          errorMessage: `[${trigger}] ${this.normalizeApiErrorMessage(normalizedError.message)}`,
+        },
+      });
+      throw this.toConnectionTestException(normalizedError);
+    }
   }
 
   private async testAndPersistConnection(
@@ -676,6 +1402,281 @@ export class AmazonAdsService {
     return this.amazonAdsTokenService.decrypt(credential.refreshTokenEnc);
   }
 
+  private async resolveReportingConnection(
+    clientId: string,
+  ): Promise<AmazonAdsReportingConnection> {
+    const snapshot = await this.getConnectionSnapshot(clientId);
+    const encryptedRefreshToken = snapshot.credential?.refreshTokenEnc ?? null;
+    const profileId = snapshot.config?.profileId?.trim() ?? "";
+    const region = snapshot.config?.region ?? null;
+
+    if (!encryptedRefreshToken) {
+      throw new BadRequestException(
+        "Amazon Ads refresh token bulunamadı. Sync öncesi müşteriyi bağlayın.",
+      );
+    }
+
+    if (!profileId) {
+      throw new BadRequestException("Amazon Ads sync için profileId gereklidir.");
+    }
+
+    if (!region) {
+      throw new BadRequestException("Amazon Ads sync için region gereklidir.");
+    }
+
+    return {
+      refreshToken: this.amazonAdsTokenService.decrypt(encryptedRefreshToken),
+      profileId,
+      marketplaceId: snapshot.config?.marketplaceId ?? null,
+      region,
+      lastSyncAt: snapshot.config?.lastSyncAt ?? null,
+      connectionStatus:
+        snapshot.config?.connectionStatus ?? AmazonAdsConnectionStatus.NOT_CONNECTED,
+    };
+  }
+
+  private mergeApiInsightRows(rows: AmazonAdsApiInsightRow[]): AmazonAdsApiInsightRow[] {
+    const rowMap = new Map<string, AmazonAdsApiInsightRow>();
+
+    for (const row of rows) {
+      const key = JSON.stringify([
+        row.date,
+        row.level,
+        row.entityId,
+        row.adProduct,
+      ]);
+      const existing = rowMap.get(key);
+
+      if (!existing) {
+        rowMap.set(key, { ...row });
+        continue;
+      }
+
+      existing.entityName = existing.entityName ?? row.entityName;
+      existing.spend = (existing.spend ?? 0) + (row.spend ?? 0);
+      existing.impressions = (existing.impressions ?? 0) + (row.impressions ?? 0);
+      existing.clicks = (existing.clicks ?? 0) + (row.clicks ?? 0);
+      existing.sales = (existing.sales ?? 0) + (row.sales ?? 0);
+      existing.orders = (existing.orders ?? 0) + (row.orders ?? 0);
+      existing.unitsSold = (existing.unitsSold ?? 0) + (row.unitsSold ?? 0);
+      existing.ctr = this.roundPercentageByCounts(
+        existing.clicks ?? 0,
+        existing.impressions ?? 0,
+        6,
+      );
+      existing.cpc = this.roundDivision(existing.spend ?? 0, existing.clicks ?? 0, 6);
+      existing.acos = this.roundPercentageByValue(existing.spend ?? 0, existing.sales ?? 0, 6);
+      existing.roas = this.roundDivision(existing.sales ?? 0, existing.spend ?? 0, 6);
+      existing.conversionRate = this.roundPercentageByCounts(
+        existing.orders ?? 0,
+        existing.clicks ?? 0,
+        6,
+      );
+      existing.raw = {
+        source: "mergedReportingRows",
+        first: existing.raw,
+        latest: row.raw,
+      };
+    }
+
+    return Array.from(rowMap.values());
+  }
+
+  private toInsightCreateManyInput(
+    clientId: string,
+    connection: AmazonAdsReportingConnection,
+    row: AmazonAdsApiInsightRow,
+  ): Prisma.AmazonAdsDailyInsightCreateManyInput | null {
+    const date = this.parseDateToUtcDay(row.date);
+    if (!date) {
+      return null;
+    }
+
+    return {
+      clientProfileId: clientId,
+      profileId: connection.profileId,
+      marketplaceId: connection.marketplaceId,
+      date,
+      level: row.level,
+      entityId: row.entityId,
+      entityName: row.entityName,
+      adProduct: row.adProduct,
+      spend: this.toPrismaDecimal(row.spend),
+      impressions: row.impressions,
+      clicks: row.clicks,
+      sales: this.toPrismaDecimal(row.sales),
+      orders: row.orders,
+      unitsSold: row.unitsSold,
+      ctr: this.toPrismaDecimal(
+        row.ctr ?? this.roundPercentageByCounts(row.clicks ?? 0, row.impressions ?? 0, 6),
+      ),
+      cpc: this.toPrismaDecimal(
+        row.cpc ?? this.roundDivision(row.spend ?? 0, row.clicks ?? 0, 6),
+      ),
+      acos: this.toPrismaDecimal(
+        row.acos ?? this.roundPercentageByValue(row.spend ?? 0, row.sales ?? 0, 6),
+      ),
+      roas: this.toPrismaDecimal(
+        row.roas ?? this.roundDivision(row.sales ?? 0, row.spend ?? 0, 6),
+      ),
+      conversionRate: this.toPrismaDecimal(
+        row.conversionRate ??
+          this.roundPercentageByCounts(row.orders ?? 0, row.clicks ?? 0, 6),
+      ),
+      raw: row.raw as Prisma.InputJsonValue,
+    };
+  }
+
+  private buildAccountInsightRows(
+    clientId: string,
+    connection: AmazonAdsReportingConnection,
+    rows: AmazonAdsApiInsightRow[],
+  ): Prisma.AmazonAdsDailyInsightCreateManyInput[] {
+    const campaignRows = rows.filter((row) => row.level === AmazonAdsInsightLevel.CAMPAIGN);
+    const byDate = new Map<
+      string,
+      {
+        spend: number;
+        impressions: number;
+        clicks: number;
+        sales: number;
+        orders: number;
+        unitsSold: number;
+      }
+    >();
+
+    for (const row of campaignRows) {
+      const existing = byDate.get(row.date) ?? {
+        spend: 0,
+        impressions: 0,
+        clicks: 0,
+        sales: 0,
+        orders: 0,
+        unitsSold: 0,
+      };
+
+      existing.spend += row.spend ?? 0;
+      existing.impressions += row.impressions ?? 0;
+      existing.clicks += row.clicks ?? 0;
+      existing.sales += row.sales ?? 0;
+      existing.orders += row.orders ?? 0;
+      existing.unitsSold += row.unitsSold ?? 0;
+      byDate.set(row.date, existing);
+    }
+
+    const accountRows: Prisma.AmazonAdsDailyInsightCreateManyInput[] = [];
+    for (const [dateValue, metrics] of byDate.entries()) {
+      const date = this.parseDateToUtcDay(dateValue);
+      if (!date) {
+        continue;
+      }
+
+      accountRows.push({
+        clientProfileId: clientId,
+        profileId: connection.profileId,
+        marketplaceId: connection.marketplaceId,
+        date,
+        level: AmazonAdsInsightLevel.ACCOUNT,
+        entityId: connection.profileId,
+        entityName: connection.profileId,
+        adProduct: null,
+        spend: this.toPrismaDecimal(metrics.spend),
+        impressions: metrics.impressions,
+        clicks: metrics.clicks,
+        sales: this.toPrismaDecimal(metrics.sales),
+        orders: metrics.orders,
+        unitsSold: metrics.unitsSold,
+        ctr: this.toPrismaDecimal(
+          this.roundPercentageByCounts(metrics.clicks, metrics.impressions, 6),
+        ),
+        cpc: this.toPrismaDecimal(this.roundDivision(metrics.spend, metrics.clicks, 6)),
+        acos: this.toPrismaDecimal(
+          this.roundPercentageByValue(metrics.spend, metrics.sales, 6),
+        ),
+        roas: this.toPrismaDecimal(this.roundDivision(metrics.sales, metrics.spend, 6)),
+        conversionRate: this.toPrismaDecimal(
+          this.roundPercentageByCounts(metrics.orders, metrics.clicks, 6),
+        ),
+        raw: {
+          source: "campaignAggregate",
+        } as Prisma.InputJsonValue,
+      });
+    }
+
+    return accountRows;
+  }
+
+  private aggregateInsightRows(rows: AmazonAdsDailyInsightModel[]): Omit<
+    AmazonAdsSummaryResponse,
+    "dateRange" | "lastSyncAt"
+  > {
+    let spend = 0;
+    let impressions = 0;
+    let clicks = 0;
+    let sales = 0;
+    let orders = 0;
+    let unitsSold = 0;
+
+    for (const row of rows) {
+      spend += this.readDecimalAsNumber(row.spend);
+      impressions += row.impressions ?? 0;
+      clicks += row.clicks ?? 0;
+      sales += this.readDecimalAsNumber(row.sales);
+      orders += row.orders ?? 0;
+      unitsSold += row.unitsSold ?? 0;
+    }
+
+    return {
+      spend: this.round(spend),
+      impressions,
+      clicks,
+      sales: this.round(sales),
+      orders,
+      unitsSold,
+      ctr: this.roundPercentageByCounts(clicks, impressions),
+      cpc: this.roundDivision(spend, clicks),
+      acos: this.roundPercentageByValue(spend, sales),
+      roas: this.roundDivision(sales, spend),
+      conversionRate: this.roundPercentageByCounts(orders, clicks),
+    };
+  }
+
+  private toInsightItem(insight: AmazonAdsDailyInsightModel): AmazonAdsInsightItem {
+    const rawMeta = this.extractInsightMetaFromRaw(insight.raw);
+
+    return {
+      id: insight.id,
+      date: insight.date.toISOString(),
+      level: insight.level,
+      entityId: insight.entityId,
+      entityName: insight.entityName,
+      adProduct: insight.adProduct,
+      spend: this.round(this.readDecimalAsNumber(insight.spend)),
+      impressions: insight.impressions ?? 0,
+      clicks: insight.clicks ?? 0,
+      sales: this.round(this.readDecimalAsNumber(insight.sales)),
+      orders: insight.orders ?? 0,
+      unitsSold: insight.unitsSold ?? 0,
+      ctr: this.round(this.readDecimalAsNumber(insight.ctr)),
+      cpc: this.round(this.readDecimalAsNumber(insight.cpc)),
+      acos: this.round(this.readDecimalAsNumber(insight.acos)),
+      roas: this.round(this.readDecimalAsNumber(insight.roas)),
+      conversionRate: this.round(this.readDecimalAsNumber(insight.conversionRate)),
+      campaignId: rawMeta.campaignId,
+      campaignName: rawMeta.campaignName,
+      adGroupId: rawMeta.adGroupId,
+      adGroupName: rawMeta.adGroupName,
+      keywordId: rawMeta.keywordId,
+      keywordText: rawMeta.keywordText,
+      keywordType: rawMeta.keywordType,
+      matchType: rawMeta.matchType,
+      targeting: rawMeta.targeting,
+      searchTerm: rawMeta.searchTerm,
+      reportTypeId: rawMeta.reportTypeId,
+      updatedAt: insight.updatedAt.toISOString(),
+    };
+  }
+
   private async markConnectionAsError(
     clientId: string,
     normalizedError: NormalizedAmazonAdsApiError,
@@ -754,6 +1755,198 @@ export class AmazonAdsService {
 
   private normalizeApiErrorMessage(message: string): string {
     return message.trim().replace(/\s+/g, " ");
+  }
+
+  private resolveReportDateRange(query: AmazonAdsDateRangeQueryDto): AmazonAdsReportDateRange {
+    const resolvedUntil = query.until
+      ? this.parseDateToUtcDay(query.until)
+      : this.startOfUtcToday();
+    if (!resolvedUntil) {
+      throw new BadRequestException("Geçersiz since/until tarih aralığı.");
+    }
+
+    const resolvedSince = query.since
+      ? this.parseDateToUtcDay(query.since)
+      : this.addDaysUtc(resolvedUntil, -(DEFAULT_REPORTING_RANGE_DAYS - 1));
+    if (!resolvedSince) {
+      throw new BadRequestException("Geçersiz since/until tarih aralığı.");
+    }
+
+    if (resolvedSince.getTime() > resolvedUntil.getTime()) {
+      throw new BadRequestException("since değeri until değerinden sonra olamaz.");
+    }
+
+    const daySpan = this.diffDaysInclusive(resolvedSince, resolvedUntil);
+    if (daySpan > MAX_REPORTING_RANGE_DAYS) {
+      throw new BadRequestException(
+        `Amazon Ads reporting aralığı ${MAX_REPORTING_RANGE_DAYS} günü aşamaz.`,
+      );
+    }
+
+    return {
+      since: resolvedSince,
+      until: resolvedUntil,
+      sinceIsoDate: this.formatDateAsIsoDay(resolvedSince),
+      untilIsoDate: this.formatDateAsIsoDay(resolvedUntil),
+    };
+  }
+
+  private parseDateToUtcDay(value: string): Date | null {
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+
+    return new Date(
+      Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate()),
+    );
+  }
+
+  private formatDateAsIsoDay(value: Date): string {
+    return value.toISOString().slice(0, 10);
+  }
+
+  private startOfUtcToday(): Date {
+    return this.parseDateToUtcDay(new Date().toISOString()) ?? new Date();
+  }
+
+  private addDaysUtc(base: Date, days: number): Date {
+    const next = new Date(base);
+    next.setUTCDate(next.getUTCDate() + days);
+    return next;
+  }
+
+  private diffDaysInclusive(since: Date, until: Date): number {
+    const millisecondsInDay = 24 * 60 * 60 * 1000;
+    return Math.floor((until.getTime() - since.getTime()) / millisecondsInDay) + 1;
+  }
+
+  private toPrismaDecimal(value: number | null): Prisma.Decimal | null {
+    if (value === null || !Number.isFinite(value)) {
+      return null;
+    }
+
+    return new Prisma.Decimal(value.toFixed(6));
+  }
+
+  private readDecimalAsNumber(value: Prisma.Decimal | null): number {
+    return value ? value.toNumber() : 0;
+  }
+
+  private round(value: number, digits = 2): number {
+    if (!Number.isFinite(value)) {
+      return 0;
+    }
+
+    const scale = 10 ** digits;
+    return Math.round(value * scale) / scale;
+  }
+
+  private roundDivision(numerator: number, denominator: number, digits = 2): number {
+    if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) {
+      return 0;
+    }
+
+    return this.round(numerator / denominator, digits);
+  }
+
+  private roundPercentageByCounts(numerator: number, denominator: number, digits = 2): number {
+    return this.roundPercentageByValue(numerator, denominator, digits);
+  }
+
+  private roundPercentageByValue(numerator: number, denominator: number, digits = 2): number {
+    if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) {
+      return 0;
+    }
+
+    return this.round((numerator / denominator) * 100, digits);
+  }
+
+  private extractCampaignMetaFromRaw(raw: Prisma.JsonValue | null): { status: string | null } {
+    if (!this.isRecord(raw)) {
+      return { status: null };
+    }
+
+    return {
+      status: this.readRawString(raw.campaignStatus) ?? this.readRawString(raw.status),
+    };
+  }
+
+  private extractProductMetaFromRaw(raw: Prisma.JsonValue | null): {
+    asin: string | null;
+    sku: string | null;
+    title: string | null;
+  } {
+    if (!this.isRecord(raw)) {
+      return { asin: null, sku: null, title: null };
+    }
+
+    return {
+      asin: this.readRawString(raw.advertisedAsin) ?? this.readRawString(raw.purchasedAsin),
+      sku: this.readRawString(raw.advertisedSku),
+      title: this.readRawString(raw.productName) ?? this.readRawString(raw.productTitle),
+    };
+  }
+
+  private extractInsightMetaFromRaw(raw: Prisma.JsonValue | null): {
+    campaignId: string | null;
+    campaignName: string | null;
+    adGroupId: string | null;
+    adGroupName: string | null;
+    keywordId: string | null;
+    keywordText: string | null;
+    keywordType: string | null;
+    matchType: string | null;
+    targeting: string | null;
+    searchTerm: string | null;
+    reportTypeId: string | null;
+  } {
+    if (!this.isRecord(raw)) {
+      return {
+        campaignId: null,
+        campaignName: null,
+        adGroupId: null,
+        adGroupName: null,
+        keywordId: null,
+        keywordText: null,
+        keywordType: null,
+        matchType: null,
+        targeting: null,
+        searchTerm: null,
+        reportTypeId: null,
+      };
+    }
+
+    return {
+      campaignId: this.readRawString(raw.campaignId),
+      campaignName: this.readRawString(raw.campaignName),
+      adGroupId: this.readRawString(raw.adGroupId),
+      adGroupName: this.readRawString(raw.adGroupName),
+      keywordId: this.readRawString(raw.keywordId),
+      keywordText: this.readRawString(raw.keyword),
+      keywordType: this.readRawString(raw.keywordType),
+      matchType: this.readRawString(raw.matchType),
+      targeting: this.readRawString(raw.targeting),
+      searchTerm: this.readRawString(raw.searchTerm),
+      reportTypeId: this.readRawString(raw.reportTypeId),
+    };
+  }
+
+  private readRawString(value: unknown): string | null {
+    if (typeof value === "string") {
+      const trimmedValue = value.trim();
+      return trimmedValue.length > 0 ? trimmedValue : null;
+    }
+
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
+    }
+
+    return null;
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
   }
 
   private async assertClientExists(clientId: string): Promise<void> {
@@ -923,6 +2116,22 @@ export class AmazonAdsService {
     this.assertHasPermission(actor, AMAZON_ADS_CONFIG_MANAGE_ANY_PERMISSION);
   }
 
+  private assertCanReadAnyReporting(actor: AuthenticatedUser): void {
+    if (actor.accountType !== AccountType.ADMIN || actor.role !== UserRole.ADMIN) {
+      throw new ForbiddenException("Bu işlem yalnızca admin kullanıcılar içindir.");
+    }
+
+    this.assertHasPermission(actor, AMAZON_ADS_REPORTING_READ_ANY_PERMISSION);
+  }
+
+  private assertCanRunAnySync(actor: AuthenticatedUser): void {
+    if (actor.accountType !== AccountType.ADMIN || actor.role !== UserRole.ADMIN) {
+      throw new ForbiddenException("Bu işlem yalnızca admin kullanıcılar içindir.");
+    }
+
+    this.assertHasPermission(actor, AMAZON_ADS_SYNC_RUN_ANY_PERMISSION);
+  }
+
   private assertCanReadAssignedConfig(actor: AuthenticatedUser): void {
     if (actor.accountType !== AccountType.EMPLOYEE) {
       throw new ForbiddenException("Bu endpoint yalnızca çalışan hesapları içindir.");
@@ -931,12 +2140,36 @@ export class AmazonAdsService {
     this.assertHasPermission(actor, AMAZON_ADS_CONFIG_READ_ASSIGNED_PERMISSION);
   }
 
+  private assertCanReadAssignedReporting(actor: AuthenticatedUser): void {
+    if (actor.accountType !== AccountType.EMPLOYEE) {
+      throw new ForbiddenException("Bu endpoint yalnızca çalışan hesapları içindir.");
+    }
+
+    this.assertHasPermission(actor, AMAZON_ADS_REPORTING_READ_ASSIGNED_PERMISSION);
+  }
+
+  private assertCanReadAssignedSync(actor: AuthenticatedUser): void {
+    if (actor.accountType !== AccountType.EMPLOYEE) {
+      throw new ForbiddenException("Bu endpoint yalnızca çalışan hesapları içindir.");
+    }
+
+    this.assertHasPermission(actor, AMAZON_ADS_SYNC_READ_ASSIGNED_PERMISSION);
+  }
+
   private assertCanReadOwnConfig(actor: AuthenticatedUser): void {
     if (actor.accountType !== AccountType.CLIENT) {
       throw new ForbiddenException("Bu endpoint yalnızca müşteri hesapları içindir.");
     }
 
     this.assertHasPermission(actor, AMAZON_ADS_CONFIG_READ_OWN_PERMISSION);
+  }
+
+  private assertCanReadOwnReporting(actor: AuthenticatedUser): void {
+    if (actor.accountType !== AccountType.CLIENT) {
+      throw new ForbiddenException("Bu endpoint yalnızca müşteri hesapları içindir.");
+    }
+
+    this.assertHasPermission(actor, AMAZON_ADS_REPORTING_READ_OWN_PERMISSION);
   }
 
   private assertHasPermission(actor: AuthenticatedUser, permission: string): void {

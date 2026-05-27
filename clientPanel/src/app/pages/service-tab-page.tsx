@@ -60,6 +60,19 @@ import type {
   TikTokAdsReportExportFormat,
   TikTokAdsReportItem,
 } from '../features/tiktokAds/tiktokAdsTypes';
+import {
+  useGetOwnAmazonAdsCampaignsQuery,
+  useGetOwnAmazonAdsConfigQuery,
+  useGetOwnAmazonAdsInsightsQuery,
+  useGetOwnAmazonAdsProductsQuery,
+  useGetOwnAmazonAdsSummaryQuery,
+} from '../features/amazonAds/amazonAdsApi';
+import type {
+  AmazonAdsCampaignSummary,
+  AmazonAdsInsightItem,
+  AmazonAdsProductSummary,
+  AmazonAdsProductType,
+} from '../features/amazonAds/amazonAdsTypes';
 import type { ProjectFile } from '../features/projectFiles/projectFilesTypes';
 import { useGetClientProjectFilesQuery } from '../features/projectFiles/projectFilesApi';
 import { useGetClientTasksQuery, useUpdateClientTaskApprovalMutation } from '../features/tasks/tasksApi';
@@ -337,6 +350,10 @@ export function ServiceTabPage({ serviceId, tabId, projectId }: ServiceTabPagePr
 
   if (serviceId === "tiktok-ads" && tabId !== "service-dashboard") {
     return <TikTokAdsServiceTab tabId={tabId} content={content} />;
+  }
+
+  if (serviceId === "amazon-ads" && tabId !== "service-dashboard") {
+    return <AmazonAdsServiceTab tabId={tabId} content={content} />;
   }
 
   if (shouldUseTaskBasedRevisions) {
@@ -1630,6 +1647,320 @@ function TikTokAdsServiceTab({
   );
 }
 
+function AmazonAdsServiceTab({
+  tabId,
+  content,
+}: {
+  tabId: string;
+  content: ServiceTabContent;
+}) {
+  const {
+    data: config,
+    isLoading: isConfigLoading,
+    isError: isConfigError,
+  } = useGetOwnAmazonAdsConfigQuery();
+  const isConnected = config?.connectionStatus === "CONNECTED";
+  const shouldSkipReportingQueries = !isConnected;
+
+  const {
+    data: summary,
+    isLoading: isSummaryLoading,
+    isError: isSummaryError,
+  } = useGetOwnAmazonAdsSummaryQuery(undefined, { skip: shouldSkipReportingQueries });
+  const {
+    data: campaignsResponse,
+    isLoading: isCampaignsLoading,
+    isError: isCampaignsError,
+  } = useGetOwnAmazonAdsCampaignsQuery({ limit: 60 }, { skip: shouldSkipReportingQueries });
+  const {
+    data: productsResponse,
+    isLoading: isProductsLoading,
+    isError: isProductsError,
+  } = useGetOwnAmazonAdsProductsQuery({ limit: 60 }, { skip: shouldSkipReportingQueries });
+  const {
+    data: searchTermInsightsResponse,
+    isLoading: isInsightsLoading,
+    isError: isInsightsError,
+  } = useGetOwnAmazonAdsInsightsQuery(
+    { level: "SEARCH_TERM", limit: 300 },
+    { skip: shouldSkipReportingQueries },
+  );
+  const {
+    data: approvalTasks = [],
+    isLoading: isApprovalsLoading,
+    isError: isApprovalsError,
+  } = useGetClientTasksQuery(
+    { approvalRequired: true },
+    { skip: !isConnected || tabId !== "approvals" },
+  );
+  const [updateClientTaskApproval, { isLoading: isUpdatingApproval }] =
+    useUpdateClientTaskApprovalMutation();
+  const [activeApprovalTaskId, setActiveApprovalTaskId] = useState<string | null>(null);
+
+  const campaigns = campaignsResponse?.data ?? [];
+  const sponsoredProductsCampaigns = useMemo(
+    () => campaigns.filter((campaign) => campaign.adProduct === "SPONSORED_PRODUCTS"),
+    [campaigns],
+  );
+  const sponsoredBrandsCampaigns = useMemo(
+    () => campaigns.filter((campaign) => campaign.adProduct === "SPONSORED_BRANDS"),
+    [campaigns],
+  );
+  const sponsoredDisplayCampaigns = useMemo(
+    () => campaigns.filter((campaign) => campaign.adProduct === "SPONSORED_DISPLAY"),
+    [campaigns],
+  );
+  const products = productsResponse?.data ?? [];
+  const searchTermInsights = searchTermInsightsResponse?.data ?? [];
+  const keywordRows = useMemo(() => buildAmazonKeywordRows(searchTermInsights), [searchTermInsights]);
+  const targetRows = useMemo(() => buildAmazonTargetRows(searchTermInsights), [searchTermInsights]);
+  const searchTermRows = useMemo(
+    () => buildAmazonSearchTermRows(searchTermInsights),
+    [searchTermInsights],
+  );
+  const currencyCode = config?.currencyCode ?? "TRY";
+  const notes = useMemo(
+    () => buildAmazonAgencyNotes(summary, campaigns, products, searchTermRows, currencyCode),
+    [summary, campaigns, products, searchTermRows, currencyCode],
+  );
+  const amazonApprovalTasks = useMemo(
+    () => approvalTasks.filter((task) => task.projectServiceId === "amazon-ads"),
+    [approvalTasks],
+  );
+  const pendingApprovalRows = useMemo(
+    () => amazonApprovalTasks.filter((task) => task.approvalStatus === "PENDING").slice(0, 10),
+    [amazonApprovalTasks],
+  );
+  const approvalHistoryRows = useMemo(
+    () =>
+      amazonApprovalTasks
+        .filter((task) => task.approvalStatus && task.approvalStatus !== "PENDING")
+        .slice(0, 10),
+    [amazonApprovalTasks],
+  );
+  const approvalProjectId = pendingApprovalRows[0]?.projectId ?? amazonApprovalTasks[0]?.projectId ?? null;
+  const {
+    data: approvalCreativeFilesResponse,
+    isLoading: isApprovalCreativeFilesLoading,
+    isError: isApprovalCreativeFilesError,
+  } = useGetClientProjectFilesQuery(
+    {
+      projectId: approvalProjectId ?? "",
+      category: "ADS_CREATIVE",
+      approvalRequired: true,
+    },
+    { skip: tabId !== "approvals" || !approvalProjectId },
+  );
+  const pendingApprovalCreativeFiles = useMemo(
+    () =>
+      (approvalCreativeFilesResponse?.data ?? [])
+        .filter((file) => file.approvalStatus === "PENDING")
+        .slice(0, 6),
+    [approvalCreativeFilesResponse?.data],
+  );
+  const lastSyncAt =
+    summary?.lastSyncAt ??
+    campaignsResponse?.lastSyncAt ??
+    productsResponse?.lastSyncAt ??
+    searchTermInsightsResponse?.lastSyncAt ??
+    config?.lastSyncAt ??
+    null;
+
+  const handleAmazonApprovalDecision = async (
+    task: ClientTask,
+    approvalStatus: ClientTaskMetaAdsApprovalStatus,
+    approvalResponseNote?: string,
+  ) => {
+    if (isUpdatingApproval) {
+      return;
+    }
+
+    setActiveApprovalTaskId(task.id);
+    try {
+      await updateClientTaskApproval({
+        taskId: task.id,
+        body: {
+          approvalStatus,
+          approvalResponseNote: approvalResponseNote?.trim() || undefined,
+        },
+      }).unwrap();
+      runClientAction(
+        `${task.title} ${approvalStatus === "APPROVED" ? "onaylandı" : "revizyona gönderildi"}`,
+        approvalStatus === "APPROVED" ? "approve" : "revision",
+      );
+    } catch {
+      runClientAction(`${task.title} onayı güncellenemedi`, "comment");
+    } finally {
+      setActiveApprovalTaskId(null);
+    }
+  };
+
+  if (isConfigLoading) {
+    return (
+      <div className="p-8">
+        <MetaAdsStatePanel title="Amazon Ads bağlantısı kontrol ediliyor..." />
+      </div>
+    );
+  }
+
+  if (isConfigError) {
+    return (
+      <div className="p-8">
+        <MetaAdsStatePanel
+          title="Amazon Ads bağlantı bilgileri alınamadı"
+          description="Lütfen biraz sonra tekrar deneyin."
+          tone="error"
+        />
+      </div>
+    );
+  }
+
+  if (!isConnected) {
+    const connectionNotice = getClientAmazonAdsConnectionNotice(config?.connectionStatus);
+    return (
+      <div className="p-8 space-y-6">
+        <PageHero content={content} tabId={tabId} />
+        <MetaAdsStatePanel
+          title={connectionNotice.title}
+          description={connectionNotice.description}
+          tone={connectionNotice.tone}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-8 space-y-6">
+      <PageHero content={content} tabId={tabId} />
+
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+        <MetricPill label="Harcama" value={formatAmazonCurrency(summary?.spend ?? 0, currencyCode)} />
+        <MetricPill label="Gösterim" value={formatAmazonInteger(summary?.impressions ?? 0)} />
+        <MetricPill label="Tıklama" value={formatAmazonInteger(summary?.clicks ?? 0)} />
+        <MetricPill label="Satış" value={formatAmazonCurrency(summary?.sales ?? 0, currencyCode)} />
+        <MetricPill label="ACOS" value={formatAmazonPercent(summary?.acos ?? 0)} />
+        <MetricPill
+          label="ROAS"
+          value={summary?.roas !== undefined ? `${summary.roas.toFixed(2)}x` : "—"}
+        />
+      </div>
+
+      <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-4 text-xs text-[#A0A0A0]">
+        Veriler Amazon Ads API üzerinden alınmıştır. Son senkron:{" "}
+        <span className="text-white">
+          {lastSyncAt ? new Date(lastSyncAt).toLocaleString("tr-TR") : "Henüz senkron yok"}
+        </span>
+      </div>
+
+      {tabId === "sponsored-products" ? (
+        <AmazonCampaignGrid
+          title="Sponsored Products Kampanyaları"
+          rows={sponsoredProductsCampaigns}
+          loading={isCampaignsLoading || isSummaryLoading}
+          isError={isCampaignsError || isSummaryError}
+          emptyMessage="Sponsored Products kampanya verisi bulunamadı."
+          currencyCode={currencyCode}
+        />
+      ) : null}
+
+      {tabId === "sponsored-brands" ? (
+        <AmazonCampaignGrid
+          title="Sponsored Brands Kampanyaları"
+          rows={sponsoredBrandsCampaigns}
+          loading={isCampaignsLoading || isSummaryLoading}
+          isError={isCampaignsError || isSummaryError}
+          emptyMessage="Sponsored Brands kampanya verisi bulunamadı."
+          currencyCode={currencyCode}
+        />
+      ) : null}
+
+      {tabId === "sponsored-display" ? (
+        <AmazonCampaignGrid
+          title="Sponsored Display Kampanyaları"
+          rows={sponsoredDisplayCampaigns}
+          loading={isCampaignsLoading || isSummaryLoading}
+          isError={isCampaignsError || isSummaryError}
+          emptyMessage="Sponsored Display kampanya verisi bulunamadı."
+          currencyCode={currencyCode}
+        />
+      ) : null}
+
+      {tabId === "campaigns" ? (
+        <AmazonCampaignGrid
+          title="Amazon Ads Kampanyaları"
+          rows={campaigns}
+          loading={isCampaignsLoading || isSummaryLoading}
+          isError={isCampaignsError || isSummaryError}
+          emptyMessage="Seçili tarih aralığında kampanya verisi bulunamadı."
+          currencyCode={currencyCode}
+        />
+      ) : null}
+
+      {tabId === "products-asin" ? (
+        <AmazonProductGrid
+          rows={products}
+          loading={isProductsLoading}
+          isError={isProductsError}
+          currencyCode={currencyCode}
+        />
+      ) : null}
+
+      {tabId === "keywords" ? (
+        <AmazonKeywordGrid
+          rows={keywordRows}
+          loading={isInsightsLoading}
+          isError={isInsightsError}
+          currencyCode={currencyCode}
+        />
+      ) : null}
+
+      {tabId === "targeting" ? (
+        <AmazonTargetingGrid
+          rows={targetRows}
+          loading={isInsightsLoading}
+          isError={isInsightsError}
+          currencyCode={currencyCode}
+        />
+      ) : null}
+
+      {tabId === "search-terms" ? (
+        <AmazonSearchTermGrid
+          rows={searchTermRows}
+          loading={isInsightsLoading}
+          isError={isInsightsError}
+          currencyCode={currencyCode}
+        />
+      ) : null}
+
+      {tabId === "amazon-reports" ? (
+        <AmazonReportsPlaceholder
+          loading={isSummaryLoading}
+          isError={isSummaryError}
+          lastSyncAt={lastSyncAt}
+        />
+      ) : null}
+
+      {tabId === "agency-notes" ? (
+        <MetaAdsAgencyNotesPanel notes={notes} loading={isSummaryLoading || isCampaignsLoading} />
+      ) : null}
+
+      {tabId === "approvals" ? (
+        <MetaAdsApprovalsPanel
+          serviceLabel="Amazon Ads"
+          tasks={pendingApprovalRows}
+          history={approvalHistoryRows}
+          creativeFiles={pendingApprovalCreativeFiles}
+          loading={isApprovalsLoading || isApprovalCreativeFilesLoading}
+          isError={isApprovalsError || isApprovalCreativeFilesError}
+          isActionLoading={isUpdatingApproval}
+          activeTaskId={activeApprovalTaskId}
+          onDecision={handleAmazonApprovalDecision}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 function TikTokCampaignGrid({
   rows,
   loading,
@@ -2626,6 +2957,498 @@ function MetaAdsApprovalsPanel({
   );
 }
 
+type AmazonKeywordRow = {
+  keywordText: string;
+  matchType: string | null;
+  campaignName: string | null;
+  adGroupName: string | null;
+  spend: number;
+  clicks: number;
+  sales: number;
+  orders: number;
+  acos: number;
+  roas: number;
+};
+
+type AmazonTargetRow = {
+  targetType: string;
+  targetExpression: string;
+  campaignName: string | null;
+  adGroupName: string | null;
+  spend: number;
+  sales: number;
+  clicks: number;
+  orders: number;
+  acos: number;
+  roas: number;
+};
+
+type AmazonSearchTermRow = {
+  searchTerm: string;
+  campaignName: string | null;
+  adGroupName: string | null;
+  keywordOrTarget: string | null;
+  spend: number;
+  clicks: number;
+  sales: number;
+  orders: number;
+  acos: number;
+  roas: number;
+};
+
+function AmazonCampaignGrid({
+  title,
+  rows,
+  loading,
+  isError,
+  emptyMessage,
+  currencyCode,
+}: {
+  title: string;
+  rows: AmazonAdsCampaignSummary[];
+  loading: boolean;
+  isError: boolean;
+  emptyMessage: string;
+  currencyCode: string;
+}) {
+  if (loading) {
+    return <MetaAdsStatePanel title={`${title} yükleniyor...`} />;
+  }
+
+  if (isError) {
+    return (
+      <MetaAdsStatePanel
+        title={`${title} alınamadı`}
+        description="Amazon Ads kampanya raporu şu anda ulaşılamıyor."
+        tone="error"
+      />
+    );
+  }
+
+  if (rows.length === 0) {
+    return <MetaAdsStatePanel title={emptyMessage} tone="muted" />;
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {rows.slice(0, 24).map((campaign) => (
+        <div key={`${campaign.adProduct ?? "UNKNOWN"}-${campaign.id}`} className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-5">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="text-white">{campaign.name}</h3>
+            <span className="rounded border border-[#7B61FF]/20 bg-[#7B61FF]/10 px-2 py-1 text-xs text-[#7B61FF]">
+              {formatAmazonAdProduct(campaign.adProduct)}
+            </span>
+          </div>
+          <p className="mb-3 text-xs text-[#A0A0A0]">Durum: {campaign.status}</p>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <MetricPill label="Spend" value={formatAmazonCurrency(campaign.spend, currencyCode)} />
+            <MetricPill label="Sales" value={formatAmazonCurrency(campaign.sales, currencyCode)} />
+            <MetricPill label="ACOS" value={formatAmazonPercent(campaign.acos)} />
+            <MetricPill label="ROAS" value={`${campaign.roas.toFixed(2)}x`} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AmazonProductGrid({
+  rows,
+  loading,
+  isError,
+  currencyCode,
+}: {
+  rows: AmazonAdsProductSummary[];
+  loading: boolean;
+  isError: boolean;
+  currencyCode: string;
+}) {
+  if (loading) {
+    return <MetaAdsStatePanel title="Ürün / ASIN verileri yükleniyor..." />;
+  }
+
+  if (isError) {
+    return (
+      <MetaAdsStatePanel
+        title="Ürün / ASIN verileri alınamadı"
+        description="Amazon Ads ürün raporu şu anda ulaşılamıyor."
+        tone="error"
+      />
+    );
+  }
+
+  if (rows.length === 0) {
+    return <MetaAdsStatePanel title="Ürün/ASIN verisi bulunamadı." tone="muted" />;
+  }
+
+  return (
+    <div className="space-y-3">
+      {rows.slice(0, 24).map((row, index) => (
+        <div key={`${row.asin ?? row.sku ?? "product"}-${index}`} className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-4">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <p className="text-sm text-white">{row.title ?? row.asin ?? row.sku ?? "Ürün"}</p>
+            <span className="text-xs text-[#A0A0A0]">
+              ASIN: {row.asin ?? "—"} {row.sku ? `• SKU: ${row.sku}` : ""}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <MetricPill label="Spend" value={formatAmazonCurrency(row.spend, currencyCode)} />
+            <MetricPill label="Sales" value={formatAmazonCurrency(row.sales, currencyCode)} />
+            <MetricPill label="Orders" value={formatAmazonInteger(row.orders)} />
+            <MetricPill label="ROAS" value={`${row.roas.toFixed(2)}x`} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AmazonKeywordGrid({
+  rows,
+  loading,
+  isError,
+  currencyCode,
+}: {
+  rows: AmazonKeywordRow[];
+  loading: boolean;
+  isError: boolean;
+  currencyCode: string;
+}) {
+  if (loading) {
+    return <MetaAdsStatePanel title="Anahtar kelime verileri yükleniyor..." />;
+  }
+
+  if (isError) {
+    return (
+      <MetaAdsStatePanel
+        title="Anahtar kelime verileri alınamadı"
+        description="Amazon Ads keyword raporu şu anda ulaşılamıyor."
+        tone="error"
+      />
+    );
+  }
+
+  if (rows.length === 0) {
+    return <MetaAdsStatePanel title="Anahtar kelime verisi bulunamadı." tone="muted" />;
+  }
+
+  return (
+    <div className="space-y-3">
+      {rows.slice(0, 30).map((row) => (
+        <div key={`${row.keywordText}-${row.matchType ?? "ANY"}-${row.campaignName ?? "campaign"}`} className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-4">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-white">{row.keywordText}</p>
+            <span className="rounded border border-[#00D4FF]/20 bg-[#00D4FF]/10 px-2 py-1 text-[11px] text-[#00D4FF]">
+              {row.matchType ?? "MATCH_TIPI_YOK"}
+            </span>
+          </div>
+          <p className="mb-2 text-xs text-[#A0A0A0]">
+            {row.campaignName ?? "Kampanya bilgisi yok"} {row.adGroupName ? `• ${row.adGroupName}` : ""}
+          </p>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+            <MetricPill label="Spend" value={formatAmazonCurrency(row.spend, currencyCode)} />
+            <MetricPill label="Clicks" value={formatAmazonInteger(row.clicks)} />
+            <MetricPill label="Sales" value={formatAmazonCurrency(row.sales, currencyCode)} />
+            <MetricPill label="Orders" value={formatAmazonInteger(row.orders)} />
+            <MetricPill label="ACOS" value={formatAmazonPercent(row.acos)} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AmazonTargetingGrid({
+  rows,
+  loading,
+  isError,
+  currencyCode,
+}: {
+  rows: AmazonTargetRow[];
+  loading: boolean;
+  isError: boolean;
+  currencyCode: string;
+}) {
+  if (loading) {
+    return <MetaAdsStatePanel title="Targeting verileri yükleniyor..." />;
+  }
+
+  if (isError) {
+    return (
+      <MetaAdsStatePanel
+        title="Targeting verileri alınamadı"
+        description="Amazon Ads targeting raporu şu anda ulaşılamıyor."
+        tone="error"
+      />
+    );
+  }
+
+  if (rows.length === 0) {
+    return <MetaAdsStatePanel title="Targeting verisi bulunamadı." tone="muted" />;
+  }
+
+  return (
+    <div className="space-y-3">
+      {rows.slice(0, 30).map((row) => (
+        <div key={`${row.targetExpression}-${row.campaignName ?? "campaign"}`} className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-4">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-white">{row.targetExpression}</p>
+            <span className="rounded border border-[#FFA726]/20 bg-[#FFA726]/10 px-2 py-1 text-[11px] text-[#FFA726]">
+              {row.targetType}
+            </span>
+          </div>
+          <p className="mb-2 text-xs text-[#A0A0A0]">
+            {row.campaignName ?? "Kampanya bilgisi yok"} {row.adGroupName ? `• ${row.adGroupName}` : ""}
+          </p>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+            <MetricPill label="Spend" value={formatAmazonCurrency(row.spend, currencyCode)} />
+            <MetricPill label="Sales" value={formatAmazonCurrency(row.sales, currencyCode)} />
+            <MetricPill label="Orders" value={formatAmazonInteger(row.orders)} />
+            <MetricPill label="ACOS" value={formatAmazonPercent(row.acos)} />
+            <MetricPill label="ROAS" value={`${row.roas.toFixed(2)}x`} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AmazonSearchTermGrid({
+  rows,
+  loading,
+  isError,
+  currencyCode,
+}: {
+  rows: AmazonSearchTermRow[];
+  loading: boolean;
+  isError: boolean;
+  currencyCode: string;
+}) {
+  if (loading) {
+    return <MetaAdsStatePanel title="Arama terimi verileri yükleniyor..." />;
+  }
+
+  if (isError) {
+    return (
+      <MetaAdsStatePanel
+        title="Arama terimi verileri alınamadı"
+        description="Amazon Ads search term raporu şu anda ulaşılamıyor."
+        tone="error"
+      />
+    );
+  }
+
+  if (rows.length === 0) {
+    return <MetaAdsStatePanel title="Arama terimi verisi bulunamadı." tone="muted" />;
+  }
+
+  return (
+    <div className="space-y-3">
+      {rows.slice(0, 30).map((row) => (
+        <div key={`${row.searchTerm}-${row.campaignName ?? "campaign"}-${row.adGroupName ?? "adgroup"}`} className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-4">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-white">{row.searchTerm}</p>
+            <span className="text-xs text-[#A0A0A0]">{row.keywordOrTarget ?? "Keyword/Target yok"}</span>
+          </div>
+          <p className="mb-2 text-xs text-[#A0A0A0]">
+            {row.campaignName ?? "Kampanya bilgisi yok"} {row.adGroupName ? `• ${row.adGroupName}` : ""}
+          </p>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+            <MetricPill label="Spend" value={formatAmazonCurrency(row.spend, currencyCode)} />
+            <MetricPill label="Clicks" value={formatAmazonInteger(row.clicks)} />
+            <MetricPill label="Sales" value={formatAmazonCurrency(row.sales, currencyCode)} />
+            <MetricPill label="Orders" value={formatAmazonInteger(row.orders)} />
+            <MetricPill label="ACOS" value={formatAmazonPercent(row.acos)} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AmazonReportsPlaceholder({
+  loading,
+  isError,
+  lastSyncAt,
+}: {
+  loading: boolean;
+  isError: boolean;
+  lastSyncAt: string | null;
+}) {
+  if (loading) {
+    return <MetaAdsStatePanel title="Amazon Ads rapor özeti hazırlanıyor..." />;
+  }
+
+  if (isError) {
+    return (
+      <MetaAdsStatePanel
+        title="Rapor özeti alınamadı"
+        description="Amazon Ads rapor verisi şu anda ulaşılamıyor."
+        tone="error"
+      />
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-5">
+      <p className="text-sm text-white">Amazon Ads raporları bu hesap için hazırlanıyor.</p>
+      <p className="mt-2 text-xs text-[#A0A0A0]">
+        Son senkron: {lastSyncAt ? new Date(lastSyncAt).toLocaleString("tr-TR") : "Henüz senkron yok"}
+      </p>
+    </div>
+  );
+}
+
+function buildAmazonKeywordRows(rows: AmazonAdsInsightItem[]): AmazonKeywordRow[] {
+  const grouped = new Map<string, AmazonKeywordRow>();
+
+  for (const row of rows) {
+    const keywordText = row.keywordText?.trim();
+    if (!keywordText) {
+      continue;
+    }
+
+    const key = [
+      keywordText.toLowerCase(),
+      row.matchType?.toUpperCase() ?? "",
+      row.campaignName ?? "",
+      row.adGroupName ?? "",
+    ].join("|");
+    const existing = grouped.get(key);
+
+    if (!existing) {
+      grouped.set(key, {
+        keywordText,
+        matchType: row.matchType,
+        campaignName: row.campaignName,
+        adGroupName: row.adGroupName,
+        spend: row.spend,
+        clicks: row.clicks,
+        sales: row.sales,
+        orders: row.orders,
+        acos: 0,
+        roas: 0,
+      });
+      continue;
+    }
+
+    existing.spend += row.spend;
+    existing.clicks += row.clicks;
+    existing.sales += row.sales;
+    existing.orders += row.orders;
+  }
+
+  return Array.from(grouped.values())
+    .map((row) => ({
+      ...row,
+      acos: calculateAcos(row.spend, row.sales),
+      roas: calculateRoas(row.sales, row.spend),
+    }))
+    .sort((left, right) => right.spend - left.spend);
+}
+
+function buildAmazonTargetRows(rows: AmazonAdsInsightItem[]): AmazonTargetRow[] {
+  const grouped = new Map<string, AmazonTargetRow>();
+
+  for (const row of rows) {
+    const targetExpression = row.targeting?.trim();
+    if (!targetExpression) {
+      continue;
+    }
+
+    const targetType = inferAmazonTargetType(targetExpression, row.keywordType);
+    const key = [targetExpression.toLowerCase(), row.campaignName ?? "", row.adGroupName ?? ""].join("|");
+    const existing = grouped.get(key);
+
+    if (!existing) {
+      grouped.set(key, {
+        targetType,
+        targetExpression,
+        campaignName: row.campaignName,
+        adGroupName: row.adGroupName,
+        spend: row.spend,
+        sales: row.sales,
+        clicks: row.clicks,
+        orders: row.orders,
+        acos: 0,
+        roas: 0,
+      });
+      continue;
+    }
+
+    existing.spend += row.spend;
+    existing.sales += row.sales;
+    existing.clicks += row.clicks;
+    existing.orders += row.orders;
+  }
+
+  return Array.from(grouped.values())
+    .map((row) => ({
+      ...row,
+      acos: calculateAcos(row.spend, row.sales),
+      roas: calculateRoas(row.sales, row.spend),
+    }))
+    .sort((left, right) => right.spend - left.spend);
+}
+
+function buildAmazonSearchTermRows(rows: AmazonAdsInsightItem[]): AmazonSearchTermRow[] {
+  return rows
+    .map((row) => {
+      const searchTerm = row.searchTerm?.trim() || row.entityName?.trim() || row.entityId.trim();
+      if (!searchTerm) {
+        return null;
+      }
+
+      return {
+        searchTerm,
+        campaignName: row.campaignName,
+        adGroupName: row.adGroupName,
+        keywordOrTarget: row.keywordText ?? row.targeting ?? null,
+        spend: row.spend,
+        clicks: row.clicks,
+        sales: row.sales,
+        orders: row.orders,
+        acos: row.acos,
+        roas: row.roas,
+      };
+    })
+    .filter((row): row is AmazonSearchTermRow => row !== null)
+    .sort((left, right) => right.spend - left.spend);
+}
+
+function inferAmazonTargetType(targetExpression: string, keywordType: string | null): string {
+  const normalizedExpression = targetExpression.toLowerCase();
+  const normalizedKeywordType = keywordType?.toLowerCase() ?? "";
+
+  if (normalizedExpression.includes("asin") || /b0[a-z0-9]{8}/i.test(targetExpression)) {
+    return "ASIN";
+  }
+
+  if (normalizedExpression.includes("category")) {
+    return "CATEGORY";
+  }
+
+  if (normalizedKeywordType.includes("auto")) {
+    return "AUTO_TARGET";
+  }
+
+  return "TARGETING";
+}
+
+function calculateAcos(spend: number, sales: number): number {
+  if (sales <= 0) {
+    return 0;
+  }
+  return (spend / sales) * 100;
+}
+
+function calculateRoas(sales: number, spend: number): number {
+  if (spend <= 0) {
+    return 0;
+  }
+  return sales / spend;
+}
+
 function MetaAdsStatePanel({
   title,
   description,
@@ -2736,6 +3559,34 @@ function getClientTikTokAdsConnectionNotice(connectionStatus: string | undefined
   };
 }
 
+function getClientAmazonAdsConnectionNotice(connectionStatus: string | undefined): {
+  title: string;
+  description: string;
+  tone: "default" | "error" | "muted";
+} {
+  if (connectionStatus === "PENDING") {
+    return {
+      title: "Veriler hazırlanıyor",
+      description: "Veriler hazırlanıyor, kısa süre içinde dashboard güncellenecek.",
+      tone: "muted",
+    };
+  }
+
+  if (connectionStatus === "ERROR" || connectionStatus === "DISCONNECTED") {
+    return {
+      title: "Bağlantı problemi var",
+      description: "Bağlantı problemi var, ekibimiz ilgileniyor.",
+      tone: "error",
+    };
+  }
+
+  return {
+    title: "Amazon Ads bağlantısı aktif değil",
+    description: "Bu hizmetin verileri sadece aktif bağlantı sonrası görüntülenebilir.",
+    tone: "muted",
+  };
+}
+
 function buildTikTokAgencyNotes(
   summary:
     | {
@@ -2778,6 +3629,56 @@ function buildTikTokAgencyNotes(
   return notes.slice(0, 4);
 }
 
+function buildAmazonAgencyNotes(
+  summary:
+    | {
+        spend: number;
+        sales: number;
+        acos: number;
+        roas: number;
+        orders: number;
+      }
+    | undefined,
+  campaigns: AmazonAdsCampaignSummary[],
+  products: AmazonAdsProductSummary[],
+  searchTerms: AmazonSearchTermRow[],
+  currencyCode: string,
+): string[] {
+  const notes: string[] = [];
+
+  if (summary) {
+    notes.push(
+      `${formatAmazonCurrency(summary.spend, currencyCode)} harcama ile ${formatAmazonCurrency(summary.sales, currencyCode)} satış ve ${formatAmazonInteger(summary.orders)} sipariş üretildi.`,
+    );
+    notes.push(
+      `Ortalama ACOS ${formatAmazonPercent(summary.acos)} ve ROAS ${summary.roas.toFixed(2)}x seviyesinde ilerliyor.`,
+    );
+  }
+
+  const topCampaign = campaigns[0];
+  if (topCampaign) {
+    notes.push(
+      `${topCampaign.name} kampanyası ${formatAmazonCurrency(topCampaign.spend, currencyCode)} harcama ile en yüksek hacmi taşıyor.`,
+    );
+  }
+
+  const topProduct = products[0];
+  if (topProduct) {
+    notes.push(
+      `${topProduct.title ?? topProduct.asin ?? "Ürün"} ürününde ROAS ${topProduct.roas.toFixed(2)}x seviyesinde.`,
+    );
+  }
+
+  const highAcosTerm = searchTerms.find((row) => row.acos >= 40);
+  if (highAcosTerm) {
+    notes.push(
+      `${highAcosTerm.searchTerm} arama teriminde ACOS ${formatAmazonPercent(highAcosTerm.acos)} seviyesinde; negatifleme veya bid düşürme takibi önerilir.`,
+    );
+  }
+
+  return notes.slice(0, 4);
+}
+
 function formatTikTokCurrency(value: number): string {
   return new Intl.NumberFormat("tr-TR", {
     style: "currency",
@@ -2814,8 +3715,47 @@ function formatMetaPercent(value: number): string {
   return `${value.toFixed(2)}%`;
 }
 
+function formatAmazonCurrency(value: number, currencyCode: string): string {
+  try {
+    return new Intl.NumberFormat("tr-TR", {
+      style: "currency",
+      currency: /^[A-Z]{3}$/.test(currencyCode) ? currencyCode : "TRY",
+      maximumFractionDigits: 0,
+    }).format(value);
+  } catch {
+    return `${formatAmazonInteger(value)} ${currencyCode || "TRY"}`;
+  }
+}
+
+function formatAmazonInteger(value: number): string {
+  return new Intl.NumberFormat("tr-TR", {
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function formatAmazonPercent(value: number): string {
+  return `${value.toFixed(2)}%`;
+}
+
+function formatAmazonAdProduct(value: AmazonAdsProductType | null): string {
+  if (value === "SPONSORED_PRODUCTS") {
+    return "Sponsored Products";
+  }
+  if (value === "SPONSORED_BRANDS") {
+    return "Sponsored Brands";
+  }
+  if (value === "SPONSORED_DISPLAY") {
+    return "Sponsored Display";
+  }
+  return "Amazon Ads";
+}
+
 function formatAdsApprovalType(value: string): string {
-  return value.replace("META_ADS_", "").replace("TIKTOK_ADS_", "").replace(/_/g, " ");
+  return value
+    .replace("META_ADS_", "")
+    .replace("TIKTOK_ADS_", "")
+    .replace("AMAZON_ADS_", "")
+    .replace(/_/g, " ");
 }
 
 function getClientTaskStatusLabel(status: ClientTaskStatus): string {

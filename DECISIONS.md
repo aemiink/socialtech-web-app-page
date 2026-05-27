@@ -1,5 +1,66 @@
 # Architecture Decisions
 
+## 2026-05-27 - Amazon Ads Faz 4 Client Panel API-Driven Tab Workspace
+
+Context:
+Amazon Ads Faz 3 ile reporting snapshot/read model aktive olduktan sonra client portalın Amazon servis sekmeleri hâlâ sınırlı ve kısmen statik bir yapıdaydı. Faz 4 kapsamında mevcut dashboard tasarımını koruyarak sekme bazlı operasyon ekranlarının tek bir API read modelinden beslenmesi gerekiyordu.
+
+Decision:
+
+- `ServiceTabPage` içinde Meta/TikTok pattern’iyle uyumlu `AmazonAdsServiceTab` eklendi; bağlantı/empty/error/loading state’leri tek yerde yönetildi.
+- Amazon service navigation ve service tab metadata yapısı Faz 4 kapsamına göre güncellendi: campaigns, sponsored product/brand/display, products/ASIN, keywords, targeting, search terms, reports-ready, agency notes, approvals.
+- Amazon insights response’una search-term bağlam alanları (`campaign/adGroup/keyword/target/searchTerm`) eklendi; keywords/targeting/search-term sekmeleri ayrı endpoint gerektirmeden aynı read model satırlarından türetildi.
+- Campaigns query contract’ına opsiyonel `adProduct` filtresi eklendi (backend DTO/service + frontend API serializer), böylece ürün tipine göre kampanya yüzeyi desteklendi.
+- Client task approval tip normalizer’ı Amazon approval type değerlerini kabul edecek şekilde genişletildi; approvals tab mevcut client approval workflow paneli ile entegre edildi.
+
+Reason:
+Bu yaklaşım fazlar arası uyumu korur: yeni Amazon sekmeleri mock fallback olmadan tek read modelden çalışır, backend surface alanı minimum değişiklikle genişler ve ileride Faz 7/Faz 9 approval/report entity katmanlarına hazır bir tab omurgası sağlanır.
+
+Affected files:
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+- `clientPanel/src/app/components/sidebar.tsx`
+- `clientPanel/src/app/data/service-pages.ts`
+- `clientPanel/src/app/features/amazonAds/amazonAdsApi.ts`
+- `clientPanel/src/app/features/amazonAds/amazonAdsTypes.ts`
+- `clientPanel/src/app/features/tasks/tasksTypes.ts`
+- `clientPanel/src/app/features/tasks/tasksUtils.ts`
+- `clientPanel/src/app/pages/__tests__/service-tab-page.amazon-ads.test.tsx`
+- `server/src/amazon-ads/dto/amazon-ads-campaigns-query.dto.ts`
+- `server/src/amazon-ads/amazon-ads.service.ts`
+
+---
+
+## 2026-05-27 - Amazon Ads Faz 3 Reporting v3 Snapshot Read Model
+
+Context:
+Amazon Ads bağlantı lifecycle’ı tamamlandıktan sonra client/admin dashboard’larının mock performans metriklerinden çıkıp Reporting v3 kaynaklı, token-safe ve permission-gated bir read model’den beslenmesi gerekiyordu. Amazon Ads reporting async create/poll/download akışı ve report type kolonları Meta/TikTok’tan farklı bir entegrasyon yüzeyi gerektiriyor.
+
+Decision:
+
+- Prisma’ya `AmazonAdsDailyInsight` ve `AmazonAdsSyncLog` eklendi; insight level, ad product ve sync status enumları snapshot/read model sözleşmesini netleştirir.
+- `AmazonAdsApiService`, LwA refresh-token grant sonrası Reporting v3 report create/poll/download lifecycle’ını tek yerde yürütür ve campaign/product/search-term satırlarını normalize eder.
+- Manual sync endpointleri snapshot satırlarını günlük olarak yazar, account-level aggregate üretir ve report request/status metadata’sını sync log içinde saklar.
+- Summary/campaigns/products/insights endpointleri admin, assigned employee ve own client yüzeylerinde aynı snapshot read model’den döner; permission kontrolleri backend’de kalır.
+- Admin ClientDetail’e Amazon Ads performance summary + manual sync aksiyonu, client dashboard’a API-driven summary/campaign/product/search-term render akışı eklendi.
+
+Reason:
+Bu yaklaşım Amazon Ads Reporting v3’ün async/rate-limit hassas doğasını UI’dan izole eder, encrypted refresh-token modelini bozmadan dashboardları deterministic snapshot verisine taşır ve Faz 4+ workspace/panel geliştirmeleri için ortak bir read model sağlar.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260527193000_add_amazon_ads_reporting_snapshot/migration.sql`
+- `server/src/amazon-ads/*`
+- `server/src/config/env.validation.ts`
+- `server/.env.example`
+- `server/test/amazon-ads-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/clients/*`
+- `adminandemployeePanel/src/app/pages/ClientDetail.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/ClientDetail.test.tsx`
+- `clientPanel/src/app/features/amazonAds/*`
+- `clientPanel/src/app/pages/services/amazon-ads-dashboard.tsx`
+
+---
+
 ## 2026-05-27 - Amazon Ads Faz 2 LwA OAuth ve Token Connection Management
 
 Context:
