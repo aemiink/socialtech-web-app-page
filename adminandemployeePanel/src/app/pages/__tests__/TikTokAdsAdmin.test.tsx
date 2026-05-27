@@ -5,7 +5,10 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthUserProfile } from "../../features/auth/authTypes";
-import type { AdminTikTokAdsClientListResponse } from "../../features/tiktokAds/tiktokAdsTypes";
+import type {
+  AdminTikTokAdsClientListResponse,
+  AdminTikTokAdsSyncLogsResponse,
+} from "../../features/tiktokAds/tiktokAdsTypes";
 import { TikTokAdsAdmin } from "../TikTokAdsAdmin";
 
 type QueryOptions = {
@@ -28,9 +31,11 @@ type TikTokAdsListQueryResult = {
 const mockUseGetAdminTikTokAdsClientsQuery = vi.fn<
   (query?: unknown, options?: QueryOptions) => TikTokAdsListQueryResult
 >();
+const mockUseGetAdminTikTokAdsSyncLogsQuery = vi.fn();
 const mockUseUpdateAdminClientTikTokAdsConfigMutation = vi.fn();
 const mockUseTestAdminClientTikTokAdsConnectionMutation = vi.fn();
 const mockUseSyncAdminClientTikTokAdsMutation = vi.fn();
+const mockUseRetryAdminClientTikTokAdsSyncMutation = vi.fn();
 const mockUseDisconnectAdminClientTikTokAdsMutation = vi.fn();
 
 let currentUser: AuthUserProfile | null = null;
@@ -42,11 +47,14 @@ vi.mock("../../store/hooks", () => ({
 vi.mock("../../features/tiktokAds/tiktokAdsApi", () => ({
   useGetAdminTikTokAdsClientsQuery: (query?: unknown, options?: QueryOptions) =>
     mockUseGetAdminTikTokAdsClientsQuery(query, options),
+  useGetAdminTikTokAdsSyncLogsQuery: (query?: unknown, options?: QueryOptions) =>
+    mockUseGetAdminTikTokAdsSyncLogsQuery(query, options),
   useUpdateAdminClientTikTokAdsConfigMutation: () =>
     mockUseUpdateAdminClientTikTokAdsConfigMutation(),
   useTestAdminClientTikTokAdsConnectionMutation: () =>
     mockUseTestAdminClientTikTokAdsConnectionMutation(),
   useSyncAdminClientTikTokAdsMutation: () => mockUseSyncAdminClientTikTokAdsMutation(),
+  useRetryAdminClientTikTokAdsSyncMutation: () => mockUseRetryAdminClientTikTokAdsSyncMutation(),
   useDisconnectAdminClientTikTokAdsMutation: () =>
     mockUseDisconnectAdminClientTikTokAdsMutation(),
 }));
@@ -124,6 +132,33 @@ const tikTokAdsClientListResponse: AdminTikTokAdsClientListResponse = {
   },
 };
 
+const syncLogsResponse: AdminTikTokAdsSyncLogsResponse = {
+  data: [
+    {
+      id: "sync-log-1",
+      clientProfileId: "11111111-1111-4111-8111-111111111111",
+      clientCompanyName: "Acme E-ticaret",
+      advertiserId: "adv-1",
+      status: "FAILED",
+      trigger: "ERROR_RETRY",
+      startedAt: "2026-05-27T11:00:00.000Z",
+      finishedAt: "2026-05-27T11:00:02.000Z",
+      durationMs: 2000,
+      errorCode: "RATE_LIMIT",
+      errorMessage: "[ERROR_RETRY] TikTok Ads API rate limit sınırına ulaşıldı.",
+      recordsFetched: null,
+      apiCallCount: null,
+      createdAt: "2026-05-27T11:00:00.000Z",
+    },
+  ],
+  meta: {
+    total: 1,
+    failed: 1,
+    running: 0,
+    skipped: 0,
+  },
+};
+
 function createResolvedMutation<T>(value: T) {
   return vi.fn((): MutationResponse<T> => ({
     unwrap: async () => value,
@@ -145,6 +180,12 @@ describe("TikTokAdsAdmin", () => {
       isLoading: false,
       refetch: vi.fn(),
     });
+    mockUseGetAdminTikTokAdsSyncLogsQuery.mockReturnValue({
+      data: syncLogsResponse,
+      error: undefined,
+      isError: false,
+      isLoading: false,
+    });
     mockUseUpdateAdminClientTikTokAdsConfigMutation.mockReturnValue([
       createResolvedMutation({}),
       { isLoading: false },
@@ -154,6 +195,10 @@ describe("TikTokAdsAdmin", () => {
       { isLoading: false },
     ]);
     mockUseSyncAdminClientTikTokAdsMutation.mockReturnValue([
+      createResolvedMutation({}),
+      { isLoading: false },
+    ]);
+    mockUseRetryAdminClientTikTokAdsSyncMutation.mockReturnValue([
       createResolvedMutation({}),
       { isLoading: false },
     ]);
@@ -168,6 +213,8 @@ describe("TikTokAdsAdmin", () => {
     expect(screen.getByRole("heading", { name: "TikTok Ads Yönetimi" })).toBeInTheDocument();
     expect(screen.getAllByText("Acme E-ticaret").length).toBeGreaterThan(0);
     expect(screen.getByText("Performance Specialist (PERFORMANCE)")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sync Logları" })).toBeInTheDocument();
+    expect(screen.getByText(/TikTok Ads API rate limit sınırına ulaşıldı/)).toBeInTheDocument();
 
     mockUseGetAdminTikTokAdsClientsQuery.mockReturnValueOnce({
       data: undefined,
@@ -262,6 +309,43 @@ describe("TikTokAdsAdmin", () => {
         clientId: "11111111-1111-4111-8111-111111111111",
       });
     });
+  });
+
+  it("shows failed sync row and runs retry action", async () => {
+    const retryMutation = createResolvedMutation({});
+    mockUseRetryAdminClientTikTokAdsSyncMutation.mockReturnValue([retryMutation, { isLoading: false }]);
+    mockUseGetAdminTikTokAdsClientsQuery.mockReturnValue({
+      data: {
+        ...tikTokAdsClientListResponse,
+        data: [
+          {
+            ...tikTokAdsClientListResponse.data[0],
+            connectionStatus: "ERROR",
+            syncError: "TikTok Ads API rate limit sınırına ulaşıldı.",
+          },
+        ],
+        meta: {
+          ...tikTokAdsClientListResponse.meta,
+          connected: 0,
+          error: 1,
+        },
+      },
+      error: undefined,
+      isError: false,
+      isFetching: false,
+      isLoading: false,
+      refetch: vi.fn(),
+    });
+
+    render(<TikTokAdsAdmin />, { wrapper: MemoryRouter });
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    await waitFor(() =>
+      expect(retryMutation).toHaveBeenCalledWith({
+        clientId: "11111111-1111-4111-8111-111111111111",
+      }),
+    );
   });
 
   it("disables management actions when permission is missing", () => {

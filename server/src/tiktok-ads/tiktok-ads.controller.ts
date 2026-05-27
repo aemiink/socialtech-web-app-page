@@ -21,6 +21,7 @@ import { TestTikTokAdsConnectionDto } from "./dto/test-tiktok-ads-connection.dto
 import { TikTokAdsCampaignsQueryDto } from "./dto/tiktok-ads-campaigns-query.dto";
 import { TikTokAdsDateRangeQueryDto } from "./dto/tiktok-ads-date-range-query.dto";
 import { TikTokAdsInsightsQueryDto } from "./dto/tiktok-ads-insights-query.dto";
+import { TikTokAdsSyncLogsQueryDto } from "./dto/tiktok-ads-sync-logs-query.dto";
 import { UpdateTikTokAdsConfigDto } from "./dto/update-tiktok-ads-config.dto";
 
 @Controller()
@@ -37,6 +38,15 @@ export class TikTokAdsController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.tikTokAdsService.getAdminTikTokAdsClients(query, actor);
+  }
+
+  @Get("admin/tiktok-ads/sync-logs")
+  @RequirePermissions("tiktokAds.config.read.any")
+  getAdminTikTokAdsSyncLogs(
+    @Query() query: TikTokAdsSyncLogsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.tikTokAdsService.getAdminSyncLogs(query, actor);
   }
 
   @Get("admin/clients/:clientId/tiktok-ads/config")
@@ -136,6 +146,16 @@ export class TikTokAdsController {
     return this.tikTokAdsService.syncAdminClientInsights(clientId, query, actor);
   }
 
+  @Post("admin/clients/:clientId/tiktok-ads/sync/retry")
+  @RequirePermissions("tiktokAds.config.manage.any")
+  retryAdminClientInsights(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: TikTokAdsDateRangeQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.tikTokAdsService.retryAdminClientInsights(clientId, query, actor);
+  }
+
   // ─── Assigned employee endpoints ───────────────────────────────────────────
 
   @Get("tiktok-ads/clients/:clientId/config")
@@ -175,6 +195,16 @@ export class TikTokAdsController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.tikTokAdsService.getAssignedClientInsights(clientId, query, actor);
+  }
+
+  @Post("tiktok-ads/clients/:clientId/sync")
+  @RequirePermissions("tiktokAds.config.read.assigned", "tiktokAds.sync.read.assigned")
+  syncAssignedClientInsights(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: TikTokAdsDateRangeQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.tikTokAdsService.syncAssignedClientInsights(clientId, query, actor);
   }
 
   // ─── Own client endpoint ────────────────────────────────────────────────────

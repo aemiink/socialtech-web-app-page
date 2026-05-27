@@ -425,8 +425,10 @@ Uygulama durumu:
 - TikTok Ads Faz 5 tamamlandı: backend global admin client list endpointi ve admin panel `/tiktok-ads` ekranı eklendi; connection/config/test/sync/disconnect aksiyonları global müşteri listesi üzerinden yönetiliyor.
 - TikTok Ads Faz 6 tamamlandı: employee panelde `/employee/tiktok-ads` assigned-scope workspace eklendi; Social/Performance/Designer rolleri için campaigns, performance, video creatives, report notes, approvals ve pixel safe-state sekmeleri backend assigned TikTok endpointleri + project/task/workspace mesaj contract'ı ile çalışıyor.
 - TikTok Ads Faz 7 tamamlandı: task-merkezli TikTok approval type'ları, `tiktokAds.approvals.create.assigned` / `tiktokAds.creatives.manage.assigned` permission kontrolleri, client own approval response ve client portal UGC/script approval queue + creative preview akışı eklendi.
+- TikTok Ads Faz 8 tamamlandı: admin sync logları + retry endpoint/UI, assigned employee TTL-safe sync endpoint/workspace aksiyonu, sync error catalog hardening ve sync log/TTL e2e coverage eklendi.
 - Active admin endpoints:
   - `GET /api/v1/admin/tiktok-ads/clients`
+  - `GET /api/v1/admin/tiktok-ads/sync-logs`
   - `GET /api/v1/admin/clients/:clientId/tiktok-ads/config`
   - `PATCH /api/v1/admin/clients/:clientId/tiktok-ads/config`
   - `GET /api/v1/admin/clients/:clientId/tiktok-ads/connection`
@@ -434,6 +436,7 @@ Uygulama durumu:
   - `POST /api/v1/admin/clients/:clientId/tiktok-ads/test`
   - `DELETE /api/v1/admin/clients/:clientId/tiktok-ads/disconnect`
   - `POST /api/v1/admin/clients/:clientId/tiktok-ads/sync`
+  - `POST /api/v1/admin/clients/:clientId/tiktok-ads/sync/retry`
   - `GET /api/v1/admin/clients/:clientId/tiktok-ads/summary`
   - `GET /api/v1/admin/clients/:clientId/tiktok-ads/campaigns`
   - `GET /api/v1/admin/clients/:clientId/tiktok-ads/insights`
@@ -442,6 +445,7 @@ Uygulama durumu:
   - `GET /api/v1/tiktok-ads/clients/:clientId/summary`
   - `GET /api/v1/tiktok-ads/clients/:clientId/campaigns`
   - `GET /api/v1/tiktok-ads/clients/:clientId/insights`
+  - `POST /api/v1/tiktok-ads/clients/:clientId/sync`
   - `GET /api/v1/clients/me/tiktok-ads/config`
   - `GET /api/v1/clients/me/tiktok-ads/summary`
   - `GET /api/v1/clients/me/tiktok-ads/campaigns`
@@ -451,7 +455,7 @@ Uygulama durumu:
 - Reporting sync uses TikTok API for Business reporting + campaign catalog reads, stores daily rows by level (`ACCOUNT`, `CAMPAIGN`, `ADGROUP`, `AD`), and exposes read-only aggregates for V1 dashboards.
 
 Planned next backend phases:
-- TikTok Ads Faz 8: Sync automation hardening
+- TikTok Ads Faz 9: Reporting/export foundation
 - Broader domain endpoint authorization rollout (beyond users/clients/admin-assignments/projects/tasks)
 - Forced password change on first login flow
 - Frontend audit log view integration for admin panel

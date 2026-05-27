@@ -437,6 +437,72 @@ describe("TikTok Ads Config Authz (e2e)", () => {
       expectResponseHasNoSensitiveTokenData(res.body);
     });
 
+    it("assigned employee sync respects TTL and writes skipped sync log", async () => {
+      if (!clientProfileId) return;
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/tiktok-ads/clients/${clientProfileId}/sync`)
+        .set("Authorization", `Bearer ${employeeToken}`)
+        .query({ since: "2026-05-20", until: "2026-05-20" });
+
+      expect([200, 201]).toContain(res.status);
+      expect(res.body.success).toBe(true);
+      expect(res.body.syncStatus).toBe("SKIPPED");
+      expect(res.body.skippedReason).toEqual(expect.any(String));
+      expectResponseHasNoSensitiveTokenData(res.body);
+
+      const skippedLog = await prisma.tikTokAdsSyncLog.findFirst({
+        where: {
+          clientProfileId,
+          trigger: "ON_DEMAND_ASSIGNED_REFRESH",
+        },
+        orderBy: { createdAt: "desc" },
+      });
+      expect(skippedLog?.status).toBe("SKIPPED");
+      expect(skippedLog?.errorCode).toBe("SYNC_TTL_ACTIVE");
+    });
+
+    it("admin can retry reporting sync and read TikTok sync logs with filters", async () => {
+      if (!clientProfileId) return;
+      const retryRes = await request(app.getHttpServer())
+        .post(`/api/v1/admin/clients/${clientProfileId}/tiktok-ads/sync/retry`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .query({ since: "2026-05-20", until: "2026-05-20" });
+
+      expect([200, 201]).toContain(retryRes.status);
+      expect(retryRes.body.success).toBe(true);
+      expect(retryRes.body.syncStatus).toBe("SUCCESS");
+      expectResponseHasNoSensitiveTokenData(retryRes.body);
+
+      const logsRes = await request(app.getHttpServer())
+        .get("/api/v1/admin/tiktok-ads/sync-logs")
+        .set("Authorization", `Bearer ${adminToken}`)
+        .query({ clientProfileId, status: "success", limit: 5 });
+
+      expect(logsRes.status).toBe(200);
+      expect(logsRes.body.meta.total).toBeGreaterThanOrEqual(1);
+      expect(logsRes.body.data.length).toBeGreaterThanOrEqual(1);
+      expect(logsRes.body.data[0]).toEqual(
+        expect.objectContaining({
+          clientProfileId,
+          status: "SUCCESS",
+        }),
+      );
+      expect(logsRes.body.data.some((row: { trigger?: string | null }) => row.trigger === "ERROR_RETRY")).toBe(true);
+      expectResponseHasNoSensitiveTokenData(logsRes.body);
+    });
+
+    it("non-admin users cannot read TikTok sync logs", async () => {
+      const employeeRes = await request(app.getHttpServer())
+        .get("/api/v1/admin/tiktok-ads/sync-logs")
+        .set("Authorization", `Bearer ${employeeToken}`);
+      expect(employeeRes.status).toBe(403);
+
+      const clientRes = await request(app.getHttpServer())
+        .get("/api/v1/admin/tiktok-ads/sync-logs")
+        .set("Authorization", `Bearer ${clientToken}`);
+      expect(clientRes.status).toBe(403);
+    });
+
     it("non-admin users cannot read global tiktok ads client list", async () => {
       const unauthenticatedRes = await request(app.getHttpServer()).get(
         "/api/v1/admin/tiktok-ads/clients",

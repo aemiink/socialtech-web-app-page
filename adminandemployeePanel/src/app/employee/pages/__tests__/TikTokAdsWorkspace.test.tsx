@@ -13,6 +13,7 @@ const mockUseGetAssignedClientTikTokAdsConfigQuery = vi.fn();
 const mockUseGetAssignedClientTikTokAdsSummaryQuery = vi.fn();
 const mockUseGetAssignedClientTikTokAdsCampaignsQuery = vi.fn();
 const mockUseGetAssignedClientTikTokAdsInsightsQuery = vi.fn();
+const mockUseSyncAssignedClientTikTokAdsMutation = vi.fn();
 const mockUseGetProjectsQuery = vi.fn();
 const mockUseGetProjectWorkspaceMessagesQuery = vi.fn();
 const mockUseCreateProjectWorkspaceMessageMutation = vi.fn();
@@ -21,6 +22,7 @@ const mockUseCreateTaskMutation = vi.fn();
 const mockUseUpdateTaskMutation = vi.fn();
 const mockUseToggleTaskTodoMutation = vi.fn();
 const mockCreateTask = vi.fn();
+const mockSyncAssignedTikTokAds = vi.fn();
 
 vi.mock("../../../store/hooks", () => ({
   useAppSelector: (selector: (state: unknown) => unknown) =>
@@ -49,6 +51,8 @@ vi.mock("../../../features/tiktokAds/tiktokAdsApi", () => ({
     mockUseGetAssignedClientTikTokAdsCampaignsQuery(...args),
   useGetAssignedClientTikTokAdsInsightsQuery: (...args: unknown[]) =>
     mockUseGetAssignedClientTikTokAdsInsightsQuery(...args),
+  useSyncAssignedClientTikTokAdsMutation: (...args: unknown[]) =>
+    mockUseSyncAssignedClientTikTokAdsMutation(...args),
 }));
 
 vi.mock("../../../features/projects/projectsApi", () => ({
@@ -83,6 +87,7 @@ const baseEmployeeUser: AuthUserProfile = {
     "projects.files.manage.assigned",
     "tiktokAds.approvals.create.assigned",
     "tiktokAds.creatives.manage.assigned",
+    "tiktokAds.sync.read.assigned",
   ],
   clientProfile: null,
 };
@@ -298,6 +303,18 @@ function setupBaseMocks() {
     vi.fn(() => ({ unwrap: () => Promise.resolve({ id: "msg-2" }) })),
     { isLoading: false },
   ]);
+  mockSyncAssignedTikTokAds.mockReturnValue({
+    unwrap: () =>
+      Promise.resolve({
+        success: true,
+        syncStatus: "SKIPPED",
+        skippedReason: "Son senkron çok yeni.",
+      }),
+  });
+  mockUseSyncAssignedClientTikTokAdsMutation.mockReturnValue([
+    mockSyncAssignedTikTokAds,
+    { isLoading: false },
+  ]);
 }
 
 function renderWorkspace(initialView?: Parameters<typeof TikTokAdsWorkspace>[0]["initialView"]) {
@@ -353,6 +370,19 @@ describe("TikTokAdsWorkspace", () => {
         }),
       ),
     );
+  });
+
+  it("runs assigned sync with TikTok sync permission", async () => {
+    renderWorkspace("overview");
+
+    fireEvent.click(screen.getByRole("button", { name: "Sync Çalıştır" }));
+
+    await waitFor(() =>
+      expect(mockSyncAssignedTikTokAds).toHaveBeenCalledWith({
+        clientId: "client-tiktok",
+      }),
+    );
+    expect(await screen.findByText("Son senkron çok yeni.")).toBeInTheDocument();
   });
 
   it("hides performance-specific tabs for social media specialist", () => {

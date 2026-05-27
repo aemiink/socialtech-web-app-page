@@ -2,6 +2,8 @@ import { baseApi } from "../../services/baseApi";
 import type {
   AdminTikTokAdsClientListResponse,
   AdminTikTokAdsConnection,
+  AdminTikTokAdsSyncLogsQuery,
+  AdminTikTokAdsSyncLogsResponse,
   ConnectManualTikTokAdsPayload,
   TestTikTokAdsConnectionPayload,
   TestTikTokAdsConnectionResponse,
@@ -17,6 +19,7 @@ import type {
 } from "./tiktokAdsTypes";
 
 const TIKTOK_ADS_ADMIN_CLIENTS_LIST_ID = "ADMIN_CLIENTS_LIST";
+const TIKTOK_ADS_SYNC_LOGS_LIST_ID = "SYNC_LOGS_LIST";
 
 type AdminClientTikTokAdsQueryArg<TQuery = void> = {
   clientId: string;
@@ -43,6 +46,18 @@ const tiktokAdsApi = baseApi.injectEndpoints({
             }))
           : []),
       ],
+    }),
+
+    getAdminTikTokAdsSyncLogs: build.query<
+      AdminTikTokAdsSyncLogsResponse,
+      AdminTikTokAdsSyncLogsQuery | void
+    >({
+      query: (query) => ({
+        url: "/admin/tiktok-ads/sync-logs",
+        method: "GET",
+        params: serializeSyncLogsQuery(query),
+      }),
+      providesTags: [{ type: "TikTokAdsConfig", id: TIKTOK_ADS_SYNC_LOGS_LIST_ID }],
     }),
 
     getAdminClientTikTokAdsConfig: build.query<TikTokAdsConfig, string>({
@@ -210,7 +225,39 @@ const tiktokAdsApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, { clientId }) => [
         { type: "TikTokAdsConfig", id: clientId },
         { type: "TikTokAdsConfig", id: TIKTOK_ADS_ADMIN_CLIENTS_LIST_ID },
+        { type: "TikTokAdsConfig", id: TIKTOK_ADS_SYNC_LOGS_LIST_ID },
         { type: "Clients", id: clientId },
+      ],
+    }),
+
+    retryAdminClientTikTokAdsSync: build.mutation<
+      TikTokAdsSyncResponse,
+      { clientId: string; query?: TikTokAdsDateRangeQuery }
+    >({
+      query: ({ clientId, query }) => ({
+        url: `/admin/clients/${clientId}/tiktok-ads/sync/retry`,
+        method: "POST",
+        params: serializeDateRangeQuery(query),
+      }),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "TikTokAdsConfig", id: clientId },
+        { type: "TikTokAdsConfig", id: TIKTOK_ADS_ADMIN_CLIENTS_LIST_ID },
+        { type: "TikTokAdsConfig", id: TIKTOK_ADS_SYNC_LOGS_LIST_ID },
+        { type: "Clients", id: clientId },
+      ],
+    }),
+
+    syncAssignedClientTikTokAds: build.mutation<
+      TikTokAdsSyncResponse,
+      { clientId: string; query?: TikTokAdsDateRangeQuery }
+    >({
+      query: ({ clientId, query }) => ({
+        url: `/tiktok-ads/clients/${clientId}/sync`,
+        method: "POST",
+        params: serializeDateRangeQuery(query),
+      }),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "TikTokAdsConfig", id: clientId },
       ],
     }),
 
@@ -232,6 +279,7 @@ export const {
   useConnectAdminClientTikTokAdsManualMutation,
   useDisconnectAdminClientTikTokAdsMutation,
   useGetAdminTikTokAdsClientsQuery,
+  useGetAdminTikTokAdsSyncLogsQuery,
   useGetAdminClientTikTokAdsCampaignsQuery,
   useGetAdminClientTikTokAdsConfigQuery,
   useGetAdminClientTikTokAdsConnectionQuery,
@@ -241,6 +289,8 @@ export const {
   useGetAssignedClientTikTokAdsConfigQuery,
   useGetAssignedClientTikTokAdsInsightsQuery,
   useGetAssignedClientTikTokAdsSummaryQuery,
+  useRetryAdminClientTikTokAdsSyncMutation,
+  useSyncAssignedClientTikTokAdsMutation,
   useSyncAdminClientTikTokAdsMutation,
   useTestAdminClientTikTokAdsConnectionMutation,
   useUpdateAdminClientTikTokAdsConfigMutation,
@@ -291,4 +341,28 @@ function serializeInsightsQuery(
   }
 
   return Object.keys(nextParams).length > 0 ? nextParams : undefined;
+}
+
+function serializeSyncLogsQuery(
+  query: AdminTikTokAdsSyncLogsQuery | void,
+): Record<string, string | number | boolean> | undefined {
+  if (!query) {
+    return undefined;
+  }
+
+  const params: Record<string, string | number | boolean> = {};
+  if (query.clientProfileId && query.clientProfileId.trim().length > 0) {
+    params.clientProfileId = query.clientProfileId.trim();
+  }
+  if (query.status) {
+    params.status = query.status;
+  }
+  if (query.failedOnly !== undefined) {
+    params.failedOnly = query.failedOnly;
+  }
+  if (typeof query.limit === "number" && Number.isFinite(query.limit)) {
+    params.limit = Math.trunc(query.limit);
+  }
+
+  return Object.keys(params).length > 0 ? params : undefined;
 }

@@ -27,6 +27,7 @@ import {
   useGetAssignedClientTikTokAdsConfigQuery,
   useGetAssignedClientTikTokAdsInsightsQuery,
   useGetAssignedClientTikTokAdsSummaryQuery,
+  useSyncAssignedClientTikTokAdsMutation,
 } from "../../features/tiktokAds/tiktokAdsApi";
 import type {
   TikTokAdsCampaign,
@@ -98,6 +99,7 @@ export function TikTokAdsWorkspace({ initialView = "overview" }: TikTokAdsWorksp
   const workspaceMode = resolveWorkspaceMode(currentUser?.role);
   const canReadAssignedClients = hasUserPermission(currentUser, ["clients.read.assigned"]);
   const canReadTikTokAds = hasUserPermission(currentUser, ["tiktokAds.config.read.assigned"]);
+  const canRunTikTokAdsSync = hasUserPermission(currentUser, ["tiktokAds.sync.read.assigned"]);
   const canCreateTikTokAdsApprovals = hasUserPermission(currentUser, ["tiktokAds.approvals.create.assigned"]);
   const canManageTikTokAdsCreatives = hasUserPermission(currentUser, ["tiktokAds.creatives.manage.assigned"]);
   const canReadTasks = hasUserPermission(currentUser, ["tasks.read.assigned"]);
@@ -231,6 +233,8 @@ export function TikTokAdsWorkspace({ initialView = "overview" }: TikTokAdsWorksp
   const [toggleTaskTodo, { isLoading: isTogglingTodo }] = useToggleTaskTodoMutation();
   const [createWorkspaceMessage, { isLoading: isCreatingMessage }] =
     useCreateProjectWorkspaceMessageMutation();
+  const [syncAssignedTikTokAds, { isLoading: isSyncingAssignedTikTokAds }] =
+    useSyncAssignedClientTikTokAdsMutation();
 
   if (!workspaceMode) {
     return (
@@ -261,7 +265,45 @@ export function TikTokAdsWorkspace({ initialView = "overview" }: TikTokAdsWorksp
     ? activeView
     : ROLE_DEFAULT_VIEW[workspaceMode];
   const hasTikTokAdsProject = Boolean(tikTokAdsProjectId);
-  const isActionBusy = isCreatingTask || isUpdatingTask || isTogglingTodo || isCreatingMessage;
+  const isActionBusy =
+    isCreatingTask ||
+    isUpdatingTask ||
+    isTogglingTodo ||
+    isCreatingMessage ||
+    isSyncingAssignedTikTokAds;
+
+  async function handleSyncAssignedTikTokAds() {
+    if (!selectedClientId) {
+      return;
+    }
+
+    if (!canRunTikTokAdsSync) {
+      setFeedback({
+        type: "error",
+        text: "TikTok Ads sync çalıştırmak için yetkiniz yok.",
+      });
+      return;
+    }
+
+    setActiveAction("sync");
+    try {
+      const response = await syncAssignedTikTokAds({ clientId: selectedClientId }).unwrap();
+      setFeedback({
+        type: "success",
+        text:
+          response.syncStatus === "SKIPPED"
+            ? response.skippedReason ?? "TikTok Ads verileri kısa süre önce güncellendi."
+            : "TikTok Ads sync tamamlandı.",
+      });
+    } catch (error) {
+      setFeedback({
+        type: "error",
+        text: extractApiErrorMessage(error, "TikTok Ads sync çalıştırılamadı."),
+      });
+    } finally {
+      setActiveAction(null);
+    }
+  }
 
   async function handleCreateRoleTask(action: "creative" | "optimization" | "report" | "approval") {
     if (!tikTokAdsProjectId) {
@@ -545,6 +587,17 @@ export function TikTokAdsWorkspace({ initialView = "overview" }: TikTokAdsWorksp
           >
             <RefreshCw className="h-4 w-4" />
             Yenile
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-2"
+            onClick={() => void handleSyncAssignedTikTokAds()}
+            disabled={!selectedClientId || !canRunTikTokAdsSync || isActionBusy}
+            title={canRunTikTokAdsSync ? undefined : "Bu işlem için TikTok Ads sync izni gerekir."}
+          >
+            <RefreshCw className="h-4 w-4" />
+            {activeAction === "sync" ? "Sync..." : "Sync Çalıştır"}
           </Button>
         </div>
         {isClientsLoading ? (

@@ -7,7 +7,6 @@
 
 ## Planned
 
-- TikTok Ads Faz 8: Sync automation hardening
 - TikTok Ads Faz 9: Reporting/export foundation
 - TikTok Ads Faz 10: Production hardening
 - Remaining employee role pages API migration (mock/static -> backend)
@@ -160,6 +159,7 @@
 - TikTok Ads Faz 5: Admin global panel (`/tiktok-ads`) + backend global clients list endpoint + config/test/sync/disconnect aksiyonları
 - TikTok Ads Faz 6: Employee role workspaces (`/employee/tiktok-ads` + `TikTokAdsWorkspace` + role-aware sections/actions + assigned endpoint coverage)
 - TikTok Ads Faz 7: Approval + creative collaboration (task approval type'ları + assigned create permission + client own response + UGC/script approval queue + creative preview)
+- TikTok Ads Faz 8: Sync automation hardening (admin sync logs + retry + assigned TTL-safe sync + normalized error catalog + admin/employee UI observability)
 
 ## Blocked
 
@@ -208,6 +208,15 @@ None identified.
   - `clientPanel`: `npm test -- src/app/pages/__tests__/service-tab-page.tiktok-ads.test.tsx` ✅ (`6/6`)
   - `clientPanel`: `npm run check` ✅
   - Browser smoke: client portal login render + employee TikTok route auth redirect, console error yok ✅
+- Latest TikTok Ads Faz 8 validation checkpoint:
+  - `server`: `npm run typecheck` ✅
+  - `server`: `npm run typecheck:spec` ✅
+  - `server`: `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true node ./test/run-e2e.cjs tiktok-ads-authz.e2e-spec.ts` ✅ (`21/21`)
+  - `server`: `npm run check` ✅
+  - `adminandemployeePanel`: `npm run typecheck` ✅
+  - `adminandemployeePanel`: `npm run test:run -- src/app/pages/__tests__/TikTokAdsAdmin.test.tsx src/app/employee/pages/__tests__/TikTokAdsWorkspace.test.tsx` ✅ (`16/16`)
+  - `adminandemployeePanel`: `npm run check` ✅
+  - Browser smoke: admin/employee TikTok routes auth redirect, console error yok ✅
 - Latest admin/employee frontend validation checkpoint: `25` test files, `153/153` tests.
 - Latest client portal frontend validation checkpoint: `4` test files, `17/17` tests.
 - Latest FAZ-05 validation checkpoint:

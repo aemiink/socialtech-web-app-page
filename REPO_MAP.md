@@ -282,15 +282,16 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 - `server/src/tiktok-ads/tiktok-ads.module.ts`
 - `server/src/tiktok-ads/tiktok-ads.controller.ts`
   - admin global client list endpoint (`GET /api/v1/admin/tiktok-ads/clients`)
-  - admin config/connection/manual connect/test/disconnect/sync endpoints
+  - admin config/connection/manual connect/test/disconnect/sync/retry/sync-log endpoints
   - admin summary/campaigns/insights reporting endpoints
-  - assigned employee config/summary/campaigns/insights read endpoints
+  - assigned employee config/summary/campaigns/insights read endpoints plus TTL-gated assigned sync
   - own client config/summary/campaigns/insights read endpoints plus TTL-gated own sync
 - `server/src/tiktok-ads/tiktok-ads.service.ts`
   - service-level admin/assigned/client permission checks
   - active purchased-service check for connection management
   - encrypted credential persistence and client-safe own summary
-  - daily insight aggregation, manual reporting sync, sync log writes, and client-safe sync errors
+  - daily insight aggregation, manual/reporting retry sync, sync log reads/writes, assigned TTL sync, and client-safe sync errors
+  - normalized sync error catalog with deterministic admin messages and client-safe fallback messages
   - admin global client list aggregation with connection status, spend/video/conversion summary, pending approval count, and assigned employees
 - `server/src/tasks/tasks.service.ts`
   - task-centric TikTok Ads approval create guard and own-client approval response support
@@ -307,22 +308,23 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 - `server/src/tiktok-ads/dto/tiktok-ads-date-range-query.dto.ts`
 - `server/src/tiktok-ads/dto/tiktok-ads-campaigns-query.dto.ts`
 - `server/src/tiktok-ads/dto/tiktok-ads-insights-query.dto.ts`
+- `server/src/tiktok-ads/dto/tiktok-ads-sync-logs-query.dto.ts`
 - `server/src/tiktok-ads/dto/update-tiktok-ads-config.dto.ts`
 - `server/prisma/migrations/20260527003000_add_tiktok_ads_reporting_snapshot/migration.sql`
 - `server/prisma/migrations/20260527143000_add_tiktok_ads_approval_types/migration.sql`
 - `server/test/tiktok-ads-authz.e2e-spec.ts`
-  - admin/employee/client authz, global admin clients list, assigned employee endpoint reads, manual connect, test, sync, reporting reads, disconnect, sensitive-token response safety
+  - admin/employee/client authz, global admin clients list, assigned employee endpoint reads, manual connect, test, sync/retry, sync logs, TTL skip, reporting reads, disconnect, sensitive-token response safety
 - `server/test/projects-tasks-authz.e2e-spec.ts`
   - TikTok Ads approval task create permission and client own approval response regression coverage
 
 ### TikTok Ads Admin Frontend
 
 - `adminandemployeePanel/src/app/features/tiktokAds/tiktokAdsApi.ts`
-  - admin global clients list, assigned employee hooks, connection summary/manual connect/test/sync/disconnect and reporting RTK Query hooks
+  - admin global clients list, sync logs, retry, assigned employee hooks, connection summary/manual connect/test/sync/disconnect and reporting RTK Query hooks
 - `adminandemployeePanel/src/app/features/tiktokAds/tiktokAdsTypes.ts`
-  - admin global client list, connection, reporting, sync, request/response, and status badge types/helpers
+  - admin global client list, connection, reporting, sync logs, request/response, and status badge types/helpers
 - `adminandemployeePanel/src/app/pages/TikTokAdsAdmin.tsx`
-  - admin `/tiktok-ads` global management screen with KPI, client table, config edit, test, sync, and disconnect actions
+  - admin `/tiktok-ads` global management screen with KPI, client table, config edit, test, sync/retry, sync log observability, and disconnect actions
 - `adminandemployeePanel/src/app/routes.tsx`
   - `/tiktok-ads` admin route
 - `adminandemployeePanel/src/app/components/RootLayout.tsx`
@@ -330,18 +332,18 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 - `adminandemployeePanel/src/app/pages/ClientDetail.tsx`
   - TikTok Ads connection management + performance summary/manual sync card in admin client detail
 - `adminandemployeePanel/src/app/pages/__tests__/TikTokAdsAdmin.test.tsx`
-  - admin global TikTok Ads page render/state/action/permission regression coverage
+  - admin global TikTok Ads page render/state/action/permission/sync-log/retry regression coverage
 - `adminandemployeePanel/src/app/pages/__tests__/ClientDetail.test.tsx`
   - TikTok Ads connection/reporting hook mocks with ClientDetail regression coverage
 
 ### TikTok Ads Employee Frontend
 
 - `adminandemployeePanel/src/app/employee/components/TikTokAdsWorkspace.tsx`
-  - assigned-scope employee workspace for Social/Performance/Designer roles with overview, campaigns, performance, video creatives, reports, TikTok approval metadata/actions, and pixel safe-state sections
+  - assigned-scope employee workspace for Social/Performance/Designer roles with overview, campaigns, performance, video creatives, reports, TikTok approval metadata/actions, TTL-gated sync action, and pixel safe-state sections
 - `adminandemployeePanel/src/app/employee/pages/TikTokAdsCalismaAlani.tsx`
   - employee route wrapper for `/employee/tiktok-ads`
 - `adminandemployeePanel/src/app/employee/pages/__tests__/TikTokAdsWorkspace.test.tsx`
-  - assigned-client filtering, role-aware tab/action, TikTok approval metadata, permission guard, and empty-state regression coverage
+  - assigned-client filtering, role-aware tab/action, TikTok approval metadata, assigned sync permission guard, and empty-state regression coverage
 - `adminandemployeePanel/src/app/employee/EmployeeLayout.tsx`
   - TikTok Ads employee sidebar entry for Social/Performance/Designer roles
 - `adminandemployeePanel/src/app/routes.tsx`

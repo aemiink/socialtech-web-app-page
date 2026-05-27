@@ -163,6 +163,40 @@ export type AdminTikTokAdsClientListResponse = {
   };
 };
 
+export type AdminTikTokAdsSyncLogItem = {
+  id: string;
+  clientProfileId: string;
+  clientCompanyName: string;
+  advertiserId: string | null;
+  status: TikTokAdsSyncStatus;
+  trigger: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+  durationMs: number | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  recordsFetched: number | null;
+  apiCallCount: number | null;
+  createdAt: string;
+};
+
+export type AdminTikTokAdsSyncLogsResponse = {
+  data: AdminTikTokAdsSyncLogItem[];
+  meta: {
+    total: number;
+    failed: number;
+    running: number;
+    skipped: number;
+  };
+};
+
+export type AdminTikTokAdsSyncLogsQuery = {
+  clientProfileId?: string;
+  status?: TikTokAdsSyncStatus;
+  failedOnly?: boolean;
+  limit?: number;
+};
+
 export type TikTokAdsCampaignsQuery = TikTokAdsDateRangeQuery & {
   limit?: number;
 };

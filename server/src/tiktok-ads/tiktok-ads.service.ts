@@ -27,6 +27,7 @@ import { TestTikTokAdsConnectionDto } from "./dto/test-tiktok-ads-connection.dto
 import { TikTokAdsCampaignsQueryDto } from "./dto/tiktok-ads-campaigns-query.dto";
 import { TikTokAdsDateRangeQueryDto } from "./dto/tiktok-ads-date-range-query.dto";
 import { TikTokAdsInsightsQueryDto } from "./dto/tiktok-ads-insights-query.dto";
+import { TikTokAdsSyncLogsQueryDto } from "./dto/tiktok-ads-sync-logs-query.dto";
 import { UpdateTikTokAdsConfigDto } from "./dto/update-tiktok-ads-config.dto";
 import {
   NormalizedTikTokAdsApiError,
@@ -42,6 +43,7 @@ const TIKTOK_ADS_CONFIG_READ_ANY_PERMISSION = "tiktokAds.config.read.any";
 const TIKTOK_ADS_CONFIG_MANAGE_ANY_PERMISSION = "tiktokAds.config.manage.any";
 const TIKTOK_ADS_CONFIG_READ_ASSIGNED_PERMISSION = "tiktokAds.config.read.assigned";
 const TIKTOK_ADS_CONFIG_READ_OWN_PERMISSION = "tiktokAds.config.read.own";
+const TIKTOK_ADS_SYNC_READ_ASSIGNED_PERMISSION = "tiktokAds.sync.read.assigned";
 const DEFAULT_TIKTOK_TOKEN_LIFETIME_DAYS = 365;
 const DEFAULT_REPORTING_RANGE_DAYS = 7;
 const MAX_REPORTING_RANGE_DAYS = 90;
@@ -101,6 +103,21 @@ const tikTokAdsDailyInsightSelect = {
   raw: true,
   updatedAt: true,
 } satisfies Prisma.TikTokAdsDailyInsightSelect;
+
+const tikTokAdsSyncLogSelect = {
+  id: true,
+  clientProfileId: true,
+  advertiserId: true,
+  status: true,
+  trigger: true,
+  startedAt: true,
+  finishedAt: true,
+  errorCode: true,
+  errorMessage: true,
+  recordsFetched: true,
+  apiCallCount: true,
+  createdAt: true,
+} satisfies Prisma.TikTokAdsSyncLogSelect;
 
 type AdminTikTokAdsConfigModel = Prisma.ClientTikTokAdsConfigGetPayload<{
   select: typeof adminTikTokAdsConfigSelect;
@@ -348,19 +365,51 @@ type TikTokAdsSyncResponse = {
 
 type TikTokAdsSyncTrigger =
   | "MANUAL_SYNC"
+  | "SCHEDULED_SYNC"
   | "ON_DEMAND_CLIENT_REFRESH"
-  | "ON_DEMAND_ASSIGNED_REFRESH";
+  | "ON_DEMAND_ASSIGNED_REFRESH"
+  | "ERROR_RETRY";
 
 type TikTokAdsConnectionErrorCode =
   | "TOKEN_INVALID"
   | "PERMISSION_MISSING"
+  | "ADVERTISER_UNAVAILABLE"
   | "RATE_LIMIT"
+  | "BUSINESS_ACCESS_REVOKED"
   | "UNKNOWN_API_ERROR";
 
 type TikTokAdsConnectionErrorInfo = {
   code: TikTokAdsConnectionErrorCode;
   category: NormalizedTikTokAdsApiError["category"];
   adminMessage: string;
+  clientMessage: string;
+};
+
+type AdminTikTokAdsSyncLogItem = {
+  id: string;
+  clientProfileId: string;
+  clientCompanyName: string;
+  advertiserId: string | null;
+  status: TikTokAdsSyncStatus;
+  trigger: string | null;
+  startedAt: Date;
+  finishedAt: Date | null;
+  durationMs: number | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  recordsFetched: number | null;
+  apiCallCount: number | null;
+  createdAt: Date;
+};
+
+type AdminTikTokAdsSyncLogsResponse = {
+  data: AdminTikTokAdsSyncLogItem[];
+  meta: {
+    total: number;
+    failed: number;
+    running: number;
+    skipped: number;
+  };
 };
 
 @Injectable()
@@ -659,6 +708,92 @@ export class TikTokAdsService {
     };
   }
 
+  async getAdminSyncLogs(
+    query: TikTokAdsSyncLogsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<AdminTikTokAdsSyncLogsResponse> {
+    this.assertCanReadAnyConfig(actor);
+
+    const requestedStatus = this.normalizeSyncStatusQuery(query.status);
+    const failedOnly = this.normalizeBooleanQuery(query.failedOnly);
+    const statusFilter =
+      requestedStatus !== undefined
+        ? requestedStatus
+        : failedOnly
+          ? {
+              in: [TikTokAdsSyncStatus.FAILED, TikTokAdsSyncStatus.PARTIAL],
+            }
+          : undefined;
+    const where: Prisma.TikTokAdsSyncLogWhereInput = {
+      ...(query.clientProfileId ? { clientProfileId: query.clientProfileId } : {}),
+      ...(statusFilter ? { status: statusFilter } : {}),
+    };
+    const take = this.normalizeLimitQuery(query.limit, 40);
+
+    const [rows, total, failed, running, skipped] = await Promise.all([
+      this.prisma.tikTokAdsSyncLog.findMany({
+        where,
+        select: {
+          ...tikTokAdsSyncLogSelect,
+          clientProfile: {
+            select: {
+              companyName: true,
+            },
+          },
+        },
+        orderBy: [{ createdAt: "desc" }],
+        take,
+      }),
+      this.prisma.tikTokAdsSyncLog.count({ where }),
+      this.prisma.tikTokAdsSyncLog.count({
+        where: {
+          ...where,
+          status: {
+            in: [TikTokAdsSyncStatus.FAILED, TikTokAdsSyncStatus.PARTIAL],
+          },
+        },
+      }),
+      this.prisma.tikTokAdsSyncLog.count({
+        where: {
+          ...where,
+          status: TikTokAdsSyncStatus.RUNNING,
+        },
+      }),
+      this.prisma.tikTokAdsSyncLog.count({
+        where: {
+          ...where,
+          status: TikTokAdsSyncStatus.SKIPPED,
+        },
+      }),
+    ]);
+
+    return {
+      data: rows.map((row) => ({
+        id: row.id,
+        clientProfileId: row.clientProfileId,
+        clientCompanyName: row.clientProfile.companyName,
+        advertiserId: row.advertiserId,
+        status: row.status,
+        trigger: row.trigger,
+        startedAt: row.startedAt,
+        finishedAt: row.finishedAt,
+        durationMs:
+          row.finishedAt !== null ? row.finishedAt.getTime() - row.startedAt.getTime() : null,
+        errorCode: row.errorCode,
+        errorMessage: row.errorMessage,
+        recordsFetched: row.recordsFetched,
+        apiCallCount: row.apiCallCount,
+        createdAt: row.createdAt,
+      })),
+      meta: {
+        total,
+        failed,
+        running,
+        skipped,
+      },
+    };
+  }
+
   async updateAdminClientConfig(
     clientId: string,
     dto: UpdateTikTokAdsConfigDto,
@@ -923,6 +1058,22 @@ export class TikTokAdsService {
     });
   }
 
+  async retryAdminClientInsights(
+    clientId: string,
+    query: TikTokAdsDateRangeQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<TikTokAdsSyncResponse> {
+    this.assertCanManageAnyConfig(actor);
+    await this.assertClientExists(clientId);
+    await this.assertClientHasActiveTikTokAdsService(clientId);
+
+    return this.syncInsightsByClientProfileId(clientId, query, {
+      trigger: "ERROR_RETRY",
+      applySyncTtl: false,
+      revealDetailedError: true,
+    });
+  }
+
   // ─── Assigned employee: read config ─────────────────────────────────────────
 
   async getAssignedClientConfig(clientId: string, actor: AuthenticatedUser) {
@@ -965,6 +1116,23 @@ export class TikTokAdsService {
     await this.assertClientHasActiveTikTokAdsService(clientId);
 
     return this.getInsightsByClientProfileId(clientId, query);
+  }
+
+  async syncAssignedClientInsights(
+    clientId: string,
+    query: TikTokAdsDateRangeQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<TikTokAdsSyncResponse> {
+    this.assertCanReadAssignedConfig(actor);
+    this.assertCanRunAssignedSync(actor);
+    await this.assertActiveAssignment(clientId, actor.id);
+    await this.assertClientHasActiveTikTokAdsService(clientId);
+
+    return this.syncInsightsByClientProfileId(clientId, query, {
+      trigger: "ON_DEMAND_ASSIGNED_REFRESH",
+      applySyncTtl: true,
+      revealDetailedError: true,
+    });
   }
 
   // ─── Own client: read minimal config ────────────────────────────────────────
@@ -1586,35 +1754,86 @@ export class TikTokAdsService {
 
   private normalizeConnectionError(error: unknown): TikTokAdsConnectionErrorInfo {
     const normalizedError = this.tikTokAdsApiService.normalizeError(error);
+    const message = this.normalizeErrorMessage(normalizedError.message);
+    const lowerMessage = message.toLowerCase();
 
-    if (normalizedError.category === "AUTH") {
+    if (
+      normalizedError.category === "AUTH" ||
+      lowerMessage.includes("token") &&
+        (lowerMessage.includes("expired") || lowerMessage.includes("invalid"))
+    ) {
       return {
         code: "TOKEN_INVALID",
         category: normalizedError.category,
-        adminMessage: normalizedError.message,
+        adminMessage: "TikTok Ads erişim tokenı geçersiz veya süresi dolmuş.",
+        clientMessage: CLIENT_SAFE_SYNC_ERROR_MESSAGE,
       };
     }
 
-    if (normalizedError.category === "PERMISSION") {
+    if (
+      normalizedError.category === "PERMISSION" ||
+      lowerMessage.includes("permission") ||
+      lowerMessage.includes("scope") ||
+      lowerMessage.includes("not authorized")
+    ) {
       return {
         code: "PERMISSION_MISSING",
         category: normalizedError.category,
-        adminMessage: normalizedError.message,
+        adminMessage: "TikTok Ads API izinleri eksik veya yetersiz.",
+        clientMessage: CLIENT_SAFE_SYNC_ERROR_MESSAGE,
       };
     }
 
-    if (normalizedError.category === "RATE_LIMIT") {
+    if (
+      normalizedError.category === "RATE_LIMIT" ||
+      lowerMessage.includes("rate limit") ||
+      lowerMessage.includes("too many") ||
+      lowerMessage.includes("throttle")
+    ) {
       return {
         code: "RATE_LIMIT",
         category: normalizedError.category,
-        adminMessage: normalizedError.message,
+        adminMessage: "TikTok Ads API rate limit sınırına ulaşıldı.",
+        clientMessage: CLIENT_SAFE_SYNC_ERROR_MESSAGE,
+      };
+    }
+
+    if (
+      lowerMessage.includes("advertiser") &&
+      (lowerMessage.includes("not found") ||
+        lowerMessage.includes("unavailable") ||
+        lowerMessage.includes("disabled"))
+    ) {
+      return {
+        code: "ADVERTISER_UNAVAILABLE",
+        category: normalizedError.category,
+        adminMessage: "TikTok Ads advertiser hesabı erişilemez durumda.",
+        clientMessage: CLIENT_SAFE_SYNC_ERROR_MESSAGE,
+      };
+    }
+
+    if (
+      lowerMessage.includes("business") &&
+      (lowerMessage.includes("revoked") ||
+        lowerMessage.includes("disabled") ||
+        lowerMessage.includes("access"))
+    ) {
+      return {
+        code: "BUSINESS_ACCESS_REVOKED",
+        category: normalizedError.category,
+        adminMessage: "TikTok Business erişimi kaldırılmış görünüyor.",
+        clientMessage: CLIENT_SAFE_SYNC_ERROR_MESSAGE,
       };
     }
 
     return {
       code: "UNKNOWN_API_ERROR",
       category: normalizedError.category,
-      adminMessage: normalizedError.message,
+      adminMessage:
+        message.length > 0
+          ? `TikTok Ads API hatası: ${message}`
+          : "TikTok Ads API beklenmeyen bir hata döndürdü.",
+      clientMessage: CLIENT_SAFE_SYNC_ERROR_MESSAGE,
     };
   }
 
@@ -1624,7 +1843,7 @@ export class TikTokAdsService {
   ): Error {
     const errorMessage = options.revealDetailedError
       ? connectionErrorInfo.adminMessage
-      : CLIENT_SAFE_SYNC_ERROR_MESSAGE;
+      : connectionErrorInfo.clientMessage;
 
     if (connectionErrorInfo.code === "PERMISSION_MISSING") {
       return new ForbiddenException(errorMessage);
@@ -1635,6 +1854,10 @@ export class TikTokAdsService {
     }
 
     return new BadGatewayException(errorMessage);
+  }
+
+  private normalizeErrorMessage(message: string): string {
+    return message.trim().replace(/\s+/g, " ");
   }
 
   private async resolveReportingConnection(clientId: string): Promise<{
@@ -2004,6 +2227,53 @@ export class TikTokAdsService {
     return `Son senkron çok yeni. Yaklaşık ${remainingMinutes} dakika sonra tekrar deneyin.`;
   }
 
+  private normalizeSyncStatusQuery(value: unknown): TikTokAdsSyncStatus | undefined {
+    if (typeof value !== "string") {
+      return undefined;
+    }
+
+    const normalized = value.trim().toUpperCase();
+    if (
+      normalized === TikTokAdsSyncStatus.RUNNING ||
+      normalized === TikTokAdsSyncStatus.SUCCESS ||
+      normalized === TikTokAdsSyncStatus.FAILED ||
+      normalized === TikTokAdsSyncStatus.PARTIAL ||
+      normalized === TikTokAdsSyncStatus.SKIPPED
+    ) {
+      return normalized as TikTokAdsSyncStatus;
+    }
+
+    return undefined;
+  }
+
+  private normalizeBooleanQuery(value: unknown): boolean {
+    if (typeof value === "boolean") {
+      return value;
+    }
+
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      return normalized === "true" || normalized === "1";
+    }
+
+    return false;
+  }
+
+  private normalizeLimitQuery(value: unknown, fallback: number): number {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return Math.min(Math.max(Math.trunc(value), 1), 100);
+    }
+
+    if (typeof value === "string") {
+      const parsed = Number.parseInt(value.trim(), 10);
+      if (!Number.isNaN(parsed) && Number.isFinite(parsed)) {
+        return Math.min(Math.max(parsed, 1), 100);
+      }
+    }
+
+    return fallback;
+  }
+
   private getSyncTtlMinutes(): number {
     const configuredValue = this.configService.get<string | number | undefined>(
       "TIKTOK_ADS_SYNC_TTL_MINUTES",
@@ -2154,6 +2424,14 @@ export class TikTokAdsService {
     }
 
     this.assertHasPermission(actor, TIKTOK_ADS_CONFIG_READ_ASSIGNED_PERMISSION);
+  }
+
+  private assertCanRunAssignedSync(actor: AuthenticatedUser): void {
+    if (actor.accountType !== AccountType.EMPLOYEE) {
+      throw new ForbiddenException("Bu endpoint yalnızca çalışan hesapları içindir.");
+    }
+
+    this.assertHasPermission(actor, TIKTOK_ADS_SYNC_READ_ASSIGNED_PERMISSION);
   }
 
   private assertCanReadOwnConfig(actor: AuthenticatedUser): void {

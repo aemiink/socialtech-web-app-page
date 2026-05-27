@@ -2563,3 +2563,38 @@ Affected files:
 - `PROJECT_CONTEXT.md`
 - `REPO_MAP.md`
 - `ROAD_MAP.md`
+
+## 2026-05-27 - TikTok Ads Faz 8 Sync Automation Hardening
+
+Context:
+TikTok Ads Faz 7 ile approval/creative collaboration akışı tamamlandı. Sync tarafında snapshot/log modeli ve TTL-gated own refresh vardı ancak admin log okuma, retry aksiyonu, assigned employee sync ve UI gözlemlenebilirliği eksikti.
+
+Decision:
+TikTok Ads Faz 8, Meta Ads Faz 8 pattern'inin TikTok V1 karşılığı olarak uygulanacak:
+- Mevcut `TikTokAdsSyncLog` modeli yeniden kullanıldı; yeni sync log modeli veya scheduler yüzeyi açılmadı.
+- Admin için `GET /api/v1/admin/tiktok-ads/sync-logs` endpointi eklendi; `clientProfileId`, `status`, `failedOnly` ve `limit` filtreleri desteklenir.
+- Admin retry için `POST /api/v1/admin/clients/:clientId/tiktok-ads/sync/retry` endpointi eklendi ve sync trigger `ERROR_RETRY` olarak loglanır.
+- Assigned employee için `POST /api/v1/tiktok-ads/clients/:clientId/sync` endpointi eklendi; `ON_DEMAND_ASSIGNED_REFRESH` trigger'ı ve `TIKTOK_ADS_SYNC_TTL_MINUTES` koruması kullanılır.
+- `tiktokAds.sync.read.assigned` ve `tiktokAds.sync.run.any` seed permission'ları eklendi; assigned sync okuma/çalıştırma izni Project Manager, Performance Specialist ve Social Media Specialist rollerine verildi.
+- Sync hata kataloğu deterministic admin mesajları ve client-safe generic mesajlarla normalize edildi.
+- Admin `/tiktok-ads` ekranına failed sync retry aksiyonu ve sync logs tablosu eklendi; employee TikTok workspace'e permission-gated `Sync Çalıştır` aksiyonu eklendi.
+- Reporting/export foundation Faz 9'a bırakıldı.
+
+Reason:
+Bu karar, yeni cron/scheduler yüzeyi açmadan sync operasyonlarını gözlemlenebilir ve güvenli hale getirir. TTL-safe assigned refresh gereksiz TikTok API çağrılarını azaltır, retry/log görünürlüğü ise operasyon ekibinin müdahalesini hızlandırır.
+
+Affected files:
+- `server/prisma/seed.ts`
+- `server/src/tiktok-ads/dto/tiktok-ads-sync-logs-query.dto.ts`
+- `server/src/tiktok-ads/tiktok-ads.controller.ts`
+- `server/src/tiktok-ads/tiktok-ads.service.ts`
+- `server/test/tiktok-ads-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/tiktokAds/tiktokAdsApi.ts`
+- `adminandemployeePanel/src/app/features/tiktokAds/tiktokAdsTypes.ts`
+- `adminandemployeePanel/src/app/pages/TikTokAdsAdmin.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/TikTokAdsAdmin.test.tsx`
+- `adminandemployeePanel/src/app/employee/components/TikTokAdsWorkspace.tsx`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/TikTokAdsWorkspace.test.tsx`
+- `PROJECT_CONTEXT.md`
+- `REPO_MAP.md`
+- `ROAD_MAP.md`

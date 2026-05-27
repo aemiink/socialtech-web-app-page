@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Link2Off,
   RefreshCw,
+  RotateCcw,
   TestTube2,
   Video,
   Wrench,
@@ -30,11 +31,16 @@ import {
 import {
   useDisconnectAdminClientTikTokAdsMutation,
   useGetAdminTikTokAdsClientsQuery,
+  useGetAdminTikTokAdsSyncLogsQuery,
+  useRetryAdminClientTikTokAdsSyncMutation,
   useSyncAdminClientTikTokAdsMutation,
   useTestAdminClientTikTokAdsConnectionMutation,
   useUpdateAdminClientTikTokAdsConfigMutation,
 } from "../features/tiktokAds/tiktokAdsApi";
-import type { AdminTikTokAdsClientListItem } from "../features/tiktokAds/tiktokAdsTypes";
+import type {
+  AdminTikTokAdsClientListItem,
+  TikTokAdsSyncStatus,
+} from "../features/tiktokAds/tiktokAdsTypes";
 import {
   getTikTokAdsConnectionStatusBadgeClass,
   getTikTokAdsConnectionStatusLabel,
@@ -74,11 +80,24 @@ export function TikTokAdsAdmin() {
   } = useGetAdminTikTokAdsClientsQuery(undefined, {
     skip: !canReadTikTokAds,
   });
+  const {
+    data: syncLogsResponse,
+    error: syncLogsError,
+    isError: isSyncLogsError,
+    isLoading: isSyncLogsLoading,
+  } = useGetAdminTikTokAdsSyncLogsQuery(
+    { limit: 20 },
+    {
+      skip: !canReadTikTokAds,
+    },
+  );
   const [updateTikTokAdsConfig, { isLoading: isUpdatingConfig }] =
     useUpdateAdminClientTikTokAdsConfigMutation();
   const [testTikTokAdsConnection, { isLoading: isTestingConnection }] =
     useTestAdminClientTikTokAdsConnectionMutation();
   const [syncTikTokAds, { isLoading: isSyncing }] = useSyncAdminClientTikTokAdsMutation();
+  const [retryTikTokAdsSync, { isLoading: isRetryingSync }] =
+    useRetryAdminClientTikTokAdsSyncMutation();
   const [disconnectTikTokAds, { isLoading: isDisconnecting }] =
     useDisconnectAdminClientTikTokAdsMutation();
 
@@ -90,11 +109,14 @@ export function TikTokAdsAdmin() {
   const listItems = response?.data ?? [];
   const meta = response?.meta;
   const dateRange = response?.dateRange;
+  const syncLogs = syncLogsResponse?.data ?? [];
+  const syncLogsMeta = syncLogsResponse?.meta;
   const failedClients = useMemo(
     () => listItems.filter((item) => item.connectionStatus === "ERROR" || Boolean(item.syncError)),
     [listItems],
   );
-  const isMutating = isUpdatingConfig || isTestingConnection || isSyncing || isDisconnecting;
+  const isMutating =
+    isUpdatingConfig || isTestingConnection || isSyncing || isRetryingSync || isDisconnecting;
 
   const kpis = useMemo(
     () => [
@@ -225,6 +247,23 @@ export function TikTokAdsAdmin() {
       },
       `${client.client.companyName} için TikTok Ads senkronizasyonu tamamlandı.`,
       "TikTok Ads senkronizasyonu çalıştırılamadı.",
+    );
+  }
+
+  async function handleRetrySync(client: AdminTikTokAdsClientListItem) {
+    if (!canManageTikTokAds || isMutating) {
+      return;
+    }
+
+    await runClientAction(
+      client.client.id,
+      async () => {
+        await retryTikTokAdsSync({
+          clientId: client.client.id,
+        }).unwrap();
+      },
+      `${client.client.companyName} için retry senkronizasyonu tamamlandı.`,
+      "Retry senkronizasyonu çalıştırılamadı.",
     );
   }
 
@@ -504,17 +543,82 @@ export function TikTokAdsAdmin() {
                   variant="outline"
                   className="gap-1 border-red-500/30 text-red-200 hover:bg-red-500/10"
                   onClick={() => {
-                    void handleManualSync(client);
+                    void handleRetrySync(client);
                   }}
                   disabled={!canManageTikTokAds || isMutating}
                 >
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  Sync
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Retry
                 </Button>
               </div>
             ))}
           </div>
         )}
+      </Card>
+
+      <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-white">Sync Logları</h2>
+          {syncLogsMeta ? (
+            <p className="text-xs text-[#A0A0A0]">
+              Toplam: {syncLogsMeta.total} · Failed: {syncLogsMeta.failed} · Running:{" "}
+              {syncLogsMeta.running} · Skipped: {syncLogsMeta.skipped}
+            </p>
+          ) : null}
+        </div>
+
+        {isSyncLogsLoading ? <p className="text-sm text-[#A0A0A0]">Sync logları yükleniyor...</p> : null}
+        {isSyncLogsError ? (
+          <p className="text-sm text-red-300">
+            {extractApiErrorMessage(syncLogsError, "Sync logları alınamadı.")}
+          </p>
+        ) : null}
+        {!isSyncLogsLoading && !isSyncLogsError && syncLogs.length === 0 ? (
+          <p className="text-sm text-[#A0A0A0]">Henüz sync log kaydı oluşmadı.</p>
+        ) : null}
+
+        {!isSyncLogsLoading && !isSyncLogsError && syncLogs.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[980px]">
+              <thead className="border-b border-white/[0.06] text-left text-xs text-[#A0A0A0]">
+                <tr>
+                  <th className="py-3 pr-3">Müşteri</th>
+                  <th className="py-3 pr-3">Durum</th>
+                  <th className="py-3 pr-3">Tetikleyici</th>
+                  <th className="py-3 pr-3">Başlangıç</th>
+                  <th className="py-3 pr-3">Süre</th>
+                  <th className="py-3 pr-3">Kayıt</th>
+                  <th className="py-3 pr-3">API Call</th>
+                  <th className="py-3">Hata Nedeni</th>
+                </tr>
+              </thead>
+              <tbody>
+                {syncLogs.map((row) => (
+                  <tr key={row.id} className="border-b border-white/[0.04] align-top">
+                    <td className="py-3 pr-3 text-sm text-white">{row.clientCompanyName}</td>
+                    <td className="py-3 pr-3">
+                      <span
+                        className={`rounded-md px-2 py-1 text-xs ${getSyncStatusClassName(row.status)}`}
+                      >
+                        {getSyncStatusLabel(row.status)}
+                      </span>
+                    </td>
+                    <td className="py-3 pr-3 text-xs text-[#DADADA]">{formatSyncTrigger(row.trigger)}</td>
+                    <td className="py-3 pr-3 text-xs text-[#DADADA]">
+                      {formatClientDateTime(row.startedAt)}
+                    </td>
+                    <td className="py-3 pr-3 text-xs text-[#DADADA]">
+                      {row.durationMs !== null ? `${Math.max(Math.round(row.durationMs / 1000), 0)} sn` : "—"}
+                    </td>
+                    <td className="py-3 pr-3 text-xs text-[#DADADA]">{row.recordsFetched ?? "—"}</td>
+                    <td className="py-3 pr-3 text-xs text-[#DADADA]">{row.apiCallCount ?? "—"}</td>
+                    <td className="py-3 text-xs text-red-200">{row.errorMessage ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
       </Card>
 
       <Dialog open={configTarget !== null} onOpenChange={(open) => (!open ? closeConfigDialog() : undefined)}>
@@ -613,6 +717,36 @@ function getServiceStatusBadgeClass(status: string): string {
     SUSPENDED: "bg-red-500/20 text-red-300",
   };
   return classes[status] ?? "bg-gray-500/20 text-gray-300";
+}
+
+function getSyncStatusLabel(status: TikTokAdsSyncStatus): string {
+  const labels: Record<TikTokAdsSyncStatus, string> = {
+    RUNNING: "Çalışıyor",
+    SUCCESS: "Başarılı",
+    FAILED: "Hatalı",
+    PARTIAL: "Kısmi",
+    SKIPPED: "Atlandı",
+  };
+  return labels[status] ?? status;
+}
+
+function getSyncStatusClassName(status: TikTokAdsSyncStatus): string {
+  const classes: Record<TikTokAdsSyncStatus, string> = {
+    RUNNING: "bg-blue-500/15 text-blue-200",
+    SUCCESS: "bg-[#AAFF01]/15 text-[#AAFF01]",
+    FAILED: "bg-red-500/15 text-red-200",
+    PARTIAL: "bg-yellow-500/15 text-yellow-200",
+    SKIPPED: "bg-white/[0.08] text-[#DADADA]",
+  };
+  return classes[status] ?? "bg-white/[0.08] text-[#DADADA]";
+}
+
+function formatSyncTrigger(trigger: string | null): string {
+  if (!trigger) {
+    return "—";
+  }
+
+  return trigger.replace(/_/g, " ");
 }
 
 function formatCurrency(value: number): string {
