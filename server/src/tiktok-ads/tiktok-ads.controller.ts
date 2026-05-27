@@ -7,6 +7,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
@@ -17,6 +18,9 @@ import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { TikTokAdsService } from "./tiktok-ads.service";
 import { ConnectManualTikTokAdsDto } from "./dto/connect-manual-tiktok-ads.dto";
 import { TestTikTokAdsConnectionDto } from "./dto/test-tiktok-ads-connection.dto";
+import { TikTokAdsCampaignsQueryDto } from "./dto/tiktok-ads-campaigns-query.dto";
+import { TikTokAdsDateRangeQueryDto } from "./dto/tiktok-ads-date-range-query.dto";
+import { TikTokAdsInsightsQueryDto } from "./dto/tiktok-ads-insights-query.dto";
 import { UpdateTikTokAdsConfigDto } from "./dto/update-tiktok-ads-config.dto";
 
 @Controller()
@@ -83,6 +87,46 @@ export class TikTokAdsController {
     return this.tikTokAdsService.disconnectAdminClient(clientId, actor);
   }
 
+  @Get("admin/clients/:clientId/tiktok-ads/summary")
+  @RequirePermissions("tiktokAds.config.read.any")
+  getAdminClientSummary(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: TikTokAdsDateRangeQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.tikTokAdsService.getAdminClientSummary(clientId, query, actor);
+  }
+
+  @Get("admin/clients/:clientId/tiktok-ads/campaigns")
+  @RequirePermissions("tiktokAds.config.read.any")
+  getAdminClientCampaigns(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: TikTokAdsCampaignsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.tikTokAdsService.getAdminClientCampaigns(clientId, query, actor);
+  }
+
+  @Get("admin/clients/:clientId/tiktok-ads/insights")
+  @RequirePermissions("tiktokAds.config.read.any")
+  getAdminClientInsights(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: TikTokAdsInsightsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.tikTokAdsService.getAdminClientInsights(clientId, query, actor);
+  }
+
+  @Post("admin/clients/:clientId/tiktok-ads/sync")
+  @RequirePermissions("tiktokAds.config.manage.any")
+  syncAdminClientInsights(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: TikTokAdsDateRangeQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.tikTokAdsService.syncAdminClientInsights(clientId, query, actor);
+  }
+
   // ─── Assigned employee endpoints ───────────────────────────────────────────
 
   @Get("tiktok-ads/clients/:clientId/config")
@@ -94,11 +138,77 @@ export class TikTokAdsController {
     return this.tikTokAdsService.getAssignedClientConfig(clientId, actor);
   }
 
+  @Get("tiktok-ads/clients/:clientId/summary")
+  @RequirePermissions("tiktokAds.config.read.assigned")
+  getAssignedClientSummary(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: TikTokAdsDateRangeQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.tikTokAdsService.getAssignedClientSummary(clientId, query, actor);
+  }
+
+  @Get("tiktok-ads/clients/:clientId/campaigns")
+  @RequirePermissions("tiktokAds.config.read.assigned")
+  getAssignedClientCampaigns(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: TikTokAdsCampaignsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.tikTokAdsService.getAssignedClientCampaigns(clientId, query, actor);
+  }
+
+  @Get("tiktok-ads/clients/:clientId/insights")
+  @RequirePermissions("tiktokAds.config.read.assigned")
+  getAssignedClientInsights(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: TikTokAdsInsightsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.tikTokAdsService.getAssignedClientInsights(clientId, query, actor);
+  }
+
   // ─── Own client endpoint ────────────────────────────────────────────────────
 
   @Get("clients/me/tiktok-ads/config")
   @RequirePermissions("tiktokAds.config.read.own")
   getOwnClientConfig(@CurrentUser() actor: AuthenticatedUser) {
     return this.tikTokAdsService.getOwnClientConfig(actor);
+  }
+
+  @Get("clients/me/tiktok-ads/summary")
+  @RequirePermissions("tiktokAds.config.read.own")
+  getOwnClientSummary(
+    @Query() query: TikTokAdsDateRangeQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.tikTokAdsService.getOwnClientSummary(query, actor);
+  }
+
+  @Get("clients/me/tiktok-ads/campaigns")
+  @RequirePermissions("tiktokAds.config.read.own")
+  getOwnClientCampaigns(
+    @Query() query: TikTokAdsCampaignsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.tikTokAdsService.getOwnClientCampaigns(query, actor);
+  }
+
+  @Get("clients/me/tiktok-ads/insights")
+  @RequirePermissions("tiktokAds.config.read.own")
+  getOwnClientInsights(
+    @Query() query: TikTokAdsInsightsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.tikTokAdsService.getOwnClientInsights(query, actor);
+  }
+
+  @Post("clients/me/tiktok-ads/sync")
+  @RequirePermissions("tiktokAds.config.read.own")
+  syncOwnClientInsights(
+    @Query() query: TikTokAdsDateRangeQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.tikTokAdsService.syncOwnClientInsights(query, actor);
   }
 }

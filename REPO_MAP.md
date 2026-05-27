@@ -255,7 +255,7 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - Delivery enums: `ProjectStatus`, `TaskStatus`, `Priority`, `TaskType`, `TaskWorkstream`, `TaskSeverity`, `TaskEnvironment`, `DeliverySprintStatus`, `DeliveryReleaseStatus`, `RepositoryProvider`
   - Additional enums: `PurchasedServiceKey`, `PurchasedServiceStatus`, `TaskTodoVisibility`
   - CRM enums: `CrmLeadStatus`, `CrmLeadSource`, `CrmLeadActivityType`
-  - TikTok Ads models: `ClientTikTokAdsConfig`, `ClientTikTokAdsCredential`
+  - TikTok Ads models: `ClientTikTokAdsConfig`, `ClientTikTokAdsCredential`, `TikTokAdsDailyInsight`, `TikTokAdsSyncLog`
   - `User.role` enum remains the primary fixed role field
   - `User.sessionInvalidatedAt` is used for access-token invalidation lifecycle
   - `ClientProfile.slug` is unique
@@ -271,34 +271,41 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 
 - `server/src/tiktok-ads/tiktok-ads.module.ts`
 - `server/src/tiktok-ads/tiktok-ads.controller.ts`
-  - admin config/connection/manual connect/test/disconnect endpoints
-  - assigned employee config read endpoint
-  - own client config summary endpoint
+  - admin config/connection/manual connect/test/disconnect/sync endpoints
+  - admin summary/campaigns/insights reporting endpoints
+  - assigned employee config/summary/campaigns/insights read endpoints
+  - own client config/summary/campaigns/insights read endpoints plus TTL-gated own sync
 - `server/src/tiktok-ads/tiktok-ads.service.ts`
   - service-level admin/assigned/client permission checks
   - active purchased-service check for connection management
   - encrypted credential persistence and client-safe own summary
+  - daily insight aggregation, manual reporting sync, sync log writes, and client-safe sync errors
 - `server/src/tiktok-ads/tiktok-ads-api.service.ts`
   - TikTok API for Business advertiser info connection test
+  - reporting snapshot fetch for account/campaign/adgroup/ad levels plus campaign catalog metadata
   - normalized API error categorization
 - `server/src/tiktok-ads/tiktok-ads-token.service.ts`
   - AES-256-GCM token encryption/decryption + SHA256 hash
 - `server/src/tiktok-ads/dto/connect-manual-tiktok-ads.dto.ts`
 - `server/src/tiktok-ads/dto/test-tiktok-ads-connection.dto.ts`
+- `server/src/tiktok-ads/dto/tiktok-ads-date-range-query.dto.ts`
+- `server/src/tiktok-ads/dto/tiktok-ads-campaigns-query.dto.ts`
+- `server/src/tiktok-ads/dto/tiktok-ads-insights-query.dto.ts`
 - `server/src/tiktok-ads/dto/update-tiktok-ads-config.dto.ts`
+- `server/prisma/migrations/20260527003000_add_tiktok_ads_reporting_snapshot/migration.sql`
 - `server/test/tiktok-ads-authz.e2e-spec.ts`
-  - admin/employee/client authz, manual connect, test, disconnect, sensitive-token response safety
+  - admin/employee/client authz, manual connect, test, sync, reporting reads, disconnect, sensitive-token response safety
 
 ### TikTok Ads Admin Frontend
 
 - `adminandemployeePanel/src/app/features/tiktokAds/tiktokAdsApi.ts`
-  - admin connection summary/manual connect/test/disconnect RTK Query hooks
+  - admin connection summary/manual connect/test/sync/disconnect and reporting RTK Query hooks
 - `adminandemployeePanel/src/app/features/tiktokAds/tiktokAdsTypes.ts`
-  - connection, request, response, and status badge types/helpers
+  - connection, reporting, sync, request/response, and status badge types/helpers
 - `adminandemployeePanel/src/app/pages/ClientDetail.tsx`
-  - TikTok Ads connection management card in admin client detail
+  - TikTok Ads connection management + performance summary/manual sync card in admin client detail
 - `adminandemployeePanel/src/app/pages/__tests__/ClientDetail.test.tsx`
-  - TikTok Ads connection hook mocks with ClientDetail regression coverage
+  - TikTok Ads connection/reporting hook mocks with ClientDetail regression coverage
 
 ## 2026-05-05 Incremental Map Update
 

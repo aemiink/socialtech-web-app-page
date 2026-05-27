@@ -4,6 +4,8 @@ import {
   PurchasedServiceKey,
   PurchasedServiceStatus,
   TikTokAdsConnectionStatus,
+  TikTokAdsInsightLevel,
+  TikTokAdsSyncStatus,
   UserRole,
 } from "@prisma/client";
 import {
@@ -13,15 +15,22 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { PrismaService } from "../database/prisma.service";
 import { ConnectManualTikTokAdsDto } from "./dto/connect-manual-tiktok-ads.dto";
 import { TestTikTokAdsConnectionDto } from "./dto/test-tiktok-ads-connection.dto";
+import { TikTokAdsCampaignsQueryDto } from "./dto/tiktok-ads-campaigns-query.dto";
+import { TikTokAdsDateRangeQueryDto } from "./dto/tiktok-ads-date-range-query.dto";
+import { TikTokAdsInsightsQueryDto } from "./dto/tiktok-ads-insights-query.dto";
 import { UpdateTikTokAdsConfigDto } from "./dto/update-tiktok-ads-config.dto";
 import {
   NormalizedTikTokAdsApiError,
+  TikTokAdsApiInsightRow,
   TikTokAdsApiService,
+  TikTokAdsCampaignCatalogItem,
   TikTokAdsConnectionTestResult,
+  TikTokAdsReportingSnapshotResult,
 } from "./tiktok-ads-api.service";
 import { TikTokAdsTokenService } from "./tiktok-ads-token.service";
 
@@ -30,6 +39,12 @@ const TIKTOK_ADS_CONFIG_MANAGE_ANY_PERMISSION = "tiktokAds.config.manage.any";
 const TIKTOK_ADS_CONFIG_READ_ASSIGNED_PERMISSION = "tiktokAds.config.read.assigned";
 const TIKTOK_ADS_CONFIG_READ_OWN_PERMISSION = "tiktokAds.config.read.own";
 const DEFAULT_TIKTOK_TOKEN_LIFETIME_DAYS = 365;
+const DEFAULT_REPORTING_RANGE_DAYS = 7;
+const MAX_REPORTING_RANGE_DAYS = 90;
+const DEFAULT_CAMPAIGNS_LIMIT = 12;
+const DEFAULT_INSIGHTS_LIMIT = 100;
+const DEFAULT_TIKTOK_ADS_SYNC_TTL_MINUTES = 30;
+const CLIENT_SAFE_SYNC_ERROR_MESSAGE = "Bağlantı problemi var, ekibimiz ilgileniyor.";
 
 const adminTikTokAdsConfigSelect = {
   id: true,
@@ -55,12 +70,44 @@ const tikTokAdsCredentialSummarySelect = {
   updatedAt: true,
 } satisfies Prisma.ClientTikTokAdsCredentialSelect;
 
+const tikTokAdsDailyInsightSelect = {
+  id: true,
+  clientProfileId: true,
+  advertiserId: true,
+  date: true,
+  level: true,
+  entityId: true,
+  entityName: true,
+  spend: true,
+  impressions: true,
+  reach: true,
+  clicks: true,
+  ctr: true,
+  cpc: true,
+  cpm: true,
+  videoViews: true,
+  videoViews2s: true,
+  videoViews6s: true,
+  videoCompletionRate: true,
+  vtr: true,
+  conversions: true,
+  costPerConversion: true,
+  conversionRate: true,
+  purchaseValue: true,
+  raw: true,
+  updatedAt: true,
+} satisfies Prisma.TikTokAdsDailyInsightSelect;
+
 type AdminTikTokAdsConfigModel = Prisma.ClientTikTokAdsConfigGetPayload<{
   select: typeof adminTikTokAdsConfigSelect;
 }>;
 
 type TikTokAdsCredentialSummaryModel = Prisma.ClientTikTokAdsCredentialGetPayload<{
   select: typeof tikTokAdsCredentialSummarySelect;
+}>;
+
+type TikTokAdsDailyInsightModel = Prisma.TikTokAdsDailyInsightGetPayload<{
+  select: typeof tikTokAdsDailyInsightSelect;
 }>;
 
 type TikTokAdsConfigPatchData = {
@@ -124,6 +171,122 @@ type AdminTikTokAdsConnectionTestResponse = {
   grantedScopes: string[];
 };
 
+type TikTokAdsReportDateRange = {
+  since: Date;
+  until: Date;
+  sinceIsoDate: string;
+  untilIsoDate: string;
+};
+
+type TikTokAdsSummaryResponse = {
+  spend: number;
+  impressions: number;
+  reach: number;
+  clicks: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  videoViews: number;
+  videoViews2s: number;
+  videoViews6s: number;
+  videoCompletionRate: number;
+  vtr: number;
+  conversions: number;
+  costPerConversion: number;
+  conversionRate: number;
+  purchaseValue: number;
+  dateRange: {
+    since: string;
+    until: string;
+  };
+  lastSyncAt: Date | null;
+};
+
+type TikTokAdsCampaignSummary = {
+  id: string;
+  name: string;
+  objective: string;
+  status: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  cpc: number;
+  videoViews: number;
+  conversions: number;
+  costPerConversion: number;
+  purchaseValue: number;
+};
+
+type TikTokAdsCampaignsResponse = {
+  data: TikTokAdsCampaignSummary[];
+  dateRange: {
+    since: string;
+    until: string;
+  };
+  lastSyncAt: Date | null;
+};
+
+type TikTokAdsInsightItem = {
+  id: string;
+  date: string;
+  level: TikTokAdsInsightLevel;
+  entityId: string;
+  entityName: string | null;
+  spend: number;
+  impressions: number;
+  reach: number;
+  clicks: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  videoViews: number;
+  videoViews2s: number;
+  videoViews6s: number;
+  videoCompletionRate: number;
+  vtr: number;
+  conversions: number;
+  costPerConversion: number;
+  conversionRate: number;
+  purchaseValue: number;
+  updatedAt: string;
+};
+
+type TikTokAdsInsightsResponse = {
+  data: TikTokAdsInsightItem[];
+  level: TikTokAdsInsightLevel;
+  dateRange: {
+    since: string;
+    until: string;
+  };
+  lastSyncAt: Date | null;
+};
+
+type TikTokAdsSyncResponse = {
+  success: true;
+  syncedAt: Date;
+  dateRange: {
+    since: string;
+    until: string;
+  };
+  inserted: {
+    account: number;
+    campaigns: number;
+    adGroups: number;
+    ads: number;
+    total: number;
+  };
+  connectionStatus: TikTokAdsConnectionStatus;
+  lastSyncAt: Date | null;
+  syncStatus: TikTokAdsSyncStatus;
+  skippedReason: string | null;
+};
+
+type TikTokAdsSyncTrigger =
+  | "MANUAL_SYNC"
+  | "ON_DEMAND_CLIENT_REFRESH"
+  | "ON_DEMAND_ASSIGNED_REFRESH";
+
 type TikTokAdsConnectionErrorCode =
   | "TOKEN_INVALID"
   | "PERMISSION_MISSING"
@@ -140,6 +303,7 @@ type TikTokAdsConnectionErrorInfo = {
 export class TikTokAdsService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
     private readonly tikTokAdsTokenService: TikTokAdsTokenService,
     private readonly tikTokAdsApiService: TikTokAdsApiService,
   ) {}
@@ -373,12 +537,100 @@ export class TikTokAdsService {
     };
   }
 
+  async getAdminClientSummary(
+    clientId: string,
+    query: TikTokAdsDateRangeQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<TikTokAdsSummaryResponse> {
+    this.assertCanReadAnyConfig(actor);
+    await this.assertClientExists(clientId);
+    await this.assertClientHasActiveTikTokAdsService(clientId);
+
+    return this.getSummaryByClientProfileId(clientId, query);
+  }
+
+  async getAdminClientCampaigns(
+    clientId: string,
+    query: TikTokAdsCampaignsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<TikTokAdsCampaignsResponse> {
+    this.assertCanReadAnyConfig(actor);
+    await this.assertClientExists(clientId);
+    await this.assertClientHasActiveTikTokAdsService(clientId);
+
+    return this.getCampaignsByClientProfileId(clientId, query);
+  }
+
+  async getAdminClientInsights(
+    clientId: string,
+    query: TikTokAdsInsightsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<TikTokAdsInsightsResponse> {
+    this.assertCanReadAnyConfig(actor);
+    await this.assertClientExists(clientId);
+    await this.assertClientHasActiveTikTokAdsService(clientId);
+
+    return this.getInsightsByClientProfileId(clientId, query);
+  }
+
+  async syncAdminClientInsights(
+    clientId: string,
+    query: TikTokAdsDateRangeQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<TikTokAdsSyncResponse> {
+    this.assertCanManageAnyConfig(actor);
+    await this.assertClientExists(clientId);
+    await this.assertClientHasActiveTikTokAdsService(clientId);
+
+    return this.syncInsightsByClientProfileId(clientId, query, {
+      trigger: "MANUAL_SYNC",
+      applySyncTtl: false,
+      revealDetailedError: true,
+    });
+  }
+
   // ─── Assigned employee: read config ─────────────────────────────────────────
 
   async getAssignedClientConfig(clientId: string, actor: AuthenticatedUser) {
     this.assertCanReadAssignedConfig(actor);
     await this.assertActiveAssignment(clientId, actor.id);
     return this.getOrCreateConfig(clientId);
+  }
+
+  async getAssignedClientSummary(
+    clientId: string,
+    query: TikTokAdsDateRangeQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<TikTokAdsSummaryResponse> {
+    this.assertCanReadAssignedConfig(actor);
+    await this.assertActiveAssignment(clientId, actor.id);
+    await this.assertClientHasActiveTikTokAdsService(clientId);
+
+    return this.getSummaryByClientProfileId(clientId, query);
+  }
+
+  async getAssignedClientCampaigns(
+    clientId: string,
+    query: TikTokAdsCampaignsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<TikTokAdsCampaignsResponse> {
+    this.assertCanReadAssignedConfig(actor);
+    await this.assertActiveAssignment(clientId, actor.id);
+    await this.assertClientHasActiveTikTokAdsService(clientId);
+
+    return this.getCampaignsByClientProfileId(clientId, query);
+  }
+
+  async getAssignedClientInsights(
+    clientId: string,
+    query: TikTokAdsInsightsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<TikTokAdsInsightsResponse> {
+    this.assertCanReadAssignedConfig(actor);
+    await this.assertActiveAssignment(clientId, actor.id);
+    await this.assertClientHasActiveTikTokAdsService(clientId);
+
+    return this.getInsightsByClientProfileId(clientId, query);
   }
 
   // ─── Own client: read minimal config ────────────────────────────────────────
@@ -415,6 +667,58 @@ export class TikTokAdsService {
     };
   }
 
+  async getOwnClientSummary(
+    query: TikTokAdsDateRangeQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<TikTokAdsSummaryResponse> {
+    this.assertCanReadOwnConfig(actor);
+    const clientProfileId = this.getClientProfileIdOrFail(actor);
+    await this.assertClientExists(clientProfileId);
+    await this.assertClientHasActiveTikTokAdsService(clientProfileId);
+
+    return this.getSummaryByClientProfileId(clientProfileId, query);
+  }
+
+  async getOwnClientCampaigns(
+    query: TikTokAdsCampaignsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<TikTokAdsCampaignsResponse> {
+    this.assertCanReadOwnConfig(actor);
+    const clientProfileId = this.getClientProfileIdOrFail(actor);
+    await this.assertClientExists(clientProfileId);
+    await this.assertClientHasActiveTikTokAdsService(clientProfileId);
+
+    return this.getCampaignsByClientProfileId(clientProfileId, query);
+  }
+
+  async getOwnClientInsights(
+    query: TikTokAdsInsightsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<TikTokAdsInsightsResponse> {
+    this.assertCanReadOwnConfig(actor);
+    const clientProfileId = this.getClientProfileIdOrFail(actor);
+    await this.assertClientExists(clientProfileId);
+    await this.assertClientHasActiveTikTokAdsService(clientProfileId);
+
+    return this.getInsightsByClientProfileId(clientProfileId, query);
+  }
+
+  async syncOwnClientInsights(
+    query: TikTokAdsDateRangeQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<TikTokAdsSyncResponse> {
+    this.assertCanReadOwnConfig(actor);
+    const clientProfileId = this.getClientProfileIdOrFail(actor);
+    await this.assertClientExists(clientProfileId);
+    await this.assertClientHasActiveTikTokAdsService(clientProfileId);
+
+    return this.syncInsightsByClientProfileId(clientProfileId, query, {
+      trigger: "ON_DEMAND_CLIENT_REFRESH",
+      applySyncTtl: true,
+      revealDetailedError: false,
+    });
+  }
+
   // ─── Helpers ────────────────────────────────────────────────────────────────
 
   private async getOrCreateConfig(clientId: string) {
@@ -425,6 +729,383 @@ export class TikTokAdsService {
     return this.prisma.clientTikTokAdsConfig.create({
       data: { clientProfileId: clientId },
     });
+  }
+
+  private async getSummaryByClientProfileId(
+    clientId: string,
+    query: TikTokAdsDateRangeQueryDto,
+  ): Promise<TikTokAdsSummaryResponse> {
+    const dateRange = this.resolveReportDateRange(query);
+    const [insights, config] = await this.prisma.$transaction([
+      this.prisma.tikTokAdsDailyInsight.findMany({
+        where: {
+          clientProfileId: clientId,
+          level: TikTokAdsInsightLevel.ACCOUNT,
+          date: {
+            gte: dateRange.since,
+            lte: dateRange.until,
+          },
+        },
+        select: tikTokAdsDailyInsightSelect,
+        orderBy: { date: "asc" },
+      }),
+      this.prisma.clientTikTokAdsConfig.findUnique({
+        where: { clientProfileId: clientId },
+        select: { lastSyncAt: true },
+      }),
+    ]);
+
+    return {
+      ...this.aggregateInsightRows(insights),
+      dateRange: {
+        since: dateRange.sinceIsoDate,
+        until: dateRange.untilIsoDate,
+      },
+      lastSyncAt: config?.lastSyncAt ?? null,
+    };
+  }
+
+  private async getCampaignsByClientProfileId(
+    clientId: string,
+    query: TikTokAdsCampaignsQueryDto,
+  ): Promise<TikTokAdsCampaignsResponse> {
+    const dateRange = this.resolveReportDateRange(query);
+    const limit = query.limit ?? DEFAULT_CAMPAIGNS_LIMIT;
+    const [insights, config] = await this.prisma.$transaction([
+      this.prisma.tikTokAdsDailyInsight.findMany({
+        where: {
+          clientProfileId: clientId,
+          level: TikTokAdsInsightLevel.CAMPAIGN,
+          date: {
+            gte: dateRange.since,
+            lte: dateRange.until,
+          },
+        },
+        select: tikTokAdsDailyInsightSelect,
+      }),
+      this.prisma.clientTikTokAdsConfig.findUnique({
+        where: { clientProfileId: clientId },
+        select: { lastSyncAt: true },
+      }),
+    ]);
+
+    const campaignMap = new Map<string, TikTokAdsCampaignSummary>();
+    for (const insight of insights) {
+      const existing = campaignMap.get(insight.entityId);
+      const spend = this.readDecimalAsNumber(insight.spend);
+      const impressions = insight.impressions ?? 0;
+      const clicks = insight.clicks ?? 0;
+      const videoViews = insight.videoViews ?? 0;
+      const conversions = insight.conversions ?? 0;
+      const purchaseValue = this.readDecimalAsNumber(insight.purchaseValue);
+      const rawMeta = this.extractCampaignMetaFromRaw(insight.raw);
+
+      if (!existing) {
+        campaignMap.set(insight.entityId, {
+          id: insight.entityId,
+          name: insight.entityName ?? insight.entityId,
+          objective: rawMeta.objective ?? "UNSPECIFIED",
+          status: rawMeta.status ?? "UNKNOWN",
+          spend,
+          impressions,
+          clicks,
+          ctr: this.roundPercentageByCounts(clicks, impressions),
+          cpc: this.roundDivision(spend, clicks),
+          videoViews,
+          conversions,
+          costPerConversion: this.roundDivision(spend, conversions),
+          purchaseValue,
+        });
+        continue;
+      }
+
+      existing.spend += spend;
+      existing.impressions += impressions;
+      existing.clicks += clicks;
+      existing.videoViews += videoViews;
+      existing.conversions += conversions;
+      existing.purchaseValue += purchaseValue;
+      existing.ctr = this.roundPercentageByCounts(existing.clicks, existing.impressions);
+      existing.cpc = this.roundDivision(existing.spend, existing.clicks);
+      existing.costPerConversion = this.roundDivision(existing.spend, existing.conversions);
+      existing.name = insight.entityName ?? existing.name;
+      existing.objective = rawMeta.objective ?? existing.objective;
+      existing.status = rawMeta.status ?? existing.status;
+    }
+
+    return {
+      data: Array.from(campaignMap.values())
+        .sort((left, right) => right.spend - left.spend)
+        .slice(0, limit)
+        .map((campaign) => ({
+          ...campaign,
+          spend: this.round(campaign.spend),
+          cpc: this.round(campaign.cpc),
+          ctr: this.round(campaign.ctr),
+          costPerConversion: this.round(campaign.costPerConversion),
+          purchaseValue: this.round(campaign.purchaseValue),
+        })),
+      dateRange: {
+        since: dateRange.sinceIsoDate,
+        until: dateRange.untilIsoDate,
+      },
+      lastSyncAt: config?.lastSyncAt ?? null,
+    };
+  }
+
+  private async getInsightsByClientProfileId(
+    clientId: string,
+    query: TikTokAdsInsightsQueryDto,
+  ): Promise<TikTokAdsInsightsResponse> {
+    const dateRange = this.resolveReportDateRange(query);
+    const level = query.level ?? TikTokAdsInsightLevel.ACCOUNT;
+    const limit = query.limit ?? DEFAULT_INSIGHTS_LIMIT;
+    const [insights, config] = await this.prisma.$transaction([
+      this.prisma.tikTokAdsDailyInsight.findMany({
+        where: {
+          clientProfileId: clientId,
+          level,
+          date: {
+            gte: dateRange.since,
+            lte: dateRange.until,
+          },
+        },
+        select: tikTokAdsDailyInsightSelect,
+        orderBy: [{ date: "desc" }, { updatedAt: "desc" }],
+        take: limit,
+      }),
+      this.prisma.clientTikTokAdsConfig.findUnique({
+        where: { clientProfileId: clientId },
+        select: { lastSyncAt: true },
+      }),
+    ]);
+
+    return {
+      data: insights.map((insight) => this.toInsightItem(insight)),
+      level,
+      dateRange: {
+        since: dateRange.sinceIsoDate,
+        until: dateRange.untilIsoDate,
+      },
+      lastSyncAt: config?.lastSyncAt ?? null,
+    };
+  }
+
+  private async syncInsightsByClientProfileId(
+    clientId: string,
+    query: TikTokAdsDateRangeQueryDto,
+    options: {
+      trigger: TikTokAdsSyncTrigger;
+      applySyncTtl: boolean;
+      revealDetailedError: boolean;
+    },
+  ): Promise<TikTokAdsSyncResponse> {
+    const dateRange = this.resolveReportDateRange(query);
+    const startedAt = new Date();
+    const syncLog = await this.prisma.tikTokAdsSyncLog.create({
+      data: {
+        clientProfileId: clientId,
+        status: TikTokAdsSyncStatus.RUNNING,
+        trigger: options.trigger,
+        startedAt,
+      },
+      select: { id: true },
+    });
+
+    try {
+      const connection = await this.resolveReportingConnection(clientId);
+      await this.prisma.tikTokAdsSyncLog.update({
+        where: { id: syncLog.id },
+        data: { advertiserId: connection.advertiserId },
+      });
+
+      if (options.applySyncTtl) {
+        const skipReason = this.resolveSyncSkipReason(connection.lastSyncAt, startedAt);
+        if (skipReason) {
+          await this.prisma.tikTokAdsSyncLog.update({
+            where: { id: syncLog.id },
+            data: {
+              status: TikTokAdsSyncStatus.SKIPPED,
+              finishedAt: startedAt,
+              errorCode: "SYNC_TTL_ACTIVE",
+              errorMessage: `[${options.trigger}] ${skipReason}`,
+              recordsFetched: 0,
+              apiCallCount: 0,
+            },
+          });
+
+          return {
+            success: true,
+            syncedAt: connection.lastSyncAt ?? startedAt,
+            dateRange: {
+              since: dateRange.sinceIsoDate,
+              until: dateRange.untilIsoDate,
+            },
+            inserted: {
+              account: 0,
+              campaigns: 0,
+              adGroups: 0,
+              ads: 0,
+              total: 0,
+            },
+            connectionStatus: connection.connectionStatus,
+            lastSyncAt: connection.lastSyncAt,
+            syncStatus: TikTokAdsSyncStatus.SKIPPED,
+            skippedReason: skipReason,
+          };
+        }
+      }
+
+      const snapshot: TikTokAdsReportingSnapshotResult =
+        await this.tikTokAdsApiService.fetchReportingSnapshot({
+          accessToken: connection.accessToken,
+          advertiserId: connection.advertiserId,
+          since: dateRange.sinceIsoDate,
+          until: dateRange.untilIsoDate,
+        });
+
+      const campaignCatalogById = new Map(
+        snapshot.campaigns.map((campaign) => [campaign.id, campaign]),
+      );
+      const accountRows = snapshot.accountInsights
+        .map((row) =>
+          this.toInsightCreateManyInput(
+            clientId,
+            connection.advertiserId,
+            TikTokAdsInsightLevel.ACCOUNT,
+            row,
+            null,
+          ),
+        )
+        .filter((row): row is Prisma.TikTokAdsDailyInsightCreateManyInput => row !== null);
+      const campaignRows = snapshot.campaignInsights
+        .map((row) =>
+          this.toInsightCreateManyInput(
+            clientId,
+            connection.advertiserId,
+            TikTokAdsInsightLevel.CAMPAIGN,
+            row,
+            row.campaignId ? campaignCatalogById.get(row.campaignId) ?? null : null,
+          ),
+        )
+        .filter((row): row is Prisma.TikTokAdsDailyInsightCreateManyInput => row !== null);
+      const adGroupRows = snapshot.adGroupInsights
+        .map((row) =>
+          this.toInsightCreateManyInput(
+            clientId,
+            connection.advertiserId,
+            TikTokAdsInsightLevel.ADGROUP,
+            row,
+            null,
+          ),
+        )
+        .filter((row): row is Prisma.TikTokAdsDailyInsightCreateManyInput => row !== null);
+      const adRows = snapshot.adInsights
+        .map((row) =>
+          this.toInsightCreateManyInput(
+            clientId,
+            connection.advertiserId,
+            TikTokAdsInsightLevel.AD,
+            row,
+            null,
+          ),
+        )
+        .filter((row): row is Prisma.TikTokAdsDailyInsightCreateManyInput => row !== null);
+
+      const allRows = [...accountRows, ...campaignRows, ...adGroupRows, ...adRows];
+      const syncedAt = new Date();
+      const syncStatus =
+        allRows.length > 0 ? TikTokAdsSyncStatus.SUCCESS : TikTokAdsSyncStatus.PARTIAL;
+
+      await this.prisma.$transaction(async (tx) => {
+        await tx.tikTokAdsDailyInsight.deleteMany({
+          where: {
+            clientProfileId: clientId,
+            level: {
+              in: [
+                TikTokAdsInsightLevel.ACCOUNT,
+                TikTokAdsInsightLevel.CAMPAIGN,
+                TikTokAdsInsightLevel.ADGROUP,
+                TikTokAdsInsightLevel.AD,
+              ],
+            },
+            date: {
+              gte: dateRange.since,
+              lte: dateRange.until,
+            },
+          },
+        });
+
+        if (allRows.length > 0) {
+          await tx.tikTokAdsDailyInsight.createMany({
+            data: allRows,
+          });
+        }
+
+        await tx.clientTikTokAdsConfig.upsert({
+          where: { clientProfileId: clientId },
+          update: {
+            advertiserId: connection.advertiserId,
+            connectionStatus: TikTokAdsConnectionStatus.CONNECTED,
+            syncError: null,
+            lastSyncAt: syncedAt,
+          },
+          create: {
+            clientProfileId: clientId,
+            advertiserId: connection.advertiserId,
+            connectionStatus: TikTokAdsConnectionStatus.CONNECTED,
+            syncError: null,
+            lastSyncAt: syncedAt,
+          },
+        });
+
+        await tx.tikTokAdsSyncLog.update({
+          where: { id: syncLog.id },
+          data: {
+            status: syncStatus,
+            finishedAt: syncedAt,
+            recordsFetched: allRows.length,
+            apiCallCount: 5,
+          },
+        });
+      });
+
+      return {
+        success: true,
+        syncedAt,
+        dateRange: {
+          since: dateRange.sinceIsoDate,
+          until: dateRange.untilIsoDate,
+        },
+        inserted: {
+          account: accountRows.length,
+          campaigns: campaignRows.length,
+          adGroups: adGroupRows.length,
+          ads: adRows.length,
+          total: allRows.length,
+        },
+        connectionStatus: TikTokAdsConnectionStatus.CONNECTED,
+        lastSyncAt: syncedAt,
+        syncStatus,
+        skippedReason: null,
+      };
+    } catch (error) {
+      const connectionErrorInfo = this.normalizeConnectionError(error);
+      const finishedAt = new Date();
+      await this.markConnectionAsError(clientId, connectionErrorInfo, finishedAt);
+      await this.prisma.tikTokAdsSyncLog.update({
+        where: { id: syncLog.id },
+        data: {
+          status: TikTokAdsSyncStatus.FAILED,
+          finishedAt,
+          errorCode: connectionErrorInfo.code,
+          errorMessage: `[${options.trigger}] ${connectionErrorInfo.adminMessage}`,
+        },
+      });
+      throw this.toConnectionTestException(connectionErrorInfo, {
+        revealDetailedError: options.revealDetailedError,
+      });
+    }
   }
 
   private async getConnectionSummaryByClientProfileId(
@@ -603,16 +1284,54 @@ export class TikTokAdsService {
     };
   }
 
-  private toConnectionTestException(connectionErrorInfo: TikTokAdsConnectionErrorInfo): Error {
+  private toConnectionTestException(
+    connectionErrorInfo: TikTokAdsConnectionErrorInfo,
+    options: { revealDetailedError: boolean } = { revealDetailedError: true },
+  ): Error {
+    const errorMessage = options.revealDetailedError
+      ? connectionErrorInfo.adminMessage
+      : CLIENT_SAFE_SYNC_ERROR_MESSAGE;
+
     if (connectionErrorInfo.code === "PERMISSION_MISSING") {
-      return new ForbiddenException(connectionErrorInfo.adminMessage);
+      return new ForbiddenException(errorMessage);
     }
 
     if (connectionErrorInfo.code === "TOKEN_INVALID") {
-      return new BadRequestException(connectionErrorInfo.adminMessage);
+      return new BadRequestException(errorMessage);
     }
 
-    return new BadGatewayException(connectionErrorInfo.adminMessage);
+    return new BadGatewayException(errorMessage);
+  }
+
+  private async resolveReportingConnection(clientId: string): Promise<{
+    accessToken: string;
+    advertiserId: string;
+    lastSyncAt: Date | null;
+    connectionStatus: TikTokAdsConnectionStatus;
+  }> {
+    const snapshot = await this.getConnectionSnapshot(clientId);
+    const encryptedAccessToken = snapshot.credential?.accessTokenEnc ?? null;
+    const advertiserId = snapshot.config?.advertiserId?.trim() ?? "";
+
+    if (!encryptedAccessToken) {
+      throw new BadRequestException(
+        "TikTok Ads access token bulunamadı. Sync öncesi müşteriyi bağlayın.",
+      );
+    }
+
+    if (!advertiserId) {
+      throw new BadRequestException(
+        "TikTok Ads sync için advertiserId gereklidir.",
+      );
+    }
+
+    return {
+      accessToken: this.tikTokAdsTokenService.decrypt(encryptedAccessToken),
+      advertiserId,
+      lastSyncAt: snapshot.config?.lastSyncAt ?? null,
+      connectionStatus:
+        snapshot.config?.connectionStatus ?? TikTokAdsConnectionStatus.NOT_CONNECTED,
+    };
   }
 
   private resolveTokenForConnectionTest(
@@ -646,6 +1365,217 @@ export class TikTokAdsService {
     return resolved.trim();
   }
 
+  private toInsightCreateManyInput(
+    clientId: string,
+    advertiserId: string,
+    level: TikTokAdsInsightLevel,
+    row: TikTokAdsApiInsightRow,
+    campaignCatalog: TikTokAdsCampaignCatalogItem | null,
+  ): Prisma.TikTokAdsDailyInsightCreateManyInput | null {
+    const date = this.parseDateToUtcDay(row.dateStart);
+    if (!date) {
+      return null;
+    }
+
+    const entityId = this.resolveEntityIdByLevel(level, row, advertiserId);
+    if (!entityId) {
+      return null;
+    }
+
+    const spend = this.parseMetricNumber(row.spend);
+    const impressions = row.impressions ?? null;
+    const reach = row.reach ?? null;
+    const clicks = row.clicks ?? null;
+    const conversions = row.conversions ?? null;
+    const videoViews = row.videoViews ?? null;
+    const videoViews2s = row.videoViews2s ?? null;
+    const videoViews6s = row.videoViews6s ?? null;
+    const purchaseValue = this.parseMetricNumber(row.purchaseValue);
+    const ctr = this.parseMetricNumber(row.ctr);
+    const cpc = this.parseMetricNumber(row.cpc);
+    const cpm = this.parseMetricNumber(row.cpm);
+    const videoCompletionRate = this.parseMetricNumber(row.videoCompletionRate);
+    const vtr = this.parseMetricNumber(row.vtr);
+    const costPerConversion = this.parseMetricNumber(row.costPerConversion);
+    const conversionRate = this.parseMetricNumber(row.conversionRate);
+    const rawPayload: Record<string, unknown> = {
+      ...row.raw,
+      ...(campaignCatalog
+        ? {
+            campaignMeta: {
+              objective: campaignCatalog.objective,
+              status: campaignCatalog.status,
+            },
+          }
+        : {}),
+    };
+
+    return {
+      clientProfileId: clientId,
+      advertiserId,
+      date,
+      level,
+      entityId,
+      entityName: this.resolveEntityNameByLevel(level, row, advertiserId),
+      spend: this.toPrismaDecimal(spend),
+      impressions,
+      reach,
+      clicks,
+      ctr: this.toPrismaDecimal(
+        ctr ?? this.roundPercentageByCounts(clicks ?? 0, impressions ?? 0, 6),
+      ),
+      cpc: this.toPrismaDecimal(cpc ?? this.roundDivision(spend ?? 0, clicks ?? 0, 6)),
+      cpm: this.toPrismaDecimal(cpm ?? this.roundMille(spend ?? 0, impressions ?? 0, 6)),
+      videoViews,
+      videoViews2s,
+      videoViews6s,
+      videoCompletionRate: this.toPrismaDecimal(videoCompletionRate),
+      vtr: this.toPrismaDecimal(vtr),
+      conversions,
+      costPerConversion: this.toPrismaDecimal(
+        costPerConversion ?? this.roundDivision(spend ?? 0, conversions ?? 0, 6),
+      ),
+      conversionRate: this.toPrismaDecimal(
+        conversionRate ?? this.roundPercentageByCounts(conversions ?? 0, clicks ?? 0, 6),
+      ),
+      purchaseValue: this.toPrismaDecimal(purchaseValue),
+      raw: rawPayload as Prisma.InputJsonValue,
+    };
+  }
+
+  private resolveEntityIdByLevel(
+    level: TikTokAdsInsightLevel,
+    row: TikTokAdsApiInsightRow,
+    advertiserId: string,
+  ): string {
+    if (level === TikTokAdsInsightLevel.CAMPAIGN) {
+      return row.campaignId ?? "";
+    }
+
+    if (level === TikTokAdsInsightLevel.ADGROUP) {
+      return row.adGroupId ?? "";
+    }
+
+    if (level === TikTokAdsInsightLevel.AD) {
+      return row.adId ?? "";
+    }
+
+    return advertiserId;
+  }
+
+  private resolveEntityNameByLevel(
+    level: TikTokAdsInsightLevel,
+    row: TikTokAdsApiInsightRow,
+    advertiserId: string,
+  ): string | null {
+    if (level === TikTokAdsInsightLevel.CAMPAIGN) {
+      return row.campaignName;
+    }
+
+    if (level === TikTokAdsInsightLevel.ADGROUP) {
+      return row.adGroupName;
+    }
+
+    if (level === TikTokAdsInsightLevel.AD) {
+      return row.adName;
+    }
+
+    return advertiserId;
+  }
+
+  private aggregateInsightRows(rows: TikTokAdsDailyInsightModel[]): Omit<
+    TikTokAdsSummaryResponse,
+    "dateRange" | "lastSyncAt"
+  > {
+    let spend = 0;
+    let impressions = 0;
+    let reach = 0;
+    let clicks = 0;
+    let videoViews = 0;
+    let videoViews2s = 0;
+    let videoViews6s = 0;
+    let conversions = 0;
+    let purchaseValue = 0;
+
+    for (const row of rows) {
+      spend += this.readDecimalAsNumber(row.spend);
+      impressions += row.impressions ?? 0;
+      reach += row.reach ?? 0;
+      clicks += row.clicks ?? 0;
+      videoViews += row.videoViews ?? 0;
+      videoViews2s += row.videoViews2s ?? 0;
+      videoViews6s += row.videoViews6s ?? 0;
+      conversions += row.conversions ?? 0;
+      purchaseValue += this.readDecimalAsNumber(row.purchaseValue);
+    }
+
+    return {
+      spend: this.round(spend),
+      impressions,
+      reach,
+      clicks,
+      ctr: this.roundPercentageByCounts(clicks, impressions),
+      cpc: this.roundDivision(spend, clicks),
+      cpm: this.roundMille(spend, impressions),
+      videoViews,
+      videoViews2s,
+      videoViews6s,
+      videoCompletionRate: this.roundPercentageByCounts(videoViews6s, videoViews),
+      vtr: this.roundPercentageByCounts(videoViews, impressions),
+      conversions,
+      costPerConversion: this.roundDivision(spend, conversions),
+      conversionRate: this.roundPercentageByCounts(conversions, clicks),
+      purchaseValue: this.round(purchaseValue),
+    };
+  }
+
+  private toInsightItem(insight: TikTokAdsDailyInsightModel): TikTokAdsInsightItem {
+    return {
+      id: insight.id,
+      date: insight.date.toISOString(),
+      level: insight.level,
+      entityId: insight.entityId,
+      entityName: insight.entityName,
+      spend: this.round(this.readDecimalAsNumber(insight.spend)),
+      impressions: insight.impressions ?? 0,
+      reach: insight.reach ?? 0,
+      clicks: insight.clicks ?? 0,
+      ctr: this.round(this.readDecimalAsNumber(insight.ctr)),
+      cpc: this.round(this.readDecimalAsNumber(insight.cpc)),
+      cpm: this.round(this.readDecimalAsNumber(insight.cpm)),
+      videoViews: insight.videoViews ?? 0,
+      videoViews2s: insight.videoViews2s ?? 0,
+      videoViews6s: insight.videoViews6s ?? 0,
+      videoCompletionRate: this.round(this.readDecimalAsNumber(insight.videoCompletionRate)),
+      vtr: this.round(this.readDecimalAsNumber(insight.vtr)),
+      conversions: insight.conversions ?? 0,
+      costPerConversion: this.round(this.readDecimalAsNumber(insight.costPerConversion)),
+      conversionRate: this.round(this.readDecimalAsNumber(insight.conversionRate)),
+      purchaseValue: this.round(this.readDecimalAsNumber(insight.purchaseValue)),
+      updatedAt: insight.updatedAt.toISOString(),
+    };
+  }
+
+  private extractCampaignMetaFromRaw(raw: Prisma.JsonValue | null): {
+    objective: string | null;
+    status: string | null;
+  } {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      return { objective: null, status: null };
+    }
+
+    const record = raw as Record<string, unknown>;
+    const meta = record.campaignMeta;
+    const metaRecord = meta && typeof meta === "object" && !Array.isArray(meta)
+      ? (meta as Record<string, unknown>)
+      : null;
+
+    return {
+      objective: this.readUnknownString(metaRecord?.objective ?? record.objective),
+      status: this.readUnknownString(metaRecord?.status ?? record.status),
+    };
+  }
+
   private resolveTokenExpiresAt(value: string | undefined, now = new Date()): Date {
     if (value) {
       return new Date(value);
@@ -654,6 +1584,176 @@ export class TikTokAdsService {
     const expiresAt = new Date(now);
     expiresAt.setDate(expiresAt.getDate() + DEFAULT_TIKTOK_TOKEN_LIFETIME_DAYS);
     return expiresAt;
+  }
+
+  private resolveReportDateRange(query: TikTokAdsDateRangeQueryDto): TikTokAdsReportDateRange {
+    const resolvedUntil = query.until
+      ? this.parseDateToUtcDay(query.until)
+      : this.startOfUtcToday();
+    if (!resolvedUntil) {
+      throw new BadRequestException("Geçersiz since/until tarih aralığı.");
+    }
+
+    const resolvedSince = query.since
+      ? this.parseDateToUtcDay(query.since)
+      : this.addDaysUtc(resolvedUntil, -(DEFAULT_REPORTING_RANGE_DAYS - 1));
+    if (!resolvedSince) {
+      throw new BadRequestException("Geçersiz since/until tarih aralığı.");
+    }
+
+    if (resolvedSince.getTime() > resolvedUntil.getTime()) {
+      throw new BadRequestException("since değeri until değerinden sonra olamaz.");
+    }
+
+    const daySpan = this.diffDaysInclusive(resolvedSince, resolvedUntil);
+    if (daySpan > MAX_REPORTING_RANGE_DAYS) {
+      throw new BadRequestException(
+        `TikTok Ads reporting aralığı ${MAX_REPORTING_RANGE_DAYS} günü aşamaz.`,
+      );
+    }
+
+    return {
+      since: resolvedSince,
+      until: resolvedUntil,
+      sinceIsoDate: this.formatDateAsIsoDay(resolvedSince),
+      untilIsoDate: this.formatDateAsIsoDay(resolvedUntil),
+    };
+  }
+
+  private parseDateToUtcDay(value: string): Date | null {
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+
+    return new Date(
+      Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate()),
+    );
+  }
+
+  private formatDateAsIsoDay(value: Date): string {
+    return value.toISOString().slice(0, 10);
+  }
+
+  private startOfUtcToday(): Date {
+    return this.parseDateToUtcDay(new Date().toISOString()) ?? new Date();
+  }
+
+  private addDaysUtc(base: Date, days: number): Date {
+    const next = new Date(base);
+    next.setUTCDate(next.getUTCDate() + days);
+    return next;
+  }
+
+  private diffDaysInclusive(since: Date, until: Date): number {
+    const millisecondsInDay = 24 * 60 * 60 * 1000;
+    return Math.floor((until.getTime() - since.getTime()) / millisecondsInDay) + 1;
+  }
+
+  private resolveSyncSkipReason(lastSyncAt: Date | null, now: Date): string | null {
+    if (!lastSyncAt) {
+      return null;
+    }
+
+    const elapsedMs = now.getTime() - lastSyncAt.getTime();
+    if (!Number.isFinite(elapsedMs) || elapsedMs < 0) {
+      return null;
+    }
+
+    const syncTtlMinutes = this.getSyncTtlMinutes();
+    const ttlMs = syncTtlMinutes * 60 * 1000;
+    if (elapsedMs >= ttlMs) {
+      return null;
+    }
+
+    const remainingMinutes = Math.max(Math.ceil((ttlMs - elapsedMs) / (60 * 1000)), 1);
+    return `Son senkron çok yeni. Yaklaşık ${remainingMinutes} dakika sonra tekrar deneyin.`;
+  }
+
+  private getSyncTtlMinutes(): number {
+    const configuredValue = this.configService.get<string | number | undefined>(
+      "TIKTOK_ADS_SYNC_TTL_MINUTES",
+    );
+
+    if (typeof configuredValue === "number" && Number.isFinite(configuredValue)) {
+      return Math.max(1, Math.trunc(configuredValue));
+    }
+
+    if (typeof configuredValue === "string") {
+      const parsed = Number.parseInt(configuredValue.trim(), 10);
+      if (!Number.isNaN(parsed) && Number.isFinite(parsed)) {
+        return Math.max(1, parsed);
+      }
+    }
+
+    return DEFAULT_TIKTOK_ADS_SYNC_TTL_MINUTES;
+  }
+
+  private parseMetricNumber(value: string | number | null | undefined): number | null {
+    if (value === null || value === undefined) {
+      return null;
+    }
+
+    if (typeof value === "number") {
+      return Number.isFinite(value) ? value : null;
+    }
+
+    const normalized = value.trim().replace(",", ".");
+    if (normalized.length === 0) {
+      return null;
+    }
+
+    const parsed = Number.parseFloat(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private toPrismaDecimal(value: number | null): Prisma.Decimal | null {
+    if (value === null || !Number.isFinite(value)) {
+      return null;
+    }
+
+    return new Prisma.Decimal(value.toFixed(6));
+  }
+
+  private readDecimalAsNumber(value: Prisma.Decimal | null): number {
+    return value ? value.toNumber() : 0;
+  }
+
+  private round(value: number, digits = 2): number {
+    if (!Number.isFinite(value)) {
+      return 0;
+    }
+
+    const scale = 10 ** digits;
+    return Math.round(value * scale) / scale;
+  }
+
+  private roundDivision(numerator: number, denominator: number, digits = 2): number {
+    if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) {
+      return 0;
+    }
+
+    return this.round(numerator / denominator, digits);
+  }
+
+  private roundPercentageByCounts(numerator: number, denominator: number, digits = 2): number {
+    if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) {
+      return 0;
+    }
+
+    return this.round((numerator / denominator) * 100, digits);
+  }
+
+  private roundMille(spend: number, impressions: number, digits = 2): number {
+    if (!Number.isFinite(spend) || !Number.isFinite(impressions) || impressions <= 0) {
+      return 0;
+    }
+
+    return this.round((spend * 1000) / impressions, digits);
+  }
+
+  private readUnknownString(value: unknown): string | null {
+    return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
   }
 
   private toAdminConfigSummary(

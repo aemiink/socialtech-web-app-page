@@ -7,7 +7,6 @@
 
 ## Planned
 
-- TikTok Ads Faz 3: Reporting sync (daily snapshot + manual sync + summary/campaign/insights API)
 - TikTok Ads Faz 4: Client panel API-driven tab workspace
 - TikTok Ads Faz 5: Admin global panel (`/tiktok-ads`)
 - TikTok Ads Faz 6: Employee role workspaces (TiktokAdsWorkspace component)
@@ -160,6 +159,7 @@
 - TikTok Ads Faz 0: Discovery contract (official API research, V1 scope, role-scope matrix, endpoint surface, Prisma model tasarımı)
 - TikTok Ads Faz 1: Backend foundation (Prisma models + NestJS module + token service + permissions/seed + e2e + admin ClientDetail card + client portal connection-aware empty state)
 - TikTok Ads Faz 2: Auth/token/connection management (manual connect + encrypted token storage + advertiser info test + disconnect + admin ClientDetail UI)
+- TikTok Ads Faz 3: Reporting sync (daily snapshot + manual sync + summary/campaign/insights API + admin ClientDetail summary integration)
 
 ## Blocked
 
@@ -173,6 +173,12 @@ None identified.
   - `server`: `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true node ./test/run-e2e.cjs tiktok-ads-authz.e2e-spec.ts` ✅ (`12/12`)
   - `adminandemployeePanel`: `npm run test:run -- src/app/pages/__tests__/ClientDetail.test.tsx` ✅ (`9/9`)
   - `adminandemployeePanel`: `npm run check` ✅
+- Latest TikTok Ads Faz 3 validation checkpoint:
+  - `server`: `npm run typecheck` ✅
+  - `server`: `npm run typecheck:spec` ✅
+  - `server`: `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true node ./test/run-e2e.cjs tiktok-ads-authz.e2e-spec.ts` ✅ (`14/14`)
+  - `adminandemployeePanel`: `npm run typecheck` ✅
+  - `adminandemployeePanel`: `npm run test:run -- src/app/pages/__tests__/ClientDetail.test.tsx` ✅ (`9/9`)
 - Latest admin/employee frontend validation checkpoint: `25` test files, `153/153` tests.
 - Latest client portal frontend validation checkpoint: `4` test files, `17/17` tests.
 - Latest FAZ-05 validation checkpoint:

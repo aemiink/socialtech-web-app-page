@@ -21,6 +21,8 @@ import {
   useConnectAdminClientTikTokAdsManualMutation,
   useDisconnectAdminClientTikTokAdsMutation,
   useGetAdminClientTikTokAdsConnectionQuery,
+  useGetAdminClientTikTokAdsSummaryQuery,
+  useSyncAdminClientTikTokAdsMutation,
   useTestAdminClientTikTokAdsConnectionMutation,
 } from "../features/tiktokAds/tiktokAdsApi";
 import {
@@ -86,6 +88,7 @@ export function ClientDetail() {
     useConnectAdminClientTikTokAdsManualMutation();
   const [testTikTokAdsConnection, { isLoading: isTikTokTesting }] =
     useTestAdminClientTikTokAdsConnectionMutation();
+  const [syncTikTokAds, { isLoading: isTikTokSyncing }] = useSyncAdminClientTikTokAdsMutation();
   const [disconnectTikTokAds, { isLoading: isTikTokDisconnecting }] =
     useDisconnectAdminClientTikTokAdsMutation();
 
@@ -134,6 +137,16 @@ export function ClientDetail() {
   } = useGetAdminClientTikTokAdsConnectionQuery(clientProfileId ?? "", {
     skip: !isValidId,
   });
+  const {
+    data: tikTokAdsSummary,
+    error: tikTokAdsSummaryError,
+    isFetching: isTikTokAdsSummaryFetching,
+    isLoading: isTikTokAdsSummaryLoading,
+    refetch: refetchTikTokAdsSummary,
+  } = useGetAdminClientTikTokAdsSummaryQuery(
+    { clientId: clientProfileId ?? "" },
+    { skip: !isValidId },
+  );
 
   useEffect(() => {
     if (!metaAdsConnection?.ids.adAccountId) {
@@ -216,6 +229,8 @@ export function ClientDetail() {
   const hasMetaConnectionError = Boolean(metaAdsConnectionError);
   const hasMetaSummaryError = Boolean(metaAdsSummaryError);
   const hasTikTokConnectionError = Boolean(tikTokAdsConnectionError);
+  const hasTikTokSummaryError = Boolean(tikTokAdsSummaryError);
+  const tikTokAdsCurrency = tikTokAdsConnection?.settings.currency ?? "TRY";
 
   const handleManualMetaConnect = async () => {
     if (!clientProfileId) {
@@ -335,7 +350,7 @@ export function ClientDetail() {
       }).unwrap();
       setTikTokAccessToken("");
       setTikTokConnectionFeedback("TikTok Ads bağlantı bilgileri kaydedildi.");
-      await refetchTikTokAdsConnection();
+      await Promise.all([refetchTikTokAdsConnection(), refetchTikTokAdsSummary()]);
     } catch (mutationError) {
       setTikTokConnectionFeedback(
         extractApiErrorMessage(mutationError, "TikTok Ads bağlantısı kaydedilemedi."),
@@ -360,7 +375,7 @@ export function ClientDetail() {
       }).unwrap();
       setTikTokAccessToken("");
       setTikTokConnectionFeedback("TikTok Ads bağlantı testi başarılı.");
-      await refetchTikTokAdsConnection();
+      await Promise.all([refetchTikTokAdsConnection(), refetchTikTokAdsSummary()]);
     } catch (mutationError) {
       setTikTokConnectionFeedback(
         extractApiErrorMessage(mutationError, "TikTok Ads bağlantı testi başarısız."),
@@ -379,10 +394,28 @@ export function ClientDetail() {
       await disconnectTikTokAds({ clientId: clientProfileId }).unwrap();
       setTikTokAccessToken("");
       setTikTokConnectionFeedback("TikTok Ads bağlantısı kesildi.");
-      await refetchTikTokAdsConnection();
+      await Promise.all([refetchTikTokAdsConnection(), refetchTikTokAdsSummary()]);
     } catch (mutationError) {
       setTikTokConnectionFeedback(
         extractApiErrorMessage(mutationError, "TikTok Ads bağlantısı kesilemedi."),
+      );
+    }
+  };
+
+  const handleTikTokSync = async () => {
+    if (!clientProfileId) {
+      return;
+    }
+
+    setTikTokConnectionFeedback(null);
+
+    try {
+      await syncTikTokAds({ clientId: clientProfileId }).unwrap();
+      setTikTokConnectionFeedback("TikTok Ads senkronizasyonu tamamlandı.");
+      await Promise.all([refetchTikTokAdsConnection(), refetchTikTokAdsSummary()]);
+    } catch (mutationError) {
+      setTikTokConnectionFeedback(
+        extractApiErrorMessage(mutationError, "TikTok Ads senkronizasyonu çalıştırılamadı."),
       );
     }
   };
@@ -625,6 +658,9 @@ export function ClientDetail() {
             {isTikTokAdsConnectionFetching ? (
               <span className="text-xs text-[#d2ff8a]">Bağlantı güncelleniyor...</span>
             ) : null}
+            {isTikTokAdsSummaryFetching ? (
+              <span className="text-xs text-[#d2ff8a]">Rapor özeti güncelleniyor...</span>
+            ) : null}
             {tikTokAdsConnection ? (
               <Badge className={getTikTokAdsConnectionStatusBadgeClass(tikTokAdsConnection.connectionStatus)}>
                 {getTikTokAdsConnectionStatusLabel(tikTokAdsConnection.connectionStatus)}
@@ -636,7 +672,7 @@ export function ClientDetail() {
               size="sm"
               className="gap-2"
               onClick={() => {
-                void refetchTikTokAdsConnection();
+                void Promise.all([refetchTikTokAdsConnection(), refetchTikTokAdsSummary()]);
               }}
             >
               <RefreshCw className="h-4 w-4" />
@@ -651,6 +687,14 @@ export function ClientDetail() {
         {hasTikTokConnectionError ? (
           <p className="text-sm text-red-300">
             {extractApiErrorMessage(tikTokAdsConnectionError, "TikTok Ads bağlantı özeti alınamadı.")}
+          </p>
+        ) : null}
+        {isTikTokAdsSummaryLoading ? (
+          <p className="mt-2 text-sm text-[#A0A0A0]">TikTok Ads performans özeti yükleniyor...</p>
+        ) : null}
+        {hasTikTokSummaryError ? (
+          <p className="mt-2 text-sm text-red-300">
+            {extractApiErrorMessage(tikTokAdsSummaryError, "TikTok Ads performans özeti alınamadı.")}
           </p>
         ) : null}
 
@@ -684,6 +728,20 @@ export function ClientDetail() {
 
         ) : null}
 
+        {tikTokAdsSummary ? (
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+            <DetailRow label="Toplam Harcama" value={`${tikTokAdsSummary.spend.toFixed(2)} ${tikTokAdsCurrency}`} />
+            <DetailRow label="Toplam Gösterim" value={String(tikTokAdsSummary.impressions)} />
+            <DetailRow label="Toplam Tıklama" value={String(tikTokAdsSummary.clicks)} />
+            <DetailRow label="CTR" value={`${tikTokAdsSummary.ctr.toFixed(2)}%`} />
+            <DetailRow label="CPC" value={`${tikTokAdsSummary.cpc.toFixed(2)} ${tikTokAdsCurrency}`} />
+            <DetailRow label="Video İzlenme" value={String(tikTokAdsSummary.videoViews)} />
+            <DetailRow label="6sn İzlenme" value={String(tikTokAdsSummary.videoViews6s)} />
+            <DetailRow label="VTR" value={`${tikTokAdsSummary.vtr.toFixed(2)}%`} />
+            <DetailRow label="Dönüşüm" value={String(tikTokAdsSummary.conversions)} />
+          </div>
+        ) : null}
+
         <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
           <Input
             value={tikTokAdvertiserId}
@@ -706,7 +764,7 @@ export function ClientDetail() {
             type="button"
             className="gap-2"
             onClick={handleManualTikTokConnect}
-            disabled={isTikTokConnecting || isTikTokTesting || isTikTokDisconnecting}
+            disabled={isTikTokConnecting || isTikTokTesting || isTikTokSyncing || isTikTokDisconnecting}
           >
             <PlugZap className="h-4 w-4" />
             {isTikTokConnecting ? "Kaydediliyor..." : "Token Güncelle / Manual Connect"}
@@ -716,7 +774,7 @@ export function ClientDetail() {
             variant="outline"
             className="gap-2"
             onClick={handleTikTokConnectionTest}
-            disabled={isTikTokConnecting || isTikTokTesting || isTikTokDisconnecting}
+            disabled={isTikTokConnecting || isTikTokTesting || isTikTokSyncing || isTikTokDisconnecting}
           >
             <CheckCircle2 className="h-4 w-4" />
             {isTikTokTesting ? "Test Ediliyor..." : "TikTok Bağlantısını Test Et"}
@@ -724,9 +782,19 @@ export function ClientDetail() {
           <Button
             type="button"
             variant="outline"
+            className="gap-2"
+            onClick={handleTikTokSync}
+            disabled={isTikTokConnecting || isTikTokTesting || isTikTokSyncing || isTikTokDisconnecting}
+          >
+            <RefreshCw className="h-4 w-4" />
+            {isTikTokSyncing ? "Sync Çalışıyor..." : "Manual Sync"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
             className="gap-2 border-red-500/30 text-red-200 hover:bg-red-500/10"
             onClick={handleTikTokDisconnect}
-            disabled={isTikTokConnecting || isTikTokTesting || isTikTokDisconnecting}
+            disabled={isTikTokConnecting || isTikTokTesting || isTikTokSyncing || isTikTokDisconnecting}
           >
             <Link2Off className="h-4 w-4" />
             {isTikTokDisconnecting ? "Kesiliyor..." : "Bağlantıyı Kes"}

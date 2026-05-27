@@ -8,6 +8,7 @@ import {
 import request from "supertest";
 import { AppModule } from "../src/app.module";
 import { TikTokAdsApiService } from "../src/tiktok-ads/tiktok-ads-api.service";
+import type { TikTokAdsReportingSnapshotInput } from "../src/tiktok-ads/tiktok-ads-api.service";
 
 const TEST_TIKTOK_TOKEN_ENCRYPTION_KEY =
   "tiktok-token-encryption-key-for-e2e-tests-0123456789";
@@ -43,6 +44,73 @@ describe("TikTok Ads Config Authz (e2e)", () => {
           timezone: "Europe/Istanbul",
           grantedScopes: [],
         }),
+        fetchReportingSnapshot: async (input: TikTokAdsReportingSnapshotInput) => {
+          const campaignId = "campaign-123";
+          const adGroupId = "adgroup-123";
+          const adId = "ad-123";
+
+          return {
+            advertiserId: input.advertiserId,
+            accountInsights: [
+              createTikTokInsightRow({
+                dateStart: input.since,
+                spend: "210",
+                impressions: 42000,
+                reach: 22000,
+                clicks: 840,
+                videoViews: 18000,
+                conversions: 42,
+              }),
+            ],
+            campaignInsights: [
+              createTikTokInsightRow({
+                dateStart: input.since,
+                campaignId,
+                campaignName: "Awareness Campaign",
+                spend: "210",
+                impressions: 42000,
+                reach: 22000,
+                clicks: 840,
+                videoViews: 18000,
+                conversions: 42,
+              }),
+            ],
+            adGroupInsights: [
+              createTikTokInsightRow({
+                dateStart: input.since,
+                adGroupId,
+                adGroupName: "Broad Audience",
+                spend: "120",
+                impressions: 24000,
+                reach: 14000,
+                clicks: 480,
+                videoViews: 9600,
+                conversions: 24,
+              }),
+            ],
+            adInsights: [
+              createTikTokInsightRow({
+                dateStart: input.since,
+                adId,
+                adName: "Spark Creative 01",
+                spend: "90",
+                impressions: 18000,
+                reach: 9000,
+                clicks: 360,
+                videoViews: 8400,
+                conversions: 18,
+              }),
+            ],
+            campaigns: [
+              {
+                id: campaignId,
+                name: "Awareness Campaign",
+                objective: "REACH",
+                status: "ENABLE",
+              },
+            ],
+          };
+        },
         normalizeError: (error: unknown) => {
           if (error instanceof Error) {
             return { category: "NETWORK" as const, message: error.message };
@@ -212,6 +280,84 @@ describe("TikTok Ads Config Authz (e2e)", () => {
       expectResponseHasNoSensitiveTokenData(res.body);
     });
 
+    it("admin can run reporting sync and read summary/campaign/insight snapshots", async () => {
+      if (!clientProfileId) return;
+      const syncRes = await request(app.getHttpServer())
+        .post(`/api/v1/admin/clients/${clientProfileId}/tiktok-ads/sync`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .query({ since: "2026-05-20", until: "2026-05-20" });
+
+      expect([200, 201]).toContain(syncRes.status);
+      expect(syncRes.body.success).toBe(true);
+      expect(syncRes.body.syncStatus).toBe("SUCCESS");
+      expect(syncRes.body.inserted.total).toBe(4);
+      expect(syncRes.body.inserted.campaigns).toBe(1);
+      expectResponseHasNoSensitiveTokenData(syncRes.body);
+
+      const summaryRes = await request(app.getHttpServer())
+        .get(`/api/v1/admin/clients/${clientProfileId}/tiktok-ads/summary`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .query({ since: "2026-05-20", until: "2026-05-20" });
+
+      expect(summaryRes.status).toBe(200);
+      expect(summaryRes.body.spend).toBe(210);
+      expect(summaryRes.body.impressions).toBe(42000);
+      expect(summaryRes.body.clicks).toBe(840);
+      expect(summaryRes.body.videoViews).toBe(18000);
+      expect(summaryRes.body.conversions).toBe(42);
+      expectResponseHasNoSensitiveTokenData(summaryRes.body);
+
+      const campaignsRes = await request(app.getHttpServer())
+        .get(`/api/v1/admin/clients/${clientProfileId}/tiktok-ads/campaigns`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .query({ since: "2026-05-20", until: "2026-05-20" });
+
+      expect(campaignsRes.status).toBe(200);
+      expect(campaignsRes.body.data).toHaveLength(1);
+      expect(campaignsRes.body.data[0].id).toBe("campaign-123");
+      expect(campaignsRes.body.data[0].name).toBe("Awareness Campaign");
+      expect(campaignsRes.body.data[0].objective).toBe("REACH");
+
+      const insightsRes = await request(app.getHttpServer())
+        .get(`/api/v1/admin/clients/${clientProfileId}/tiktok-ads/insights`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .query({ since: "2026-05-20", until: "2026-05-20", level: "CAMPAIGN" });
+
+      expect(insightsRes.status).toBe(200);
+      expect(insightsRes.body.level).toBe("CAMPAIGN");
+      expect(insightsRes.body.data).toHaveLength(1);
+      expect(insightsRes.body.data[0].entityId).toBe("campaign-123");
+      expect(insightsRes.body.data[0].entityName).toBe("Awareness Campaign");
+      expectResponseHasNoSensitiveTokenData(insightsRes.body);
+    });
+
+    it("client can read own tiktok ads reporting snapshots without token data", async () => {
+      const freshClientToken = await loginAndGetAccessToken(
+        app,
+        "client@socialtech.com",
+        DEMO_PASSWORD,
+      );
+
+      const summaryRes = await request(app.getHttpServer())
+        .get("/api/v1/clients/me/tiktok-ads/summary")
+        .set("Authorization", `Bearer ${freshClientToken}`)
+        .query({ since: "2026-05-20", until: "2026-05-20" });
+
+      expect(summaryRes.status).toBe(200);
+      expect(summaryRes.body.spend).toBe(210);
+      expect(summaryRes.body.videoViews).toBe(18000);
+      expectResponseHasNoSensitiveTokenData(summaryRes.body);
+
+      const campaignsRes = await request(app.getHttpServer())
+        .get("/api/v1/clients/me/tiktok-ads/campaigns")
+        .set("Authorization", `Bearer ${freshClientToken}`)
+        .query({ since: "2026-05-20", until: "2026-05-20" });
+
+      expect(campaignsRes.status).toBe(200);
+      expect(campaignsRes.body.data[0].id).toBe("campaign-123");
+      expectResponseHasNoSensitiveTokenData(campaignsRes.body);
+    });
+
     it("admin can disconnect and clear credential summary", async () => {
       if (!clientProfileId) return;
       const res = await request(app.getHttpServer())
@@ -275,4 +421,52 @@ function expectResponseHasNoSensitiveTokenData(payload: unknown): void {
   for (const sensitiveToken of SENSITIVE_RESPONSE_TOKENS) {
     expect(serializedPayload).not.toContain(sensitiveToken);
   }
+}
+
+function createTikTokInsightRow(overrides: {
+  dateStart: string;
+  campaignId?: string;
+  campaignName?: string;
+  adGroupId?: string;
+  adGroupName?: string;
+  adId?: string;
+  adName?: string;
+  spend: string;
+  impressions: number;
+  reach: number;
+  clicks: number;
+  videoViews: number;
+  conversions: number;
+}) {
+  return {
+    dateStart: overrides.dateStart,
+    campaignId: overrides.campaignId ?? null,
+    campaignName: overrides.campaignName ?? null,
+    adGroupId: overrides.adGroupId ?? null,
+    adGroupName: overrides.adGroupName ?? null,
+    adId: overrides.adId ?? null,
+    adName: overrides.adName ?? null,
+    spend: overrides.spend,
+    impressions: overrides.impressions,
+    reach: overrides.reach,
+    clicks: overrides.clicks,
+    ctr: "2",
+    cpc: "0.25",
+    cpm: "5",
+    videoViews: overrides.videoViews,
+    videoViews2s: Math.trunc(overrides.videoViews * 0.8),
+    videoViews6s: Math.trunc(overrides.videoViews * 0.5),
+    videoCompletionRate: "50",
+    vtr: "42.86",
+    conversions: overrides.conversions,
+    costPerConversion: "5",
+    conversionRate: "5",
+    purchaseValue: "1200",
+    raw: {
+      source: "e2e",
+      campaign_id: overrides.campaignId ?? null,
+      adgroup_id: overrides.adGroupId ?? null,
+      ad_id: overrides.adId ?? null,
+    },
+  };
 }
