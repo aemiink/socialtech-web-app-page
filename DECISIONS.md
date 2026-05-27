@@ -1,5 +1,178 @@
 # Architecture Decisions
 
+## 2026-05-27 - TikTok Ads Faz 0: Discovery Contract ve Teknik Sözleşme
+
+Context:
+Meta Ads Faz 0-10 tamamlandı. Sıradaki platform entegrasyonu TikTok Ads. `TIKTOK_ADS` purchased service key Prisma schema'da zaten mevcut. Müşteri portalında TikTok mock dashboard ve service-pages.ts içeriği hazır. Backend'de hiç TikTok kodu yok — sıfırdan başlanıyor.
+
+Meta Ads'in 10 fazlık yapısı referans alınarak TikTok Ads için aynı katmanlı mimari uygulanacak.
+
+Decision:
+
+### V1 Kapsam Sınırı
+- **V1: Read-only reporting.** Campaign management (create/edit/pause) V1 dışı.
+- Manuel token girişi (admin sisteme `access_token` + `advertiser_id` girer). OAuth flow V2.
+- Daily snapshot + manual sync. Scheduler cron: günlük 06:00.
+- TikTok Marketing API versiyonu: `v1.3` (stable).
+- Base URL: `https://business-api.tiktok.com/open_api/v1.3/`
+
+### TikTok API vs Meta API Temel Farklar
+
+| Konu | Meta Ads | TikTok Ads |
+|------|----------|------------|
+| Token ömrü | Kısa ömürlü, refresh gerekli | 365 gün (long-lived, V1'de refresh yok) |
+| Token tipi | User access token + app token | App-based `access_token` |
+| Report API | Graph API GET | `POST /report/integrated/get/` (JSON body) |
+| Ad hiyerarşisi | Campaign > Ad Set > Ad | Campaign > Ad Group > Ad |
+| Pixel | Meta Pixel (`pixel_id`) | TikTok Pixel (`pixel_id`) |
+| Advertiser ID | `adAccountId` (act_xxx) | `advertiser_id` (sayısal string) |
+
+### Prisma Veri Modeli — V1 Tasarımı
+
+5 yeni model (Meta Ads pattern'inden türetildi, TikTok'a özgü alanlar eklendi):
+
+**`ClientTiktokAdsConfig`**
+- `clientProfileId` (unique FK)
+- `advertiserId` (TikTok advertiser_id string)
+- `businessCenterId` (optional)
+- `pixelId` (optional)
+- `currency`, `timezone` (optional)
+- `connectionStatus` (enum: NOT_CONNECTED | PENDING | CONNECTED | ERROR | DISCONNECTED)
+- `lastSyncAt`, `syncError`
+
+**`ClientTiktokAdsCredential`**
+- `clientProfileId` (unique FK)
+- `accessTokenEnc` (AES-256-GCM encrypted)
+- `tokenHash` (SHA256, validation için)
+- `tokenExpiresAt` (365 gün, nullable)
+
+**`TiktokAdsDailyInsight`**
+- `clientProfileId`, `advertiserId`, `date`, `level` (ACCOUNT/CAMPAIGN/ADGROUP/AD)
+- `entityId`, `entityName`
+- Temel metrikler: `spend`, `impressions`, `reach`, `clicks`, `ctr`, `cpc`, `cpm`
+- Video metrikler: `videoViews`, `videoViews2s`, `videoViews6s`, `videoCompletionRate`, `vtr`
+- Conversion: `conversions`, `costPerConversion`, `conversionRate`, `purchaseValue`
+- `raw` (JSON)
+
+**`TiktokAdsSyncLog`**
+- `clientProfileId`, `advertiserId`, `status` (RUNNING/SUCCESS/FAILED/PARTIAL/SKIPPED)
+- `startedAt`, `finishedAt`, `errorCode`, `errorMessage`
+- `recordsFetched`, `apiCallCount`
+- `trigger` (MANUAL_SYNC | SCHEDULER | ERROR_RETRY | ON_DEMAND_CLIENT)
+
+**`TiktokAdsReport`**
+- `clientProfileId`, `projectId` (optional)
+- `periodStart`, `periodEnd`, `type`, `status`
+- `summary`, `metricsSnapshot` (JSON)
+- `clientVisible`, `publishedAt`
+- `acknowledgementTaskId` (Task FK, optional)
+
+### V1 Endpoint Yüzeyi
+
+**Admin endpoints (`/api/v1/admin/*`):**
+- `GET /admin/tiktok-ads/clients` — global client list (connection status + spend summary + pending approvals)
+- `GET /admin/clients/:clientId/tiktok-ads/config`
+- `POST /admin/clients/:clientId/tiktok-ads/connect` — manual token input
+- `POST /admin/clients/:clientId/tiktok-ads/test` — connection test
+- `POST /admin/clients/:clientId/tiktok-ads/sync` — manual sync
+- `POST /admin/clients/:clientId/tiktok-ads/sync/retry`
+- `DELETE /admin/clients/:clientId/tiktok-ads/disconnect`
+- `GET /admin/tiktok-ads/sync-logs`
+- `GET /admin/clients/:clientId/tiktok-ads/summary`
+- `GET /admin/clients/:clientId/tiktok-ads/campaigns`
+- `GET /admin/clients/:clientId/tiktok-ads/adgroups`
+- `GET /admin/clients/:clientId/tiktok-ads/ads`
+- `GET /admin/clients/:clientId/tiktok-ads/insights`
+- `GET /admin/clients/:clientId/tiktok-ads/pixel-status`
+- `GET/POST /admin/clients/:clientId/tiktok-ads/reports`
+- `PATCH /admin/tiktok-ads/reports/:reportId`
+
+**Assigned Employee endpoints (`/api/v1/tiktok-ads/*`):**
+- `GET /tiktok-ads/clients/:clientId/config`
+- `GET /tiktok-ads/clients/:clientId/summary`
+- `GET /tiktok-ads/clients/:clientId/campaigns`
+- `GET /tiktok-ads/clients/:clientId/adgroups`
+- `GET /tiktok-ads/clients/:clientId/pixel-status`
+- `GET/POST /tiktok-ads/clients/:clientId/reports`
+- `PATCH /tiktok-ads/reports/:reportId`
+
+**Own Client endpoints (`/api/v1/clients/me/*`):**
+- `GET /clients/me/tiktok-ads/summary`
+- `GET /clients/me/tiktok-ads/campaigns`
+- `GET /clients/me/tiktok-ads/reports`
+- `POST /clients/me/tiktok-ads/sync` (TTL-gated)
+
+### Permission Kataloğu — Yeni İzinler
+
+- `tiktokAds.config.read.any` / `tiktokAds.config.manage.any` (admin)
+- `tiktokAds.config.read.assigned` / `tiktokAds.reporting.read.assigned` (employee)
+- `tiktokAds.reporting.read.own` (client)
+- `tiktokAds.notes.manage.assigned`
+- `tiktokAds.approvals.create.assigned`
+- `tiktokAds.creatives.manage.assigned`
+
+### Role-Scope Matrisi
+
+| Aktör | Erişim Kapsamı | Ana İzinler |
+|-------|----------------|-------------|
+| Admin | Tüm müşterilerin TikTok Ads verisi | `config.manage.any`, `reporting.read.any` |
+| Performance Specialist | Atanan müşteriler (tam metrik) | `config.read.assigned`, `reporting.read.assigned`, `pixel` |
+| Social Media Specialist | Atanan müşteriler (kreatif/içerik odaklı) | `config.read.assigned`, `reporting.read.assigned` |
+| Designer | Atanan müşteriler (kreatif asset) | `creatives.manage.assigned` |
+| Client | Kendi hesabı, yalnızca published raporlar | `reporting.read.own` |
+
+### Ortam Değişkenleri
+
+```
+TIKTOK_ADS_APP_ID=
+TIKTOK_ADS_APP_SECRET=
+TIKTOK_ADS_TOKEN_ENCRYPTION_KEY=  # AES-256-GCM, min 32 char
+TIKTOK_ADS_API_VERSION=v1.3
+TIKTOK_ADS_SYNC_TTL_MINUTES=30
+```
+
+### Client Portal Mock → API Eşleme
+
+| Mock Alan | TikTok API Karşılığı | API Endpoint |
+|-----------|---------------------|--------------|
+| Video İzlenme | `video_play_actions` | insights |
+| VTR | `video_play_rate` | insights |
+| CPA | `cost_per_conversion` | insights |
+| Aktif Hook | ad-level metrik (özel hesaplama) | ad insights |
+| Kampanya listesi | `GET /campaign/get/` | campaigns |
+| Hook performans | ad-level first-3s retention | custom metric V1'de hesaplanmaz, mock |
+| Video kreatif grid | `GET /ad/get/` + creative materials | ads |
+| Pixel durumu | `GET /pixel/list/` | pixel-status |
+| Kitle notları | `GET /dmp/custom_audience/list/` | audiences (V2) |
+
+### Employee Workspace Tasarımı
+
+`TiktokAdsWorkspace` bileşeni `MetaAdsWorkspace` pattern'inden türetilecek:
+- Tab views: overview, campaigns, performance, video-creatives, reports, approvals, pixel
+- Role-based: Performance Specialist (tam erişim), Social (kreatif/içerik), Designer (kreatif)
+- Admin: `/tiktok-ads` global yönetim ekranı
+
+### Faz 0 → Faz 1 Köprüsü
+
+Faz 1'de yapılacaklar (Implementation contract hazır):
+1. Prisma schema — 5 yeni model + `TiktokAdsInsightLevel` enum + yeni enums
+2. Migration dosyaları
+3. `server/src/tiktok-ads/` modülü (service/controller/dto/api-client/token-service/scheduler)
+4. `server/src/config/env.validation.ts` güncelleme
+5. `server/.env.example` güncelleme
+6. Seed: `TIKTOK_ADS` permission kataloğu + role-permission mapping
+7. `adminandemployeePanel/src/app/features/tiktokAds/` — RTK Query feature
+8. E2E test foundation: `server/test/tiktok-ads-authz.e2e-spec.ts`
+
+Reason:
+Meta Ads'in kanıtlanmış 10 fazlık delivery yapısı TikTok Ads için doğrudan referans. Contract Meta Ads ile yapısal paralellik kurarak Faz 1-10 boyunca tutarlı bir mimari sağlar. Mevcut codebase'de `TIKTOK_ADS` purchased service key zaten var; yeni Prisma model isimlendirmesi Meta Ads ile simetrik tutuldu.
+
+Affected files:
+- `DECISIONS.md`
+- `ROAD_MAP.md`
+
+---
+
 ## 2026-04-28 - Initial Repository Analysis and Context Bootstrap
 
 Context:

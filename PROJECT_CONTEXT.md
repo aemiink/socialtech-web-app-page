@@ -406,7 +406,19 @@ Current backend baseline includes:
   - manual auth flow tests passed (`login`, `me`, `refresh`, `logout`, `logout` sonrası `refresh=401`)
   - `server/tsconfig.build.json` uses `incremental: false` to avoid missing-module runtime issues from stale/incomplete dist output
 
+## TikTok Ads Faz 0 — Tamamlanan Contract (2026-05-27)
+
+TikTok Ads Faz 0 discovery tamamlandı. Detaylı karar DECISIONS.md'de mevcut. Özet:
+- `TIKTOK_ADS` PurchasedServiceKey zaten schema'da mevcut.
+- V1 kapsam: Read-only reporting, manuel token girişi, no campaign management.
+- TikTok Marketing API v1.3 kullanılacak. Base URL: `https://business-api.tiktok.com/open_api/v1.3/`
+- Token stratejisi: Long-lived access_token (365 gün), AES-256-GCM encrypted at rest.
+- 5 yeni Prisma model: `ClientTiktokAdsConfig`, `ClientTiktokAdsCredential`, `TiktokAdsDailyInsight`, `TiktokAdsSyncLog`, `TiktokAdsReport`.
+- Yeni env vars: `TIKTOK_ADS_APP_ID`, `TIKTOK_ADS_APP_SECRET`, `TIKTOK_ADS_TOKEN_ENCRYPTION_KEY`, `TIKTOK_ADS_API_VERSION`, `TIKTOK_ADS_SYNC_TTL_MINUTES`.
+- Faz 1 implementation contract hazır.
+
 Planned next backend phases:
+- TikTok Ads Faz 1: Backend foundation (Prisma + NestJS module + token + scheduler + e2e)
 - Broader domain endpoint authorization rollout (beyond users/clients/admin-assignments/projects/tasks)
 - Forced password change on first login flow
 - Frontend audit log view integration for admin panel

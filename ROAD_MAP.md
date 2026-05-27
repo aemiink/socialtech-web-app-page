@@ -7,6 +7,15 @@
 
 ## Planned
 
+- TikTok Ads Faz 2: Auth/token/connection management (manual connect + test + disconnect + admin UI)
+- TikTok Ads Faz 3: Reporting sync (daily snapshot + manual sync + summary/campaign/insights API)
+- TikTok Ads Faz 4: Client panel API-driven tab workspace
+- TikTok Ads Faz 5: Admin global panel (`/tiktok-ads`)
+- TikTok Ads Faz 6: Employee role workspaces (TiktokAdsWorkspace component)
+- TikTok Ads Faz 7: Approval + creative collaboration
+- TikTok Ads Faz 8: Sync automation hardening
+- TikTok Ads Faz 9: Reporting/export foundation
+- TikTok Ads Faz 10: Production hardening
 - Remaining employee role pages API migration (mock/static -> backend)
 - Remaining admin mock/static pages API migration
 - Service-specific project/task filtering refinements (client purchased service scope)
@@ -149,6 +158,8 @@
 - Meta Ads Faz 8 sync automation hardening (sync log modeli, TTL/rate-limit skip, normalize error catalog, admin sync observability, client safe-state refresh)
 - Meta Ads Faz 9 reporting/export foundation (`MetaAdsReport` entity, admin/assigned draft-publish endpoints, client own report visibility, publish->ack task bridge)
 - Meta Ads Faz 10 production hardening (client-safe sync error responses, authz/state coverage genişletmesi, client portal lazy loading + manualChunks)
+- TikTok Ads Faz 0: Discovery contract (official API research, V1 scope, role-scope matrix, endpoint surface, Prisma model tasarımı)
+- TikTok Ads Faz 1: Backend foundation (Prisma models + NestJS module + token service + permissions/seed + e2e + admin ClientDetail card + client portal connection-aware empty state)
 
 ## Blocked
 
