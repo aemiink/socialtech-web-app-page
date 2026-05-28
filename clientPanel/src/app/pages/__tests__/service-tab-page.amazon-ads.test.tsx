@@ -8,6 +8,7 @@ const mockUseGetOwnAmazonAdsCampaignsQuery = vi.fn();
 const mockUseGetOwnAmazonAdsProductsQuery = vi.fn();
 const mockUseGetOwnAmazonAdsInsightsQuery = vi.fn();
 const mockUseGetOwnAmazonAdsReportsQuery = vi.fn();
+const mockUseExportOwnAmazonAdsReportMutation = vi.fn();
 const mockUseGetClientTasksQuery = vi.fn();
 const mockUseUpdateClientTaskApprovalMutation = vi.fn();
 
@@ -18,6 +19,8 @@ vi.mock("../../features/amazonAds/amazonAdsApi", () => ({
   useGetOwnAmazonAdsProductsQuery: (...args: unknown[]) => mockUseGetOwnAmazonAdsProductsQuery(...args),
   useGetOwnAmazonAdsInsightsQuery: (...args: unknown[]) => mockUseGetOwnAmazonAdsInsightsQuery(...args),
   useGetOwnAmazonAdsReportsQuery: (...args: unknown[]) => mockUseGetOwnAmazonAdsReportsQuery(...args),
+  useExportOwnAmazonAdsReportMutation: (...args: unknown[]) =>
+    mockUseExportOwnAmazonAdsReportMutation(...args),
 }));
 
 vi.mock("../../features/metaAds/metaAdsApi", () => ({
@@ -95,6 +98,7 @@ describe("ServiceTabPage Amazon Ads tabs", () => {
     mockUseGetOwnAmazonAdsProductsQuery.mockReset();
     mockUseGetOwnAmazonAdsInsightsQuery.mockReset();
     mockUseGetOwnAmazonAdsReportsQuery.mockReset();
+    mockUseExportOwnAmazonAdsReportMutation.mockReset();
     mockUseGetClientTasksQuery.mockReset();
     mockUseUpdateClientTaskApprovalMutation.mockReset();
 
@@ -287,6 +291,10 @@ describe("ServiceTabPage Amazon Ads tabs", () => {
     });
     mockUseUpdateClientTaskApprovalMutation.mockReturnValue([
       vi.fn(() => ({ unwrap: () => Promise.resolve({}) })),
+      { isLoading: false },
+    ]);
+    mockUseExportOwnAmazonAdsReportMutation.mockReturnValue([
+      vi.fn(() => ({ unwrap: () => Promise.resolve("mock-report-body") })),
       { isLoading: false },
     ]);
   });

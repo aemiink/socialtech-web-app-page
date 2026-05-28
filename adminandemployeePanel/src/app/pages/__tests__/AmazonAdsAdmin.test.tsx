@@ -42,6 +42,7 @@ const mockUseRetryAdminClientAmazonAdsSyncMutation = vi.fn();
 const mockUseDisconnectAdminClientAmazonAdsMutation = vi.fn();
 const mockUseCreateAdminClientAmazonAdsReportMutation = vi.fn();
 const mockUseUpdateAdminAmazonAdsReportMutation = vi.fn();
+const mockUseExportAdminAmazonAdsReportMutation = vi.fn();
 const mockUseCreateTaskMutation = vi.fn();
 
 let currentUser: AuthUserProfile | null = null;
@@ -70,6 +71,8 @@ vi.mock("../../features/clients/clientsApi", () => ({
     mockUseCreateAdminClientAmazonAdsReportMutation(),
   useUpdateAdminAmazonAdsReportMutation: () =>
     mockUseUpdateAdminAmazonAdsReportMutation(),
+  useExportAdminAmazonAdsReportMutation: () =>
+    mockUseExportAdminAmazonAdsReportMutation(),
 }));
 
 vi.mock("../../features/tasks/tasksApi", () => ({
@@ -257,6 +260,10 @@ describe("AmazonAdsAdmin", () => {
     ]);
     mockUseUpdateAdminAmazonAdsReportMutation.mockReturnValue([
       createResolvedMutation({}),
+      { isLoading: false },
+    ]);
+    mockUseExportAdminAmazonAdsReportMutation.mockReturnValue([
+      createResolvedMutation("mock-report-body"),
       { isLoading: false },
     ]);
     mockUseCreateTaskMutation.mockReturnValue([

@@ -1,5 +1,44 @@
 # Architecture Decisions
 
+## 2026-05-28 - Amazon Ads Faz 10 Production Hardening (Report Export + Client-Safe Authz/Error Surface)
+
+Context:
+Amazon Ads Faz 9 ile report lifecycle tamamlandı ancak production öncesi eksik kalan kritik alanlar vardı: admin/assigned/client için gerçek export dosya akışı, own-client görünürlük sertleştirmesi, assigned report permission hizası ve state/authz edge-case test kapsamı.
+
+Decision:
+
+- Backend Amazon Ads report export surface’i eklendi:
+  - `GET /api/v1/admin/amazon-ads/reports/:reportId/export?format=json|csv`
+  - `GET /api/v1/amazon-ads/reports/:reportId/export?format=json|csv`
+  - `GET /api/v1/clients/me/amazon-ads/reports/:reportId/export?format=json|csv`
+- Export query contract’ı için `AmazonAdsReportExportQueryDto` (`json|csv`) eklendi; export response’ları `Content-Disposition` + `Cache-Control: private, no-store` başlıklarıyla dosya indirme davranışına taşındı.
+- Own-client report görünürlüğü sertleştirildi: own list/export akışında yalnızca `PUBLISHED + clientVisible=true` raporlar döner; out-of-scope veya gizli taslak raporlar client-safe `404` (`Amazon Ads raporu bulunamadı.`) ile kapanır.
+- Assigned report endpointleri `reports.read` / `reports.manage` permission’larıyla route + service katmanında netleştirildi; employee role visibility/aksiyonları bu authz modeliyle eşlendi.
+- Report create + optional acknowledgement task üretimi transaction içine alındı; acknowledgement create hatasında orphan draft kalmaması sağlandı.
+- Admin global panel (`/amazon-ads`), employee workspace (`/employee/amazon-ads`) ve client service-tab Amazon report listelerine CSV/JSON export aksiyonları eklendi.
+- Authz/state regression kapsamı genişletildi: archived report own görünürlüğü, scoped export success, own hidden/draft export denial, assigned export permission denial ve publish-state guard senaryoları e2e’ye alındı.
+
+Reason:
+Bu karar Faz 10’da hedeflenen production hardening’i minimum invaziv şekilde tamamlar: rapor paylaşımı API-scoped dosya export ile güvenli hale gelir, own-client görünürlüğü publish contract’ına kilitlenir, assigned operasyonlar explicit report permission gerektirir ve edge-case’ler testlerle korunur.
+
+Affected files:
+- `server/src/amazon-ads/dto/amazon-ads-report-export-query.dto.ts`
+- `server/src/amazon-ads/amazon-ads.controller.ts`
+- `server/src/amazon-ads/amazon-ads.service.ts`
+- `server/test/amazon-ads-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
+- `adminandemployeePanel/src/app/pages/AmazonAdsAdmin.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/AmazonAdsAdmin.test.tsx`
+- `adminandemployeePanel/src/app/employee/components/AmazonAdsWorkspace.tsx`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/AmazonAdsWorkspace.test.tsx`
+- `clientPanel/src/app/features/amazonAds/amazonAdsTypes.ts`
+- `clientPanel/src/app/features/amazonAds/amazonAdsApi.ts`
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+- `clientPanel/src/app/pages/__tests__/service-tab-page.amazon-ads.test.tsx`
+
+---
+
 ## 2026-05-28 - Amazon Ads Faz 9 Reporting + Export Foundation (Report Entity + Publish/Ack Bridge)
 
 Context:

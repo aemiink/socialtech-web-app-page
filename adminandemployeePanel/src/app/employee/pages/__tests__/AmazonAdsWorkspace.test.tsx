@@ -18,6 +18,7 @@ const mockUseGetAssignedClientAmazonAdsReportsQuery = vi.fn();
 const mockUseSyncAssignedClientAmazonAdsMutation = vi.fn();
 const mockUseCreateAssignedClientAmazonAdsReportMutation = vi.fn();
 const mockUseUpdateAssignedAmazonAdsReportMutation = vi.fn();
+const mockUseExportAssignedAmazonAdsReportMutation = vi.fn();
 const mockUseGetProjectsQuery = vi.fn();
 const mockUseGetProjectWorkspaceMessagesQuery = vi.fn();
 const mockUseCreateProjectWorkspaceMessageMutation = vi.fn();
@@ -62,6 +63,8 @@ vi.mock("../../../features/clients/clientsApi", () => ({
     mockUseCreateAssignedClientAmazonAdsReportMutation(...args),
   useUpdateAssignedAmazonAdsReportMutation: (...args: unknown[]) =>
     mockUseUpdateAssignedAmazonAdsReportMutation(...args),
+  useExportAssignedAmazonAdsReportMutation: (...args: unknown[]) =>
+    mockUseExportAssignedAmazonAdsReportMutation(...args),
 }));
 
 vi.mock("../../../features/projects/projectsApi", () => ({
@@ -90,6 +93,8 @@ const baseEmployeeUser: AuthUserProfile = {
     "clients.read.assigned",
     "amazonAds.config.read.assigned",
     "amazonAds.reporting.read.assigned",
+    "reports.read",
+    "reports.manage",
     "amazonAds.notes.manage.assigned",
     "amazonAds.approvals.create.assigned",
     "amazonAds.sync.read.assigned",
@@ -378,6 +383,10 @@ function setupBaseMocks() {
   ]);
   mockUseUpdateAssignedAmazonAdsReportMutation.mockReturnValue([
     vi.fn(() => ({ unwrap: () => Promise.resolve({ id: "report-1" }) })),
+    { isLoading: false },
+  ]);
+  mockUseExportAssignedAmazonAdsReportMutation.mockReturnValue([
+    vi.fn(() => ({ unwrap: () => Promise.resolve("mock-report-body") })),
     { isLoading: false },
   ]);
 }

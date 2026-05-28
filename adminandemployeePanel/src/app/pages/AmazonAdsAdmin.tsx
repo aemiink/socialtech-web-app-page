@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import {
   BadgeCheck,
+  Download,
   Link2Off,
   RefreshCw,
   RotateCcw,
@@ -26,6 +27,7 @@ import { hasAdminPermission, selectCurrentUser } from "../features/auth/authSele
 import {
   useDisconnectAdminClientAmazonAdsMutation,
   useCreateAdminClientAmazonAdsReportMutation,
+  useExportAdminAmazonAdsReportMutation,
   useGetAdminClientAmazonAdsReportsQuery,
   useGetAdminAmazonAdsClientsQuery,
   useGetAdminAmazonAdsSyncLogsQuery,
@@ -39,6 +41,7 @@ import type {
   AdminAmazonAdsClientListItem,
   AmazonAdsReportStatus,
   AmazonAdsReportType,
+  AmazonAdsReportExportFormat,
   AdminAmazonAdsSyncLogItem,
   AmazonAdsRegion,
 } from "../features/clients/clientsTypes";
@@ -156,6 +159,8 @@ export function AmazonAdsAdmin() {
     useCreateAdminClientAmazonAdsReportMutation();
   const [updateAmazonAdsReport, { isLoading: isUpdatingReport }] =
     useUpdateAdminAmazonAdsReportMutation();
+  const [exportAmazonAdsReport, { isLoading: isExportingReport }] =
+    useExportAdminAmazonAdsReportMutation();
 
   const [pageMessage, setPageMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [configTarget, setConfigTarget] = useState<AdminAmazonAdsClientListItem | null>(null);
@@ -168,6 +173,7 @@ export function AmazonAdsAdmin() {
   const [reportTypeFilter, setReportTypeFilter] = useState<AmazonAdsReportType | "ALL">("ALL");
   const [reportForm, setReportForm] = useState<ReportFormState>(initialReportForm);
   const [publishAckToggle, setPublishAckToggle] = useState(false);
+  const [exportingReportId, setExportingReportId] = useState<string | null>(null);
 
   const listItems = response?.data ?? [];
   const selectedReportClient = useMemo(
@@ -216,7 +222,8 @@ export function AmazonAdsAdmin() {
     isDisconnecting ||
     isCreatingApproval ||
     isCreatingReport ||
-    isUpdatingReport;
+    isUpdatingReport ||
+    isExportingReport;
 
   const kpis = useMemo(
     () => [
@@ -429,6 +436,33 @@ export function AmazonAdsAdmin() {
         type: "error",
         text: extractApiErrorMessage(error, "Rapor yayınlanamadı."),
       });
+    }
+  }
+
+  async function handleExportReport(
+    report: { id: string; periodEnd: string },
+    format: AmazonAdsReportExportFormat,
+  ) {
+    if (!canReadReports || isMutating) {
+      return;
+    }
+
+    setPageMessage(null);
+    setExportingReportId(report.id);
+    try {
+      const body = await exportAmazonAdsReport({ reportId: report.id, format }).unwrap();
+      downloadAmazonAdsReportFile(report, format, body);
+      setPageMessage({
+        type: "success",
+        text: `${selectedReportClientName} Amazon Ads raporu ${format.toUpperCase()} olarak indirildi.`,
+      });
+    } catch (error) {
+      setPageMessage({
+        type: "error",
+        text: extractApiErrorMessage(error, "Amazon Ads raporu indirilemedi."),
+      });
+    } finally {
+      setExportingReportId(null);
     }
   }
 
@@ -1073,17 +1107,47 @@ export function AmazonAdsAdmin() {
                       </td>
                       <td className="py-3 pr-3 text-xs text-[#DADADA]">{report.summary ?? "—"}</td>
                       <td className="py-3">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            void handlePublishReport(report.id);
-                          }}
-                          disabled={report.status === "PUBLISHED" || !canManageReports || isMutating}
-                        >
-                          {isUpdatingReport ? "Yayınlanıyor..." : "Publish"}
-                        </Button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              void handlePublishReport(report.id);
+                            }}
+                            disabled={
+                              report.status === "PUBLISHED" || !canManageReports || isMutating
+                            }
+                          >
+                            {isUpdatingReport ? "Yayınlanıyor..." : "Publish"}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => {
+                              void handleExportReport(report, "csv");
+                            }}
+                            title="CSV olarak indir"
+                            disabled={!canReadReports || isMutating}
+                          >
+                            <Download className="mr-1 h-3.5 w-3.5" />
+                            {exportingReportId === report.id ? "İndiriliyor..." : "CSV"}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => {
+                              void handleExportReport(report, "json");
+                            }}
+                            title="JSON olarak indir"
+                            disabled={!canReadReports || isMutating}
+                          >
+                            <Download className="mr-1 h-3.5 w-3.5" />
+                            JSON
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1403,6 +1467,27 @@ function formatReportPeriod(periodStart: string, periodEnd: string): string {
   const from = periodStart.slice(0, 10);
   const until = periodEnd.slice(0, 10);
   return `${from} - ${until}`;
+}
+
+function downloadAmazonAdsReportFile(
+  report: { id: string; periodEnd: string },
+  format: AmazonAdsReportExportFormat,
+  body: string,
+) {
+  if (typeof URL.createObjectURL !== "function") {
+    return;
+  }
+
+  const mimeType = format === "csv" ? "text/csv;charset=utf-8" : "application/json;charset=utf-8";
+  const blob = new Blob([body], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `amazon-ads-report-${report.periodEnd.slice(0, 10)}-${report.id}.${format}`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 function formatCurrency(value: number): string {

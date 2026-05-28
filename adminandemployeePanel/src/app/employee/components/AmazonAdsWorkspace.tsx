@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import {
   AlertCircle,
+  Download,
   MessageSquare,
   RefreshCw,
   Search,
@@ -17,6 +18,7 @@ import { Textarea } from "../../components/ui/textarea";
 import { hasUserPermission, selectCurrentUser } from "../../features/auth/authSelectors";
 import {
   useCreateAssignedClientAmazonAdsReportMutation,
+  useExportAssignedAmazonAdsReportMutation,
   useGetAssignedClientAmazonAdsCampaignsQuery,
   useGetAssignedClientAmazonAdsConfigQuery,
   useGetAssignedClientAmazonAdsInsightsQuery,
@@ -32,6 +34,7 @@ import type {
   AmazonAdsInsightItem,
   AmazonAdsProductSummary,
   AmazonAdsReportItem,
+  AmazonAdsReportExportFormat,
   AmazonAdsReportStatus,
   AmazonAdsReportType,
   ClientProfile,
@@ -140,10 +143,12 @@ export function AmazonAdsWorkspace({ initialView = "overview" }: AmazonAdsWorksp
   const canReadAssignedClients = hasUserPermission(currentUser, ["clients.read.assigned"]);
   const canReadAmazonAdsConfig = hasUserPermission(currentUser, ["amazonAds.config.read.assigned"]);
   const canReadAmazonAdsReporting = hasUserPermission(currentUser, ["amazonAds.reporting.read.assigned"]);
-  const canReadAmazonAdsReports = canReadAmazonAdsReporting;
+  const canReadReports = hasUserPermission(currentUser, ["reports.read"]);
+  const canManageReports = hasUserPermission(currentUser, ["reports.manage"]);
+  const canReadAmazonAdsReports = canReadAmazonAdsReporting && canReadReports;
   const canRunAmazonAdsSync = hasUserPermission(currentUser, ["amazonAds.sync.read.assigned"]);
   const canManageAmazonAdsNotes = hasUserPermission(currentUser, ["amazonAds.notes.manage.assigned"]);
-  const canManageAmazonAdsReports = canManageAmazonAdsNotes;
+  const canManageAmazonAdsReports = canManageAmazonAdsNotes && canManageReports;
   const canCreateAmazonAdsApprovals = hasUserPermission(currentUser, ["amazonAds.approvals.create.assigned"]);
   const canManageAmazonAdsRecommendations = hasUserPermission(currentUser, [
     "amazonAds.recommendations.manage.assigned",
@@ -179,6 +184,7 @@ export function AmazonAdsWorkspace({ initialView = "overview" }: AmazonAdsWorksp
   const [publishAckToggle, setPublishAckToggle] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [activeAction, setActiveAction] = useState<string | null>(null);
+  const [exportingReportId, setExportingReportId] = useState<string | null>(null);
 
   const {
     data: clientsResponse,
@@ -317,6 +323,8 @@ export function AmazonAdsWorkspace({ initialView = "overview" }: AmazonAdsWorksp
     useCreateAssignedClientAmazonAdsReportMutation();
   const [updateAssignedAmazonAdsReport, { isLoading: isUpdatingReport }] =
     useUpdateAssignedAmazonAdsReportMutation();
+  const [exportAssignedAmazonAdsReport, { isLoading: isExportingReport }] =
+    useExportAssignedAmazonAdsReportMutation();
 
   if (!workspaceMode) {
     return (
@@ -355,7 +363,8 @@ export function AmazonAdsWorkspace({ initialView = "overview" }: AmazonAdsWorksp
     isCreatingMessage ||
     isSyncingAssignedAmazonAds ||
     isCreatingReport ||
-    isUpdatingReport;
+    isUpdatingReport ||
+    isExportingReport;
 
   async function handleSyncAssignedAmazonAds() {
     if (!selectedClientId) {
@@ -486,6 +495,36 @@ export function AmazonAdsWorkspace({ initialView = "overview" }: AmazonAdsWorksp
       });
     } finally {
       setActiveAction(null);
+    }
+  }
+
+  async function handleExportReport(
+    report: AmazonAdsReportItem,
+    format: AmazonAdsReportExportFormat,
+  ) {
+    if (!canReadAmazonAdsReports || isActionBusy) {
+      return;
+    }
+
+    setFeedback(null);
+    setExportingReportId(report.id);
+    try {
+      const body = await exportAssignedAmazonAdsReport({
+        reportId: report.id,
+        format,
+      }).unwrap();
+      downloadAmazonAdsReportFile(report, format, body);
+      setFeedback({
+        type: "success",
+        text: `Amazon Ads raporu ${format.toUpperCase()} olarak indirildi.`,
+      });
+    } catch (error) {
+      setFeedback({
+        type: "error",
+        text: extractApiErrorMessage(error, "Amazon Ads raporu indirilemedi."),
+      });
+    } finally {
+      setExportingReportId(null);
     }
   }
 
@@ -925,6 +964,7 @@ export function AmazonAdsWorkspace({ initialView = "overview" }: AmazonAdsWorksp
                 hasAmazonAdsProject={hasAmazonAdsProject}
                 isActionBusy={isActionBusy}
                 activeAction={activeAction}
+                exportingReportId={exportingReportId}
                 noteBody={noteBody}
                 setNoteBody={setNoteBody}
                 reportTasks={amazonAdsTasks.filter((task) => task.type === "QA")}
@@ -932,6 +972,7 @@ export function AmazonAdsWorkspace({ initialView = "overview" }: AmazonAdsWorksp
                 onCreateReportTask={() => void handleCreateRoleTask("report")}
                 onCreateReportDraft={() => void handleCreateReportDraft()}
                 onPublishReport={(reportId) => void handlePublishReport(reportId)}
+                onExportReport={(report, format) => void handleExportReport(report, format)}
                 currencyCode={config?.settings.currencyCode}
               />
             ) : null}
@@ -1283,6 +1324,7 @@ function ReportsSection({
   hasAmazonAdsProject,
   isActionBusy,
   activeAction,
+  exportingReportId,
   noteBody,
   setNoteBody,
   reportTasks,
@@ -1290,6 +1332,7 @@ function ReportsSection({
   onCreateReportTask,
   onCreateReportDraft,
   onPublishReport,
+  onExportReport,
   currencyCode,
 }: {
   summaryDateLabel: string;
@@ -1329,6 +1372,7 @@ function ReportsSection({
   hasAmazonAdsProject: boolean;
   isActionBusy: boolean;
   activeAction: string | null;
+  exportingReportId: string | null;
   noteBody: string;
   setNoteBody: (value: string) => void;
   reportTasks: Task[];
@@ -1336,6 +1380,10 @@ function ReportsSection({
   onCreateReportTask: () => void;
   onCreateReportDraft: () => void;
   onPublishReport: (reportId: string) => void;
+  onExportReport: (
+    report: AmazonAdsReportItem,
+    format: AmazonAdsReportExportFormat,
+  ) => void;
   currencyCode?: string | null;
 }) {
   return (
@@ -1352,7 +1400,8 @@ function ReportsSection({
 
       {!canReadAmazonAdsReports ? (
         <p className="rounded-md border border-orange-500/30 bg-orange-500/10 p-3 text-xs text-orange-200">
-          Amazon Ads raporlarını görmek için `amazonAds.reporting.read.assigned` izni gereklidir.
+          Amazon Ads raporlarını görmek için `amazonAds.reporting.read.assigned` ve `reports.read`
+          izinleri gereklidir.
         </p>
       ) : (
         <div className="space-y-3 rounded-lg border border-white/[0.08] p-4">
@@ -1545,16 +1594,41 @@ function ReportsSection({
                     {report.publishedAt ? new Date(report.publishedAt).toLocaleString("tr-TR") : "Taslak"}
                   </p>
                   <p className="mt-1 text-xs text-[#D8D8D8]">{report.summary ?? "Özet girilmedi."}</p>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="mt-2"
-                    onClick={() => onPublishReport(report.id)}
-                    disabled={report.status === "PUBLISHED" || !canManageAmazonAdsReports || isActionBusy}
-                  >
-                    {activeAction === report.id ? "Yayınlanıyor..." : "Publish"}
-                  </Button>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onPublishReport(report.id)}
+                      disabled={
+                        report.status === "PUBLISHED" || !canManageAmazonAdsReports || isActionBusy
+                      }
+                    >
+                      {activeAction === report.id ? "Yayınlanıyor..." : "Publish"}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      title="CSV olarak indir"
+                      disabled={isActionBusy}
+                      onClick={() => onExportReport(report, "csv")}
+                    >
+                      <Download className="mr-1 h-3.5 w-3.5" />
+                      {exportingReportId === report.id ? "İndiriliyor..." : "CSV"}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      title="JSON olarak indir"
+                      disabled={isActionBusy}
+                      onClick={() => onExportReport(report, "json")}
+                    >
+                      <Download className="mr-1 h-3.5 w-3.5" />
+                      JSON
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1867,6 +1941,27 @@ function formatReportPeriod(periodStart: string, periodEnd: string): string {
   const from = periodStart.slice(0, 10);
   const until = periodEnd.slice(0, 10);
   return `${from} - ${until}`;
+}
+
+function downloadAmazonAdsReportFile(
+  report: AmazonAdsReportItem,
+  format: AmazonAdsReportExportFormat,
+  body: string,
+) {
+  if (typeof URL.createObjectURL !== "function") {
+    return;
+  }
+
+  const mimeType = format === "csv" ? "text/csv;charset=utf-8" : "application/json;charset=utf-8";
+  const blob = new Blob([body], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `amazon-ads-report-${report.periodEnd.slice(0, 10)}-${report.id}.${format}`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 function formatApprovalType(value: string): string {

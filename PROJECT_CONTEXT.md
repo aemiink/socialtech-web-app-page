@@ -515,6 +515,7 @@ Amazon Ads Faz 3 ile read-only Reporting v3 lifecycle ve günlük snapshot read 
 - Amazon Ads Faz 7 tamamlandı: approval enum/contract ve creative collaboration katmanı backend/frontend arasında hizalandı; client approve/revise/ack akışı Amazon type setiyle standardize edildi.
 - Amazon Ads Faz 8 tamamlandı: sync log observability, retry endpointi, assigned TTL/cooldown normalizasyonu ve client-safe sync error yüzeyi production-grade hale getirildi.
 - Amazon Ads Faz 9 tamamlandı: `AmazonAdsReport` entity/migration, admin+assigned draft/publish lifecycle endpointleri, own client report görünürlüğü ve publish->ack task bridge’i devreye alındı; admin/employee/client panel rapor yüzeyleri read-model tabanlı API akışına taşındı.
+- Amazon Ads Faz 10 tamamlandı: admin/assigned/own report CSV+JSON export endpointleri eklendi; own report visibility `PUBLISHED + clientVisible` ile sertleştirildi, assigned report surface `reports.read/manage` guard’larıyla hizalandı, client-safe report not-found contract’ı ve authz/state edge-case coverage genişletildi.
 
 Additional active Amazon Ads reporting endpoints:
 - `GET /api/v1/admin/clients/:clientId/amazon-ads/summary`
@@ -530,14 +531,17 @@ Additional active Amazon Ads reporting endpoints:
 - `GET /api/v1/admin/clients/:clientId/amazon-ads/reports`
 - `POST /api/v1/admin/clients/:clientId/amazon-ads/reports`
 - `PATCH /api/v1/admin/amazon-ads/reports/:reportId`
+- `GET /api/v1/admin/amazon-ads/reports/:reportId/export?format=json|csv`
 - `GET /api/v1/amazon-ads/clients/:clientId/reports`
 - `POST /api/v1/amazon-ads/clients/:clientId/reports`
 - `PATCH /api/v1/amazon-ads/reports/:reportId`
+- `GET /api/v1/amazon-ads/reports/:reportId/export?format=json|csv`
 - `GET /api/v1/clients/me/amazon-ads/summary`
 - `GET /api/v1/clients/me/amazon-ads/campaigns`
 - `GET /api/v1/clients/me/amazon-ads/products`
 - `GET /api/v1/clients/me/amazon-ads/insights`
 - `GET /api/v1/clients/me/amazon-ads/reports`
+- `GET /api/v1/clients/me/amazon-ads/reports/:reportId/export?format=json|csv`
 
 Planned next backend phases:
 - Broader domain endpoint authorization rollout (beyond users/clients/admin-assignments/projects/tasks)

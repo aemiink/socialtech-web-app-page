@@ -149,6 +149,7 @@ export type AmazonAdsReportType =
   | "ACOS_OPTIMIZATION";
 
 export type AmazonAdsReportStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
+export type AmazonAdsReportExportFormat = "json" | "csv";
 
 export type AmazonAdsReportAcknowledgementStatus =
   | "NOT_REQUESTED"

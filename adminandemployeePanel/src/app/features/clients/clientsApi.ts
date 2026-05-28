@@ -7,6 +7,7 @@ import type {
   AdminMetaAdsSyncLogsResponse,
   AmazonAdsCampaignsQuery,
   AmazonAdsCampaignsResponse,
+  AmazonAdsReportExportFormat,
   AmazonAdsReportsQuery,
   AmazonAdsReportItem,
   AmazonAdsReportsResponse,
@@ -625,6 +626,17 @@ export const clientsApi = baseApi.injectEndpoints({
         { type: "Clients", id: CLIENT_AMAZON_ADS_GLOBAL_LIST_ID },
       ],
     }),
+    exportAdminAmazonAdsReport: builder.mutation<
+      string,
+      { reportId: string; format: AmazonAdsReportExportFormat }
+    >({
+      query: ({ reportId, format }) => ({
+        url: `/admin/amazon-ads/reports/${reportId}/export`,
+        method: "GET",
+        params: { format },
+        responseHandler: (response: Response) => response.text(),
+      }),
+    }),
     getAssignedClientAmazonAdsReports: builder.query<
       AmazonAdsReportsResponse,
       { clientId: string; query?: AmazonAdsReportsQuery }
@@ -666,6 +678,17 @@ export const clientsApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, { clientId }) => [
         { type: "Clients", id: `${CLIENT_AMAZON_ADS_CONNECTION_ID_PREFIX}:REPORTS:${clientId}` },
       ],
+    }),
+    exportAssignedAmazonAdsReport: builder.mutation<
+      string,
+      { reportId: string; format: AmazonAdsReportExportFormat }
+    >({
+      query: ({ reportId, format }) => ({
+        url: `/amazon-ads/reports/${reportId}/export`,
+        method: "GET",
+        params: { format },
+        responseHandler: (response: Response) => response.text(),
+      }),
     }),
     createAdminClient: builder.mutation<ClientProfile, CreateAdminClientRequest>({
       query: (body) => ({
@@ -774,8 +797,10 @@ export const {
   useGetAdminClientAmazonAdsReportsQuery,
   useCreateAdminClientAmazonAdsReportMutation,
   useUpdateAdminAmazonAdsReportMutation,
+  useExportAdminAmazonAdsReportMutation,
   useCreateAssignedClientAmazonAdsReportMutation,
   useUpdateAssignedAmazonAdsReportMutation,
+  useExportAssignedAmazonAdsReportMutation,
   useCreateAdminClientMutation,
   useUpdateAdminClientMutation,
   useDeactivateAdminClientMutation,

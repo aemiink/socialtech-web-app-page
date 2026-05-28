@@ -7,8 +7,10 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   UseGuards,
 } from "@nestjs/common";
+import { Response } from "express";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { RequirePermissions } from "../auth/decorators/permissions.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
@@ -20,6 +22,7 @@ import { AmazonAdsDateRangeQueryDto } from "./dto/amazon-ads-date-range-query.dt
 import { AmazonAdsInsightsQueryDto } from "./dto/amazon-ads-insights-query.dto";
 import { AmazonAdsOAuthStartQueryDto } from "./dto/amazon-ads-oauth-start-query.dto";
 import { AmazonAdsProductsQueryDto } from "./dto/amazon-ads-products-query.dto";
+import { AmazonAdsReportExportQueryDto } from "./dto/amazon-ads-report-export-query.dto";
 import { AmazonAdsReportsQueryDto } from "./dto/amazon-ads-reports-query.dto";
 import { AmazonAdsSyncLogsQueryDto } from "./dto/amazon-ads-sync-logs-query.dto";
 import { ConnectManualAmazonAdsDto } from "./dto/connect-manual-amazon-ads.dto";
@@ -219,6 +222,20 @@ export class AmazonAdsController {
     return this.amazonAdsService.updateAdminReport(reportId, dto, actor);
   }
 
+  @Get("admin/amazon-ads/reports/:reportId/export")
+  @RequirePermissions("reports.read")
+  async exportAdminReport(
+    @Param("reportId", ParseUUIDPipe) reportId: string,
+    @Query() query: AmazonAdsReportExportQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<string> {
+    return this.writeReportExport(
+      response,
+      await this.amazonAdsService.exportAdminReport(reportId, query, actor),
+    );
+  }
+
   @Get("amazon-ads/clients/:clientId/config")
   @RequirePermissions("amazonAds.config.read.assigned")
   getAssignedClientConfig(
@@ -279,7 +296,11 @@ export class AmazonAdsController {
   }
 
   @Get("amazon-ads/clients/:clientId/reports")
-  @RequirePermissions("amazonAds.config.read.assigned", "amazonAds.reporting.read.assigned")
+  @RequirePermissions(
+    "amazonAds.config.read.assigned",
+    "amazonAds.reporting.read.assigned",
+    "reports.read",
+  )
   getAssignedClientReports(
     @Param("clientId", ParseUUIDPipe) clientId: string,
     @Query() query: AmazonAdsReportsQueryDto,
@@ -289,7 +310,11 @@ export class AmazonAdsController {
   }
 
   @Post("amazon-ads/clients/:clientId/reports")
-  @RequirePermissions("amazonAds.config.read.assigned", "amazonAds.notes.manage.assigned")
+  @RequirePermissions(
+    "amazonAds.config.read.assigned",
+    "amazonAds.notes.manage.assigned",
+    "reports.manage",
+  )
   createAssignedClientReport(
     @Param("clientId", ParseUUIDPipe) clientId: string,
     @Body() dto: CreateAmazonAdsReportDto,
@@ -299,13 +324,35 @@ export class AmazonAdsController {
   }
 
   @Patch("amazon-ads/reports/:reportId")
-  @RequirePermissions("amazonAds.config.read.assigned", "amazonAds.notes.manage.assigned")
+  @RequirePermissions(
+    "amazonAds.config.read.assigned",
+    "amazonAds.notes.manage.assigned",
+    "reports.manage",
+  )
   updateAssignedReport(
     @Param("reportId", ParseUUIDPipe) reportId: string,
     @Body() dto: UpdateAmazonAdsReportDto,
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.amazonAdsService.updateAssignedReport(reportId, dto, actor);
+  }
+
+  @Get("amazon-ads/reports/:reportId/export")
+  @RequirePermissions(
+    "amazonAds.config.read.assigned",
+    "amazonAds.reporting.read.assigned",
+    "reports.read",
+  )
+  async exportAssignedReport(
+    @Param("reportId", ParseUUIDPipe) reportId: string,
+    @Query() query: AmazonAdsReportExportQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<string> {
+    return this.writeReportExport(
+      response,
+      await this.amazonAdsService.exportAssignedReport(reportId, query, actor),
+    );
   }
 
   @Get("clients/me/amazon-ads/config")
@@ -354,6 +401,24 @@ export class AmazonAdsController {
     return this.amazonAdsService.getOwnClientReports(query, actor);
   }
 
+  @Get("clients/me/amazon-ads/reports/:reportId/export")
+  @RequirePermissions(
+    "amazonAds.config.read.own",
+    "amazonAds.reporting.read.own",
+    "reports.read.own",
+  )
+  async exportOwnReport(
+    @Param("reportId", ParseUUIDPipe) reportId: string,
+    @Query() query: AmazonAdsReportExportQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<string> {
+    return this.writeReportExport(
+      response,
+      await this.amazonAdsService.exportOwnReport(reportId, query, actor),
+    );
+  }
+
   @Get("clients/me/amazon-ads/insights")
   @RequirePermissions("amazonAds.config.read.own", "amazonAds.reporting.read.own")
   getOwnClientInsights(
@@ -361,5 +426,15 @@ export class AmazonAdsController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.amazonAdsService.getOwnClientInsights(query, actor);
+  }
+
+  private writeReportExport(
+    response: Response,
+    file: { body: string; contentType: string; filename: string },
+  ): string {
+    response.setHeader("Content-Type", file.contentType);
+    response.setHeader("Content-Disposition", `attachment; filename="${file.filename}"`);
+    response.setHeader("Cache-Control", "private, no-store");
+    return file.body;
   }
 }

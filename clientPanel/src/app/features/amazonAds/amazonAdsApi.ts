@@ -8,6 +8,7 @@ import type {
   AmazonAdsInsightsResponse,
   AmazonAdsProductType,
   AmazonAdsProductsResponse,
+  AmazonAdsReportExportFormat,
   AmazonAdsReportsQuery,
   AmazonAdsReportsResponse,
   AmazonAdsRegion,
@@ -82,10 +83,22 @@ const amazonAdsApi = baseApi.injectEndpoints({
       transformResponse: (response: unknown) => normalizeAmazonAdsReportsResponse(response),
       providesTags: ["AmazonAdsConfig"],
     }),
+    exportOwnAmazonAdsReport: build.mutation<
+      string,
+      { reportId: string; format: AmazonAdsReportExportFormat }
+    >({
+      query: ({ reportId, format }) => ({
+        url: `/clients/me/amazon-ads/reports/${reportId}/export`,
+        method: "GET",
+        params: { format },
+        responseHandler: (response: Response) => response.text(),
+      }),
+    }),
   }),
 });
 
 export const {
+  useExportOwnAmazonAdsReportMutation,
   useGetOwnAmazonAdsConfigQuery,
   useGetOwnAmazonAdsSummaryQuery,
   useGetOwnAmazonAdsCampaignsQuery,

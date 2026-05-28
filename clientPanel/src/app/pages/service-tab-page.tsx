@@ -61,6 +61,7 @@ import type {
   TikTokAdsReportItem,
 } from '../features/tiktokAds/tiktokAdsTypes';
 import {
+  useExportOwnAmazonAdsReportMutation,
   useGetOwnAmazonAdsCampaignsQuery,
   useGetOwnAmazonAdsConfigQuery,
   useGetOwnAmazonAdsInsightsQuery,
@@ -73,6 +74,7 @@ import type {
   AmazonAdsInsightItem,
   AmazonAdsProductSummary,
   AmazonAdsProductType,
+  AmazonAdsReportExportFormat,
   AmazonAdsReportItem,
 } from '../features/amazonAds/amazonAdsTypes';
 import type { ProjectFile } from '../features/projectFiles/projectFilesTypes';
@@ -1691,6 +1693,8 @@ function AmazonAdsServiceTab({
     { limit: 40 },
     { skip: shouldSkipReportingQueries },
   );
+  const [exportAmazonReport, { isLoading: isExportingAmazonReport }] =
+    useExportOwnAmazonAdsReportMutation();
   const {
     data: approvalTasks = [],
     isLoading: isApprovalsLoading,
@@ -1702,6 +1706,7 @@ function AmazonAdsServiceTab({
   const [updateClientTaskApproval, { isLoading: isUpdatingApproval }] =
     useUpdateClientTaskApprovalMutation();
   const [activeApprovalTaskId, setActiveApprovalTaskId] = useState<string | null>(null);
+  const [activeAmazonReportExportId, setActiveAmazonReportExportId] = useState<string | null>(null);
 
   const campaigns = campaignsResponse?.data ?? [];
   const sponsoredProductsCampaigns = useMemo(
@@ -1797,6 +1802,26 @@ function AmazonAdsServiceTab({
       runClientAction(`${task.title} onayı güncellenemedi`, "comment");
     } finally {
       setActiveApprovalTaskId(null);
+    }
+  };
+
+  const handleAmazonReportExport = async (
+    report: AmazonAdsReportItem,
+    format: AmazonAdsReportExportFormat,
+  ) => {
+    if (isExportingAmazonReport) {
+      return;
+    }
+
+    setActiveAmazonReportExportId(report.id);
+    try {
+      const body = await exportAmazonReport({ reportId: report.id, format }).unwrap();
+      downloadAmazonAdsReportFile(report, format, body);
+      runClientAction(`Amazon Ads raporu ${format.toUpperCase()} olarak indirildi`, "report");
+    } catch {
+      runClientAction("Amazon Ads raporu indirilemedi", "comment");
+    } finally {
+      setActiveAmazonReportExportId(null);
     }
   };
 
@@ -1942,6 +1967,9 @@ function AmazonAdsServiceTab({
           rows={amazonReports}
           loading={isAmazonReportsLoading}
           isError={isAmazonReportsError}
+          exportingReportId={activeAmazonReportExportId}
+          isExporting={isExportingAmazonReport}
+          onExport={handleAmazonReportExport}
         />
       ) : null}
 
@@ -3346,10 +3374,16 @@ function AmazonAdsReportPanel({
   rows,
   loading,
   isError,
+  exportingReportId,
+  isExporting,
+  onExport,
 }: {
   rows: AmazonAdsReportItem[];
   loading: boolean;
   isError: boolean;
+  exportingReportId: string | null;
+  isExporting: boolean;
+  onExport: (row: AmazonAdsReportItem, format: AmazonAdsReportExportFormat) => void;
 }) {
   if (loading) {
     return <MetaAdsStatePanel title="Amazon Ads rapor listesi yükleniyor..." />;
@@ -3396,11 +3430,52 @@ function AmazonAdsReportPanel({
               <p>Onay: {getAmazonAdsReportAcknowledgementLabel(row.acknowledgementStatus)}</p>
               <p>Snapshot: {hasMetricsSnapshot ? "Var" : "Yok"}</p>
             </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button
+                variant="secondary"
+                className="text-xs"
+                disabled={isExporting}
+                onClick={() => onExport(row, "csv")}
+              >
+                <Download className="mr-1 h-3.5 w-3.5" />
+                {exportingReportId === row.id ? "İndiriliyor..." : "CSV"}
+              </Button>
+              <Button
+                variant="secondary"
+                className="text-xs"
+                disabled={isExporting}
+                onClick={() => onExport(row, "json")}
+              >
+                <Download className="mr-1 h-3.5 w-3.5" />
+                JSON
+              </Button>
+            </div>
           </div>
         );
       })}
     </div>
   );
+}
+
+function downloadAmazonAdsReportFile(
+  report: AmazonAdsReportItem,
+  format: AmazonAdsReportExportFormat,
+  body: string,
+) {
+  if (typeof URL.createObjectURL !== "function") {
+    return;
+  }
+
+  const mimeType = format === "csv" ? "text/csv;charset=utf-8" : "application/json;charset=utf-8";
+  const blob = new Blob([body], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `amazon-ads-report-${report.periodEnd.slice(0, 10)}-${report.id}.${format}`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 function buildAmazonKeywordRows(rows: AmazonAdsInsightItem[]): AmazonKeywordRow[] {

@@ -14,6 +14,7 @@ import {
   PrismaClient,
   PurchasedServiceStatus,
   TaskStatus,
+  UserRole,
 } from "@prisma/client";
 import request from "supertest";
 import {
@@ -37,6 +38,8 @@ const SENSITIVE_RESPONSE_TOKENS = [
   TEST_REFRESH_TOKEN,
   TEST_ACCESS_TOKEN,
 ] as const;
+const CLIENT_OWN_AMAZON_ADS_REPORTS_PATH = "/api/v1/clients/me/amazon-ads/reports";
+const CLIENT_SAFE_REPORT_NOT_FOUND_MESSAGE = "Amazon Ads raporu bulunamadı.";
 
 describe("Amazon Ads Config Authz (e2e)", () => {
   let app: INestApplication;
@@ -729,7 +732,7 @@ describe("Amazon Ads Config Authz (e2e)", () => {
     });
 
     const ownReportsRes = await request(app.getHttpServer())
-      .get("/api/v1/clients/me/amazon-ads/reports")
+      .get(CLIENT_OWN_AMAZON_ADS_REPORTS_PATH)
       .set("Authorization", `Bearer ${clientToken}`);
 
     expect(ownReportsRes.status).toBe(200);
@@ -758,7 +761,7 @@ describe("Amazon Ads Config Authz (e2e)", () => {
     });
 
     const ownReportsRes = await request(app.getHttpServer())
-      .get("/api/v1/clients/me/amazon-ads/reports")
+      .get(CLIENT_OWN_AMAZON_ADS_REPORTS_PATH)
       .set("Authorization", `Bearer ${clientToken}`);
 
     expect(ownReportsRes.status).toBe(200);
@@ -767,6 +770,153 @@ describe("Amazon Ads Config Authz (e2e)", () => {
       ownReportsRes.body.data.some((row: { id: string }) => row.id === visibleReport.id),
     ).toBe(true);
     expectResponseHasNoSensitiveTokenData(ownReportsRes.body);
+  });
+
+  it("archived Amazon Ads report is not visible to own client even when clientVisible is true", async () => {
+    if (!clientProfileId) return;
+
+    const archivedReport = await prisma.amazonAdsReport.create({
+      data: {
+        clientProfileId,
+        periodStart: new Date("2026-05-29T00:00:00.000Z"),
+        periodEnd: new Date("2026-06-04T23:59:59.999Z"),
+        type: AmazonAdsReportType.SEARCH_TERMS,
+        status: AmazonAdsReportStatus.ARCHIVED,
+        summary: "Archived visible report",
+        clientVisible: true,
+        publishedAt: new Date("2026-06-05T11:00:00.000Z"),
+      },
+      select: { id: true },
+    });
+
+    const ownReportsRes = await request(app.getHttpServer())
+      .get(CLIENT_OWN_AMAZON_ADS_REPORTS_PATH)
+      .set("Authorization", `Bearer ${clientToken}`);
+
+    expect(ownReportsRes.status).toBe(200);
+    expect(Array.isArray(ownReportsRes.body.data)).toBe(true);
+    expect(
+      ownReportsRes.body.data.some((row: { id: string }) => row.id === archivedReport.id),
+    ).toBe(false);
+    expectResponseHasNoSensitiveTokenData(ownReportsRes.body);
+  });
+
+  it("Amazon Ads report exports generate CSV and JSON files with scoped visibility", async () => {
+    if (!clientProfileId) return;
+
+    const exportableReport = await prisma.amazonAdsReport.create({
+      data: {
+        clientProfileId,
+        projectId: await ensureAmazonAdsProjectId(prisma, clientProfileId),
+        periodStart: new Date("2026-06-05T00:00:00.000Z"),
+        periodEnd: new Date("2026-06-11T23:59:59.999Z"),
+        type: AmazonAdsReportType.WEEKLY,
+        status: AmazonAdsReportStatus.PUBLISHED,
+        summary: "Amazon exportable weekly report",
+        metricsSnapshot: {
+          spend: 100,
+          sales: 500,
+        },
+        clientVisible: true,
+        publishedAt: new Date("2026-06-12T09:00:00.000Z"),
+      },
+      select: { id: true },
+    });
+
+    const adminCsvRes = await request(app.getHttpServer())
+      .get(adminAmazonAdsReportExportPath(exportableReport.id))
+      .query({ format: "csv" })
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    expect(adminCsvRes.status).toBe(200);
+    expect(adminCsvRes.headers["content-type"]).toContain("text/csv");
+    expect(adminCsvRes.headers["content-disposition"]).toContain(".csv");
+    expect(adminCsvRes.text).toContain("Amazon exportable weekly report");
+    expect(adminCsvRes.text).toContain("metricsSnapshot");
+    expectResponseHasNoSensitiveTokenData(adminCsvRes.text);
+
+    const ownJsonRes = await request(app.getHttpServer())
+      .get(ownAmazonAdsReportExportPath(exportableReport.id))
+      .query({ format: "json" })
+      .set("Authorization", `Bearer ${clientToken}`);
+
+    expect(ownJsonRes.status).toBe(200);
+    expect(ownJsonRes.headers["content-type"]).toContain("application/json");
+    expect(ownJsonRes.headers["content-disposition"]).toContain(".json");
+    expect(ownJsonRes.text).toContain("Amazon exportable weekly report");
+    expect(ownJsonRes.text).toContain("\"metricsSnapshot\"");
+    expectResponseHasNoSensitiveTokenData(ownJsonRes.text);
+  });
+
+  it("own client cannot export draft or hidden Amazon Ads reports", async () => {
+    if (!clientProfileId) return;
+
+    const hiddenReport = await prisma.amazonAdsReport.create({
+      data: {
+        clientProfileId,
+        periodStart: new Date("2026-06-12T00:00:00.000Z"),
+        periodEnd: new Date("2026-06-18T23:59:59.999Z"),
+        type: AmazonAdsReportType.MONTHLY,
+        status: AmazonAdsReportStatus.DRAFT,
+        summary: "Hidden Amazon report",
+        clientVisible: false,
+      },
+      select: { id: true },
+    });
+
+    const res = await request(app.getHttpServer())
+      .get(ownAmazonAdsReportExportPath(hiddenReport.id))
+      .query({ format: "csv" })
+      .set("Authorization", `Bearer ${clientToken}`);
+
+    expect(res.status).toBe(404);
+    expect(JSON.stringify(res.body)).toContain(CLIENT_SAFE_REPORT_NOT_FOUND_MESSAGE);
+    expectResponseHasNoSensitiveTokenData(res.body);
+  });
+
+  it("assigned employee report export requires reports.read permission", async () => {
+    if (!clientProfileId) return;
+
+    const report = await prisma.amazonAdsReport.create({
+      data: {
+        clientProfileId,
+        periodStart: new Date("2026-06-19T00:00:00.000Z"),
+        periodEnd: new Date("2026-06-25T23:59:59.999Z"),
+        type: AmazonAdsReportType.WEEKLY,
+        status: AmazonAdsReportStatus.PUBLISHED,
+        summary: "Assigned export authz report",
+        clientVisible: true,
+        publishedAt: new Date("2026-06-26T09:00:00.000Z"),
+      },
+      select: { id: true },
+    });
+    const permission = await prisma.permission.findUnique({
+      where: { slug: "reports.read" },
+      select: { id: true },
+    });
+    if (!permission) {
+      throw new Error("Expected reports.read permission to exist.");
+    }
+
+    await prisma.rolePermission.deleteMany({
+      where: {
+        role: UserRole.PERFORMANCE_SPECIALIST,
+        permissionId: permission.id,
+      },
+    });
+
+    try {
+      await request(app.getHttpServer())
+        .get(assignedAmazonAdsReportExportPath(report.id))
+        .query({ format: "json" })
+        .set("Authorization", `Bearer ${employeeToken}`)
+        .expect(403);
+    } finally {
+      await prisma.rolePermission.createMany({
+        data: [{ role: UserRole.PERFORMANCE_SPECIALIST, permissionId: permission.id }],
+        skipDuplicates: true,
+      });
+    }
   });
 
   it("publishing Amazon Ads report can request acknowledgement task", async () => {
@@ -819,6 +969,35 @@ describe("Amazon Ads Config Authz (e2e)", () => {
     expect(acknowledgementTask?.approvalRequired).toBe(true);
     expect(acknowledgementTask?.approvalStatus).toBe(MetaAdsApprovalStatus.PENDING);
     expect(acknowledgementTask?.status).toBe(TaskStatus.REVIEW);
+  });
+
+  it("publishing an Amazon Ads report cannot force clientVisible false", async () => {
+    if (!clientProfileId) return;
+
+    const report = await prisma.amazonAdsReport.create({
+      data: {
+        clientProfileId,
+        periodStart: new Date("2026-06-26T00:00:00.000Z"),
+        periodEnd: new Date("2026-07-02T23:59:59.999Z"),
+        type: AmazonAdsReportType.BUDGET_RECOMMENDATION,
+        status: AmazonAdsReportStatus.DRAFT,
+        summary: "Amazon invalid publish state",
+        clientVisible: false,
+      },
+      select: { id: true },
+    });
+
+    const res = await request(app.getHttpServer())
+      .patch(`/api/v1/admin/amazon-ads/reports/${report.id}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        status: AmazonAdsReportStatus.PUBLISHED,
+        clientVisible: false,
+      });
+
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).toContain("Published report client görünürlüğü kapatılamaz.");
+    expectResponseHasNoSensitiveTokenData(res.body);
   });
 
   it("admin can read amazon ads global clients list without token leakage", async () => {
@@ -897,6 +1076,18 @@ function expectResponseHasNoSensitiveTokenData(payload: unknown): void {
   for (const sensitiveToken of SENSITIVE_RESPONSE_TOKENS) {
     expect(serializedPayload).not.toContain(sensitiveToken);
   }
+}
+
+function adminAmazonAdsReportExportPath(reportId: string): string {
+  return `/api/v1/admin/amazon-ads/reports/${reportId}/export`;
+}
+
+function assignedAmazonAdsReportExportPath(reportId: string): string {
+  return `/api/v1/amazon-ads/reports/${reportId}/export`;
+}
+
+function ownAmazonAdsReportExportPath(reportId: string): string {
+  return `/api/v1/clients/me/amazon-ads/reports/${reportId}/export`;
 }
 
 async function ensureAmazonAdsProjectId(

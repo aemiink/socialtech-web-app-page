@@ -41,6 +41,10 @@ import { AmazonAdsDateRangeQueryDto } from "./dto/amazon-ads-date-range-query.dt
 import { AmazonAdsInsightsQueryDto } from "./dto/amazon-ads-insights-query.dto";
 import { AmazonAdsOAuthStartQueryDto } from "./dto/amazon-ads-oauth-start-query.dto";
 import { AmazonAdsProductsQueryDto } from "./dto/amazon-ads-products-query.dto";
+import {
+  type AmazonAdsReportExportFormat,
+  AmazonAdsReportExportQueryDto,
+} from "./dto/amazon-ads-report-export-query.dto";
 import { AmazonAdsReportsQueryDto } from "./dto/amazon-ads-reports-query.dto";
 import { AmazonAdsSyncLogsQueryDto } from "./dto/amazon-ads-sync-logs-query.dto";
 import { ConnectManualAmazonAdsDto } from "./dto/connect-manual-amazon-ads.dto";
@@ -65,6 +69,7 @@ const REPORTS_READ_PERMISSION = "reports.read";
 const REPORTS_MANAGE_PERMISSION = "reports.manage";
 const REPORTS_READ_OWN_PERMISSION = "reports.read.own";
 const CLIENT_SAFE_SYNC_ERROR_MESSAGE = "Bağlantı problemi var, ekibimiz ilgileniyor.";
+const CLIENT_SAFE_REPORT_NOT_FOUND_MESSAGE = "Amazon Ads raporu bulunamadı.";
 const DEFAULT_REPORTING_RANGE_DAYS = 7;
 const MAX_REPORTING_RANGE_DAYS = 31;
 const DEFAULT_CAMPAIGNS_LIMIT = 25;
@@ -559,6 +564,17 @@ type AmazonAdsReportsResponse = {
     clientVisible: number;
   };
 };
+
+type AmazonAdsReportExportFile = {
+  filename: string;
+  contentType: string;
+  body: string;
+};
+
+type AmazonAdsReportExportScope =
+  | { visibility: "ANY" }
+  | { visibility: "ASSIGNED"; employeeUserId: string }
+  | { visibility: "OWN_VISIBLE"; clientProfileId: string };
 
 type AmazonAdsReportingConnection = {
   refreshToken: string;
@@ -1293,6 +1309,17 @@ export class AmazonAdsService {
     });
   }
 
+  async exportAdminReport(
+    reportId: string,
+    query: AmazonAdsReportExportQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<AmazonAdsReportExportFile> {
+    this.assertCanReadAnyConfig(actor);
+    this.assertCanReadReports(actor);
+
+    return this.exportReportById(reportId, query, { visibility: "ANY" });
+  }
+
   async getAssignedClientConfig(
     clientId: string,
     actor: AuthenticatedUser,
@@ -1386,6 +1413,7 @@ export class AmazonAdsService {
   ): Promise<AmazonAdsReportsResponse> {
     this.assertCanReadAssignedConfig(actor);
     this.assertCanReadAssignedReporting(actor);
+    this.assertCanReadReports(actor);
     await this.assertActiveAssignment(clientId, actor.id);
     await this.assertClientHasActiveAmazonAdsService(clientId);
 
@@ -1401,6 +1429,7 @@ export class AmazonAdsService {
   ): Promise<AmazonAdsReportItem> {
     this.assertCanReadAssignedConfig(actor);
     this.assertCanManageAssignedNotes(actor);
+    this.assertCanManageReports(actor);
     if (dto.requestAcknowledgement === true) {
       this.assertCanCreateAssignedApprovals(actor);
     }
@@ -1417,12 +1446,28 @@ export class AmazonAdsService {
   ): Promise<AmazonAdsReportItem> {
     this.assertCanReadAssignedConfig(actor);
     this.assertCanManageAssignedNotes(actor);
+    this.assertCanManageReports(actor);
     if (dto.requestAcknowledgement === true) {
       this.assertCanCreateAssignedApprovals(actor);
     }
 
     return this.updateReportById(actor, reportId, dto, {
       scope: "ASSIGNED",
+      employeeUserId: actor.id,
+    });
+  }
+
+  async exportAssignedReport(
+    reportId: string,
+    query: AmazonAdsReportExportQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<AmazonAdsReportExportFile> {
+    this.assertCanReadAssignedConfig(actor);
+    this.assertCanReadAssignedReporting(actor);
+    this.assertCanReadReports(actor);
+
+    return this.exportReportById(reportId, query, {
+      visibility: "ASSIGNED",
       employeeUserId: actor.id,
     });
   }
@@ -1544,6 +1589,25 @@ export class AmazonAdsService {
 
     return this.getReportsByClientProfileId(clientProfileId, query, {
       onlyClientVisible: true,
+      onlyPublished: true,
+    });
+  }
+
+  async exportOwnReport(
+    reportId: string,
+    query: AmazonAdsReportExportQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<AmazonAdsReportExportFile> {
+    this.assertCanReadOwnConfig(actor);
+    this.assertCanReadOwnReporting(actor);
+    this.assertCanReadOwnReports(actor);
+    const clientProfileId = this.getClientProfileIdOrFail(actor);
+    await this.assertClientExists(clientProfileId);
+    await this.assertClientHasActiveAmazonAdsService(clientProfileId);
+
+    return this.exportReportById(reportId, query, {
+      visibility: "OWN_VISIBLE",
+      clientProfileId,
     });
   }
 
@@ -1607,6 +1671,7 @@ export class AmazonAdsService {
     query: AmazonAdsReportsQueryDto,
     options: {
       onlyClientVisible: boolean;
+      onlyPublished?: boolean;
     },
   ): Promise<AmazonAdsReportsResponse> {
     const where: Prisma.AmazonAdsReportWhereInput = {
@@ -1619,7 +1684,9 @@ export class AmazonAdsService {
       where.clientVisible = query.clientVisible;
     }
 
-    if (query.status !== undefined) {
+    if (options.onlyPublished) {
+      where.status = AmazonAdsReportStatus.PUBLISHED;
+    } else if (query.status !== undefined) {
       where.status = query.status;
     }
 
@@ -1630,6 +1697,7 @@ export class AmazonAdsService {
     const statsWhere: Prisma.AmazonAdsReportWhereInput = {
       clientProfileId: clientId,
       ...(options.onlyClientVisible ? { clientVisible: true } : {}),
+      ...(options.onlyPublished ? { status: AmazonAdsReportStatus.PUBLISHED } : {}),
     };
     const limit = query.limit ?? 30;
 
@@ -1665,11 +1733,123 @@ export class AmazonAdsService {
       data: reports.map((report) => this.toAmazonAdsReportItem(report)),
       meta: {
         total,
-        draft,
+        draft: options.onlyPublished ? 0 : draft,
         published,
         clientVisible,
       },
     };
+  }
+
+  private async exportReportById(
+    reportId: string,
+    query: AmazonAdsReportExportQueryDto,
+    scope: AmazonAdsReportExportScope,
+  ): Promise<AmazonAdsReportExportFile> {
+    const report = await this.prisma.amazonAdsReport.findUnique({
+      where: { id: reportId },
+      select: amazonAdsReportSelect,
+    });
+
+    if (!report) {
+      throw new NotFoundException(CLIENT_SAFE_REPORT_NOT_FOUND_MESSAGE);
+    }
+
+    if (scope.visibility === "ASSIGNED") {
+      await this.assertActiveAssignment(report.clientProfileId, scope.employeeUserId);
+    }
+
+    if (
+      scope.visibility === "OWN_VISIBLE" &&
+      (report.clientProfileId !== scope.clientProfileId ||
+        report.status !== AmazonAdsReportStatus.PUBLISHED ||
+        report.clientVisible !== true)
+    ) {
+      throw new NotFoundException(CLIENT_SAFE_REPORT_NOT_FOUND_MESSAGE);
+    }
+
+    await this.assertClientHasActiveAmazonAdsService(report.clientProfileId);
+
+    const format = this.resolveReportExportFormat(query.format);
+    const item = this.toAmazonAdsReportItem(report);
+    const filename = this.buildAmazonAdsReportExportFilename(item, format);
+
+    if (format === "csv") {
+      return {
+        filename,
+        contentType: "text/csv; charset=utf-8",
+        body: this.buildAmazonAdsReportCsv(item),
+      };
+    }
+
+    return {
+      filename,
+      contentType: "application/json; charset=utf-8",
+      body: this.buildAmazonAdsReportJson(item),
+    };
+  }
+
+  private resolveReportExportFormat(
+    value: AmazonAdsReportExportFormat | string | undefined,
+  ): AmazonAdsReportExportFormat {
+    if (typeof value !== "string") {
+      return "json";
+    }
+
+    const normalized = value.trim().toLowerCase();
+    return normalized === "csv" ? "csv" : "json";
+  }
+
+  private buildAmazonAdsReportExportFilename(
+    report: AmazonAdsReportItem,
+    format: AmazonAdsReportExportFormat,
+  ): string {
+    const periodEnd = report.periodEnd.slice(0, 10);
+    return `amazon-ads-report-${periodEnd}-${report.id}.${format}`;
+  }
+
+  private buildAmazonAdsReportJson(report: AmazonAdsReportItem): string {
+    return JSON.stringify(
+      {
+        exportedAt: new Date().toISOString(),
+        report,
+      },
+      null,
+      2,
+    );
+  }
+
+  private buildAmazonAdsReportCsv(report: AmazonAdsReportItem): string {
+    const columns: Array<{ header: string; value: unknown }> = [
+      { header: "reportId", value: report.id },
+      { header: "clientProfileId", value: report.clientProfileId },
+      { header: "projectId", value: report.projectId },
+      { header: "projectName", value: report.projectName },
+      { header: "periodStart", value: report.periodStart },
+      { header: "periodEnd", value: report.periodEnd },
+      { header: "type", value: report.type },
+      { header: "status", value: report.status },
+      { header: "clientVisible", value: report.clientVisible },
+      { header: "publishedAt", value: report.publishedAt },
+      { header: "acknowledgementStatus", value: report.acknowledgementStatus },
+      { header: "acknowledgementTaskId", value: report.acknowledgementTaskId },
+      { header: "summary", value: report.summary },
+      { header: "metricsSnapshot", value: report.metricsSnapshot },
+    ];
+
+    return [
+      columns.map((column) => this.escapeCsvValue(column.header)).join(","),
+      columns.map((column) => this.escapeCsvValue(column.value)).join(","),
+    ].join("\n");
+  }
+
+  private escapeCsvValue(value: unknown): string {
+    if (value === null || value === undefined) {
+      return "";
+    }
+
+    const text = typeof value === "object" ? JSON.stringify(value) : String(value);
+    const escaped = text.replace(/"/g, "\"\"");
+    return /[",\n\r]/.test(escaped) ? `"${escaped}"` : escaped;
   }
 
   private async createReportByClientProfileId(
@@ -1680,43 +1860,47 @@ export class AmazonAdsService {
     const period = this.resolveAmazonAdsReportPeriod(dto.periodStart, dto.periodEnd);
     const summary = this.normalizeAmazonAdsReportSummary(dto.summary);
     const projectId = await this.resolveAmazonAdsReportProjectId(clientId, dto.projectId ?? null);
+    const acknowledgementProjectId =
+      dto.requestAcknowledgement === true ? projectId ?? undefined : undefined;
     const shouldPublish = dto.clientVisible === true || dto.requestAcknowledgement === true;
     const now = new Date();
 
-    let report = await this.prisma.amazonAdsReport.create({
-      data: {
-        clientProfileId: clientId,
-        projectId,
-        periodStart: period.periodStart,
-        periodEnd: period.periodEnd,
-        type: dto.type,
-        status: shouldPublish ? AmazonAdsReportStatus.PUBLISHED : AmazonAdsReportStatus.DRAFT,
-        summary,
-        metricsSnapshot: dto.metricsSnapshot as Prisma.InputJsonValue | undefined,
-        createdByUserId: actor.id,
-        publishedByUserId: shouldPublish ? actor.id : null,
-        clientVisible: shouldPublish,
-        publishedAt: shouldPublish ? now : null,
-      },
-      select: amazonAdsReportSelect,
-    });
+    if (dto.requestAcknowledgement === true && !acknowledgementProjectId) {
+      throw new BadRequestException(
+        "AMAZON_ADS proje kaydı olmadan rapor acknowledgement talebi açılamaz.",
+      );
+    }
 
-    if (dto.requestAcknowledgement === true) {
-      const acknowledgementProjectId =
-        projectId ?? (await this.resolveAmazonAdsReportProjectId(clientId, null));
-      if (!acknowledgementProjectId) {
-        throw new BadRequestException(
-          "AMAZON_ADS proje kaydı olmadan rapor acknowledgement talebi açılamaz.",
-        );
+    const report = await this.prisma.$transaction(async (tx) => {
+      const createdReport = await tx.amazonAdsReport.create({
+        data: {
+          clientProfileId: clientId,
+          projectId,
+          periodStart: period.periodStart,
+          periodEnd: period.periodEnd,
+          type: dto.type,
+          status: shouldPublish ? AmazonAdsReportStatus.PUBLISHED : AmazonAdsReportStatus.DRAFT,
+          summary,
+          metricsSnapshot: dto.metricsSnapshot as Prisma.InputJsonValue | undefined,
+          createdByUserId: actor.id,
+          publishedByUserId: shouldPublish ? actor.id : null,
+          clientVisible: shouldPublish,
+          publishedAt: shouldPublish ? now : null,
+        },
+        select: amazonAdsReportSelect,
+      });
+
+      if (dto.requestAcknowledgement !== true || !acknowledgementProjectId) {
+        return createdReport;
       }
 
-      const task = await this.prisma.task.create({
+      const task = await tx.task.create({
         data: {
           projectId: acknowledgementProjectId,
           title: this.buildReportAcknowledgementTaskTitle(
-            report.type,
-            report.periodStart,
-            report.periodEnd,
+            createdReport.type,
+            createdReport.periodStart,
+            createdReport.periodEnd,
           ),
           description: this.buildReportAcknowledgementTaskDescription(summary),
           status: TaskStatus.REVIEW,
@@ -1726,20 +1910,18 @@ export class AmazonAdsService {
           approvalStatus: MetaAdsApprovalStatus.PENDING,
           approvalRequestedAt: now,
           approvalContext: {
-            reportId: report.id,
-            reportType: report.type,
-            periodStart: report.periodStart.toISOString(),
-            periodEnd: report.periodEnd.toISOString(),
+            reportId: createdReport.id,
+            reportType: createdReport.type,
+            periodStart: createdReport.periodStart.toISOString(),
+            periodEnd: createdReport.periodEnd.toISOString(),
           },
         },
-        select: {
-          id: true,
-        },
+        select: { id: true },
       });
 
-      report = await this.prisma.amazonAdsReport.update({
+      return tx.amazonAdsReport.update({
         where: {
-          id: report.id,
+          id: createdReport.id,
         },
         data: {
           acknowledgementRequestedAt: now,
@@ -1747,7 +1929,7 @@ export class AmazonAdsService {
         },
         select: amazonAdsReportSelect,
       });
-    }
+    });
 
     return this.toAmazonAdsReportItem(report);
   }

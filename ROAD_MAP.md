@@ -28,7 +28,6 @@
 - CI/CD status automation
 - Advanced sprint planning
 - Full release approval workflow UX
-- Platform integrations: Meta/TikTok/Amazon Ads
 - CRM automation/reminder notifications
 - CRM pipeline analytics
 - CRM outbound email/WhatsApp sending integrations
@@ -170,6 +169,7 @@
 - Amazon Ads Faz 7: Approval + creative collaboration (Amazon approval enum contract alignment, assigned create permission mapping, client approve/revise/ack flow, creative/product collaboration permission guard, admin/employee approval create payload alignment)
 - Amazon Ads Faz 8: Sync automation hardening (admin sync logs + retry endpoint + assigned TTL/cooldown skip normalizasyonu + error catalog standardizasyonu + admin/client observability UX)
 - Amazon Ads Faz 9: Reporting/export foundation (`AmazonAdsReport` entity, admin/assigned draft-publish endpoints, client own report visibility, publish->ack task bridge)
+- Amazon Ads Faz 10: Production hardening (admin/assigned/own CSV+JSON report export, client-safe report visibility/404 surface, assigned `reports.read/manage` authz alignment, expanded report edge-case coverage)
 
 ## Blocked
 
@@ -326,6 +326,14 @@ None identified.
   - `clientPanel`: `npm run typecheck` ✅
   - `clientPanel`: `npm test -- --run src/app/pages/__tests__/service-tab-page.amazon-ads.test.tsx` ✅ (`7/7`)
   - `server`: `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true node ./test/run-e2e.cjs amazon-ads-authz.e2e-spec.ts` çalıştırıldı; local test DB bağlantısı nedeniyle `Schema engine error` ile başarısız oldu.
+- Latest Amazon Ads Faz 10 checkpoint:
+  - `server`: `npm run check` ✅
+  - `server`: `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true npm run test:e2e:authz -- amazon-ads-authz.e2e-spec.ts` ✅ (`317/317`)
+  - `adminandemployeePanel`: `npm run check` ✅
+  - `adminandemployeePanel`: `npm run test:run -- src/app/pages/__tests__/AmazonAdsAdmin.test.tsx src/app/employee/pages/__tests__/AmazonAdsWorkspace.test.tsx` ✅ (`16/16`)
+  - `clientPanel`: `npm run check` ✅
+  - `clientPanel`: `npm test -- --run src/app/pages/__tests__/service-tab-page.amazon-ads.test.tsx` ✅ (`7/7`)
+  - Bundle audit: Vite build çıktılarında Amazon odaklı chunklar için hard warning yok; safe code-splitting değişikliği gerekmedi ✅
 - Latest admin/employee frontend validation checkpoint: `25` test files, `153/153` tests.
 - Latest client portal frontend validation checkpoint: `4` test files, `17/17` tests.
 - Latest FAZ-05 validation checkpoint:
