@@ -38,6 +38,7 @@ import { AmazonAdsDateRangeQueryDto } from "./dto/amazon-ads-date-range-query.dt
 import { AmazonAdsInsightsQueryDto } from "./dto/amazon-ads-insights-query.dto";
 import { AmazonAdsOAuthStartQueryDto } from "./dto/amazon-ads-oauth-start-query.dto";
 import { AmazonAdsProductsQueryDto } from "./dto/amazon-ads-products-query.dto";
+import { AmazonAdsSyncLogsQueryDto } from "./dto/amazon-ads-sync-logs-query.dto";
 import { ConnectManualAmazonAdsDto } from "./dto/connect-manual-amazon-ads.dto";
 import { ExchangeAmazonAdsOAuthCodeDto } from "./dto/exchange-amazon-ads-oauth-code.dto";
 import { TestAmazonAdsConnectionDto } from "./dto/test-amazon-ads-connection.dto";
@@ -52,11 +53,14 @@ const AMAZON_ADS_REPORTING_READ_ASSIGNED_PERMISSION = "amazonAds.reporting.read.
 const AMAZON_ADS_REPORTING_READ_OWN_PERMISSION = "amazonAds.reporting.read.own";
 const AMAZON_ADS_SYNC_RUN_ANY_PERMISSION = "amazonAds.sync.run.any";
 const AMAZON_ADS_SYNC_READ_ASSIGNED_PERMISSION = "amazonAds.sync.read.assigned";
+const CLIENT_SAFE_SYNC_ERROR_MESSAGE = "Bağlantı problemi var, ekibimiz ilgileniyor.";
 const DEFAULT_REPORTING_RANGE_DAYS = 7;
 const MAX_REPORTING_RANGE_DAYS = 31;
 const DEFAULT_CAMPAIGNS_LIMIT = 25;
 const DEFAULT_PRODUCTS_LIMIT = 25;
 const DEFAULT_INSIGHTS_LIMIT = 100;
+const DEFAULT_AMAZON_ADS_SYNC_TTL_MINUTES = 30;
+const DEFAULT_AMAZON_ADS_FAILED_SYNC_RETRY_COOLDOWN_MINUTES = 10;
 
 const adminAmazonAdsConfigSelect = {
   id: true,
@@ -112,6 +116,22 @@ const amazonAdsDailyInsightSelect = {
   raw: true,
   updatedAt: true,
 } satisfies Prisma.AmazonAdsDailyInsightSelect;
+
+const amazonAdsSyncLogSelect = {
+  id: true,
+  clientProfileId: true,
+  profileId: true,
+  status: true,
+  trigger: true,
+  startedAt: true,
+  finishedAt: true,
+  errorCode: true,
+  errorMessage: true,
+  recordsFetched: true,
+  apiCallCount: true,
+  reportStatuses: true,
+  createdAt: true,
+} satisfies Prisma.AmazonAdsSyncLogSelect;
 
 type AdminAmazonAdsConfigModel = Prisma.ClientAmazonAdsConfigGetPayload<{
   select: typeof adminAmazonAdsConfigSelect;
@@ -335,6 +355,32 @@ type AmazonAdsSyncResponse = {
   connectionStatus: AmazonAdsConnectionStatus;
   lastSyncAt: Date | null;
   syncStatus: AmazonAdsSyncStatus;
+  skippedReason: string | null;
+};
+
+type AmazonAdsSyncTrigger =
+  | "MANUAL_SYNC"
+  | "SCHEDULED_SYNC"
+  | "ON_DEMAND_CLIENT_REFRESH"
+  | "ON_DEMAND_ASSIGNED_REFRESH"
+  | "ERROR_RETRY";
+
+type AmazonAdsConnectionErrorCode =
+  | "TOKEN_EXPIRED_OR_REVOKED"
+  | "PERMISSION_DENIED"
+  | "PROFILE_NOT_FOUND"
+  | "MARKETPLACE_MISMATCH"
+  | "INVALID_PROFILE_ID"
+  | "REPORT_GENERATION_FAILED"
+  | "REPORT_NOT_READY"
+  | "RATE_LIMIT"
+  | "UNKNOWN_API_ERROR";
+
+type AmazonAdsConnectionErrorInfo = {
+  code: AmazonAdsConnectionErrorCode;
+  category: NormalizedAmazonAdsApiError["category"];
+  adminMessage: string;
+  clientMessage: string;
 };
 
 type AdminAmazonAdsClientListItem = {
@@ -398,6 +444,34 @@ type AdminAmazonAdsClientListResponse = {
     connected: number;
     error: number;
     pendingApprovals: number;
+  };
+};
+
+type AdminAmazonAdsSyncLogItem = {
+  id: string;
+  clientProfileId: string;
+  clientCompanyName: string;
+  profileId: string | null;
+  status: AmazonAdsSyncStatus;
+  trigger: string | null;
+  startedAt: Date;
+  finishedAt: Date | null;
+  durationMs: number | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  recordsFetched: number | null;
+  apiCallCount: number | null;
+  reportStatus: string | null;
+  createdAt: Date;
+};
+
+type AdminAmazonAdsSyncLogsResponse = {
+  data: AdminAmazonAdsSyncLogItem[];
+  meta: {
+    total: number;
+    failed: number;
+    running: number;
+    skipped: number;
   };
 };
 
@@ -708,6 +782,94 @@ export class AmazonAdsService {
     };
   }
 
+  async getAdminSyncLogs(
+    query: AmazonAdsSyncLogsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<AdminAmazonAdsSyncLogsResponse> {
+    this.assertCanReadAnyConfig(actor);
+
+    const requestedStatus = this.normalizeSyncStatusQuery(query.status);
+    const failedOnly = this.normalizeBooleanQuery(query.failedOnly);
+    const statusFilter =
+      requestedStatus !== undefined
+        ? requestedStatus
+        : failedOnly
+          ? {
+              in: [AmazonAdsSyncStatus.FAILED, AmazonAdsSyncStatus.PARTIAL],
+            }
+          : undefined;
+
+    const where: Prisma.AmazonAdsSyncLogWhereInput = {
+      ...(query.clientProfileId ? { clientProfileId: query.clientProfileId } : {}),
+      ...(statusFilter ? { status: statusFilter } : {}),
+    };
+    const take = this.normalizeLimitQuery(query.limit, 40);
+
+    const [rows, total, failed, running, skipped] = await Promise.all([
+      this.prisma.amazonAdsSyncLog.findMany({
+        where,
+        select: {
+          ...amazonAdsSyncLogSelect,
+          clientProfile: {
+            select: {
+              companyName: true,
+            },
+          },
+        },
+        orderBy: [{ createdAt: "desc" }],
+        take,
+      }),
+      this.prisma.amazonAdsSyncLog.count({ where }),
+      this.prisma.amazonAdsSyncLog.count({
+        where: {
+          ...where,
+          status: {
+            in: [AmazonAdsSyncStatus.FAILED, AmazonAdsSyncStatus.PARTIAL],
+          },
+        },
+      }),
+      this.prisma.amazonAdsSyncLog.count({
+        where: {
+          ...where,
+          status: AmazonAdsSyncStatus.RUNNING,
+        },
+      }),
+      this.prisma.amazonAdsSyncLog.count({
+        where: {
+          ...where,
+          status: AmazonAdsSyncStatus.SKIPPED,
+        },
+      }),
+    ]);
+
+    return {
+      data: rows.map((row) => ({
+        id: row.id,
+        clientProfileId: row.clientProfileId,
+        clientCompanyName: row.clientProfile.companyName,
+        profileId: row.profileId,
+        status: row.status,
+        trigger: row.trigger,
+        startedAt: row.startedAt,
+        finishedAt: row.finishedAt,
+        durationMs:
+          row.finishedAt !== null ? row.finishedAt.getTime() - row.startedAt.getTime() : null,
+        errorCode: row.errorCode,
+        errorMessage: row.errorMessage,
+        recordsFetched: row.recordsFetched,
+        apiCallCount: row.apiCallCount,
+        reportStatus: this.resolveReportStatusLabel(row.reportStatuses),
+        createdAt: row.createdAt,
+      })),
+      meta: {
+        total,
+        failed,
+        running,
+        skipped,
+      },
+    };
+  }
+
   async updateAdminClientConfig(
     clientId: string,
     dto: UpdateAmazonAdsConfigDto,
@@ -783,9 +945,9 @@ export class AmazonAdsService {
 
       return { ...token, refreshToken: token.refreshToken };
     } catch (error) {
-      const normalizedError = this.amazonAdsApiService.normalizeError(error);
-      await this.markConnectionAsError(clientId, normalizedError);
-      throw this.toConnectionTestException(normalizedError);
+      const connectionErrorInfo = this.normalizeConnectionError(error);
+      await this.markConnectionAsError(clientId, connectionErrorInfo);
+      throw this.toConnectionTestException(connectionErrorInfo);
     }
   }
 
@@ -979,7 +1141,30 @@ export class AmazonAdsService {
     await this.assertClientExists(clientId);
     await this.assertClientHasActiveAmazonAdsService(clientId);
 
-    return this.syncInsightsByClientProfileId(clientId, query, "MANUAL_SYNC");
+    return this.syncInsightsByClientProfileId(clientId, query, {
+      trigger: "MANUAL_SYNC",
+      applySyncTtl: false,
+      applyFailedSyncCooldown: false,
+      revealDetailedError: true,
+    });
+  }
+
+  async retryAdminClientInsights(
+    clientId: string,
+    query: AmazonAdsDateRangeQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<AmazonAdsSyncResponse> {
+    this.assertCanManageAnyConfig(actor);
+    this.assertCanRunAnySync(actor);
+    await this.assertClientExists(clientId);
+    await this.assertClientHasActiveAmazonAdsService(clientId);
+
+    return this.syncInsightsByClientProfileId(clientId, query, {
+      trigger: "ERROR_RETRY",
+      applySyncTtl: false,
+      applyFailedSyncCooldown: false,
+      revealDetailedError: true,
+    });
   }
 
   async getAssignedClientConfig(
@@ -1060,7 +1245,12 @@ export class AmazonAdsService {
     await this.assertActiveAssignment(clientId, actor.id);
     await this.assertClientHasActiveAmazonAdsService(clientId);
 
-    return this.syncInsightsByClientProfileId(clientId, query, "ON_DEMAND_ASSIGNED_REFRESH");
+    return this.syncInsightsByClientProfileId(clientId, query, {
+      trigger: "ON_DEMAND_ASSIGNED_REFRESH",
+      applySyncTtl: true,
+      applyFailedSyncCooldown: true,
+      revealDetailedError: true,
+    });
   }
 
   async getOwnClientConfig(
@@ -1459,7 +1649,12 @@ export class AmazonAdsService {
   private async syncInsightsByClientProfileId(
     clientId: string,
     query: AmazonAdsDateRangeQueryDto,
-    trigger: string,
+    options: {
+      trigger: AmazonAdsSyncTrigger;
+      applySyncTtl: boolean;
+      applyFailedSyncCooldown: boolean;
+      revealDetailedError: boolean;
+    },
   ): Promise<AmazonAdsSyncResponse> {
     const dateRange = this.resolveReportDateRange(query);
     const startedAt = new Date();
@@ -1467,7 +1662,7 @@ export class AmazonAdsService {
       data: {
         clientProfileId: clientId,
         status: AmazonAdsSyncStatus.RUNNING,
-        trigger,
+        trigger: options.trigger,
         startedAt,
       },
       select: { id: true },
@@ -1477,8 +1672,87 @@ export class AmazonAdsService {
       const connection = await this.resolveReportingConnection(clientId);
       await this.prisma.amazonAdsSyncLog.update({
         where: { id: syncLog.id },
-        data: { profileId: connection.profileId },
+        data: {
+          profileId: connection.profileId,
+        },
       });
+
+      if (options.applySyncTtl) {
+        const skipReason = this.resolveSyncSkipReason(connection.lastSyncAt, startedAt);
+        if (skipReason) {
+          await this.prisma.amazonAdsSyncLog.update({
+            where: { id: syncLog.id },
+            data: {
+              status: AmazonAdsSyncStatus.SKIPPED,
+              finishedAt: startedAt,
+              errorCode: "SYNC_TTL_ACTIVE",
+              errorMessage: `[${options.trigger}] ${skipReason}`,
+              recordsFetched: 0,
+              apiCallCount: 0,
+            },
+          });
+
+          return {
+            success: true,
+            syncedAt: connection.lastSyncAt ?? startedAt,
+            dateRange: {
+              since: dateRange.sinceIsoDate,
+              until: dateRange.untilIsoDate,
+            },
+            inserted: {
+              account: 0,
+              campaigns: 0,
+              products: 0,
+              searchTerms: 0,
+              total: 0,
+            },
+            connectionStatus: connection.connectionStatus,
+            lastSyncAt: connection.lastSyncAt,
+            syncStatus: AmazonAdsSyncStatus.SKIPPED,
+            skippedReason: skipReason,
+          };
+        }
+      }
+
+      if (options.applyFailedSyncCooldown) {
+        const failedSyncCooldownReason = await this.resolveFailedSyncCooldownReason(
+          clientId,
+          startedAt,
+        );
+        if (failedSyncCooldownReason) {
+          await this.prisma.amazonAdsSyncLog.update({
+            where: { id: syncLog.id },
+            data: {
+              status: AmazonAdsSyncStatus.SKIPPED,
+              finishedAt: startedAt,
+              errorCode: "FAILED_SYNC_COOLDOWN_ACTIVE",
+              errorMessage: `[${options.trigger}] ${failedSyncCooldownReason}`,
+              recordsFetched: 0,
+              apiCallCount: 0,
+            },
+          });
+
+          return {
+            success: true,
+            syncedAt: connection.lastSyncAt ?? startedAt,
+            dateRange: {
+              since: dateRange.sinceIsoDate,
+              until: dateRange.untilIsoDate,
+            },
+            inserted: {
+              account: 0,
+              campaigns: 0,
+              products: 0,
+              searchTerms: 0,
+              total: 0,
+            },
+            connectionStatus: connection.connectionStatus,
+            lastSyncAt: connection.lastSyncAt,
+            syncStatus: AmazonAdsSyncStatus.SKIPPED,
+            skippedReason: failedSyncCooldownReason,
+          };
+        }
+      }
 
       const snapshot = await this.amazonAdsApiService.fetchReportingSnapshot({
         refreshToken: connection.refreshToken,
@@ -1576,21 +1850,24 @@ export class AmazonAdsService {
         connectionStatus: AmazonAdsConnectionStatus.CONNECTED,
         lastSyncAt: syncedAt,
         syncStatus,
+        skippedReason: null,
       };
     } catch (error) {
-      const normalizedError = this.amazonAdsApiService.normalizeError(error);
+      const connectionErrorInfo = this.normalizeConnectionError(error);
       const finishedAt = new Date();
-      await this.markConnectionAsError(clientId, normalizedError, finishedAt);
+      await this.markConnectionAsError(clientId, connectionErrorInfo, finishedAt);
       await this.prisma.amazonAdsSyncLog.update({
         where: { id: syncLog.id },
         data: {
           status: AmazonAdsSyncStatus.FAILED,
           finishedAt,
-          errorCode: normalizedError.category,
-          errorMessage: `[${trigger}] ${this.normalizeApiErrorMessage(normalizedError.message)}`,
+          errorCode: connectionErrorInfo.code,
+          errorMessage: `[${options.trigger}] ${connectionErrorInfo.adminMessage}`,
         },
       });
-      throw this.toConnectionTestException(normalizedError);
+      throw this.toConnectionTestException(connectionErrorInfo, {
+        revealDetailedError: options.revealDetailedError,
+      });
     }
   }
 
@@ -1654,9 +1931,9 @@ export class AmazonAdsService {
         grantedScopes: normalizedScopes,
       };
     } catch (error) {
-      const normalizedError = this.amazonAdsApiService.normalizeError(error);
-      await this.markConnectionAsError(clientId, normalizedError);
-      throw this.toConnectionTestException(normalizedError);
+      const connectionErrorInfo = this.normalizeConnectionError(error);
+      await this.markConnectionAsError(clientId, connectionErrorInfo);
+      throw this.toConnectionTestException(connectionErrorInfo);
     }
   }
 
@@ -2018,53 +2295,177 @@ export class AmazonAdsService {
 
   private async markConnectionAsError(
     clientId: string,
-    normalizedError: NormalizedAmazonAdsApiError,
+    connectionErrorInfo: AmazonAdsConnectionErrorInfo,
     occurredAt = new Date(),
   ): Promise<void> {
     await this.prisma.clientAmazonAdsConfig.upsert({
       where: { clientProfileId: clientId },
       update: {
         connectionStatus: AmazonAdsConnectionStatus.ERROR,
-        syncError: this.normalizeApiErrorMessage(normalizedError.message),
+        syncError: connectionErrorInfo.adminMessage,
         lastSyncAt: occurredAt,
       },
       create: {
         clientProfileId: clientId,
         connectionStatus: AmazonAdsConnectionStatus.ERROR,
-        syncError: this.normalizeApiErrorMessage(normalizedError.message),
+        syncError: connectionErrorInfo.adminMessage,
         lastSyncAt: occurredAt,
       },
     });
   }
 
-  private toConnectionTestException(normalizedError: NormalizedAmazonAdsApiError): Error {
+  private normalizeConnectionError(error: unknown): AmazonAdsConnectionErrorInfo {
+    const normalizedError = this.amazonAdsApiService.normalizeError(error);
     const message = this.normalizeApiErrorMessage(normalizedError.message);
+    const lowerMessage = message.toLowerCase();
 
-    if (normalizedError.category === "AUTH") {
-      return new BadRequestException(
+    if (
+      normalizedError.category === "AUTH" ||
+      lowerMessage.includes("token") &&
+        (lowerMessage.includes("expired") ||
+          lowerMessage.includes("revoked") ||
+          lowerMessage.includes("invalid"))
+    ) {
+      return {
+        code: "TOKEN_EXPIRED_OR_REVOKED",
+        category: normalizedError.category,
+        adminMessage: "Amazon Ads OAuth token süresi dolmuş veya iptal edilmiş görünüyor.",
+        clientMessage: CLIENT_SAFE_SYNC_ERROR_MESSAGE,
+      };
+    }
+
+    if (
+      normalizedError.category === "PERMISSION" ||
+      lowerMessage.includes("permission") ||
+      lowerMessage.includes("not authorized") ||
+      lowerMessage.includes("access denied")
+    ) {
+      return {
+        code: "PERMISSION_DENIED",
+        category: normalizedError.category,
+        adminMessage: "Amazon Ads API erişim izni reddedildi.",
+        clientMessage: CLIENT_SAFE_SYNC_ERROR_MESSAGE,
+      };
+    }
+
+    if (
+      lowerMessage.includes("profile") &&
+      (lowerMessage.includes("not found") || lowerMessage.includes("unavailable"))
+    ) {
+      return {
+        code: "PROFILE_NOT_FOUND",
+        category: normalizedError.category,
+        adminMessage: "Amazon Ads profile bulunamadı veya erişilemiyor.",
+        clientMessage: CLIENT_SAFE_SYNC_ERROR_MESSAGE,
+      };
+    }
+
+    if (
+      lowerMessage.includes("marketplace") &&
+      (lowerMessage.includes("mismatch") ||
+        lowerMessage.includes("does not match") ||
+        lowerMessage.includes("invalid"))
+    ) {
+      return {
+        code: "MARKETPLACE_MISMATCH",
+        category: normalizedError.category,
+        adminMessage: "Amazon Ads marketplace uyuşmazlığı tespit edildi.",
+        clientMessage: CLIENT_SAFE_SYNC_ERROR_MESSAGE,
+      };
+    }
+
+    if (
+      lowerMessage.includes("profileid") ||
+      (lowerMessage.includes("profile id") &&
+        (lowerMessage.includes("invalid") || lowerMessage.includes("required")))
+    ) {
+      return {
+        code: "INVALID_PROFILE_ID",
+        category: normalizedError.category,
+        adminMessage: "Amazon Ads profile ID geçersiz veya eksik.",
+        clientMessage: CLIENT_SAFE_SYNC_ERROR_MESSAGE,
+      };
+    }
+
+    if (
+      lowerMessage.includes("report") &&
+      (lowerMessage.includes("failed") ||
+        lowerMessage.includes("failure") ||
+        lowerMessage.includes("cancelled"))
+    ) {
+      return {
+        code: "REPORT_GENERATION_FAILED",
+        category: normalizedError.category,
+        adminMessage: "Amazon Ads rapor üretimi başarısız oldu.",
+        clientMessage: CLIENT_SAFE_SYNC_ERROR_MESSAGE,
+      };
+    }
+
+    if (
+      lowerMessage.includes("report") &&
+      (lowerMessage.includes("pending") ||
+        lowerMessage.includes("not ready") ||
+        lowerMessage.includes("poll window"))
+    ) {
+      return {
+        code: "REPORT_NOT_READY",
+        category: normalizedError.category,
+        adminMessage: "Amazon Ads raporu henüz hazır değil.",
+        clientMessage: "Veriler hazırlanıyor, kısa süre içinde dashboard güncellenecek.",
+      };
+    }
+
+    if (
+      normalizedError.category === "RATE_LIMIT" ||
+      lowerMessage.includes("rate limit") ||
+      lowerMessage.includes("too many") ||
+      lowerMessage.includes("throttle")
+    ) {
+      return {
+        code: "RATE_LIMIT",
+        category: normalizedError.category,
+        adminMessage: "Amazon Ads API rate limit sınırına ulaşıldı.",
+        clientMessage: CLIENT_SAFE_SYNC_ERROR_MESSAGE,
+      };
+    }
+
+    return {
+      code: "UNKNOWN_API_ERROR",
+      category: normalizedError.category,
+      adminMessage:
         message.length > 0
-          ? `Amazon Ads refresh token geçersiz veya süresi dolmuş: ${message}`
-          : "Amazon Ads refresh token geçersiz veya süresi dolmuş.",
-      );
+          ? `Amazon Ads API hatası: ${message}`
+          : "Amazon Ads API beklenmeyen bir hata döndürdü.",
+      clientMessage: CLIENT_SAFE_SYNC_ERROR_MESSAGE,
+    };
+  }
+
+  private toConnectionTestException(
+    connectionErrorInfo: AmazonAdsConnectionErrorInfo,
+    options: {
+      revealDetailedError: boolean;
+    } = {
+      revealDetailedError: true,
+    },
+  ): Error {
+    const errorMessage = options.revealDetailedError
+      ? connectionErrorInfo.adminMessage
+      : connectionErrorInfo.clientMessage;
+
+    if (connectionErrorInfo.code === "PERMISSION_DENIED") {
+      return new ForbiddenException(errorMessage);
     }
 
-    if (normalizedError.category === "PERMISSION") {
-      return new ForbiddenException(
-        message.length > 0
-          ? `Amazon Ads API izinleri eksik veya yetersiz: ${message}`
-          : "Amazon Ads API izinleri eksik veya yetersiz.",
-      );
+    if (
+      connectionErrorInfo.code === "TOKEN_EXPIRED_OR_REVOKED" ||
+      connectionErrorInfo.code === "PROFILE_NOT_FOUND" ||
+      connectionErrorInfo.code === "INVALID_PROFILE_ID" ||
+      connectionErrorInfo.code === "MARKETPLACE_MISMATCH"
+    ) {
+      return new BadRequestException(errorMessage);
     }
 
-    if (normalizedError.category === "RATE_LIMIT") {
-      return new BadGatewayException("Amazon Ads API rate limit sınırına ulaştı.");
-    }
-
-    return new BadGatewayException(
-      message.length > 0
-        ? `Amazon Ads bağlantısı doğrulanamadı: ${message}`
-        : "Amazon Ads bağlantısı doğrulanamadı.",
-    );
+    return new BadGatewayException(errorMessage);
   }
 
   private getAmazonAdsClientId(): string {
@@ -2094,6 +2495,40 @@ export class AmazonAdsService {
 
   private normalizeApiErrorMessage(message: string): string {
     return message.trim().replace(/\s+/g, " ");
+  }
+
+  private resolveReportStatusLabel(value: Prisma.JsonValue | null): string | null {
+    if (!Array.isArray(value) || value.length === 0) {
+      return null;
+    }
+
+    const statuses = value
+      .map((item) => {
+        if (!this.isRecord(item)) {
+          return null;
+        }
+
+        return this.readRawString(item.status)?.toUpperCase() ?? null;
+      })
+      .filter((status): status is string => typeof status === "string");
+
+    if (statuses.length === 0) {
+      return null;
+    }
+
+    if (statuses.some((status) => status === "FAILED" || status === "FAILURE" || status === "CANCELLED")) {
+      return "FAILED";
+    }
+
+    if (statuses.some((status) => status === "PENDING" || status === "IN_PROGRESS")) {
+      return "PENDING";
+    }
+
+    if (statuses.some((status) => status === "COMPLETED" || status === "SUCCESS")) {
+      return "COMPLETED";
+    }
+
+    return statuses[0] ?? null;
   }
 
   private resolveReportDateRange(query: AmazonAdsDateRangeQueryDto): AmazonAdsReportDateRange {
@@ -2158,6 +2593,150 @@ export class AmazonAdsService {
   private diffDaysInclusive(since: Date, until: Date): number {
     const millisecondsInDay = 24 * 60 * 60 * 1000;
     return Math.floor((until.getTime() - since.getTime()) / millisecondsInDay) + 1;
+  }
+
+  private resolveSyncSkipReason(lastSyncAt: Date | null, now: Date): string | null {
+    if (!lastSyncAt) {
+      return null;
+    }
+
+    const elapsedMs = now.getTime() - lastSyncAt.getTime();
+    if (!Number.isFinite(elapsedMs) || elapsedMs < 0) {
+      return null;
+    }
+
+    const syncTtlMinutes = this.getSyncTtlMinutes();
+    const ttlMs = syncTtlMinutes * 60 * 1000;
+    if (elapsedMs >= ttlMs) {
+      return null;
+    }
+
+    const remainingMinutes = Math.max(Math.ceil((ttlMs - elapsedMs) / (60 * 1000)), 1);
+    return `Son senkron çok yeni. Yaklaşık ${remainingMinutes} dakika sonra tekrar deneyin.`;
+  }
+
+  private async resolveFailedSyncCooldownReason(
+    clientProfileId: string,
+    now: Date,
+  ): Promise<string | null> {
+    const cooldownMinutes = this.getFailedSyncRetryCooldownMinutes();
+    const cooldownMs = cooldownMinutes * 60 * 1000;
+    const cooldownStart = new Date(now.getTime() - cooldownMs);
+
+    const lastFailedSync = await this.prisma.amazonAdsSyncLog.findFirst({
+      where: {
+        clientProfileId,
+        status: {
+          in: [AmazonAdsSyncStatus.FAILED, AmazonAdsSyncStatus.PARTIAL],
+        },
+        startedAt: {
+          gte: cooldownStart,
+        },
+      },
+      orderBy: {
+        startedAt: "desc",
+      },
+      select: {
+        startedAt: true,
+      },
+    });
+
+    if (!lastFailedSync) {
+      return null;
+    }
+
+    const elapsedMs = now.getTime() - lastFailedSync.startedAt.getTime();
+    if (!Number.isFinite(elapsedMs) || elapsedMs < 0 || elapsedMs >= cooldownMs) {
+      return null;
+    }
+
+    const remainingMinutes = Math.max(Math.ceil((cooldownMs - elapsedMs) / (60 * 1000)), 1);
+    return `Son hatalı senkron çok yeni. Yaklaşık ${remainingMinutes} dakika sonra tekrar deneyin.`;
+  }
+
+  private normalizeSyncStatusQuery(value: unknown): AmazonAdsSyncStatus | undefined {
+    if (typeof value !== "string") {
+      return undefined;
+    }
+
+    const normalized = value.trim().toUpperCase();
+    if (
+      normalized === AmazonAdsSyncStatus.RUNNING ||
+      normalized === AmazonAdsSyncStatus.SUCCESS ||
+      normalized === AmazonAdsSyncStatus.FAILED ||
+      normalized === AmazonAdsSyncStatus.PARTIAL ||
+      normalized === AmazonAdsSyncStatus.SKIPPED
+    ) {
+      return normalized as AmazonAdsSyncStatus;
+    }
+
+    return undefined;
+  }
+
+  private normalizeBooleanQuery(value: unknown): boolean {
+    if (typeof value === "boolean") {
+      return value;
+    }
+
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      return normalized === "true" || normalized === "1";
+    }
+
+    return false;
+  }
+
+  private normalizeLimitQuery(value: unknown, fallback: number): number {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return Math.min(Math.max(Math.trunc(value), 1), 100);
+    }
+
+    if (typeof value === "string") {
+      const parsed = Number.parseInt(value.trim(), 10);
+      if (!Number.isNaN(parsed) && Number.isFinite(parsed)) {
+        return Math.min(Math.max(parsed, 1), 100);
+      }
+    }
+
+    return fallback;
+  }
+
+  private getSyncTtlMinutes(): number {
+    const configuredValue = this.configService.get<string | number | undefined>(
+      "AMAZON_ADS_SYNC_TTL_MINUTES",
+    );
+
+    if (typeof configuredValue === "number" && Number.isFinite(configuredValue)) {
+      return Math.max(1, Math.trunc(configuredValue));
+    }
+
+    if (typeof configuredValue === "string") {
+      const parsed = Number.parseInt(configuredValue.trim(), 10);
+      if (!Number.isNaN(parsed) && Number.isFinite(parsed)) {
+        return Math.max(1, parsed);
+      }
+    }
+
+    return DEFAULT_AMAZON_ADS_SYNC_TTL_MINUTES;
+  }
+
+  private getFailedSyncRetryCooldownMinutes(): number {
+    const configuredValue = this.configService.get<string | number | undefined>(
+      "AMAZON_ADS_FAILED_SYNC_RETRY_COOLDOWN_MINUTES",
+    );
+
+    if (typeof configuredValue === "number" && Number.isFinite(configuredValue)) {
+      return Math.max(1, Math.trunc(configuredValue));
+    }
+
+    if (typeof configuredValue === "string") {
+      const parsed = Number.parseInt(configuredValue.trim(), 10);
+      if (!Number.isNaN(parsed) && Number.isFinite(parsed)) {
+        return Math.max(1, parsed);
+      }
+    }
+
+    return DEFAULT_AMAZON_ADS_FAILED_SYNC_RETRY_COOLDOWN_MINUTES;
   }
 
   private toPrismaDecimal(value: number | null): Prisma.Decimal | null {

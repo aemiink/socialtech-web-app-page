@@ -1,5 +1,42 @@
 # Architecture Decisions
 
+## 2026-05-28 - Amazon Ads Faz 8 Sync Automation Hardening
+
+Context:
+Amazon Ads Faz 7 sonrası sync lifecycle fonksiyonel olsa da operasyonel gözlemlenebilirlik, tekrar-deneme kontrolü ve client-safe hata yüzeyi production standardı için yetersizdi. Admin ve assigned employee tarafında sync geçmişinin merkezi izlenmesi, retry aksiyonu ve TTL/cooldown normalizasyonu gerekiyordu.
+
+Decision:
+
+- Backend sync lifecycle’a trigger-aware loglama eklendi (`MANUAL_SYNC`, `ON_DEMAND_ASSIGNED_REFRESH`, `ERROR_RETRY`), `AmazonAdsSyncLog` kaydı üzerinden status/error/report-status observability standardize edildi.
+- Assigned sync flow’u için TTL skip (`SYNC_TTL_ACTIVE`) ve failed-sync cooldown skip (`FAILED_SYNC_COOLDOWN_ACTIVE`) normalize edildi; skip durumları response contract’ına `skippedReason` olarak eklendi.
+- Admin API surface’i genişletildi:
+  - `GET /api/v1/admin/amazon-ads/sync-logs`
+  - `POST /api/v1/admin/clients/:clientId/amazon-ads/sync/retry`
+- Amazon API hata katalogu normalize edilerek connection config üzerinde admin-readable `syncError` standardına taşındı (`TOKEN_EXPIRED_OR_REVOKED`, `PERMISSION_DENIED`, `REPORT_NOT_READY`, `RATE_LIMIT`, vb.).
+- Admin global panelde sync log tablosu, status sayaçları, report-status görünürlüğü ve failed-client retry aksiyonları eklendi.
+- Client dashboard manual refresh tarafında kısa cooldown/rate-limit UX koruması eklendi; teknik hata detayları client response yüzeyinden saklı tutuldu.
+- Faz 8 e2e senaryoları (sync logs, retry, TTL skip, normalized auth/profile/report errors, token-safe read models) test kapsamına alındı.
+
+Reason:
+Bu yaklaşım sync operasyonunu sadece “çalışıyor” seviyesinden “izlenebilir, tekrar denenebilir ve güvenli hata yüzeyine sahip” production-grade seviyeye taşır. Admin/employee aksiyonları aynı lifecycle modelini kullanırken client tarafında teknik detay sızıntısı engellenir.
+
+Affected files:
+- `server/src/amazon-ads/amazon-ads.service.ts`
+- `server/src/amazon-ads/amazon-ads.controller.ts`
+- `server/src/amazon-ads/dto/amazon-ads-sync-logs-query.dto.ts`
+- `server/src/config/env.validation.ts`
+- `server/.env.example`
+- `server/test/amazon-ads-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
+- `adminandemployeePanel/src/app/pages/AmazonAdsAdmin.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/AmazonAdsAdmin.test.tsx`
+- `clientPanel/src/app/pages/services/amazon-ads-dashboard.tsx`
+- `clientPanel/src/app/pages/__tests__/amazon-ads-dashboard.test.tsx`
+
+---
+
 ## 2026-05-28 - Amazon Ads Faz 7 Approval + Creative Collaboration Contract Alignment
 
 Context:

@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   AdminClientAmazonAdsConnection,
   AdminClientMetaAdsConnection,
+  AmazonAdsSummaryResponse,
   ClientSummaryResponse,
   MetaAdsSummaryResponse,
 } from "../../features/clients/clientsTypes";
@@ -83,11 +84,13 @@ const mockUseDisconnectAdminClientMetaAdsMutation = vi.fn();
 const mockUseGetAdminClientAmazonAdsConnectionQuery = vi.fn<
   (id: string, options: QueryOptions) => AmazonAdsConnectionQueryResult
 >();
+const mockUseGetAdminClientAmazonAdsSummaryQuery = vi.fn();
 const mockUseUpdateAdminClientAmazonAdsConfigMutation = vi.fn();
 const mockUseCreateAdminClientAmazonAdsOAuthUrlMutation = vi.fn();
 const mockUseExchangeAdminClientAmazonAdsOAuthCodeMutation = vi.fn();
 const mockUseConnectAdminClientAmazonAdsManualMutation = vi.fn();
 const mockUseTestAdminClientAmazonAdsConnectionMutation = vi.fn();
+const mockUseSyncAdminClientAmazonAdsMutation = vi.fn();
 const mockUseDisconnectAdminClientAmazonAdsMutation = vi.fn();
 const mockUseResetClientOwnerPasswordMutation = vi.fn();
 const mockUseGetAdminClientTikTokAdsConnectionQuery = vi.fn<
@@ -108,6 +111,8 @@ vi.mock("../../features/clients/clientsApi", () => ({
     mockUseGetAdminClientMetaAdsSummaryQuery(...args),
   useGetAdminClientAmazonAdsConnectionQuery: (id: string, options: QueryOptions) =>
     mockUseGetAdminClientAmazonAdsConnectionQuery(id, options),
+  useGetAdminClientAmazonAdsSummaryQuery: (...args: unknown[]) =>
+    mockUseGetAdminClientAmazonAdsSummaryQuery(...args),
   useUpdateAdminClientAmazonAdsConfigMutation: () =>
     mockUseUpdateAdminClientAmazonAdsConfigMutation(),
   useCreateAdminClientAmazonAdsOAuthUrlMutation: () =>
@@ -118,6 +123,7 @@ vi.mock("../../features/clients/clientsApi", () => ({
     mockUseConnectAdminClientAmazonAdsManualMutation(),
   useTestAdminClientAmazonAdsConnectionMutation: () =>
     mockUseTestAdminClientAmazonAdsConnectionMutation(),
+  useSyncAdminClientAmazonAdsMutation: () => mockUseSyncAdminClientAmazonAdsMutation(),
   useDisconnectAdminClientAmazonAdsMutation: () =>
     mockUseDisconnectAdminClientAmazonAdsMutation(),
   useConnectAdminClientMetaAdsManualMutation: () =>
@@ -277,6 +283,25 @@ const amazonAdsConnectionSummary: AdminClientAmazonAdsConnection = {
   },
 };
 
+const amazonAdsSummary: AmazonAdsSummaryResponse = {
+  spend: 320,
+  impressions: 24000,
+  clicks: 480,
+  sales: 2400,
+  orders: 36,
+  unitsSold: 40,
+  ctr: 2,
+  cpc: 0.67,
+  acos: 13.33,
+  roas: 7.5,
+  conversionRate: 7.5,
+  dateRange: {
+    since: "2026-05-07",
+    until: "2026-05-08",
+  },
+  lastSyncAt: "2026-05-09T10:00:00.000Z",
+};
+
 const tikTokAdsConnectionSummary: AdminTikTokAdsConnection = {
   clientProfileId,
   connectionStatus: "CONNECTED",
@@ -363,6 +388,24 @@ function setupAmazonAdsConnectionState(
   });
 }
 
+function setupAmazonAdsSummaryState(
+  overrides: Partial<{
+    data: AmazonAdsSummaryResponse | undefined;
+    error: unknown;
+    isLoading: boolean;
+    isFetching: boolean;
+  }> = {},
+) {
+  mockUseGetAdminClientAmazonAdsSummaryQuery.mockReturnValue({
+    data: amazonAdsSummary,
+    error: undefined,
+    isLoading: false,
+    isFetching: false,
+    refetch: vi.fn(),
+    ...overrides,
+  });
+}
+
 function setupTikTokAdsConnectionState(
   overrides: Partial<TikTokAdsConnectionQueryResult> = {},
 ) {
@@ -423,6 +466,7 @@ describe("ClientDetail", () => {
     setupSummaryState();
     setupMetaAdsConnectionState();
     setupAmazonAdsConnectionState();
+    setupAmazonAdsSummaryState();
     setupMetaAdsSummaryState();
     setupTikTokAdsConnectionState();
     setupTikTokAdsSummaryState();
@@ -435,6 +479,7 @@ describe("ClientDetail", () => {
     mockUseExchangeAdminClientAmazonAdsOAuthCodeMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseConnectAdminClientAmazonAdsManualMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseTestAdminClientAmazonAdsConnectionMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
+    mockUseSyncAdminClientAmazonAdsMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseDisconnectAdminClientAmazonAdsMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseConnectAdminClientTikTokAdsManualMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseTestAdminClientTikTokAdsConnectionMutation.mockReturnValue([vi.fn(), { isLoading: false }]);

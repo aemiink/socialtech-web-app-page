@@ -5,7 +5,10 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthUserProfile } from "../../features/auth/authTypes";
-import type { AdminAmazonAdsClientListResponse } from "../../features/clients/clientsTypes";
+import type {
+  AdminAmazonAdsClientListResponse,
+  AdminAmazonAdsSyncLogsResponse,
+} from "../../features/clients/clientsTypes";
 import type { Task } from "../../features/tasks/tasksTypes";
 import { AmazonAdsAdmin } from "../AmazonAdsAdmin";
 
@@ -29,9 +32,11 @@ type AmazonAdsListQueryResult = {
 const mockUseGetAdminAmazonAdsClientsQuery = vi.fn<
   (query?: unknown, options?: QueryOptions) => AmazonAdsListQueryResult
 >();
+const mockUseGetAdminAmazonAdsSyncLogsQuery = vi.fn();
 const mockUseUpdateAdminClientAmazonAdsConfigMutation = vi.fn();
 const mockUseTestAdminClientAmazonAdsConnectionMutation = vi.fn();
 const mockUseSyncAdminClientAmazonAdsMutation = vi.fn();
+const mockUseRetryAdminClientAmazonAdsSyncMutation = vi.fn();
 const mockUseDisconnectAdminClientAmazonAdsMutation = vi.fn();
 const mockUseCreateTaskMutation = vi.fn();
 
@@ -44,11 +49,15 @@ vi.mock("../../store/hooks", () => ({
 vi.mock("../../features/clients/clientsApi", () => ({
   useGetAdminAmazonAdsClientsQuery: (query?: unknown, options?: QueryOptions) =>
     mockUseGetAdminAmazonAdsClientsQuery(query, options),
+  useGetAdminAmazonAdsSyncLogsQuery: (query?: unknown, options?: QueryOptions) =>
+    mockUseGetAdminAmazonAdsSyncLogsQuery(query, options),
   useUpdateAdminClientAmazonAdsConfigMutation: () =>
     mockUseUpdateAdminClientAmazonAdsConfigMutation(),
   useTestAdminClientAmazonAdsConnectionMutation: () =>
     mockUseTestAdminClientAmazonAdsConnectionMutation(),
   useSyncAdminClientAmazonAdsMutation: () => mockUseSyncAdminClientAmazonAdsMutation(),
+  useRetryAdminClientAmazonAdsSyncMutation: () =>
+    mockUseRetryAdminClientAmazonAdsSyncMutation(),
   useDisconnectAdminClientAmazonAdsMutation: () =>
     mockUseDisconnectAdminClientAmazonAdsMutation(),
 }));
@@ -139,6 +148,34 @@ const amazonAdsClientListResponse: AdminAmazonAdsClientListResponse = {
   },
 };
 
+const amazonAdsSyncLogsResponse: AdminAmazonAdsSyncLogsResponse = {
+  data: [
+    {
+      id: "sync-log-1",
+      clientProfileId: "11111111-1111-4111-8111-111111111111",
+      clientCompanyName: "Acme E-ticaret",
+      profileId: "amzn1.profile.1",
+      status: "SUCCESS",
+      trigger: "MANUAL_SYNC",
+      startedAt: "2026-05-27T10:00:00.000Z",
+      finishedAt: "2026-05-27T10:00:05.000Z",
+      durationMs: 5000,
+      errorCode: null,
+      errorMessage: null,
+      recordsFetched: 42,
+      apiCallCount: 12,
+      reportStatus: "COMPLETED",
+      createdAt: "2026-05-27T10:00:05.000Z",
+    },
+  ],
+  meta: {
+    total: 1,
+    failed: 0,
+    running: 0,
+    skipped: 0,
+  },
+};
+
 function createResolvedMutation<T>(value: T) {
   return vi.fn((): MutationResponse<T> => ({
     unwrap: async () => value,
@@ -159,6 +196,12 @@ describe("AmazonAdsAdmin", () => {
       isLoading: false,
       refetch: vi.fn(),
     });
+    mockUseGetAdminAmazonAdsSyncLogsQuery.mockReturnValue({
+      data: amazonAdsSyncLogsResponse,
+      error: undefined,
+      isError: false,
+      isLoading: false,
+    });
     mockUseUpdateAdminClientAmazonAdsConfigMutation.mockReturnValue([
       createResolvedMutation({}),
       { isLoading: false },
@@ -168,6 +211,10 @@ describe("AmazonAdsAdmin", () => {
       { isLoading: false },
     ]);
     mockUseSyncAdminClientAmazonAdsMutation.mockReturnValue([
+      createResolvedMutation({}),
+      { isLoading: false },
+    ]);
+    mockUseRetryAdminClientAmazonAdsSyncMutation.mockReturnValue([
       createResolvedMutation({}),
       { isLoading: false },
     ]);
@@ -186,6 +233,8 @@ describe("AmazonAdsAdmin", () => {
     expect(screen.getByRole("heading", { name: "Amazon Ads Yönetimi" })).toBeInTheDocument();
     expect(screen.getAllByText("Acme E-ticaret").length).toBeGreaterThan(0);
     expect(screen.getByText("Performance Specialist (PERFORMANCE)")).toBeInTheDocument();
+    expect(screen.getByText("Sync Logları")).toBeInTheDocument();
+    expect(screen.getByText("COMPLETED")).toBeInTheDocument();
 
     mockUseGetAdminAmazonAdsClientsQuery.mockReturnValueOnce({
       data: undefined,
@@ -285,6 +334,40 @@ describe("AmazonAdsAdmin", () => {
     fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
     await waitFor(() => {
       expect(disconnectMutation).toHaveBeenCalledWith({
+        clientId: "11111111-1111-4111-8111-111111111111",
+      });
+    });
+  });
+
+  it("runs retry sync action from failed clients panel", async () => {
+    const retryMutation = createResolvedMutation({});
+    mockUseRetryAdminClientAmazonAdsSyncMutation.mockReturnValue([
+      retryMutation,
+      { isLoading: false },
+    ]);
+    mockUseGetAdminAmazonAdsClientsQuery.mockReturnValue({
+      data: {
+        ...amazonAdsClientListResponse,
+        data: [
+          {
+            ...amazonAdsClientListResponse.data[0],
+            connectionStatus: "ERROR",
+            syncError: "Amazon Ads API rate limit sınırına ulaşıldı.",
+          },
+        ],
+      },
+      error: undefined,
+      isError: false,
+      isFetching: false,
+      isLoading: false,
+      refetch: vi.fn(),
+    });
+
+    render(<AmazonAdsAdmin />, { wrapper: MemoryRouter });
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry Sync" }));
+    await waitFor(() => {
+      expect(retryMutation).toHaveBeenCalledWith({
         clientId: "11111111-1111-4111-8111-111111111111",
       });
     });

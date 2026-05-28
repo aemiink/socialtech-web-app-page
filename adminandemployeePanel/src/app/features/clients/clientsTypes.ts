@@ -525,6 +525,7 @@ export type AmazonAdsSyncResponse = {
   connectionStatus: AmazonAdsConnectionStatus;
   lastSyncAt: string | null;
   syncStatus: AmazonAdsSyncStatus;
+  skippedReason: string | null;
 };
 
 export type AdminAmazonAdsClientListItem = {
@@ -589,6 +590,41 @@ export type AdminAmazonAdsClientListResponse = {
     error: number;
     pendingApprovals: number;
   };
+};
+
+export type AdminAmazonAdsSyncLogItem = {
+  id: string;
+  clientProfileId: string;
+  clientCompanyName: string;
+  profileId: string | null;
+  status: AmazonAdsSyncStatus;
+  trigger: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+  durationMs: number | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  recordsFetched: number | null;
+  apiCallCount: number | null;
+  reportStatus: string | null;
+  createdAt: string;
+};
+
+export type AdminAmazonAdsSyncLogsResponse = {
+  data: AdminAmazonAdsSyncLogItem[];
+  meta: {
+    total: number;
+    failed: number;
+    running: number;
+    skipped: number;
+  };
+};
+
+export type AdminAmazonAdsSyncLogsQuery = {
+  clientProfileId?: string;
+  status?: AmazonAdsSyncStatus;
+  failedOnly?: boolean;
+  limit?: number;
 };
 
 export type TestMetaAdsConnectionRequest = {

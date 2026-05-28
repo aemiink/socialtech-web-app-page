@@ -65,6 +65,9 @@ describe("Amazon Ads Config Authz (e2e)", () => {
       AMAZON_ADS_REDIRECT_URI: process.env.AMAZON_ADS_REDIRECT_URI,
       AMAZON_ADS_OAUTH_SCOPES: process.env.AMAZON_ADS_OAUTH_SCOPES,
       AMAZON_ADS_DEFAULT_REGION: process.env.AMAZON_ADS_DEFAULT_REGION,
+      AMAZON_ADS_SYNC_TTL_MINUTES: process.env.AMAZON_ADS_SYNC_TTL_MINUTES,
+      AMAZON_ADS_FAILED_SYNC_RETRY_COOLDOWN_MINUTES:
+        process.env.AMAZON_ADS_FAILED_SYNC_RETRY_COOLDOWN_MINUTES,
     };
     process.env.AMAZON_ADS_TOKEN_ENCRYPTION_KEY = TEST_TOKEN_ENCRYPTION_KEY;
     process.env.AMAZON_ADS_LWA_CLIENT_ID = TEST_LWA_CLIENT_ID;
@@ -72,6 +75,8 @@ describe("Amazon Ads Config Authz (e2e)", () => {
     process.env.AMAZON_ADS_REDIRECT_URI = TEST_REDIRECT_URI;
     process.env.AMAZON_ADS_OAUTH_SCOPES = "advertising::campaign_management";
     process.env.AMAZON_ADS_DEFAULT_REGION = "NA";
+    process.env.AMAZON_ADS_SYNC_TTL_MINUTES = "30";
+    process.env.AMAZON_ADS_FAILED_SYNC_RETRY_COOLDOWN_MINUTES = "10";
 
     const amazonAdsApiMock = {
       createAuthorizationUrl: jest.fn(
@@ -101,7 +106,12 @@ describe("Amazon Ads Config Authz (e2e)", () => {
           profiles: [mockProfile],
         };
       }),
-      fetchReportingSnapshot: jest.fn(async () => ({
+      fetchReportingSnapshot: jest.fn(async () => {
+        if (mockAmazonAdsConnectionError) {
+          throw new Error(mockAmazonAdsConnectionError.message);
+        }
+
+        return {
         rows: [
           {
             date: "2026-05-01",
@@ -186,7 +196,8 @@ describe("Amazon Ads Config Authz (e2e)", () => {
           },
         ],
         apiCallCount: 3,
-      })),
+        };
+      }),
       normalizeError: jest.fn((error: unknown) => {
         if (mockAmazonAdsConnectionError) {
           return mockAmazonAdsConnectionError;
@@ -446,7 +457,7 @@ describe("Amazon Ads Config Authz (e2e)", () => {
       select: { connectionStatus: true, syncError: true },
     });
     expect(config?.connectionStatus).toBe(AmazonAdsConnectionStatus.ERROR);
-    expect(config?.syncError).toBe("Missing Amazon Ads profile access.");
+    expect(config?.syncError).toBe("Amazon Ads API erişim izni reddedildi.");
   });
 
   it("admin can start and exchange amazon ads oauth connection", async () => {
@@ -541,8 +552,129 @@ describe("Amazon Ads Config Authz (e2e)", () => {
     expect(snapshotCount).toBeGreaterThanOrEqual(4);
   });
 
+  it("admin can read amazon ads sync logs with report status details", async () => {
+    if (!clientProfileId) return;
+
+    const res = await request(app.getHttpServer())
+      .get(`/api/v1/admin/amazon-ads/sync-logs?clientProfileId=${clientProfileId}&limit=10`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.data)).toBe(true);
+    expect(res.body.meta.total).toBeGreaterThanOrEqual(1);
+    expect(res.body.data[0].clientProfileId).toBe(clientProfileId);
+    expect(typeof res.body.data[0].status).toBe("string");
+    expectResponseHasNoSensitiveTokenData(res.body);
+  });
+
+  it("assigned sync returns SKIPPED when sync ttl is active", async () => {
+    if (!clientProfileId) return;
+
+    const res = await request(app.getHttpServer())
+      .post(`/api/v1/amazon-ads/clients/${clientProfileId}/sync`)
+      .set("Authorization", `Bearer ${employeeToken}`);
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(res.body.syncStatus).toBe(AmazonAdsSyncStatus.SKIPPED);
+    expect(typeof res.body.skippedReason).toBe("string");
+  });
+
+  it("admin can run amazon ads retry sync endpoint", async () => {
+    if (!clientProfileId) return;
+
+    const res = await request(app.getHttpServer())
+      .post(
+        `/api/v1/admin/clients/${clientProfileId}/amazon-ads/sync/retry?since=2026-05-01&until=2026-05-01`,
+      )
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect([AmazonAdsSyncStatus.SUCCESS, AmazonAdsSyncStatus.PARTIAL]).toContain(
+      res.body.syncStatus,
+    );
+    expect(res.body.skippedReason).toBeNull();
+    expectResponseHasNoSensitiveTokenData(res.body);
+  });
+
+  it("normalizes amazon ads auth errors for sync and keeps client response technical-detail free", async () => {
+    if (!clientProfileId) return;
+
+    mockAmazonAdsConnectionError = {
+      category: "AUTH",
+      message: "OAuth token revoked by user.",
+      statusCode: 401,
+    };
+
+    const syncRes = await request(app.getHttpServer())
+      .post(`/api/v1/admin/clients/${clientProfileId}/amazon-ads/sync`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    mockAmazonAdsConnectionError = null;
+
+    expect(syncRes.status).toBe(400);
+    expect(syncRes.body.message).toBe("Amazon Ads OAuth token süresi dolmuş veya iptal edilmiş görünüyor.");
+
+    const adminConnectionRes = await request(app.getHttpServer())
+      .get(`/api/v1/admin/clients/${clientProfileId}/amazon-ads/connection`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(adminConnectionRes.status).toBe(200);
+    expect(adminConnectionRes.body.syncError).toBe(
+      "Amazon Ads OAuth token süresi dolmuş veya iptal edilmiş görünüyor.",
+    );
+
+    const clientConfigRes = await request(app.getHttpServer())
+      .get("/api/v1/clients/me/amazon-ads/config")
+      .set("Authorization", `Bearer ${clientToken}`);
+    expect(clientConfigRes.status).toBe(200);
+    expect(clientConfigRes.body.syncError).toBeUndefined();
+    expectResponseHasNoSensitiveTokenData(clientConfigRes.body);
+  });
+
+  it("normalizes invalid profile and report-not-ready sync failures", async () => {
+    if (!clientProfileId) return;
+
+    mockAmazonAdsConnectionError = {
+      category: "UNKNOWN",
+      message: "profileId is invalid for this region.",
+      statusCode: 400,
+    };
+
+    const invalidProfileRes = await request(app.getHttpServer())
+      .post(`/api/v1/admin/clients/${clientProfileId}/amazon-ads/sync`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    expect(invalidProfileRes.status).toBe(400);
+    expect(invalidProfileRes.body.message).toBe("Amazon Ads profile ID geçersiz veya eksik.");
+
+    mockAmazonAdsConnectionError = {
+      category: "UNKNOWN",
+      message: "Amazon Ads report report-1 did not complete within poll window.",
+      statusCode: 502,
+    };
+
+    const reportNotReadyRes = await request(app.getHttpServer())
+      .post(`/api/v1/admin/clients/${clientProfileId}/amazon-ads/sync`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    mockAmazonAdsConnectionError = null;
+
+    expect(reportNotReadyRes.status).toBe(502);
+    expect(reportNotReadyRes.body.message).toBe("Amazon Ads raporu henüz hazır değil.");
+  });
+
   it("admin can read amazon ads global clients list without token leakage", async () => {
     if (!clientProfileId) return;
+
+    const reconnectRes = await request(app.getHttpServer())
+      .post(`/api/v1/admin/clients/${clientProfileId}/amazon-ads/test-connection`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        profileId: mockProfile.profileId,
+        region: "NA",
+      });
+    expect(reconnectRes.status).toBe(201);
 
     const res = await request(app.getHttpServer())
       .get("/api/v1/admin/amazon-ads/clients?since=2026-05-01&until=2026-05-01")

@@ -3,6 +3,8 @@ import { extractApiErrorMessage } from "../adminUsers/adminUsersUtils";
 import type {
   AdminAmazonAdsClientListItem,
   AdminAmazonAdsClientListResponse,
+  AdminAmazonAdsSyncLogItem,
+  AdminAmazonAdsSyncLogsResponse,
   AdminMetaAdsSyncLogItem,
   AdminMetaAdsSyncLogsResponse,
   AdminMetaAdsClientListItem,
@@ -835,6 +837,8 @@ export function normalizeAmazonAdsSyncResponse(response: unknown): AmazonAdsSync
       isRecord(candidate) && candidate.syncStatus
         ? normalizeAmazonAdsSyncStatus(candidate.syncStatus)
         : "SUCCESS",
+    skippedReason:
+      isRecord(candidate) && isStringOrNull(candidate.skippedReason) ? candidate.skippedReason : null,
   };
 }
 
@@ -904,6 +908,28 @@ export function normalizeAdminMetaAdsSyncLogsResponse(
   return {
     data: Array.isArray(rowsSource)
       ? rowsSource.map((row) => normalizeAdminMetaAdsSyncLogItem(row)).filter(isDefined)
+      : [],
+    meta: {
+      total: readNumber(metaSource.total, 0),
+      failed: readNumber(metaSource.failed, 0),
+      running: readNumber(metaSource.running, 0),
+      skipped: readNumber(metaSource.skipped, 0),
+    },
+  };
+}
+
+export function normalizeAdminAmazonAdsSyncLogsResponse(
+  response: unknown,
+): AdminAmazonAdsSyncLogsResponse {
+  const candidate = isRecord(response) && "data" in response && isRecord(response.data)
+    ? response.data
+    : response;
+  const rowsSource = isRecord(candidate) ? candidate.data : undefined;
+  const metaSource = isRecord(candidate) && isRecord(candidate.meta) ? candidate.meta : {};
+
+  return {
+    data: Array.isArray(rowsSource)
+      ? rowsSource.map((row) => normalizeAdminAmazonAdsSyncLogItem(row)).filter(isDefined)
       : [],
     meta: {
       total: readNumber(metaSource.total, 0),
@@ -1482,6 +1508,46 @@ function normalizeAdminMetaAdsSyncLogItem(value: unknown): AdminMetaAdsSyncLogIt
     apiCallCount: typeof value.apiCallCount === "number" && Number.isFinite(value.apiCallCount)
       ? Math.trunc(value.apiCallCount)
       : null,
+    createdAt: value.createdAt,
+  };
+}
+
+function normalizeAdminAmazonAdsSyncLogItem(value: unknown): AdminAmazonAdsSyncLogItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (
+    typeof value.id !== "string" ||
+    typeof value.clientProfileId !== "string" ||
+    typeof value.clientCompanyName !== "string" ||
+    typeof value.startedAt !== "string" ||
+    typeof value.createdAt !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    clientProfileId: value.clientProfileId,
+    clientCompanyName: value.clientCompanyName,
+    profileId: isStringOrNull(value.profileId) ? value.profileId : null,
+    status: normalizeAmazonAdsSyncStatus(value.status),
+    trigger: isStringOrNull(value.trigger) ? value.trigger : null,
+    startedAt: value.startedAt,
+    finishedAt: isStringOrNull(value.finishedAt) ? value.finishedAt : null,
+    durationMs: typeof value.durationMs === "number" && Number.isFinite(value.durationMs)
+      ? value.durationMs
+      : null,
+    errorCode: isStringOrNull(value.errorCode) ? value.errorCode : null,
+    errorMessage: isStringOrNull(value.errorMessage) ? value.errorMessage : null,
+    recordsFetched: typeof value.recordsFetched === "number" && Number.isFinite(value.recordsFetched)
+      ? Math.trunc(value.recordsFetched)
+      : null,
+    apiCallCount: typeof value.apiCallCount === "number" && Number.isFinite(value.apiCallCount)
+      ? Math.trunc(value.apiCallCount)
+      : null,
+    reportStatus: isStringOrNull(value.reportStatus) ? value.reportStatus : null,
     createdAt: value.createdAt,
   };
 }

@@ -501,6 +501,31 @@ Additional active Amazon Ads endpoints:
 - `POST /api/v1/admin/clients/:clientId/amazon-ads/test-connection`
 - `POST /api/v1/admin/clients/:clientId/amazon-ads/disconnect`
 
+## Amazon Ads Faz 3 — Reporting v3 Async Sync ve Snapshot Read Model (2026-05-27)
+
+Amazon Ads Faz 3 ile read-only Reporting v3 lifecycle ve günlük snapshot read model eklendi. Özet:
+- Prisma reporting foundation: `AmazonAdsDailyInsight`, `AmazonAdsSyncLog`, `AmazonAdsInsightLevel`, `AmazonAdsProductType`, `AmazonAdsSyncStatus`.
+- Backend `AmazonAdsApiService`, LwA refresh token ile access token yenileyip Reporting v3 async report create/poll/download akışını çalıştırır; campaign, product ve search-term satırlarını normalize eder.
+- Backend `AmazonAdsService`, manual sync endpointinde refresh token’ı decrypt eder, snapshot satırlarını yazar, account-level aggregate üretir ve sync log/request/status metadata’sını saklar.
+- Admin, assigned employee ve client own read endpoints summary/campaigns/products/insights yüzeylerini snapshot’tan döndürür; client/admin UI mock performans metrikleri yerine API-driven summary/read model kullanır.
+- Admin ClientDetail Amazon Ads kartı performans özeti ve manual sync aksiyonu gösterir; client portal Amazon Ads dashboard connected durumda gerçek summary/campaign/product/search-term verisiyle çalışır.
+
+Additional active Amazon Ads reporting endpoints:
+- `GET /api/v1/admin/clients/:clientId/amazon-ads/summary`
+- `GET /api/v1/admin/clients/:clientId/amazon-ads/campaigns`
+- `GET /api/v1/admin/clients/:clientId/amazon-ads/products`
+- `GET /api/v1/admin/clients/:clientId/amazon-ads/insights`
+- `POST /api/v1/admin/clients/:clientId/amazon-ads/sync`
+- `GET /api/v1/amazon-ads/clients/:clientId/summary`
+- `GET /api/v1/amazon-ads/clients/:clientId/campaigns`
+- `GET /api/v1/amazon-ads/clients/:clientId/products`
+- `GET /api/v1/amazon-ads/clients/:clientId/insights`
+- `POST /api/v1/amazon-ads/clients/:clientId/sync`
+- `GET /api/v1/clients/me/amazon-ads/summary`
+- `GET /api/v1/clients/me/amazon-ads/campaigns`
+- `GET /api/v1/clients/me/amazon-ads/products`
+- `GET /api/v1/clients/me/amazon-ads/insights`
+
 Planned next backend phases:
 - Broader domain endpoint authorization rollout (beyond users/clients/admin-assignments/projects/tasks)
 - Forced password change on first login flow

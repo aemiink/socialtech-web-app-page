@@ -1,5 +1,5 @@
 import { type FormEvent, useMemo, useState } from "react";
-import { BadgeCheck, Link2Off, RefreshCw, TestTube2, Wrench } from "lucide-react";
+import { BadgeCheck, Link2Off, RefreshCw, RotateCcw, TestTube2, Wrench } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -17,11 +17,17 @@ import { hasAdminPermission, selectCurrentUser } from "../features/auth/authSele
 import {
   useDisconnectAdminClientAmazonAdsMutation,
   useGetAdminAmazonAdsClientsQuery,
+  useGetAdminAmazonAdsSyncLogsQuery,
+  useRetryAdminClientAmazonAdsSyncMutation,
   useSyncAdminClientAmazonAdsMutation,
   useTestAdminClientAmazonAdsConnectionMutation,
   useUpdateAdminClientAmazonAdsConfigMutation,
 } from "../features/clients/clientsApi";
-import type { AdminAmazonAdsClientListItem, AmazonAdsRegion } from "../features/clients/clientsTypes";
+import type {
+  AdminAmazonAdsClientListItem,
+  AdminAmazonAdsSyncLogItem,
+  AmazonAdsRegion,
+} from "../features/clients/clientsTypes";
 import {
   extractApiErrorMessage,
   formatClientDateTime,
@@ -77,11 +83,26 @@ export function AmazonAdsAdmin() {
   } = useGetAdminAmazonAdsClientsQuery(undefined, {
     skip: !canReadAmazonAds,
   });
+  const {
+    data: syncLogsResponse,
+    error: syncLogsError,
+    isError: isSyncLogsError,
+    isLoading: isSyncLogsLoading,
+  } = useGetAdminAmazonAdsSyncLogsQuery(
+    {
+      limit: 20,
+    },
+    {
+      skip: !canReadAmazonAds,
+    },
+  );
   const [updateAmazonAdsConfig, { isLoading: isUpdatingConfig }] =
     useUpdateAdminClientAmazonAdsConfigMutation();
   const [testAmazonAdsConnection, { isLoading: isTestingConnection }] =
     useTestAdminClientAmazonAdsConnectionMutation();
   const [syncAmazonAds, { isLoading: isSyncing }] = useSyncAdminClientAmazonAdsMutation();
+  const [retryAmazonAdsSync, { isLoading: isRetryingSync }] =
+    useRetryAdminClientAmazonAdsSyncMutation();
   const [disconnectAmazonAds, { isLoading: isDisconnecting }] =
     useDisconnectAdminClientAmazonAdsMutation();
   const [createTask, { isLoading: isCreatingApproval }] = useCreateTaskMutation();
@@ -94,6 +115,8 @@ export function AmazonAdsAdmin() {
   const listItems = response?.data ?? [];
   const meta = response?.meta;
   const dateRange = response?.dateRange;
+  const syncLogs = syncLogsResponse?.data ?? [];
+  const syncLogsMeta = syncLogsResponse?.meta;
   const failedClients = useMemo(
     () => listItems.filter((item) => item.connectionStatus === "ERROR" || Boolean(item.syncError)),
     [listItems],
@@ -102,6 +125,7 @@ export function AmazonAdsAdmin() {
     isUpdatingConfig ||
     isTestingConnection ||
     isSyncing ||
+    isRetryingSync ||
     isDisconnecting ||
     isCreatingApproval;
 
@@ -250,6 +274,23 @@ export function AmazonAdsAdmin() {
       },
       `${client.client.companyName} için manuel sync tamamlandı.`,
       "Amazon Ads sync çalıştırılamadı.",
+    );
+  }
+
+  async function handleRetrySync(client: AdminAmazonAdsClientListItem) {
+    if (!canManageAmazonAds || isMutating) {
+      return;
+    }
+
+    await runClientAction(
+      client.client.id,
+      async () => {
+        await retryAmazonAdsSync({
+          clientId: client.client.id,
+        }).unwrap();
+      },
+      `${client.client.companyName} için retry sync tamamlandı.`,
+      "Amazon Ads retry sync çalıştırılamadı.",
     );
   }
 
@@ -577,17 +618,130 @@ export function AmazonAdsAdmin() {
                   variant="outline"
                   className="gap-1 border-red-500/30 text-red-200 hover:bg-red-500/10"
                   onClick={() => {
-                    void handleManualSync(client);
+                    void handleRetrySync(client);
                   }}
                   disabled={!canManageAmazonAds || isMutating}
                 >
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  Tekrar Sync
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Retry Sync
                 </Button>
               </div>
             ))}
           </div>
         )}
+      </Card>
+
+      <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-white">Sync Logları</h2>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="rounded bg-white/5 px-2 py-1 text-[#DADADA]">
+              Toplam: {syncLogsMeta?.total ?? 0}
+            </span>
+            <span className="rounded bg-red-500/15 px-2 py-1 text-red-200">
+              Hatalı: {syncLogsMeta?.failed ?? 0}
+            </span>
+            <span className="rounded bg-yellow-500/15 px-2 py-1 text-yellow-200">
+              Running: {syncLogsMeta?.running ?? 0}
+            </span>
+            <span className="rounded bg-[#00D4FF]/15 px-2 py-1 text-[#8defff]">
+              Skipped: {syncLogsMeta?.skipped ?? 0}
+            </span>
+          </div>
+        </div>
+
+        {isSyncLogsLoading ? (
+          <p className="text-sm text-[#A0A0A0]">Amazon Ads sync logları yükleniyor...</p>
+        ) : null}
+        {isSyncLogsError ? (
+          <p className="text-sm text-red-300">
+            {extractApiErrorMessage(syncLogsError, "Amazon Ads sync logları alınamadı.")}
+          </p>
+        ) : null}
+        {!isSyncLogsLoading && !isSyncLogsError && syncLogs.length === 0 ? (
+          <p className="text-sm text-[#A0A0A0]">Henüz sync log kaydı bulunmuyor.</p>
+        ) : null}
+
+        {!isSyncLogsLoading && !isSyncLogsError && syncLogs.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[980px]">
+              <thead className="border-b border-white/[0.06] text-left text-xs text-[#A0A0A0]">
+                <tr>
+                  <th className="py-3 pr-3">Müşteri</th>
+                  <th className="py-3 pr-3">Trigger</th>
+                  <th className="py-3 pr-3">Sync</th>
+                  <th className="py-3 pr-3">Report</th>
+                  <th className="py-3 pr-3">Başlangıç</th>
+                  <th className="py-3 pr-3">Süre</th>
+                  <th className="py-3 pr-3">API</th>
+                  <th className="py-3 pr-3">Kayıt</th>
+                  <th className="py-3">Aksiyon</th>
+                </tr>
+              </thead>
+              <tbody>
+                {syncLogs.map((log) => {
+                  const targetClient = listItems.find((item) => item.client.id === log.clientProfileId);
+                  const canRetry =
+                    log.status === "FAILED" || log.status === "PARTIAL" || log.status === "SKIPPED";
+
+                  return (
+                    <tr key={log.id} className="border-b border-white/[0.04] align-top">
+                      <td className="py-3 pr-3">
+                        <p className="font-medium text-white">{log.clientCompanyName}</p>
+                        <p className="text-xs text-[#A0A0A0]">{log.profileId ?? "Profile yok"}</p>
+                        {log.errorMessage ? (
+                          <p className="mt-1 max-w-[320px] text-xs text-red-200">{log.errorMessage}</p>
+                        ) : null}
+                      </td>
+                      <td className="py-3 pr-3 text-xs text-[#DADADA]">
+                        {formatSyncTriggerLabel(log.trigger)}
+                      </td>
+                      <td className="py-3 pr-3">
+                        <span className={getAmazonSyncStatusBadgeClass(log.status)}>
+                          {getAmazonSyncStatusLabel(log.status)}
+                        </span>
+                      </td>
+                      <td className="py-3 pr-3">
+                        <span className={getAmazonReportStatusBadgeClass(log.reportStatus)}>
+                          {formatReportStatusLabel(log.reportStatus)}
+                        </span>
+                      </td>
+                      <td className="py-3 pr-3 text-xs text-[#DADADA]">
+                        {formatClientDateTime(log.startedAt)}
+                      </td>
+                      <td className="py-3 pr-3 text-xs text-[#DADADA]">
+                        {formatDuration(log.durationMs)}
+                      </td>
+                      <td className="py-3 pr-3 text-xs text-[#DADADA]">
+                        {log.apiCallCount ?? 0}
+                      </td>
+                      <td className="py-3 pr-3 text-xs text-[#DADADA]">
+                        {log.recordsFetched ?? 0}
+                      </td>
+                      <td className="py-3">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="gap-1"
+                          onClick={() => {
+                            if (targetClient) {
+                              void handleRetrySync(targetClient);
+                            }
+                          }}
+                          disabled={!targetClient || !canManageAmazonAds || !canRetry || isMutating}
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          Retry
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
       </Card>
 
       <Dialog open={configTarget !== null} onOpenChange={(open) => (open ? undefined : closeConfigDialog())}>
@@ -760,4 +914,90 @@ function formatPercent(value: number): string {
 
 function formatRatio(value: number): string {
   return `${value.toFixed(2)}x`;
+}
+
+function getAmazonSyncStatusLabel(status: AdminAmazonAdsSyncLogItem["status"]): string {
+  if (status === "SUCCESS") {
+    return "Success";
+  }
+  if (status === "FAILED") {
+    return "Failed";
+  }
+  if (status === "PARTIAL") {
+    return "Partial";
+  }
+  if (status === "SKIPPED") {
+    return "Skipped";
+  }
+  return "Running";
+}
+
+function getAmazonSyncStatusBadgeClass(status: AdminAmazonAdsSyncLogItem["status"]): string {
+  if (status === "SUCCESS") {
+    return "rounded-md bg-[#AAFF01]/15 px-2 py-1 text-xs text-[#d6ff88]";
+  }
+  if (status === "FAILED") {
+    return "rounded-md bg-red-500/20 px-2 py-1 text-xs text-red-200";
+  }
+  if (status === "PARTIAL") {
+    return "rounded-md bg-yellow-500/20 px-2 py-1 text-xs text-yellow-200";
+  }
+  if (status === "SKIPPED") {
+    return "rounded-md bg-[#00D4FF]/15 px-2 py-1 text-xs text-[#8defff]";
+  }
+  return "rounded-md bg-white/10 px-2 py-1 text-xs text-[#DADADA]";
+}
+
+function formatSyncTriggerLabel(trigger: string | null): string {
+  if (trigger === "MANUAL_SYNC") {
+    return "Manual";
+  }
+  if (trigger === "ERROR_RETRY") {
+    return "Retry";
+  }
+  if (trigger === "ON_DEMAND_ASSIGNED_REFRESH") {
+    return "Assigned Refresh";
+  }
+  if (trigger === "ON_DEMAND_CLIENT_REFRESH") {
+    return "Client Refresh";
+  }
+  if (trigger === "SCHEDULED_SYNC") {
+    return "Scheduled";
+  }
+  return "Unknown";
+}
+
+function formatDuration(durationMs: number | null): string {
+  if (durationMs === null || !Number.isFinite(durationMs) || durationMs < 0) {
+    return "—";
+  }
+
+  const seconds = Math.round(durationMs / 1000);
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${minutes}m ${remainingSeconds}s`;
+}
+
+function formatReportStatusLabel(status: string | null): string {
+  if (!status) {
+    return "—";
+  }
+  return status;
+}
+
+function getAmazonReportStatusBadgeClass(status: string | null): string {
+  if (status === "COMPLETED" || status === "SUCCESS") {
+    return "rounded-md bg-[#AAFF01]/15 px-2 py-1 text-xs text-[#d6ff88]";
+  }
+  if (status === "FAILED" || status === "FAILURE" || status === "CANCELLED") {
+    return "rounded-md bg-red-500/20 px-2 py-1 text-xs text-red-200";
+  }
+  if (status === "PENDING" || status === "IN_PROGRESS") {
+    return "rounded-md bg-yellow-500/20 px-2 py-1 text-xs text-yellow-200";
+  }
+  return "rounded-md bg-white/10 px-2 py-1 text-xs text-[#DADADA]";
 }

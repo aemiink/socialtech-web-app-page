@@ -1,6 +1,8 @@
 import { baseApi } from "../../services/baseApi";
 import type {
   AdminAmazonAdsClientListResponse,
+  AdminAmazonAdsSyncLogsQuery,
+  AdminAmazonAdsSyncLogsResponse,
   AdminMetaAdsSyncLogsQuery,
   AdminMetaAdsSyncLogsResponse,
   AmazonAdsCampaignsQuery,
@@ -49,6 +51,7 @@ import {
   normalizeAssignedAmazonAdsConfigResponse,
   normalizeAdminAmazonAdsConnectionResponse,
   normalizeAdminAmazonAdsClientListResponse,
+  normalizeAdminAmazonAdsSyncLogsResponse,
   normalizeAmazonAdsInsightsResponse,
   normalizeAmazonAdsProductsResponse,
   normalizeAmazonAdsSummaryResponse,
@@ -76,6 +79,7 @@ const CLIENT_AMAZON_ADS_CONNECTION_ID_PREFIX = "AMAZON_ADS_CONNECTION";
 const CLIENT_META_ADS_GLOBAL_LIST_ID = "META_ADS_GLOBAL_LIST";
 const CLIENT_AMAZON_ADS_GLOBAL_LIST_ID = "AMAZON_ADS_GLOBAL_LIST";
 const CLIENT_META_ADS_SYNC_LOGS_LIST_ID = "META_ADS_SYNC_LOGS_LIST";
+const CLIENT_AMAZON_ADS_SYNC_LOGS_LIST_ID = "AMAZON_ADS_SYNC_LOGS_LIST";
 const ADMIN_SUMMARY_ID = "SUMMARY";
 const AUDIT_LOGS_LIST_ID = "LIST";
 const ADMIN_USERS_LIST_ID = "LIST";
@@ -281,6 +285,18 @@ export const clientsApi = baseApi.injectEndpoints({
       transformResponse: (response: unknown) => normalizeAdminMetaAdsSyncLogsResponse(response),
       providesTags: [{ type: "Clients", id: CLIENT_META_ADS_SYNC_LOGS_LIST_ID }],
     }),
+    getAdminAmazonAdsSyncLogs: builder.query<
+      AdminAmazonAdsSyncLogsResponse,
+      AdminAmazonAdsSyncLogsQuery | void
+    >({
+      query: (query) => ({
+        url: "/admin/amazon-ads/sync-logs",
+        method: "GET",
+        params: serializeAmazonAdsSyncLogsQuery(query),
+      }),
+      transformResponse: (response: unknown) => normalizeAdminAmazonAdsSyncLogsResponse(response),
+      providesTags: [{ type: "Clients", id: CLIENT_AMAZON_ADS_SYNC_LOGS_LIST_ID }],
+    }),
     updateAdminClientMetaAdsConfig: builder.mutation<
       AdminClientMetaAdsConnection,
       { clientId: string; body: UpdateAdminClientMetaAdsConfigRequest }
@@ -386,6 +402,24 @@ export const clientsApi = baseApi.injectEndpoints({
         ...getAdminClientMutationInvalidations(clientId),
         { type: "Clients", id: getClientAmazonAdsConnectionTagId(clientId) },
         { type: "Clients", id: CLIENT_AMAZON_ADS_GLOBAL_LIST_ID },
+        { type: "Clients", id: CLIENT_AMAZON_ADS_SYNC_LOGS_LIST_ID },
+      ],
+    }),
+    retryAdminClientAmazonAdsSync: builder.mutation<
+      AmazonAdsSyncResponse,
+      { clientId: string; query?: AmazonAdsDateRangeQuery }
+    >({
+      query: ({ clientId, query }) => ({
+        url: `/admin/clients/${clientId}/amazon-ads/sync/retry`,
+        method: "POST",
+        params: serializeAmazonAdsDateRangeQuery(query),
+      }),
+      transformResponse: (response: unknown) => normalizeAmazonAdsSyncResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        ...getAdminClientMutationInvalidations(clientId),
+        { type: "Clients", id: getClientAmazonAdsConnectionTagId(clientId) },
+        { type: "Clients", id: CLIENT_AMAZON_ADS_GLOBAL_LIST_ID },
+        { type: "Clients", id: CLIENT_AMAZON_ADS_SYNC_LOGS_LIST_ID },
       ],
     }),
     syncAssignedClientAmazonAds: builder.mutation<
@@ -624,6 +658,7 @@ export const {
   useGetAdminMetaAdsClientsQuery,
   useGetAdminAmazonAdsClientsQuery,
   useGetAdminMetaAdsSyncLogsQuery,
+  useGetAdminAmazonAdsSyncLogsQuery,
   useUpdateAdminClientMetaAdsConfigMutation,
   useUpdateAdminClientAmazonAdsConfigMutation,
   useCreateAdminClientAmazonAdsOAuthUrlMutation,
@@ -631,6 +666,7 @@ export const {
   useConnectAdminClientAmazonAdsManualMutation,
   useTestAdminClientAmazonAdsConnectionMutation,
   useSyncAdminClientAmazonAdsMutation,
+  useRetryAdminClientAmazonAdsSyncMutation,
   useSyncAssignedClientAmazonAdsMutation,
   useDisconnectAdminClientAmazonAdsMutation,
   useConnectAdminClientMetaAdsManualMutation,
@@ -831,6 +867,34 @@ function serializeAmazonAdsInsightsQuery(
 
 function serializeMetaAdsSyncLogsQuery(
   query: AdminMetaAdsSyncLogsQuery | void,
+): Record<string, string | number | boolean> {
+  if (!query) {
+    return {};
+  }
+
+  const params: Record<string, string | number | boolean> = {};
+
+  if (query.clientProfileId !== undefined && query.clientProfileId.trim().length > 0) {
+    params.clientProfileId = query.clientProfileId.trim();
+  }
+
+  if (query.status !== undefined) {
+    params.status = query.status;
+  }
+
+  if (query.failedOnly !== undefined) {
+    params.failedOnly = query.failedOnly;
+  }
+
+  if (typeof query.limit === "number" && Number.isFinite(query.limit)) {
+    params.limit = Math.trunc(query.limit);
+  }
+
+  return params;
+}
+
+function serializeAmazonAdsSyncLogsQuery(
+  query: AdminAmazonAdsSyncLogsQuery | void,
 ): Record<string, string | number | boolean> {
   if (!query) {
     return {};

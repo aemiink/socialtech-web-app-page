@@ -38,10 +38,12 @@ import {
   useDisconnectAdminClientMetaAdsMutation,
   useExchangeAdminClientAmazonAdsOAuthCodeMutation,
   useGetAdminClientAmazonAdsConnectionQuery,
+  useGetAdminClientAmazonAdsSummaryQuery,
   useGetAdminClientMetaAdsConnectionQuery,
   useGetAdminClientMetaAdsSummaryQuery,
   useGetClientSummaryQuery,
   useResetClientOwnerPasswordMutation,
+  useSyncAdminClientAmazonAdsMutation,
   useSyncAdminClientMetaAdsMutation,
   useTestAdminClientAmazonAdsConnectionMutation,
   useTestAdminClientMetaAdsConnectionMutation,
@@ -130,6 +132,7 @@ export function ClientDetail() {
     useConnectAdminClientAmazonAdsManualMutation();
   const [testAmazonAdsConnection, { isLoading: isAmazonTesting }] =
     useTestAdminClientAmazonAdsConnectionMutation();
+  const [syncAmazonAds, { isLoading: isAmazonSyncing }] = useSyncAdminClientAmazonAdsMutation();
   const [disconnectAmazonAds, { isLoading: isAmazonDisconnecting }] =
     useDisconnectAdminClientAmazonAdsMutation();
 
@@ -197,6 +200,16 @@ export function ClientDetail() {
   } = useGetAdminClientAmazonAdsConnectionQuery(clientProfileId ?? "", {
     skip: !isValidId,
   });
+  const {
+    data: amazonAdsSummary,
+    error: amazonAdsSummaryError,
+    isFetching: isAmazonAdsSummaryFetching,
+    isLoading: isAmazonAdsSummaryLoading,
+    refetch: refetchAmazonAdsSummary,
+  } = useGetAdminClientAmazonAdsSummaryQuery(
+    { clientId: clientProfileId ?? "" },
+    { skip: !isValidId },
+  );
 
   useEffect(() => {
     if (!metaAdsConnection?.ids.adAccountId) {
@@ -304,13 +317,16 @@ export function ClientDetail() {
   const hasTikTokConnectionError = Boolean(tikTokAdsConnectionError);
   const hasTikTokSummaryError = Boolean(tikTokAdsSummaryError);
   const hasAmazonConnectionError = Boolean(amazonAdsConnectionError);
+  const hasAmazonSummaryError = Boolean(amazonAdsSummaryError);
   const tikTokAdsCurrency = tikTokAdsConnection?.settings.currency ?? "TRY";
+  const amazonAdsCurrency = amazonAdsConnection?.settings.currencyCode ?? "TRY";
   const isAmazonConnectionActionRunning =
     isAmazonConfigSaving ||
     isAmazonOAuthStarting ||
     isAmazonOAuthExchanging ||
     isAmazonManualConnecting ||
     isAmazonTesting ||
+    isAmazonSyncing ||
     isAmazonDisconnecting;
 
   const handleManualMetaConnect = async () => {
@@ -532,7 +548,7 @@ export function ClientDetail() {
         body: payload,
       }).unwrap();
       setAmazonConnectionFeedback("Amazon Ads yapılandırması kaydedildi.");
-      await refetchAmazonAdsConnection();
+      await Promise.all([refetchAmazonAdsConnection(), refetchAmazonAdsSummary()]);
     } catch (mutationError) {
       setAmazonConnectionFeedback(
         extractApiErrorMessage(mutationError, "Amazon Ads yapılandırması kaydedilemedi."),
@@ -588,7 +604,7 @@ export function ClientDetail() {
       setAmazonRefreshToken("");
       setAmazonAccessToken("");
       setAmazonConnectionFeedback("Amazon Ads OAuth bağlantısı tamamlandı.");
-      await refetchAmazonAdsConnection();
+      await Promise.all([refetchAmazonAdsConnection(), refetchAmazonAdsSummary()]);
     } catch (mutationError) {
       setAmazonConnectionFeedback(
         extractApiErrorMessage(mutationError, "Amazon Ads OAuth bağlantısı tamamlanamadı."),
@@ -631,7 +647,7 @@ export function ClientDetail() {
       setAmazonRefreshToken("");
       setAmazonAccessToken("");
       setAmazonConnectionFeedback("Amazon Ads refresh token şifreli olarak kaydedildi.");
-      await refetchAmazonAdsConnection();
+      await Promise.all([refetchAmazonAdsConnection(), refetchAmazonAdsSummary()]);
     } catch (mutationError) {
       setAmazonConnectionFeedback(
         extractApiErrorMessage(mutationError, "Amazon Ads manual bağlantısı kaydedilemedi."),
@@ -658,10 +674,32 @@ export function ClientDetail() {
       setAmazonRefreshToken("");
       setAmazonAccessToken("");
       setAmazonConnectionFeedback("Amazon Ads bağlantı testi başarılı.");
-      await refetchAmazonAdsConnection();
+      await Promise.all([refetchAmazonAdsConnection(), refetchAmazonAdsSummary()]);
     } catch (mutationError) {
       setAmazonConnectionFeedback(
         extractApiErrorMessage(mutationError, "Amazon Ads bağlantı testi başarısız."),
+      );
+    }
+  };
+
+  const handleAmazonSync = async () => {
+    if (!clientProfileId) {
+      return;
+    }
+
+    setAmazonConnectionFeedback(null);
+
+    try {
+      const result = await syncAmazonAds({ clientId: clientProfileId }).unwrap();
+      setAmazonConnectionFeedback(
+        `Amazon Ads senkronizasyonu tamamlandı. ${result.inserted.total.toLocaleString(
+          "tr-TR",
+        )} kayıt işlendi.`,
+      );
+      await Promise.all([refetchAmazonAdsConnection(), refetchAmazonAdsSummary()]);
+    } catch (mutationError) {
+      setAmazonConnectionFeedback(
+        extractApiErrorMessage(mutationError, "Amazon Ads senkronizasyonu çalıştırılamadı."),
       );
     }
   };
@@ -680,7 +718,7 @@ export function ClientDetail() {
       setAmazonOAuthCode("");
       setAmazonOAuthUrl("");
       setAmazonConnectionFeedback("Amazon Ads bağlantısı kesildi.");
-      await refetchAmazonAdsConnection();
+      await Promise.all([refetchAmazonAdsConnection(), refetchAmazonAdsSummary()]);
     } catch (mutationError) {
       setAmazonConnectionFeedback(
         extractApiErrorMessage(mutationError, "Amazon Ads bağlantısı kesilemedi."),
@@ -1081,6 +1119,9 @@ export function ClientDetail() {
             {isAmazonAdsConnectionFetching ? (
               <span className="text-xs text-[#d2ff8a]">Bağlantı güncelleniyor...</span>
             ) : null}
+            {isAmazonAdsSummaryFetching ? (
+              <span className="text-xs text-[#d2ff8a]">Rapor özeti güncelleniyor...</span>
+            ) : null}
             {amazonAdsConnection ? (
               <Badge
                 className={getAmazonAdsConnectionStatusBadgeClass(
@@ -1096,7 +1137,7 @@ export function ClientDetail() {
               size="sm"
               className="gap-2"
               onClick={() => {
-                void refetchAmazonAdsConnection();
+                void Promise.all([refetchAmazonAdsConnection(), refetchAmazonAdsSummary()]);
               }}
             >
               <RefreshCw className="h-4 w-4" />
@@ -1114,6 +1155,14 @@ export function ClientDetail() {
               amazonAdsConnectionError,
               "Amazon Ads bağlantı özeti alınamadı.",
             )}
+          </p>
+        ) : null}
+        {isAmazonAdsSummaryLoading ? (
+          <p className="mt-2 text-sm text-[#A0A0A0]">Amazon Ads performans özeti yükleniyor...</p>
+        ) : null}
+        {hasAmazonSummaryError ? (
+          <p className="mt-2 text-sm text-red-300">
+            {extractApiErrorMessage(amazonAdsSummaryError, "Amazon Ads performans özeti alınamadı.")}
           </p>
         ) : null}
 
@@ -1174,6 +1223,29 @@ export function ClientDetail() {
               value={formatClientDateTime(amazonAdsConnection.lastSyncAt)}
             />
             <DetailRow label="Hata Özeti" value={amazonAdsConnection.syncError ?? "—"} />
+          </div>
+        ) : null}
+
+        {amazonAdsSummary ? (
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+            <DetailRow
+              label="Toplam Harcama"
+              value={formatCurrencyMetric(amazonAdsSummary.spend, amazonAdsCurrency)}
+            />
+            <DetailRow
+              label="Toplam Satış"
+              value={formatCurrencyMetric(amazonAdsSummary.sales, amazonAdsCurrency)}
+            />
+            <DetailRow label="Sipariş" value={formatMetricNumber(amazonAdsSummary.orders)} />
+            <DetailRow label="Gösterim" value={formatMetricNumber(amazonAdsSummary.impressions)} />
+            <DetailRow label="Tıklama" value={formatMetricNumber(amazonAdsSummary.clicks)} />
+            <DetailRow label="ACOS" value={`${formatMetricNumber(amazonAdsSummary.acos)}%`} />
+            <DetailRow label="ROAS" value={`${formatMetricNumber(amazonAdsSummary.roas)}x`} />
+            <DetailRow label="CTR" value={`${formatMetricNumber(amazonAdsSummary.ctr)}%`} />
+            <DetailRow
+              label="Son Rapor Sync"
+              value={formatClientDateTime(amazonAdsSummary.lastSyncAt)}
+            />
           </div>
         ) : null}
 
@@ -1330,6 +1402,16 @@ export function ClientDetail() {
           >
             <CheckCircle2 className="h-4 w-4" />
             {isAmazonTesting ? "Test Ediliyor..." : "Bağlantıyı Test Et"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-2"
+            onClick={handleAmazonSync}
+            disabled={isAmazonConnectionActionRunning}
+          >
+            <RefreshCw className="h-4 w-4" />
+            {isAmazonSyncing ? "Sync Çalışıyor..." : "Manual Sync"}
           </Button>
           <Button
             type="button"
@@ -1509,6 +1591,24 @@ function DetailRow({
       <p className={`text-sm text-white ${mono ? "break-all font-mono" : "break-words"}`}>{value}</p>
     </div>
   );
+}
+
+function formatMetricNumber(value: number): string {
+  return new Intl.NumberFormat("tr-TR", {
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function formatCurrencyMetric(value: number, currencyCode: string): string {
+  try {
+    return new Intl.NumberFormat("tr-TR", {
+      style: "currency",
+      currency: /^[A-Z]{3}$/.test(currencyCode) ? currencyCode : "TRY",
+      maximumFractionDigits: 2,
+    }).format(value);
+  } catch {
+    return `${formatMetricNumber(value)} ${currencyCode || "TRY"}`;
+  }
 }
 
 function DetailSelectControl({

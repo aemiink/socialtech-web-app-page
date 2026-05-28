@@ -20,6 +20,7 @@ import { AmazonAdsDateRangeQueryDto } from "./dto/amazon-ads-date-range-query.dt
 import { AmazonAdsInsightsQueryDto } from "./dto/amazon-ads-insights-query.dto";
 import { AmazonAdsOAuthStartQueryDto } from "./dto/amazon-ads-oauth-start-query.dto";
 import { AmazonAdsProductsQueryDto } from "./dto/amazon-ads-products-query.dto";
+import { AmazonAdsSyncLogsQueryDto } from "./dto/amazon-ads-sync-logs-query.dto";
 import { ConnectManualAmazonAdsDto } from "./dto/connect-manual-amazon-ads.dto";
 import { ExchangeAmazonAdsOAuthCodeDto } from "./dto/exchange-amazon-ads-oauth-code.dto";
 import { TestAmazonAdsConnectionDto } from "./dto/test-amazon-ads-connection.dto";
@@ -37,6 +38,15 @@ export class AmazonAdsController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.amazonAdsService.getAdminAmazonAdsClients(query, actor);
+  }
+
+  @Get("admin/amazon-ads/sync-logs")
+  @RequirePermissions("amazonAds.config.read.any")
+  getAdminAmazonAdsSyncLogs(
+    @Query() query: AmazonAdsSyncLogsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.amazonAdsService.getAdminSyncLogs(query, actor);
   }
 
   @Get("admin/clients/:clientId/amazon-ads/config")
@@ -164,6 +174,16 @@ export class AmazonAdsController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.amazonAdsService.syncAdminClientInsights(clientId, query, actor);
+  }
+
+  @Post("admin/clients/:clientId/amazon-ads/sync/retry")
+  @RequirePermissions("amazonAds.config.manage.any", "amazonAds.sync.run.any")
+  retryAdminClientInsights(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: AmazonAdsDateRangeQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.amazonAdsService.retryAdminClientInsights(clientId, query, actor);
   }
 
   @Get("amazon-ads/clients/:clientId/config")
