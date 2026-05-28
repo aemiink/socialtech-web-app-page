@@ -293,11 +293,14 @@ export function AmazonAdsAdmin() {
           projectId,
           title: `Amazon Ads Onay Talebi - ${client.client.companyName}`,
           description:
-            "FAZ-05 admin Amazon Ads panelinden oluşturulan onay talebi. Müşteri kreatif/rapor onayı bekleniyor.",
+            "FAZ-07 admin Amazon Ads panelinden oluşturulan strateji onay talebi.",
           status: "REVIEW",
           priority: "MEDIUM",
           type: "REVISION",
           workstream: "FULLSTACK",
+          approvalRequired: true,
+          approvalType: "AMAZON_ADS_STRATEGY_APPROVAL",
+          approvalStatus: "PENDING",
         }).unwrap();
       },
       `${client.client.companyName} için onay talebi oluşturuldu.`,

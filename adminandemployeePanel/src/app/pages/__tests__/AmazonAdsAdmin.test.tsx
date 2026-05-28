@@ -304,6 +304,9 @@ describe("AmazonAdsAdmin", () => {
           projectId: "22222222-2222-4222-8222-222222222222",
           status: "REVIEW",
           type: "REVISION",
+          approvalRequired: true,
+          approvalStatus: "PENDING",
+          approvalType: "AMAZON_ADS_STRATEGY_APPROVAL",
         }),
       );
     });

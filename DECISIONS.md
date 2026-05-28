@@ -1,5 +1,41 @@
 # Architecture Decisions
 
+## 2026-05-28 - Amazon Ads Faz 7 Approval + Creative Collaboration Contract Alignment
+
+Context:
+Amazon Ads Faz 6 sonrası approval lifecycle Amazon için kısmen çalışıyordu ancak backend enum sözleşmesi, approval permission eşlemesi, client ACK akışı ve admin/employee create payloadları tam hizalı değildi. Ayrıca Amazon creative/product collaboration akışının file-management permission katmanı backend/frontend arasında simetrik hale getirilmesi gerekiyordu.
+
+Decision:
+
+- Backend `MetaAdsApprovalType` enumu Amazon approval setiyle genişletildi: campaign, budget, report acknowledgement, strategy, creative, product promotion ve search-term action type’ları eklendi.
+- Tasks service Amazon Ads approval create permission’ını (`amazonAds.approvals.create.assigned`) serviceKey eşlemesine dahil etti; client approval response scope’u da `AMAZON_ADS` projelerini kapsayacak şekilde genişletildi.
+- Project files manage guard’ına Amazon Ads için `amazonAds.productCollaboration.manage.assigned` kontrolü eklendi; böylece creative/product asset management aksiyonları assigned scope’ta explicit permission gerektirir hale getirildi.
+- Admin Amazon global panelde oluşturulan approval task payload’u Faz 7 contract’ıyla hizalandı (`approvalRequired`, `approvalStatus=PENDING`, `approvalType=AMAZON_ADS_STRATEGY_APPROVAL`).
+- Employee Amazon workspace role-based approval type üretir hale geldi (social/campaign, performance/budget, designer/creative) ve task create payload’ı explicit `approvalType` alanı taşımaya başladı.
+- Client panel approval contract’ı Amazon type setiyle güncellendi; report acknowledgement task’larında primary aksiyon `ACKNOWLEDGED` (`Okudum`) olarak işlendi.
+
+Reason:
+Bu yaklaşım Amazon approval lifecycle’ını Meta/TikTok pattern’iyle aynı teknik seviyeye getirir; API validation, permission guard, UI action semantics ve test kapsamı tek sözleşmede birleşir. Özellikle report acknowledgement ve creative/product collaboration adımları artık hem backend hem frontend’de aynı enum/permission modeline dayanır.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260528110000_add_amazon_ads_approval_types/migration.sql`
+- `server/src/tasks/tasks.service.ts`
+- `server/src/project-files/project-files.service.ts`
+- `server/test/projects-tasks-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/tasks/tasksTypes.ts`
+- `adminandemployeePanel/src/app/employee/components/AmazonAdsWorkspace.tsx`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/AmazonAdsWorkspace.test.tsx`
+- `adminandemployeePanel/src/app/pages/AmazonAdsAdmin.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/AmazonAdsAdmin.test.tsx`
+- `clientPanel/src/app/features/tasks/tasksTypes.ts`
+- `clientPanel/src/app/features/tasks/tasksUtils.ts`
+- `clientPanel/src/app/features/projectFiles/projectFilesTypes.ts`
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+- `clientPanel/src/app/pages/__tests__/service-tab-page.amazon-ads.test.tsx`
+
+---
+
 ## 2026-05-28 - Amazon Ads Faz 6 Employee Assigned-Scope Workspace (Social/Performance/Designer)
 
 Context:

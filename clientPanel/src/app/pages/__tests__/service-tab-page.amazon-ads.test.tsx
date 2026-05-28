@@ -332,4 +332,39 @@ describe("ServiceTabPage Amazon Ads tabs", () => {
     expect(screen.getByText("Amazon bütçe artışı onayı")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Onayla" })).toBeInTheDocument();
   });
+
+  it("renders report acknowledgement action as Okudum", () => {
+    mockUseGetClientTasksQuery.mockReturnValue({
+      data: [
+        {
+          id: "task-report-1",
+          projectId: "project-1",
+          title: "Amazon haftalık rapor paylaşımı",
+          description: "Haftalık performans raporu paylaşıldı.",
+          status: "REVIEW",
+          visibility: "CLIENT_VISIBLE",
+          priority: "MEDIUM",
+          type: "QA",
+          workstream: "QA",
+          dueDate: null,
+          updatedAt: "2026-05-27T10:00:00.000Z",
+          projectName: "Amazon Ads Ops",
+          projectServiceId: "amazon-ads",
+          approvalRequired: true,
+          approvalType: "AMAZON_ADS_REPORT_ACKNOWLEDGEMENT",
+          approvalStatus: "PENDING",
+          sprint: null,
+          completion: null,
+          todos: [],
+          progressPercent: 100,
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<ServiceTabPage serviceId="amazon-ads" tabId="approvals" />);
+
+    expect(screen.getByRole("button", { name: "Okudum" })).toBeInTheDocument();
+  });
 });

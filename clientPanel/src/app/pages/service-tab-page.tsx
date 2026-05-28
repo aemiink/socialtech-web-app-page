@@ -1215,10 +1215,8 @@ function MetaAdsServiceTab({
           approvalResponseNote: approvalResponseNote?.trim() || undefined,
         },
       }).unwrap();
-      runClientAction(
-        `${task.title} ${approvalStatus === "APPROVED" ? "onaylandı" : "revizyona gönderildi"}`,
-        approvalStatus === "APPROVED" ? "approve" : "revision",
-      );
+      const feedback = getApprovalDecisionFeedback(task.title, approvalStatus);
+      runClientAction(feedback.message, feedback.action);
     } catch {
       runClientAction(`${task.title} onayı güncellenemedi`, "comment");
     } finally {
@@ -1488,10 +1486,8 @@ function TikTokAdsServiceTab({
           approvalResponseNote: approvalResponseNote?.trim() || undefined,
         },
       }).unwrap();
-      runClientAction(
-        `${task.title} ${approvalStatus === "APPROVED" ? "onaylandı" : "revizyona gönderildi"}`,
-        approvalStatus === "APPROVED" ? "approve" : "revision",
-      );
+      const feedback = getApprovalDecisionFeedback(task.title, approvalStatus);
+      runClientAction(feedback.message, feedback.action);
     } catch {
       runClientAction(`${task.title} onayı güncellenemedi`, "comment");
     } finally {
@@ -1784,10 +1780,8 @@ function AmazonAdsServiceTab({
           approvalResponseNote: approvalResponseNote?.trim() || undefined,
         },
       }).unwrap();
-      runClientAction(
-        `${task.title} ${approvalStatus === "APPROVED" ? "onaylandı" : "revizyona gönderildi"}`,
-        approvalStatus === "APPROVED" ? "approve" : "revision",
-      );
+      const feedback = getApprovalDecisionFeedback(task.title, approvalStatus);
+      runClientAction(feedback.message, feedback.action);
     } catch {
       runClientAction(`${task.title} onayı güncellenemedi`, "comment");
     } finally {
@@ -2923,9 +2917,18 @@ function MetaAdsApprovalsPanel({
               variant="primary"
               className="text-xs"
               disabled={isActionLoading}
-              onClick={() => void onDecision(task, "APPROVED", decisionNotes[task.id])}
+              onClick={() => {
+                const primaryStatus = task.approvalType?.endsWith("REPORT_ACKNOWLEDGEMENT")
+                  ? "ACKNOWLEDGED"
+                  : "APPROVED";
+                void onDecision(task, primaryStatus, decisionNotes[task.id]);
+              }}
             >
-              {activeTaskId === task.id ? "Kaydediliyor..." : "Onayla"}
+              {activeTaskId === task.id
+                ? "Kaydediliyor..."
+                : task.approvalType?.endsWith("REPORT_ACKNOWLEDGEMENT")
+                  ? "Okudum"
+                  : "Onayla"}
             </Button>
             <Button
               variant="secondary"
@@ -3748,6 +3751,37 @@ function formatAmazonAdProduct(value: AmazonAdsProductType | null): string {
     return "Sponsored Display";
   }
   return "Amazon Ads";
+}
+
+function getApprovalDecisionFeedback(
+  taskTitle: string,
+  approvalStatus: ClientTaskMetaAdsApprovalStatus,
+): { message: string; action: "approve" | "revision" | "comment" } {
+  if (approvalStatus === "APPROVED") {
+    return {
+      message: `${taskTitle} onaylandı`,
+      action: "approve",
+    };
+  }
+
+  if (approvalStatus === "ACKNOWLEDGED") {
+    return {
+      message: `${taskTitle} okundu olarak işaretlendi`,
+      action: "approve",
+    };
+  }
+
+  if (approvalStatus === "CHANGES_REQUESTED" || approvalStatus === "REJECTED") {
+    return {
+      message: `${taskTitle} revizyona gönderildi`,
+      action: "revision",
+    };
+  }
+
+  return {
+    message: `${taskTitle} onayı güncellendi`,
+    action: "comment",
+  };
 }
 
 function formatAdsApprovalType(value: string): string {

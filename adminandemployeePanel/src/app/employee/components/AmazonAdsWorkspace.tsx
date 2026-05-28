@@ -91,6 +91,12 @@ const ROLE_DEFAULT_VIEW: Record<WorkspaceMode, AmazonAdsWorkspaceView> = {
   designer: "creative",
 };
 
+const ROLE_APPROVAL_TYPE: Record<WorkspaceMode, CreateTaskRequest["approvalType"]> = {
+  social: "AMAZON_ADS_CAMPAIGN_APPROVAL",
+  performance: "AMAZON_ADS_BUDGET_CHANGE_APPROVAL",
+  designer: "AMAZON_ADS_CREATIVE_APPROVAL",
+};
+
 export function AmazonAdsWorkspace({ initialView = "overview" }: AmazonAdsWorkspaceProps) {
   const currentUser = useAppSelector(selectCurrentUser);
   const workspaceMode = resolveWorkspaceMode(currentUser?.role);
@@ -108,10 +114,15 @@ export function AmazonAdsWorkspace({ initialView = "overview" }: AmazonAdsWorksp
   const canReadTasks = hasUserPermission(currentUser, ["tasks.read.assigned"]);
   const canCreateTask = hasUserPermission(currentUser, ["tasks.manage.assigned"]);
   const canUpdateTask = hasUserPermission(currentUser, ["tasks.update.assigned", "tasks.update.own"]);
-  const canManageFiles = hasUserPermission(currentUser, [
+  const canManageProjectFiles = hasUserPermission(currentUser, [
     "projects.files.manage.assigned",
     "projects.files.manage.any",
   ]);
+  const canManageAmazonProductCollaboration = hasUserPermission(currentUser, [
+    "amazonAds.productCollaboration.manage.assigned",
+    "projects.files.manage.any",
+  ]);
+  const canManageFiles = canManageProjectFiles && canManageAmazonProductCollaboration;
   const canInteractWorkspace = hasUserPermission(currentUser, [
     "webapp.workspace.interact.assigned",
     "webapp.workspace.manage.assigned",
@@ -354,6 +365,7 @@ export function AmazonAdsWorkspace({ initialView = "overview" }: AmazonAdsWorksp
       approval: "Amazon Ads Onay Talebi",
       recommendation: "Amazon Ads Performans Önerisi",
     };
+    const approvalType = workspaceMode ? ROLE_APPROVAL_TYPE[workspaceMode] : "AMAZON_ADS_CAMPAIGN_APPROVAL";
 
     const taskBody: CreateTaskRequest = {
       projectId: amazonAdsProjectId,
@@ -363,6 +375,7 @@ export function AmazonAdsWorkspace({ initialView = "overview" }: AmazonAdsWorksp
       priority: action === "approval" || action === "recommendation" ? "HIGH" : "MEDIUM",
       type: action === "approval" ? "REVISION" : action === "report" ? "QA" : "FEATURE",
       approvalRequired: action === "approval",
+      approvalType: action === "approval" ? approvalType : undefined,
       approvalStatus: action === "approval" ? "PENDING" : undefined,
       workstream:
         action === "creative"
@@ -1370,5 +1383,9 @@ function formatAdProduct(value: string | null): string {
 }
 
 function formatApprovalType(value: string): string {
-  return value.replace("TIKTOK_ADS_", "").replace("META_ADS_", "").replace(/_/g, " ");
+  return value
+    .replace("TIKTOK_ADS_", "")
+    .replace("META_ADS_", "")
+    .replace("AMAZON_ADS_", "")
+    .replace(/_/g, " ");
 }

@@ -23,6 +23,7 @@ const mockUseCreateTaskMutation = vi.fn();
 const mockUseUpdateTaskMutation = vi.fn();
 const mockUseToggleTaskTodoMutation = vi.fn();
 const mockSyncAssignedAmazonAds = vi.fn();
+const mockCreateTask = vi.fn();
 
 vi.mock("../../../store/hooks", () => ({
   useAppSelector: (selector: (state: unknown) => unknown) =>
@@ -84,6 +85,7 @@ const baseEmployeeUser: AuthUserProfile = {
     "amazonAds.approvals.create.assigned",
     "amazonAds.sync.read.assigned",
     "amazonAds.recommendations.manage.assigned",
+    "amazonAds.productCollaboration.manage.assigned",
     "tasks.read.assigned",
     "tasks.manage.assigned",
     "tasks.update.assigned",
@@ -325,10 +327,8 @@ function setupBaseMocks() {
     ],
   });
 
-  mockUseCreateTaskMutation.mockReturnValue([
-    vi.fn(() => ({ unwrap: () => Promise.resolve({ id: "task-new" }) })),
-    { isLoading: false },
-  ]);
+  mockCreateTask.mockReturnValue({ unwrap: () => Promise.resolve({ id: "task-new" }) });
+  mockUseCreateTaskMutation.mockReturnValue([mockCreateTask, { isLoading: false }]);
   mockUseUpdateTaskMutation.mockReturnValue([
     vi.fn(() => ({ unwrap: () => Promise.resolve({ id: "task-1" }) })),
     { isLoading: false },
@@ -399,6 +399,24 @@ describe("AmazonAdsWorkspace", () => {
       }),
     );
     expect(await screen.findByText("Son senkron çok yeni.")).toBeInTheDocument();
+  });
+
+  it("creates amazon approval task with role-based approval type", async () => {
+    currentUser = { ...baseEmployeeUser, role: "PERFORMANCE_SPECIALIST" };
+    renderWorkspace("overview");
+
+    fireEvent.click(screen.getByRole("button", { name: "Onay Talebi Oluştur" }));
+
+    await waitFor(() =>
+      expect(mockCreateTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectId: "project-amazon-1",
+          approvalRequired: true,
+          approvalStatus: "PENDING",
+          approvalType: "AMAZON_ADS_BUDGET_CHANGE_APPROVAL",
+        }),
+      ),
+    );
   });
 
   it("hides products tab for social media specialist", () => {

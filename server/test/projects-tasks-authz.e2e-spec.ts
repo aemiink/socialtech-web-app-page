@@ -27,6 +27,7 @@ const E2E_PROJECT_NAME_PREFIX = "Authz E2E Project";
 const E2E_TODO_TITLE_PREFIX = "Authz E2E Todo";
 const E2E_META_APPROVAL_TASK_PREFIX = "Authz E2E Meta Approval";
 const E2E_TIKTOK_APPROVAL_TASK_PREFIX = "Authz E2E TikTok Approval";
+const E2E_AMAZON_APPROVAL_TASK_PREFIX = "Authz E2E Amazon Approval";
 
 type LoginBody = {
   accessToken: string;
@@ -131,6 +132,7 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
   let clientVisibleTodoId = "";
   let clientOwnMetaAdsProjectId = "";
   let clientOwnTikTokAdsProjectId = "";
+  let clientOwnAmazonAdsProjectId = "";
   let createdProjectId = "";
   const taskStatusRestores: TaskStatusRestore[] = [];
   const taskTodoRestores: TaskTodoRestore[] = [];
@@ -695,6 +697,32 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
     expect(task.approvalStatus).toBe(MetaAdsApprovalStatus.PENDING);
   });
 
+  it("assigned specialist can create Amazon Ads approval task with Amazon approval permission", async () => {
+    const response = await request(app.getHttpServer())
+      .post(TASKS_PATH)
+      .set("Authorization", `Bearer ${employeeToken}`)
+      .send({
+        projectId: clientOwnAmazonAdsProjectId,
+        title: `${E2E_AMAZON_APPROVAL_TASK_PREFIX} Specialist ${Date.now()}`,
+        status: TaskStatus.REVIEW,
+        priority: Priority.HIGH,
+        type: TaskType.REVISION,
+        approvalRequired: true,
+        approvalType: MetaAdsApprovalType.AMAZON_ADS_BUDGET_CHANGE_APPROVAL,
+      })
+      .expect(201);
+
+    const task = expectTaskResponse(response.body) as TaskListItem & {
+      approvalRequired?: boolean;
+      approvalType?: MetaAdsApprovalType | null;
+      approvalStatus?: MetaAdsApprovalStatus | null;
+    };
+    expect(task.projectId).toBe(clientOwnAmazonAdsProjectId);
+    expect(task.approvalRequired).toBe(true);
+    expect(task.approvalType).toBe(MetaAdsApprovalType.AMAZON_ADS_BUDGET_CHANGE_APPROVAL);
+    expect(task.approvalStatus).toBe(MetaAdsApprovalStatus.PENDING);
+  });
+
   it("TikTok Ads approval task creation requires tiktokAds.approvals.create.assigned permission", async () => {
     const permission = await prisma.permission.findUnique({
       where: { slug: "tiktokAds.approvals.create.assigned" },
@@ -723,6 +751,44 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
           type: TaskType.REVISION,
           approvalRequired: true,
           approvalType: MetaAdsApprovalType.TIKTOK_ADS_BUDGET_CHANGE_APPROVAL,
+        })
+        .expect(403);
+    } finally {
+      await prisma.rolePermission.createMany({
+        data: [{ role: UserRole.PERFORMANCE_SPECIALIST, permissionId: permission.id }],
+        skipDuplicates: true,
+      });
+    }
+  });
+
+  it("Amazon Ads approval task creation requires amazonAds.approvals.create.assigned permission", async () => {
+    const permission = await prisma.permission.findUnique({
+      where: { slug: "amazonAds.approvals.create.assigned" },
+      select: { id: true },
+    });
+    if (!permission) {
+      throw new Error("Expected amazonAds.approvals.create.assigned permission to exist.");
+    }
+
+    await prisma.rolePermission.deleteMany({
+      where: {
+        role: UserRole.PERFORMANCE_SPECIALIST,
+        permissionId: permission.id,
+      },
+    });
+
+    try {
+      await request(app.getHttpServer())
+        .post(TASKS_PATH)
+        .set("Authorization", `Bearer ${employeeToken}`)
+        .send({
+          projectId: clientOwnAmazonAdsProjectId,
+          title: `${E2E_AMAZON_APPROVAL_TASK_PREFIX} Permission ${Date.now()}`,
+          status: TaskStatus.REVIEW,
+          priority: Priority.HIGH,
+          type: TaskType.REVISION,
+          approvalRequired: true,
+          approvalType: MetaAdsApprovalType.AMAZON_ADS_PRODUCT_PROMOTION_APPROVAL,
         })
         .expect(403);
     } finally {
@@ -846,6 +912,47 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
     expect(updated).toEqual(
       expect.objectContaining({
         approvalStatus: MetaAdsApprovalStatus.APPROVED,
+        approvalResponseNote: null,
+        status: TaskStatus.DONE,
+      }),
+    );
+    expect(updated?.approvalRespondedAt).toBeTruthy();
+  });
+
+  it("client can acknowledge own Amazon Ads report approval task", async () => {
+    const pendingApproval = await prisma.task.create({
+      data: {
+        projectId: clientOwnAmazonAdsProjectId,
+        title: `${E2E_AMAZON_APPROVAL_TASK_PREFIX} Report ${Date.now()}`,
+        status: TaskStatus.REVIEW,
+        priority: Priority.MEDIUM,
+        type: TaskType.QA,
+        approvalRequired: true,
+        approvalType: MetaAdsApprovalType.AMAZON_ADS_REPORT_ACKNOWLEDGEMENT,
+        approvalStatus: MetaAdsApprovalStatus.PENDING,
+        approvalRequestedAt: new Date(),
+      },
+      select: { id: true },
+    });
+
+    await request(app.getHttpServer())
+      .patch(`${TASKS_PATH}/${pendingApproval.id}`)
+      .set("Authorization", `Bearer ${clientToken}`)
+      .send({ approvalStatus: MetaAdsApprovalStatus.ACKNOWLEDGED })
+      .expect(200);
+
+    const updated = await prisma.task.findUnique({
+      where: { id: pendingApproval.id },
+      select: {
+        approvalStatus: true,
+        approvalResponseNote: true,
+        approvalRespondedAt: true,
+        status: true,
+      },
+    });
+    expect(updated).toEqual(
+      expect.objectContaining({
+        approvalStatus: MetaAdsApprovalStatus.ACKNOWLEDGED,
         approvalResponseNote: null,
         status: TaskStatus.DONE,
       }),
@@ -1017,6 +1124,7 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
     clientOwnProfileId = clientUser.clientProfileId;
     clientOwnMetaAdsProjectId = await resolveClientMetaAdsProjectId(clientOwnProfileId);
     clientOwnTikTokAdsProjectId = await resolveClientTikTokAdsProjectId(clientOwnProfileId);
+    clientOwnAmazonAdsProjectId = await resolveClientAmazonAdsProjectId(clientOwnProfileId);
 
     const otherClientMetaAdsProject = await prisma.project.findFirst({
       where: {
@@ -1346,6 +1454,34 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
         serviceKey: PurchasedServiceKey.TIKTOK_ADS,
         name: `${E2E_PROJECT_NAME_PREFIX} TikTok Ads ${Date.now()}`,
         slug: `authz-tiktok-ads-${Date.now()}`,
+        status: ProjectStatus.IN_PROGRESS,
+        priority: Priority.HIGH,
+      },
+      select: { id: true },
+    });
+
+    return createdProject.id;
+  }
+
+  async function resolveClientAmazonAdsProjectId(clientProfileId: string): Promise<string> {
+    const existingAmazonAdsProject = await prisma.project.findFirst({
+      where: {
+        clientProfileId,
+        serviceKey: PurchasedServiceKey.AMAZON_ADS,
+      },
+      select: { id: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    if (existingAmazonAdsProject) {
+      return existingAmazonAdsProject.id;
+    }
+
+    const createdProject = await prisma.project.create({
+      data: {
+        clientProfileId,
+        serviceKey: PurchasedServiceKey.AMAZON_ADS,
+        name: `${E2E_PROJECT_NAME_PREFIX} Amazon Ads ${Date.now()}`,
+        slug: `authz-amazon-ads-${Date.now()}`,
         status: ProjectStatus.IN_PROGRESS,
         priority: Priority.HIGH,
       },

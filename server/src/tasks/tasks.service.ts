@@ -207,6 +207,7 @@ const TASK_UPDATE_OWN_FALLBACK_PERMISSION = "tasks.update.own";
 const APPROVAL_RESPOND_OWN_PERMISSION = "approvals.respond.own";
 const META_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION = "metaAds.approvals.create.assigned";
 const TIKTOK_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION = "tiktokAds.approvals.create.assigned";
+const AMAZON_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION = "amazonAds.approvals.create.assigned";
 
 @Injectable()
 export class TasksService {
@@ -787,7 +788,13 @@ export class TasksService {
         approvalStatus: MetaAdsApprovalStatus.PENDING,
         project: {
           clientProfileId,
-          serviceKey: { in: [PurchasedServiceKey.META_ADS, PurchasedServiceKey.TIKTOK_ADS] },
+          serviceKey: {
+            in: [
+              PurchasedServiceKey.META_ADS,
+              PurchasedServiceKey.TIKTOK_ADS,
+              PurchasedServiceKey.AMAZON_ADS,
+            ],
+          },
         },
       },
       select: {
@@ -1469,6 +1476,10 @@ export class TasksService {
 
     if (projectServiceKey === PurchasedServiceKey.TIKTOK_ADS) {
       return TIKTOK_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION;
+    }
+
+    if (projectServiceKey === PurchasedServiceKey.AMAZON_ADS) {
+      return AMAZON_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION;
     }
 
     return null;
