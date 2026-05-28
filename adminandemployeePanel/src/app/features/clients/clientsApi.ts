@@ -7,7 +7,11 @@ import type {
   AdminMetaAdsSyncLogsResponse,
   AmazonAdsCampaignsQuery,
   AmazonAdsCampaignsResponse,
+  AmazonAdsReportsQuery,
+  AmazonAdsReportItem,
+  AmazonAdsReportsResponse,
   CreateMetaAdsReportRequest,
+  CreateAmazonAdsReportRequest,
   AdminMetaAdsClientListResponse,
   AssignedClientAmazonAdsConfig,
   AdminClientAmazonAdsConnection,
@@ -42,6 +46,7 @@ import type {
   TestMetaAdsConnectionRequest,
   TestMetaAdsConnectionResponse,
   UpdateMetaAdsReportRequest,
+  UpdateAmazonAdsReportRequest,
   UpdateAdminClientAmazonAdsConfigRequest,
   UpdateAdminClientMetaAdsConfigRequest,
   UpdateAdminClientRequest,
@@ -64,6 +69,8 @@ import {
   normalizeClientsListResponse,
   normalizeAdminMetaAdsConnectionResponse,
   normalizeMetaAdsSyncResponse,
+  normalizeAmazonAdsReportsResponse,
+  normalizeAmazonAdsReportItemResponse,
   normalizeMetaAdsReportsResponse,
   normalizeMetaAdsReportItemResponse,
   normalizeMetaAdsSummaryResponse,
@@ -574,6 +581,92 @@ export const clientsApi = baseApi.injectEndpoints({
         { type: "Clients", id: CLIENT_META_ADS_GLOBAL_LIST_ID },
       ],
     }),
+    getAdminClientAmazonAdsReports: builder.query<
+      AmazonAdsReportsResponse,
+      { clientId: string; query?: AmazonAdsReportsQuery }
+    >({
+      query: ({ clientId, query }) => ({
+        url: `/admin/clients/${clientId}/amazon-ads/reports`,
+        method: "GET",
+        params: serializeAmazonAdsReportsQuery(query),
+      }),
+      transformResponse: (response: unknown) => normalizeAmazonAdsReportsResponse(response),
+      providesTags: (_result, _error, { clientId }) => [
+        { type: "Clients", id: `${CLIENT_AMAZON_ADS_GLOBAL_LIST_ID}:REPORTS:${clientId}` },
+      ],
+    }),
+    createAdminClientAmazonAdsReport: builder.mutation<
+      AmazonAdsReportItem,
+      { clientId: string; body: CreateAmazonAdsReportRequest }
+    >({
+      query: ({ clientId, body }) => ({
+        url: `/admin/clients/${clientId}/amazon-ads/reports`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeAmazonAdsReportItemResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "Clients", id: `${CLIENT_AMAZON_ADS_GLOBAL_LIST_ID}:REPORTS:${clientId}` },
+        { type: "Clients", id: CLIENT_AMAZON_ADS_GLOBAL_LIST_ID },
+      ],
+    }),
+    updateAdminAmazonAdsReport: builder.mutation<
+      AmazonAdsReportItem,
+      { reportId: string; body: UpdateAmazonAdsReportRequest; clientId: string }
+    >({
+      query: ({ reportId, body }) => ({
+        url: `/admin/amazon-ads/reports/${reportId}`,
+        method: "PATCH",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeAmazonAdsReportItemResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "Clients", id: `${CLIENT_AMAZON_ADS_GLOBAL_LIST_ID}:REPORTS:${clientId}` },
+        { type: "Clients", id: CLIENT_AMAZON_ADS_GLOBAL_LIST_ID },
+      ],
+    }),
+    getAssignedClientAmazonAdsReports: builder.query<
+      AmazonAdsReportsResponse,
+      { clientId: string; query?: AmazonAdsReportsQuery }
+    >({
+      query: ({ clientId, query }) => ({
+        url: `/amazon-ads/clients/${clientId}/reports`,
+        method: "GET",
+        params: serializeAmazonAdsReportsQuery(query),
+      }),
+      transformResponse: (response: unknown) => normalizeAmazonAdsReportsResponse(response),
+      providesTags: (_result, _error, { clientId }) => [
+        { type: "Clients", id: `${CLIENT_AMAZON_ADS_CONNECTION_ID_PREFIX}:REPORTS:${clientId}` },
+      ],
+    }),
+    createAssignedClientAmazonAdsReport: builder.mutation<
+      AmazonAdsReportItem,
+      { clientId: string; body: CreateAmazonAdsReportRequest }
+    >({
+      query: ({ clientId, body }) => ({
+        url: `/amazon-ads/clients/${clientId}/reports`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeAmazonAdsReportItemResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "Clients", id: `${CLIENT_AMAZON_ADS_CONNECTION_ID_PREFIX}:REPORTS:${clientId}` },
+      ],
+    }),
+    updateAssignedAmazonAdsReport: builder.mutation<
+      AmazonAdsReportItem,
+      { reportId: string; body: UpdateAmazonAdsReportRequest; clientId: string }
+    >({
+      query: ({ reportId, body }) => ({
+        url: `/amazon-ads/reports/${reportId}`,
+        method: "PATCH",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeAmazonAdsReportItemResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "Clients", id: `${CLIENT_AMAZON_ADS_CONNECTION_ID_PREFIX}:REPORTS:${clientId}` },
+      ],
+    }),
     createAdminClient: builder.mutation<ClientProfile, CreateAdminClientRequest>({
       query: (body) => ({
         url: "/admin/clients",
@@ -654,6 +747,7 @@ export const {
   useGetAssignedClientAmazonAdsCampaignsQuery,
   useGetAssignedClientAmazonAdsProductsQuery,
   useGetAssignedClientAmazonAdsInsightsQuery,
+  useGetAssignedClientAmazonAdsReportsQuery,
   useGetAdminClientMetaAdsSummaryQuery,
   useGetAdminMetaAdsClientsQuery,
   useGetAdminAmazonAdsClientsQuery,
@@ -677,6 +771,11 @@ export const {
   useGetAdminClientMetaAdsReportsQuery,
   useCreateAdminClientMetaAdsReportMutation,
   useUpdateAdminMetaAdsReportMutation,
+  useGetAdminClientAmazonAdsReportsQuery,
+  useCreateAdminClientAmazonAdsReportMutation,
+  useUpdateAdminAmazonAdsReportMutation,
+  useCreateAssignedClientAmazonAdsReportMutation,
+  useUpdateAssignedAmazonAdsReportMutation,
   useCreateAdminClientMutation,
   useUpdateAdminClientMutation,
   useDeactivateAdminClientMutation,
@@ -923,6 +1022,34 @@ function serializeAmazonAdsSyncLogsQuery(
 
 function serializeMetaAdsReportsQuery(
   query: MetaAdsReportsQuery | void,
+): Record<string, string | number | boolean> {
+  if (!query) {
+    return {};
+  }
+
+  const params: Record<string, string | number | boolean> = {};
+
+  if (query.status !== undefined) {
+    params.status = query.status;
+  }
+
+  if (query.type !== undefined) {
+    params.type = query.type;
+  }
+
+  if (query.clientVisible !== undefined) {
+    params.clientVisible = query.clientVisible;
+  }
+
+  if (typeof query.limit === "number" && Number.isFinite(query.limit)) {
+    params.limit = Math.trunc(query.limit);
+  }
+
+  return params;
+}
+
+function serializeAmazonAdsReportsQuery(
+  query: AmazonAdsReportsQuery | void,
 ): Record<string, string | number | boolean> {
   if (!query) {
     return {};

@@ -1,5 +1,48 @@
 # Architecture Decisions
 
+## 2026-05-28 - Amazon Ads Faz 9 Reporting + Export Foundation (Report Entity + Publish/Ack Bridge)
+
+Context:
+Amazon Ads Faz 8 sonrası sync lifecycle üretim seviyesine taşındı ancak raporlar hâlâ snapshot görünümünden ayrı bir lifecycle entity’si olarak tutulmuyordu. Admin/assigned ekip için draft->publish akışı, client tarafı için yalnızca own-visible rapor görünürlüğü ve publish sonrası acknowledgement task köprüsü gerekiyordu.
+
+Decision:
+
+- Prisma’ya yeni `AmazonAdsReport` domain entity’si eklendi (`AmazonAdsReportType`, `AmazonAdsReportStatus`, acknowledgement alanları ve task bridge foreign key’i).
+- Backend Amazon Ads API surface’i rapor lifecycle ile genişletildi:
+  - Admin: `GET /api/v1/admin/clients/:clientId/amazon-ads/reports`, `POST /api/v1/admin/clients/:clientId/amazon-ads/reports`, `PATCH /api/v1/admin/amazon-ads/reports/:reportId`
+  - Assigned: `GET /api/v1/amazon-ads/clients/:clientId/reports`, `POST /api/v1/amazon-ads/clients/:clientId/reports`, `PATCH /api/v1/amazon-ads/reports/:reportId`
+  - Own client: `GET /api/v1/clients/me/amazon-ads/reports`
+- Create/update report akışında publish state normalize edildi: `clientVisible` veya `requestAcknowledgement` aktif olduğunda rapor `PUBLISHED + clientVisible` modeline taşınır; `DRAFT/ARCHIVED` durumunda client görünürlüğü kapatılır.
+- Publish->ack bridge için Amazon report bazlı task üretimi/update akışı eklendi (`MetaAdsApprovalType.AMAZON_ADS_REPORT_ACKNOWLEDGEMENT`), report/task ilişkisinde `acknowledgementTaskId` tutulur.
+- Admin global panel (`/amazon-ads`) ve employee workspace (`/employee/amazon-ads`) report read-model ile genişletildi; draft oluşturma, publish etme, ack talebi oluşturma ve liste filtreleme aksiyonları permission-aware bağlandı.
+- Client portal Amazon service-tab, mock rapor placeholder yerine own reports endpointinden sadece publish/client-visible raporları gösteren API-driven panel ile güncellendi.
+
+Reason:
+Bu karar, Amazon Ads raporlarını snapshot performans verisinden ayrıştırılmış bir deliverable domainine taşır ve ajans iş akışını kalıcı hale getirir. Admin/employee lifecycle operasyonu ve client görünürlüğü aynı authz/read-model çizgisinde birleşirken publish sonrası onay/ack süreci mevcut task approval altyapısıyla tekrar kullanılabilir olur.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260528152000_add_amazon_ads_reports/migration.sql`
+- `server/src/amazon-ads/amazon-ads.controller.ts`
+- `server/src/amazon-ads/amazon-ads.service.ts`
+- `server/src/amazon-ads/dto/amazon-ads-reports-query.dto.ts`
+- `server/src/amazon-ads/dto/create-amazon-ads-report.dto.ts`
+- `server/src/amazon-ads/dto/update-amazon-ads-report.dto.ts`
+- `server/test/amazon-ads-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
+- `adminandemployeePanel/src/app/pages/AmazonAdsAdmin.tsx`
+- `adminandemployeePanel/src/app/employee/components/AmazonAdsWorkspace.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/AmazonAdsAdmin.test.tsx`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/AmazonAdsWorkspace.test.tsx`
+- `clientPanel/src/app/features/amazonAds/amazonAdsTypes.ts`
+- `clientPanel/src/app/features/amazonAds/amazonAdsApi.ts`
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+- `clientPanel/src/app/pages/__tests__/service-tab-page.amazon-ads.test.tsx`
+
+---
+
 ## 2026-05-28 - Amazon Ads Faz 8 Sync Automation Hardening
 
 Context:

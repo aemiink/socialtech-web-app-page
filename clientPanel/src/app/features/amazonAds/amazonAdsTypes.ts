@@ -136,3 +136,61 @@ export type AmazonAdsInsightsResponse = {
   dateRange: { since: string; until: string };
   lastSyncAt: string | null;
 };
+
+export type AmazonAdsReportType =
+  | "WEEKLY"
+  | "MONTHLY"
+  | "SPONSORED_PRODUCTS_PERFORMANCE"
+  | "SPONSORED_BRANDS_PERFORMANCE"
+  | "SPONSORED_DISPLAY_PERFORMANCE"
+  | "PRODUCT_PERFORMANCE"
+  | "SEARCH_TERMS"
+  | "BUDGET_RECOMMENDATION"
+  | "ACOS_OPTIMIZATION";
+
+export type AmazonAdsReportStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
+
+export type AmazonAdsReportAcknowledgementStatus =
+  | "NOT_REQUESTED"
+  | "PENDING"
+  | "ACKNOWLEDGED"
+  | "CHANGES_REQUESTED";
+
+export type AmazonAdsReportItem = {
+  id: string;
+  clientProfileId: string;
+  projectId: string | null;
+  projectName: string | null;
+  periodStart: string;
+  periodEnd: string;
+  type: AmazonAdsReportType;
+  status: AmazonAdsReportStatus;
+  summary: string | null;
+  metricsSnapshot: Record<string, unknown> | null;
+  clientVisible: boolean;
+  publishedAt: string | null;
+  acknowledgementRequestedAt: string | null;
+  acknowledgedAt: string | null;
+  acknowledgementStatus: AmazonAdsReportAcknowledgementStatus;
+  acknowledgementTaskId: string | null;
+  acknowledgementTaskUpdatedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AmazonAdsReportsResponse = {
+  data: AmazonAdsReportItem[];
+  meta: {
+    total: number;
+    draft: number;
+    published: number;
+    clientVisible: number;
+  };
+};
+
+export type AmazonAdsReportsQuery = {
+  status?: AmazonAdsReportStatus;
+  type?: AmazonAdsReportType;
+  clientVisible?: boolean;
+  limit?: number;
+};

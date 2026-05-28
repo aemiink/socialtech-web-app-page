@@ -14,7 +14,10 @@ const mockUseGetAssignedClientAmazonAdsSummaryQuery = vi.fn();
 const mockUseGetAssignedClientAmazonAdsCampaignsQuery = vi.fn();
 const mockUseGetAssignedClientAmazonAdsProductsQuery = vi.fn();
 const mockUseGetAssignedClientAmazonAdsInsightsQuery = vi.fn();
+const mockUseGetAssignedClientAmazonAdsReportsQuery = vi.fn();
 const mockUseSyncAssignedClientAmazonAdsMutation = vi.fn();
+const mockUseCreateAssignedClientAmazonAdsReportMutation = vi.fn();
+const mockUseUpdateAssignedAmazonAdsReportMutation = vi.fn();
 const mockUseGetProjectsQuery = vi.fn();
 const mockUseGetProjectWorkspaceMessagesQuery = vi.fn();
 const mockUseCreateProjectWorkspaceMessageMutation = vi.fn();
@@ -51,8 +54,14 @@ vi.mock("../../../features/clients/clientsApi", () => ({
     mockUseGetAssignedClientAmazonAdsProductsQuery(...args),
   useGetAssignedClientAmazonAdsInsightsQuery: (...args: unknown[]) =>
     mockUseGetAssignedClientAmazonAdsInsightsQuery(...args),
+  useGetAssignedClientAmazonAdsReportsQuery: (...args: unknown[]) =>
+    mockUseGetAssignedClientAmazonAdsReportsQuery(...args),
   useSyncAssignedClientAmazonAdsMutation: (...args: unknown[]) =>
     mockUseSyncAssignedClientAmazonAdsMutation(...args),
+  useCreateAssignedClientAmazonAdsReportMutation: (...args: unknown[]) =>
+    mockUseCreateAssignedClientAmazonAdsReportMutation(...args),
+  useUpdateAssignedAmazonAdsReportMutation: (...args: unknown[]) =>
+    mockUseUpdateAssignedAmazonAdsReportMutation(...args),
 }));
 
 vi.mock("../../../features/projects/projectsApi", () => ({
@@ -263,6 +272,21 @@ function setupBaseMocks() {
     isLoading: false,
     isError: false,
   });
+  mockUseGetAssignedClientAmazonAdsReportsQuery.mockReturnValue({
+    data: {
+      data: [],
+      meta: {
+        total: 0,
+        draft: 0,
+        published: 0,
+        clientVisible: 0,
+      },
+    },
+    error: undefined,
+    isLoading: false,
+    isFetching: false,
+    isError: false,
+  });
 
   mockUseGetProjectsQuery.mockReturnValue({
     data: {
@@ -346,6 +370,14 @@ function setupBaseMocks() {
   });
   mockUseSyncAssignedClientAmazonAdsMutation.mockReturnValue([
     mockSyncAssignedAmazonAds,
+    { isLoading: false },
+  ]);
+  mockUseCreateAssignedClientAmazonAdsReportMutation.mockReturnValue([
+    vi.fn(() => ({ unwrap: () => Promise.resolve({ id: "report-1" }) })),
+    { isLoading: false },
+  ]);
+  mockUseUpdateAssignedAmazonAdsReportMutation.mockReturnValue([
+    vi.fn(() => ({ unwrap: () => Promise.resolve({ id: "report-1" }) })),
     { isLoading: false },
   ]);
 }

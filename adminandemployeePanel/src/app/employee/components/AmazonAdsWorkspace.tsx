@@ -16,18 +16,24 @@ import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
 import { hasUserPermission, selectCurrentUser } from "../../features/auth/authSelectors";
 import {
+  useCreateAssignedClientAmazonAdsReportMutation,
   useGetAssignedClientAmazonAdsCampaignsQuery,
   useGetAssignedClientAmazonAdsConfigQuery,
   useGetAssignedClientAmazonAdsInsightsQuery,
   useGetAssignedClientAmazonAdsProductsQuery,
+  useGetAssignedClientAmazonAdsReportsQuery,
   useGetAssignedClientAmazonAdsSummaryQuery,
   useGetClientsQuery,
   useSyncAssignedClientAmazonAdsMutation,
+  useUpdateAssignedAmazonAdsReportMutation,
 } from "../../features/clients/clientsApi";
 import type {
   AmazonAdsCampaignSummary,
   AmazonAdsInsightItem,
   AmazonAdsProductSummary,
+  AmazonAdsReportItem,
+  AmazonAdsReportStatus,
+  AmazonAdsReportType,
   ClientProfile,
   ClientsListQuery,
 } from "../../features/clients/clientsTypes";
@@ -54,6 +60,15 @@ export type AmazonAdsWorkspaceView =
 
 type AmazonAdsWorkspaceProps = {
   initialView?: AmazonAdsWorkspaceView;
+};
+
+type ReportDraftFormState = {
+  periodStart: string;
+  periodEnd: string;
+  type: AmazonAdsReportType;
+  summary: string;
+  publishNow: boolean;
+  requestAcknowledgement: boolean;
 };
 
 const ASSIGNED_CLIENTS_QUERY: ClientsListQuery = {
@@ -97,6 +112,27 @@ const ROLE_APPROVAL_TYPE: Record<WorkspaceMode, CreateTaskRequest["approvalType"
   designer: "AMAZON_ADS_CREATIVE_APPROVAL",
 };
 
+const REPORT_TYPE_OPTIONS: Array<{ value: AmazonAdsReportType; label: string }> = [
+  { value: "WEEKLY", label: "Weekly" },
+  { value: "MONTHLY", label: "Monthly" },
+  { value: "SPONSORED_PRODUCTS_PERFORMANCE", label: "SP Performance" },
+  { value: "SPONSORED_BRANDS_PERFORMANCE", label: "SB Performance" },
+  { value: "SPONSORED_DISPLAY_PERFORMANCE", label: "SD Performance" },
+  { value: "PRODUCT_PERFORMANCE", label: "Product Performance" },
+  { value: "SEARCH_TERMS", label: "Search Terms" },
+  { value: "BUDGET_RECOMMENDATION", label: "Budget" },
+  { value: "ACOS_OPTIMIZATION", label: "ACOS" },
+];
+
+const INITIAL_REPORT_FORM: ReportDraftFormState = {
+  periodStart: "",
+  periodEnd: "",
+  type: "WEEKLY",
+  summary: "",
+  publishNow: false,
+  requestAcknowledgement: false,
+};
+
 export function AmazonAdsWorkspace({ initialView = "overview" }: AmazonAdsWorkspaceProps) {
   const currentUser = useAppSelector(selectCurrentUser);
   const workspaceMode = resolveWorkspaceMode(currentUser?.role);
@@ -104,8 +140,10 @@ export function AmazonAdsWorkspace({ initialView = "overview" }: AmazonAdsWorksp
   const canReadAssignedClients = hasUserPermission(currentUser, ["clients.read.assigned"]);
   const canReadAmazonAdsConfig = hasUserPermission(currentUser, ["amazonAds.config.read.assigned"]);
   const canReadAmazonAdsReporting = hasUserPermission(currentUser, ["amazonAds.reporting.read.assigned"]);
+  const canReadAmazonAdsReports = canReadAmazonAdsReporting;
   const canRunAmazonAdsSync = hasUserPermission(currentUser, ["amazonAds.sync.read.assigned"]);
   const canManageAmazonAdsNotes = hasUserPermission(currentUser, ["amazonAds.notes.manage.assigned"]);
+  const canManageAmazonAdsReports = canManageAmazonAdsNotes;
   const canCreateAmazonAdsApprovals = hasUserPermission(currentUser, ["amazonAds.approvals.create.assigned"]);
   const canManageAmazonAdsRecommendations = hasUserPermission(currentUser, [
     "amazonAds.recommendations.manage.assigned",
@@ -135,6 +173,10 @@ export function AmazonAdsWorkspace({ initialView = "overview" }: AmazonAdsWorksp
   const [taskDescription, setTaskDescription] = useState("");
   const [noteBody, setNoteBody] = useState("");
   const [replyBody, setReplyBody] = useState("");
+  const [reportForm, setReportForm] = useState<ReportDraftFormState>(INITIAL_REPORT_FORM);
+  const [reportStatusFilter, setReportStatusFilter] = useState<AmazonAdsReportStatus | "ALL">("ALL");
+  const [reportTypeFilter, setReportTypeFilter] = useState<AmazonAdsReportType | "ALL">("ALL");
+  const [publishAckToggle, setPublishAckToggle] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [activeAction, setActiveAction] = useState<string | null>(null);
 
@@ -203,6 +245,24 @@ export function AmazonAdsWorkspace({ initialView = "overview" }: AmazonAdsWorksp
       { clientId: selectedClientId, query: { level: "SEARCH_TERM", limit: 12 } },
       { skip: shouldSkipAmazonQueries },
     );
+  const reportsQuery = useMemo(
+    () => ({
+      ...(reportStatusFilter !== "ALL" ? { status: reportStatusFilter } : {}),
+      ...(reportTypeFilter !== "ALL" ? { type: reportTypeFilter } : {}),
+      limit: 50,
+    }),
+    [reportStatusFilter, reportTypeFilter],
+  );
+  const {
+    data: reportsResponse,
+    error: reportsError,
+    isLoading: isReportsLoading,
+    isError: isReportsError,
+    isFetching: isReportsFetching,
+  } = useGetAssignedClientAmazonAdsReportsQuery(
+    { clientId: selectedClientId, query: reportsQuery },
+    { skip: shouldSkipAmazonQueries || selectedClientId.length === 0 },
+  );
 
   const { data: projectsResponse } = useGetProjectsQuery(
     selectedClientId.length > 0 ? { clientProfileId: selectedClientId } : undefined,
@@ -233,6 +293,8 @@ export function AmazonAdsWorkspace({ initialView = "overview" }: AmazonAdsWorksp
       ),
     [amazonAdsTasks],
   );
+  const reportRows = reportsResponse?.data ?? [];
+  const reportMeta = reportsResponse?.meta;
 
   const { data: workspaceMessages = [] } = useGetProjectWorkspaceMessagesQuery(
     {
@@ -251,6 +313,10 @@ export function AmazonAdsWorkspace({ initialView = "overview" }: AmazonAdsWorksp
     useCreateProjectWorkspaceMessageMutation();
   const [syncAssignedAmazonAds, { isLoading: isSyncingAssignedAmazonAds }] =
     useSyncAssignedClientAmazonAdsMutation();
+  const [createAssignedAmazonAdsReport, { isLoading: isCreatingReport }] =
+    useCreateAssignedClientAmazonAdsReportMutation();
+  const [updateAssignedAmazonAdsReport, { isLoading: isUpdatingReport }] =
+    useUpdateAssignedAmazonAdsReportMutation();
 
   if (!workspaceMode) {
     return (
@@ -287,7 +353,9 @@ export function AmazonAdsWorkspace({ initialView = "overview" }: AmazonAdsWorksp
     isUpdatingTask ||
     isTogglingTodo ||
     isCreatingMessage ||
-    isSyncingAssignedAmazonAds;
+    isSyncingAssignedAmazonAds ||
+    isCreatingReport ||
+    isUpdatingReport;
 
   async function handleSyncAssignedAmazonAds() {
     if (!selectedClientId) {
@@ -317,6 +385,104 @@ export function AmazonAdsWorkspace({ initialView = "overview" }: AmazonAdsWorksp
       setFeedback({
         type: "error",
         text: extractApiErrorMessage(error, "Amazon Ads sync çalıştırılamadı."),
+      });
+    } finally {
+      setActiveAction(null);
+    }
+  }
+
+  function toReportPeriodStartIso(value: string): string {
+    return new Date(`${value}T00:00:00.000Z`).toISOString();
+  }
+
+  function toReportPeriodEndIso(value: string): string {
+    return new Date(`${value}T23:59:59.999Z`).toISOString();
+  }
+
+  async function handleCreateReportDraft() {
+    if (!selectedClientId || !canManageAmazonAdsReports || !hasAmazonAdsProject || isActionBusy) {
+      return;
+    }
+
+    if (!reportForm.periodStart || !reportForm.periodEnd) {
+      setFeedback({
+        type: "error",
+        text: "Rapor başlangıç ve bitiş tarihi zorunludur.",
+      });
+      return;
+    }
+
+    if (reportForm.periodStart > reportForm.periodEnd) {
+      setFeedback({
+        type: "error",
+        text: "Rapor başlangıç tarihi bitiş tarihinden sonra olamaz.",
+      });
+      return;
+    }
+
+    if (reportForm.requestAcknowledgement && !canCreateAmazonAdsApprovals) {
+      setFeedback({
+        type: "error",
+        text: "Ack talebi için `amazonAds.approvals.create.assigned` izni gereklidir.",
+      });
+      return;
+    }
+
+    setFeedback(null);
+    setActiveAction("report-create");
+    try {
+      await createAssignedAmazonAdsReport({
+        clientId: selectedClientId,
+        body: {
+          projectId: amazonAdsProjectId ?? undefined,
+          periodStart: toReportPeriodStartIso(reportForm.periodStart),
+          periodEnd: toReportPeriodEndIso(reportForm.periodEnd),
+          type: reportForm.type,
+          summary: reportForm.summary.trim().length > 0 ? reportForm.summary.trim() : undefined,
+          clientVisible: reportForm.publishNow || undefined,
+          requestAcknowledgement: reportForm.requestAcknowledgement || undefined,
+        },
+      }).unwrap();
+      setReportForm(INITIAL_REPORT_FORM);
+      setFeedback({
+        type: "success",
+        text: "Amazon Ads rapor taslağı kaydedildi.",
+      });
+    } catch (error) {
+      setFeedback({
+        type: "error",
+        text: extractApiErrorMessage(error, "Amazon Ads raporu kaydedilemedi."),
+      });
+    } finally {
+      setActiveAction(null);
+    }
+  }
+
+  async function handlePublishReport(reportId: string) {
+    if (!selectedClientId || !canManageAmazonAdsReports || isActionBusy) {
+      return;
+    }
+
+    setFeedback(null);
+    setActiveAction(reportId);
+    try {
+      await updateAssignedAmazonAdsReport({
+        reportId,
+        clientId: selectedClientId,
+        body: {
+          status: "PUBLISHED",
+          clientVisible: true,
+          requestAcknowledgement: publishAckToggle || undefined,
+        },
+      }).unwrap();
+      setFeedback({
+        type: "success",
+        text: "Rapor yayınlandı.",
+      });
+    } catch (error) {
+      setFeedback({
+        type: "error",
+        text: extractApiErrorMessage(error, "Rapor yayınlanamadı."),
       });
     } finally {
       setActiveAction(null);
@@ -680,7 +846,12 @@ export function AmazonAdsWorkspace({ initialView = "overview" }: AmazonAdsWorksp
             />
           </div>
 
-          {(isConfigError || isSummaryError || isCampaignsError || isProductsError || isSearchTermsError) ? (
+          {(isConfigError ||
+            isSummaryError ||
+            isCampaignsError ||
+            isProductsError ||
+            isSearchTermsError ||
+            isReportsError) ? (
             <Card className="border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
               Amazon Ads read-model endpointlerinden biri okunamadı. Assigned scope ve bağlantı durumunu
               kontrol edin.
@@ -733,6 +904,22 @@ export function AmazonAdsWorkspace({ initialView = "overview" }: AmazonAdsWorksp
                   summary ? `${summary.dateRange.since} - ${summary.dateRange.until}` : "—"
                 }
                 summary={summary}
+                canReadAmazonAdsReports={canReadAmazonAdsReports}
+                canManageAmazonAdsReports={canManageAmazonAdsReports}
+                reportRows={reportRows}
+                reportMeta={reportMeta}
+                reportsError={reportsError}
+                isReportsError={isReportsError}
+                isReportsLoading={isReportsLoading}
+                isReportsFetching={isReportsFetching}
+                reportStatusFilter={reportStatusFilter}
+                setReportStatusFilter={setReportStatusFilter}
+                reportTypeFilter={reportTypeFilter}
+                setReportTypeFilter={setReportTypeFilter}
+                reportForm={reportForm}
+                setReportForm={setReportForm}
+                publishAckToggle={publishAckToggle}
+                setPublishAckToggle={setPublishAckToggle}
                 canManageAmazonAdsNotes={canManageAmazonAdsNotes}
                 canCreateTask={canCreateTask}
                 hasAmazonAdsProject={hasAmazonAdsProject}
@@ -743,6 +930,8 @@ export function AmazonAdsWorkspace({ initialView = "overview" }: AmazonAdsWorksp
                 reportTasks={amazonAdsTasks.filter((task) => task.type === "QA")}
                 onCreateInternalNote={() => void handleCreateInternalNote()}
                 onCreateReportTask={() => void handleCreateRoleTask("report")}
+                onCreateReportDraft={() => void handleCreateReportDraft()}
+                onPublishReport={(reportId) => void handlePublishReport(reportId)}
                 currencyCode={config?.settings.currencyCode}
               />
             ) : null}
@@ -1073,6 +1262,22 @@ function SearchTermsSection({
 function ReportsSection({
   summaryDateLabel,
   summary,
+  canReadAmazonAdsReports,
+  canManageAmazonAdsReports,
+  reportRows,
+  reportMeta,
+  reportsError,
+  isReportsError,
+  isReportsLoading,
+  isReportsFetching,
+  reportStatusFilter,
+  setReportStatusFilter,
+  reportTypeFilter,
+  setReportTypeFilter,
+  reportForm,
+  setReportForm,
+  publishAckToggle,
+  setPublishAckToggle,
   canManageAmazonAdsNotes,
   canCreateTask,
   hasAmazonAdsProject,
@@ -1083,6 +1288,8 @@ function ReportsSection({
   reportTasks,
   onCreateInternalNote,
   onCreateReportTask,
+  onCreateReportDraft,
+  onPublishReport,
   currencyCode,
 }: {
   summaryDateLabel: string;
@@ -1094,6 +1301,29 @@ function ReportsSection({
     acos: number;
     roas: number;
   } | undefined;
+  canReadAmazonAdsReports: boolean;
+  canManageAmazonAdsReports: boolean;
+  reportRows: AmazonAdsReportItem[];
+  reportMeta:
+    | {
+        total: number;
+        draft: number;
+        published: number;
+        clientVisible: number;
+      }
+    | undefined;
+  reportsError: unknown;
+  isReportsError: boolean;
+  isReportsLoading: boolean;
+  isReportsFetching: boolean;
+  reportStatusFilter: AmazonAdsReportStatus | "ALL";
+  setReportStatusFilter: (value: AmazonAdsReportStatus | "ALL") => void;
+  reportTypeFilter: AmazonAdsReportType | "ALL";
+  setReportTypeFilter: (value: AmazonAdsReportType | "ALL") => void;
+  reportForm: ReportDraftFormState;
+  setReportForm: (value: ReportDraftFormState | ((prev: ReportDraftFormState) => ReportDraftFormState)) => void;
+  publishAckToggle: boolean;
+  setPublishAckToggle: (value: boolean) => void;
   canManageAmazonAdsNotes: boolean;
   canCreateTask: boolean;
   hasAmazonAdsProject: boolean;
@@ -1104,6 +1334,8 @@ function ReportsSection({
   reportTasks: Task[];
   onCreateInternalNote: () => void;
   onCreateReportTask: () => void;
+  onCreateReportDraft: () => void;
+  onPublishReport: (reportId: string) => void;
   currencyCode?: string | null;
 }) {
   return (
@@ -1117,6 +1349,219 @@ function ReportsSection({
         <span>Sales: {summary ? formatCurrency(summary.sales, currencyCode) : "—"}</span>
         <span>Orders: {summary ? summary.orders.toLocaleString("tr-TR") : "—"}</span>
       </div>
+
+      {!canReadAmazonAdsReports ? (
+        <p className="rounded-md border border-orange-500/30 bg-orange-500/10 p-3 text-xs text-orange-200">
+          Amazon Ads raporlarını görmek için `amazonAds.reporting.read.assigned` izni gereklidir.
+        </p>
+      ) : (
+        <div className="space-y-3 rounded-lg border border-white/[0.08] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-[#A0A0A0]">
+              Toplam: {reportMeta?.total ?? 0} · Draft: {reportMeta?.draft ?? 0} · Published:{" "}
+              {reportMeta?.published ?? 0}
+            </p>
+            <label className="flex items-center gap-2 text-xs text-[#DADADA]">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-[#AAFF01]"
+                checked={publishAckToggle}
+                onChange={(event) => setPublishAckToggle(event.target.checked)}
+              />
+              Yayında ack iste
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="workspace-amazon-report-status">Status</Label>
+              <select
+                id="workspace-amazon-report-status"
+                className="h-10 rounded-md border border-white/[0.12] bg-black/20 px-3 text-sm text-white"
+                value={reportStatusFilter}
+                onChange={(event) =>
+                  setReportStatusFilter(event.target.value as AmazonAdsReportStatus | "ALL")
+                }
+              >
+                <option value="ALL">All</option>
+                <option value="DRAFT">Draft</option>
+                <option value="PUBLISHED">Published</option>
+                <option value="ARCHIVED">Archived</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="workspace-amazon-report-type">Tip</Label>
+              <select
+                id="workspace-amazon-report-type"
+                className="h-10 rounded-md border border-white/[0.12] bg-black/20 px-3 text-sm text-white"
+                value={reportTypeFilter}
+                onChange={(event) =>
+                  setReportTypeFilter(event.target.value as AmazonAdsReportType | "ALL")
+                }
+              >
+                <option value="ALL">All</option>
+                {REPORT_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="workspace-amazon-period-start">Dönem Başlangıç</Label>
+              <Input
+                id="workspace-amazon-period-start"
+                type="date"
+                value={reportForm.periodStart}
+                onChange={(event) =>
+                  setReportForm((prev) => ({
+                    ...prev,
+                    periodStart: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="workspace-amazon-period-end">Dönem Bitiş</Label>
+              <Input
+                id="workspace-amazon-period-end"
+                type="date"
+                value={reportForm.periodEnd}
+                onChange={(event) =>
+                  setReportForm((prev) => ({
+                    ...prev,
+                    periodEnd: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="workspace-amazon-report-draft-type">Rapor Tipi</Label>
+              <select
+                id="workspace-amazon-report-draft-type"
+                className="h-10 rounded-md border border-white/[0.12] bg-black/20 px-3 text-sm text-white"
+                value={reportForm.type}
+                onChange={(event) =>
+                  setReportForm((prev) => ({
+                    ...prev,
+                    type: event.target.value as AmazonAdsReportType,
+                  }))
+                }
+              >
+                {REPORT_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-end gap-3 text-xs text-[#DADADA]">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[#AAFF01]"
+                  checked={reportForm.publishNow}
+                  onChange={(event) =>
+                    setReportForm((prev) => ({
+                      ...prev,
+                      publishNow: event.target.checked,
+                    }))
+                  }
+                />
+                Hemen yayınla
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[#AAFF01]"
+                  checked={reportForm.requestAcknowledgement}
+                  onChange={(event) =>
+                    setReportForm((prev) => ({
+                      ...prev,
+                      requestAcknowledgement: event.target.checked,
+                    }))
+                  }
+                />
+                Ack iste
+              </label>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="workspace-amazon-report-summary">Özet</Label>
+            <Input
+              id="workspace-amazon-report-summary"
+              placeholder="Haftalık rapor özeti..."
+              value={reportForm.summary}
+              onChange={(event) =>
+                setReportForm((prev) => ({
+                  ...prev,
+                  summary: event.target.value,
+                }))
+              }
+            />
+          </div>
+
+          <Button
+            type="button"
+            size="sm"
+            className="bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
+            onClick={onCreateReportDraft}
+            disabled={!canManageAmazonAdsReports || !hasAmazonAdsProject || isActionBusy}
+          >
+            {activeAction === "report-create" ? "Kaydediliyor..." : "Taslak Kaydet"}
+          </Button>
+
+          {isReportsLoading || isReportsFetching ? (
+            <p className="text-xs text-[#A0A0A0]">Raporlar yükleniyor...</p>
+          ) : null}
+          {isReportsError ? (
+            <p className="text-xs text-red-300">
+              {extractApiErrorMessage(reportsError, "Amazon Ads raporları alınamadı.")}
+            </p>
+          ) : null}
+          {!isReportsLoading && !isReportsError && reportRows.length === 0 ? (
+            <p className="text-xs text-[#A0A0A0]">Seçili filtre için rapor kaydı bulunmuyor.</p>
+          ) : null}
+          {!isReportsLoading && !isReportsError && reportRows.length > 0 ? (
+            <div className="space-y-2">
+              {reportRows.map((report) => (
+                <div key={report.id} className="rounded border border-white/[0.08] bg-white/5 p-3">
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm text-white">
+                      {formatReportTypeLabel(report.type)} · {formatReportPeriod(report.periodStart, report.periodEnd)}
+                    </p>
+                    <span
+                      className={`rounded-md px-2 py-1 text-xs ${getReportStatusClassName(report.status)}`}
+                    >
+                      {report.status}
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#A0A0A0]">
+                    Ack: {report.acknowledgementStatus} · Yayın:{" "}
+                    {report.publishedAt ? new Date(report.publishedAt).toLocaleString("tr-TR") : "Taslak"}
+                  </p>
+                  <p className="mt-1 text-xs text-[#D8D8D8]">{report.summary ?? "Özet girilmedi."}</p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="mt-2"
+                    onClick={() => onPublishReport(report.id)}
+                    disabled={report.status === "PUBLISHED" || !canManageAmazonAdsReports || isActionBusy}
+                  >
+                    {activeAction === report.id ? "Yayınlanıyor..." : "Publish"}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      )}
+
       <h4 className="text-sm font-semibold text-white">Ajans Notları</h4>
       <Textarea
         placeholder="Kampanya değerlendirme notu..."
@@ -1380,6 +1825,48 @@ function formatAdProduct(value: string | null): string {
   }
 
   return "UNKNOWN";
+}
+
+function getReportStatusClassName(status: AmazonAdsReportStatus): string {
+  if (status === "PUBLISHED") {
+    return "bg-[#AAFF01]/15 text-[#d2ff8a]";
+  }
+  if (status === "ARCHIVED") {
+    return "bg-white/[0.06] text-[#A0A0A0]";
+  }
+  return "bg-amber-500/15 text-amber-200";
+}
+
+function formatReportTypeLabel(type: AmazonAdsReportType): string {
+  if (type === "SPONSORED_PRODUCTS_PERFORMANCE") {
+    return "SP Performance";
+  }
+  if (type === "SPONSORED_BRANDS_PERFORMANCE") {
+    return "SB Performance";
+  }
+  if (type === "SPONSORED_DISPLAY_PERFORMANCE") {
+    return "SD Performance";
+  }
+  if (type === "PRODUCT_PERFORMANCE") {
+    return "Product";
+  }
+  if (type === "SEARCH_TERMS") {
+    return "Search Terms";
+  }
+  if (type === "BUDGET_RECOMMENDATION") {
+    return "Budget";
+  }
+  if (type === "ACOS_OPTIMIZATION") {
+    return "ACOS";
+  }
+
+  return type;
+}
+
+function formatReportPeriod(periodStart: string, periodEnd: string): string {
+  const from = periodStart.slice(0, 10);
+  const until = periodEnd.slice(0, 10);
+  return `${from} - ${until}`;
 }
 
 function formatApprovalType(value: string): string {

@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthUserProfile } from "../../features/auth/authTypes";
 import type {
   AdminAmazonAdsClientListResponse,
+  AmazonAdsReportsResponse,
   AdminAmazonAdsSyncLogsResponse,
 } from "../../features/clients/clientsTypes";
 import type { Task } from "../../features/tasks/tasksTypes";
@@ -33,11 +34,14 @@ const mockUseGetAdminAmazonAdsClientsQuery = vi.fn<
   (query?: unknown, options?: QueryOptions) => AmazonAdsListQueryResult
 >();
 const mockUseGetAdminAmazonAdsSyncLogsQuery = vi.fn();
+const mockUseGetAdminClientAmazonAdsReportsQuery = vi.fn();
 const mockUseUpdateAdminClientAmazonAdsConfigMutation = vi.fn();
 const mockUseTestAdminClientAmazonAdsConnectionMutation = vi.fn();
 const mockUseSyncAdminClientAmazonAdsMutation = vi.fn();
 const mockUseRetryAdminClientAmazonAdsSyncMutation = vi.fn();
 const mockUseDisconnectAdminClientAmazonAdsMutation = vi.fn();
+const mockUseCreateAdminClientAmazonAdsReportMutation = vi.fn();
+const mockUseUpdateAdminAmazonAdsReportMutation = vi.fn();
 const mockUseCreateTaskMutation = vi.fn();
 
 let currentUser: AuthUserProfile | null = null;
@@ -51,6 +55,8 @@ vi.mock("../../features/clients/clientsApi", () => ({
     mockUseGetAdminAmazonAdsClientsQuery(query, options),
   useGetAdminAmazonAdsSyncLogsQuery: (query?: unknown, options?: QueryOptions) =>
     mockUseGetAdminAmazonAdsSyncLogsQuery(query, options),
+  useGetAdminClientAmazonAdsReportsQuery: (query?: unknown, options?: QueryOptions) =>
+    mockUseGetAdminClientAmazonAdsReportsQuery(query, options),
   useUpdateAdminClientAmazonAdsConfigMutation: () =>
     mockUseUpdateAdminClientAmazonAdsConfigMutation(),
   useTestAdminClientAmazonAdsConnectionMutation: () =>
@@ -60,6 +66,10 @@ vi.mock("../../features/clients/clientsApi", () => ({
     mockUseRetryAdminClientAmazonAdsSyncMutation(),
   useDisconnectAdminClientAmazonAdsMutation: () =>
     mockUseDisconnectAdminClientAmazonAdsMutation(),
+  useCreateAdminClientAmazonAdsReportMutation: () =>
+    mockUseCreateAdminClientAmazonAdsReportMutation(),
+  useUpdateAdminAmazonAdsReportMutation: () =>
+    mockUseUpdateAdminAmazonAdsReportMutation(),
 }));
 
 vi.mock("../../features/tasks/tasksApi", () => ({
@@ -76,6 +86,8 @@ const adminUser: AuthUserProfile = {
   permissions: [
     "amazonAds.config.read.any",
     "amazonAds.config.manage.any",
+    "reports.read",
+    "reports.manage",
     "amazonAds.approvals.manage.any",
     "tasks.manage.any",
   ],
@@ -176,6 +188,16 @@ const amazonAdsSyncLogsResponse: AdminAmazonAdsSyncLogsResponse = {
   },
 };
 
+const amazonAdsReportsResponse: AmazonAdsReportsResponse = {
+  data: [],
+  meta: {
+    total: 0,
+    draft: 0,
+    published: 0,
+    clientVisible: 0,
+  },
+};
+
 function createResolvedMutation<T>(value: T) {
   return vi.fn((): MutationResponse<T> => ({
     unwrap: async () => value,
@@ -202,6 +224,13 @@ describe("AmazonAdsAdmin", () => {
       isError: false,
       isLoading: false,
     });
+    mockUseGetAdminClientAmazonAdsReportsQuery.mockReturnValue({
+      data: amazonAdsReportsResponse,
+      error: undefined,
+      isError: false,
+      isFetching: false,
+      isLoading: false,
+    });
     mockUseUpdateAdminClientAmazonAdsConfigMutation.mockReturnValue([
       createResolvedMutation({}),
       { isLoading: false },
@@ -219,6 +248,14 @@ describe("AmazonAdsAdmin", () => {
       { isLoading: false },
     ]);
     mockUseDisconnectAdminClientAmazonAdsMutation.mockReturnValue([
+      createResolvedMutation({}),
+      { isLoading: false },
+    ]);
+    mockUseCreateAdminClientAmazonAdsReportMutation.mockReturnValue([
+      createResolvedMutation({}),
+      { isLoading: false },
+    ]);
+    mockUseUpdateAdminAmazonAdsReportMutation.mockReturnValue([
       createResolvedMutation({}),
       { isLoading: false },
     ]);

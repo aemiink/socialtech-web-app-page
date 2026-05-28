@@ -20,10 +20,13 @@ import { AmazonAdsDateRangeQueryDto } from "./dto/amazon-ads-date-range-query.dt
 import { AmazonAdsInsightsQueryDto } from "./dto/amazon-ads-insights-query.dto";
 import { AmazonAdsOAuthStartQueryDto } from "./dto/amazon-ads-oauth-start-query.dto";
 import { AmazonAdsProductsQueryDto } from "./dto/amazon-ads-products-query.dto";
+import { AmazonAdsReportsQueryDto } from "./dto/amazon-ads-reports-query.dto";
 import { AmazonAdsSyncLogsQueryDto } from "./dto/amazon-ads-sync-logs-query.dto";
 import { ConnectManualAmazonAdsDto } from "./dto/connect-manual-amazon-ads.dto";
+import { CreateAmazonAdsReportDto } from "./dto/create-amazon-ads-report.dto";
 import { ExchangeAmazonAdsOAuthCodeDto } from "./dto/exchange-amazon-ads-oauth-code.dto";
 import { TestAmazonAdsConnectionDto } from "./dto/test-amazon-ads-connection.dto";
+import { UpdateAmazonAdsReportDto } from "./dto/update-amazon-ads-report.dto";
 import { UpdateAmazonAdsConfigDto } from "./dto/update-amazon-ads-config.dto";
 
 @Controller()
@@ -186,6 +189,36 @@ export class AmazonAdsController {
     return this.amazonAdsService.retryAdminClientInsights(clientId, query, actor);
   }
 
+  @Get("admin/clients/:clientId/amazon-ads/reports")
+  @RequirePermissions("reports.read")
+  getAdminClientReports(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: AmazonAdsReportsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.amazonAdsService.getAdminClientReports(clientId, query, actor);
+  }
+
+  @Post("admin/clients/:clientId/amazon-ads/reports")
+  @RequirePermissions("reports.manage")
+  createAdminClientReport(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Body() dto: CreateAmazonAdsReportDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.amazonAdsService.createAdminClientReport(clientId, dto, actor);
+  }
+
+  @Patch("admin/amazon-ads/reports/:reportId")
+  @RequirePermissions("reports.manage")
+  updateAdminReport(
+    @Param("reportId", ParseUUIDPipe) reportId: string,
+    @Body() dto: UpdateAmazonAdsReportDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.amazonAdsService.updateAdminReport(reportId, dto, actor);
+  }
+
   @Get("amazon-ads/clients/:clientId/config")
   @RequirePermissions("amazonAds.config.read.assigned")
   getAssignedClientConfig(
@@ -245,6 +278,36 @@ export class AmazonAdsController {
     return this.amazonAdsService.syncAssignedClientInsights(clientId, query, actor);
   }
 
+  @Get("amazon-ads/clients/:clientId/reports")
+  @RequirePermissions("amazonAds.config.read.assigned", "amazonAds.reporting.read.assigned")
+  getAssignedClientReports(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: AmazonAdsReportsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.amazonAdsService.getAssignedClientReports(clientId, query, actor);
+  }
+
+  @Post("amazon-ads/clients/:clientId/reports")
+  @RequirePermissions("amazonAds.config.read.assigned", "amazonAds.notes.manage.assigned")
+  createAssignedClientReport(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Body() dto: CreateAmazonAdsReportDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.amazonAdsService.createAssignedClientReport(clientId, dto, actor);
+  }
+
+  @Patch("amazon-ads/reports/:reportId")
+  @RequirePermissions("amazonAds.config.read.assigned", "amazonAds.notes.manage.assigned")
+  updateAssignedReport(
+    @Param("reportId", ParseUUIDPipe) reportId: string,
+    @Body() dto: UpdateAmazonAdsReportDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.amazonAdsService.updateAssignedReport(reportId, dto, actor);
+  }
+
   @Get("clients/me/amazon-ads/config")
   @RequirePermissions("amazonAds.config.read.own")
   getOwnClientConfig(@CurrentUser() actor: AuthenticatedUser) {
@@ -276,6 +339,19 @@ export class AmazonAdsController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.amazonAdsService.getOwnClientProducts(query, actor);
+  }
+
+  @Get("clients/me/amazon-ads/reports")
+  @RequirePermissions(
+    "amazonAds.config.read.own",
+    "amazonAds.reporting.read.own",
+    "reports.read.own",
+  )
+  getOwnClientReports(
+    @Query() query: AmazonAdsReportsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.amazonAdsService.getOwnClientReports(query, actor);
   }
 
   @Get("clients/me/amazon-ads/insights")

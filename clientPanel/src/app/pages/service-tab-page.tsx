@@ -65,6 +65,7 @@ import {
   useGetOwnAmazonAdsConfigQuery,
   useGetOwnAmazonAdsInsightsQuery,
   useGetOwnAmazonAdsProductsQuery,
+  useGetOwnAmazonAdsReportsQuery,
   useGetOwnAmazonAdsSummaryQuery,
 } from '../features/amazonAds/amazonAdsApi';
 import type {
@@ -72,6 +73,7 @@ import type {
   AmazonAdsInsightItem,
   AmazonAdsProductSummary,
   AmazonAdsProductType,
+  AmazonAdsReportItem,
 } from '../features/amazonAds/amazonAdsTypes';
 import type { ProjectFile } from '../features/projectFiles/projectFilesTypes';
 import { useGetClientProjectFilesQuery } from '../features/projectFiles/projectFilesApi';
@@ -1682,6 +1684,14 @@ function AmazonAdsServiceTab({
     { skip: shouldSkipReportingQueries },
   );
   const {
+    data: amazonReportsResponse,
+    isLoading: isAmazonReportsLoading,
+    isError: isAmazonReportsError,
+  } = useGetOwnAmazonAdsReportsQuery(
+    { limit: 40 },
+    { skip: shouldSkipReportingQueries },
+  );
+  const {
     data: approvalTasks = [],
     isLoading: isApprovalsLoading,
     isError: isApprovalsError,
@@ -1707,6 +1717,7 @@ function AmazonAdsServiceTab({
     [campaigns],
   );
   const products = productsResponse?.data ?? [];
+  const amazonReports = amazonReportsResponse?.data ?? [];
   const searchTermInsights = searchTermInsightsResponse?.data ?? [];
   const keywordRows = useMemo(() => buildAmazonKeywordRows(searchTermInsights), [searchTermInsights]);
   const targetRows = useMemo(() => buildAmazonTargetRows(searchTermInsights), [searchTermInsights]);
@@ -1927,10 +1938,10 @@ function AmazonAdsServiceTab({
       ) : null}
 
       {tabId === "amazon-reports" ? (
-        <AmazonReportsPlaceholder
-          loading={isSummaryLoading}
-          isError={isSummaryError}
-          lastSyncAt={lastSyncAt}
+        <AmazonAdsReportPanel
+          rows={amazonReports}
+          loading={isAmazonReportsLoading}
+          isError={isAmazonReportsError}
         />
       ) : null}
 
@@ -2776,6 +2787,68 @@ function getTikTokAdsReportAcknowledgementLabel(
   return status;
 }
 
+function getAmazonAdsReportTypeLabel(type: AmazonAdsReportItem["type"]): string {
+  if (type === "WEEKLY") {
+    return "Haftalık";
+  }
+  if (type === "MONTHLY") {
+    return "Aylık";
+  }
+  if (type === "SPONSORED_PRODUCTS_PERFORMANCE") {
+    return "SP Performans";
+  }
+  if (type === "SPONSORED_BRANDS_PERFORMANCE") {
+    return "SB Performans";
+  }
+  if (type === "SPONSORED_DISPLAY_PERFORMANCE") {
+    return "SD Performans";
+  }
+  if (type === "PRODUCT_PERFORMANCE") {
+    return "Ürün Performansı";
+  }
+  if (type === "SEARCH_TERMS") {
+    return "Search Terms";
+  }
+  if (type === "BUDGET_RECOMMENDATION") {
+    return "Bütçe Önerisi";
+  }
+  if (type === "ACOS_OPTIMIZATION") {
+    return "ACOS Optimizasyonu";
+  }
+  return type;
+}
+
+function getAmazonAdsReportStatusLabel(status: AmazonAdsReportItem["status"]): string {
+  if (status === "DRAFT") {
+    return "Taslak";
+  }
+  if (status === "PUBLISHED") {
+    return "Yayında";
+  }
+  if (status === "ARCHIVED") {
+    return "Arşiv";
+  }
+  return status;
+}
+
+function getAmazonAdsReportAcknowledgementLabel(
+  status: AmazonAdsReportItem["acknowledgementStatus"],
+): string {
+  if (status === "NOT_REQUESTED") {
+    return "Talep Yok";
+  }
+  if (status === "PENDING") {
+    return "Müşteri Onayı Bekliyor";
+  }
+  if (status === "ACKNOWLEDGED") {
+    return "Onaylandı";
+  }
+  if (status === "CHANGES_REQUESTED") {
+    return "Revizyon İstendi";
+  }
+  return status;
+}
+
 function MetaAdsAgencyNotesPanel({
   notes,
   loading,
@@ -3269,35 +3342,63 @@ function AmazonSearchTermGrid({
   );
 }
 
-function AmazonReportsPlaceholder({
+function AmazonAdsReportPanel({
+  rows,
   loading,
   isError,
-  lastSyncAt,
 }: {
+  rows: AmazonAdsReportItem[];
   loading: boolean;
   isError: boolean;
-  lastSyncAt: string | null;
 }) {
   if (loading) {
-    return <MetaAdsStatePanel title="Amazon Ads rapor özeti hazırlanıyor..." />;
+    return <MetaAdsStatePanel title="Amazon Ads rapor listesi yükleniyor..." />;
   }
 
   if (isError) {
     return (
       <MetaAdsStatePanel
-        title="Rapor özeti alınamadı"
-        description="Amazon Ads rapor verisi şu anda ulaşılamıyor."
+        title="Amazon Ads raporları alınamadı"
+        description="Amazon Ads rapor listesi şu anda ulaşılamıyor."
         tone="error"
       />
     );
   }
 
+  if (rows.length === 0) {
+    return <MetaAdsStatePanel title="Yayınlanmış Amazon Ads raporu bulunamadı." tone="muted" />;
+  }
+
   return (
-    <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-5">
-      <p className="text-sm text-white">Amazon Ads raporları bu hesap için hazırlanıyor.</p>
-      <p className="mt-2 text-xs text-[#A0A0A0]">
-        Son senkron: {lastSyncAt ? new Date(lastSyncAt).toLocaleString("tr-TR") : "Henüz senkron yok"}
-      </p>
+    <div className="space-y-3">
+      {rows.map((row) => {
+        const hasMetricsSnapshot = row.metricsSnapshot !== null;
+
+        return (
+          <div key={row.id} className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded border border-[#00D4FF]/20 bg-[#00D4FF]/10 px-2 py-1 text-[11px] text-[#00D4FF]">
+                  {getAmazonAdsReportTypeLabel(row.type)}
+                </span>
+                <span className="rounded border border-[#AAFF01]/20 bg-[#AAFF01]/10 px-2 py-1 text-[11px] text-[#AAFF01]">
+                  {getAmazonAdsReportStatusLabel(row.status)}
+                </span>
+              </div>
+              <span className="text-xs text-[#A0A0A0]">
+                {new Date(row.periodStart).toLocaleDateString("tr-TR")} -{" "}
+                {new Date(row.periodEnd).toLocaleDateString("tr-TR")}
+              </span>
+            </div>
+            <p className="text-sm text-white">{row.summary ?? "Rapor özeti girilmedi."}</p>
+            <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-[#A0A0A0] md:grid-cols-3">
+              <p>Yayın: {row.publishedAt ? new Date(row.publishedAt).toLocaleString("tr-TR") : "Taslak"}</p>
+              <p>Onay: {getAmazonAdsReportAcknowledgementLabel(row.acknowledgementStatus)}</p>
+              <p>Snapshot: {hasMetricsSnapshot ? "Var" : "Yok"}</p>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

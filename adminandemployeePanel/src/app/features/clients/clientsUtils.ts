@@ -20,6 +20,11 @@ import type {
   AmazonAdsSummaryResponse,
   AmazonAdsOAuthStartResponse,
   AmazonAdsProfileSummary,
+  AmazonAdsReportAcknowledgementStatus,
+  AmazonAdsReportItem,
+  AmazonAdsReportsResponse,
+  AmazonAdsReportStatus,
+  AmazonAdsReportType,
   AmazonAdsConnectionStatus,
   AmazonAdsRegion,
   AmazonAdsSyncResponse,
@@ -970,6 +975,36 @@ export function normalizeMetaAdsReportItemResponse(response: unknown): MetaAdsRe
   return parsed;
 }
 
+export function normalizeAmazonAdsReportsResponse(response: unknown): AmazonAdsReportsResponse {
+  const candidate = isRecord(response) && "data" in response && isRecord(response.data)
+    ? response.data
+    : response;
+  const rowsSource = isRecord(candidate) ? candidate.data : undefined;
+  const metaSource = isRecord(candidate) && isRecord(candidate.meta) ? candidate.meta : {};
+
+  return {
+    data: Array.isArray(rowsSource)
+      ? rowsSource.map((row) => normalizeAmazonAdsReportItem(row)).filter(isDefined)
+      : [],
+    meta: {
+      total: readNumber(metaSource.total, 0),
+      draft: readNumber(metaSource.draft, 0),
+      published: readNumber(metaSource.published, 0),
+      clientVisible: readNumber(metaSource.clientVisible, 0),
+    },
+  };
+}
+
+export function normalizeAmazonAdsReportItemResponse(response: unknown): AmazonAdsReportItem {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  const parsed = normalizeAmazonAdsReportItem(candidate);
+  if (!parsed) {
+    throw new Error("Amazon Ads report response could not be parsed.");
+  }
+
+  return parsed;
+}
+
 export function getActivePurchasedServices(client: ClientProfile): ClientPurchasedService[] {
   return getClientPurchasedServices(client).filter((service) => service.status === "ACTIVE");
 }
@@ -1597,6 +1632,55 @@ function normalizeMetaAdsReportItem(value: unknown): MetaAdsReportItem | null {
   };
 }
 
+function normalizeAmazonAdsReportItem(value: unknown): AmazonAdsReportItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (
+    typeof value.id !== "string" ||
+    typeof value.clientProfileId !== "string" ||
+    typeof value.periodStart !== "string" ||
+    typeof value.periodEnd !== "string" ||
+    typeof value.createdAt !== "string" ||
+    typeof value.updatedAt !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    clientProfileId: value.clientProfileId,
+    projectId: isStringOrNull(value.projectId) ? value.projectId : null,
+    projectName: isStringOrNull(value.projectName) ? value.projectName : null,
+    periodStart: value.periodStart,
+    periodEnd: value.periodEnd,
+    type: normalizeAmazonAdsReportType(value.type),
+    status: normalizeAmazonAdsReportStatus(value.status),
+    summary: isStringOrNull(value.summary) ? value.summary : null,
+    metricsSnapshot: isRecord(value.metricsSnapshot)
+      ? value.metricsSnapshot
+      : value.metricsSnapshot === null
+        ? null
+        : null,
+    clientVisible: typeof value.clientVisible === "boolean" ? value.clientVisible : false,
+    publishedAt: isStringOrNull(value.publishedAt) ? value.publishedAt : null,
+    acknowledgementRequestedAt:
+      isStringOrNull(value.acknowledgementRequestedAt) ? value.acknowledgementRequestedAt : null,
+    acknowledgedAt: isStringOrNull(value.acknowledgedAt) ? value.acknowledgedAt : null,
+    acknowledgementStatus: normalizeAmazonAdsReportAcknowledgementStatus(
+      value.acknowledgementStatus,
+    ),
+    acknowledgementTaskId: isStringOrNull(value.acknowledgementTaskId)
+      ? value.acknowledgementTaskId
+      : null,
+    acknowledgementTaskUpdatedAt:
+      isStringOrNull(value.acknowledgementTaskUpdatedAt) ? value.acknowledgementTaskUpdatedAt : null,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+  };
+}
+
 function normalizeAmazonAdsCampaign(
   value: unknown,
 ): AmazonAdsCampaignsResponse["data"][number] | null {
@@ -2014,6 +2098,47 @@ function normalizeMetaAdsReportStatus(value: unknown): MetaAdsReportStatus {
 function normalizeMetaAdsReportAcknowledgementStatus(
   value: unknown,
 ): MetaAdsReportAcknowledgementStatus {
+  if (
+    value === "NOT_REQUESTED" ||
+    value === "PENDING" ||
+    value === "ACKNOWLEDGED" ||
+    value === "CHANGES_REQUESTED"
+  ) {
+    return value;
+  }
+
+  return "NOT_REQUESTED";
+}
+
+function normalizeAmazonAdsReportType(value: unknown): AmazonAdsReportType {
+  if (
+    value === "WEEKLY" ||
+    value === "MONTHLY" ||
+    value === "SPONSORED_PRODUCTS_PERFORMANCE" ||
+    value === "SPONSORED_BRANDS_PERFORMANCE" ||
+    value === "SPONSORED_DISPLAY_PERFORMANCE" ||
+    value === "PRODUCT_PERFORMANCE" ||
+    value === "SEARCH_TERMS" ||
+    value === "BUDGET_RECOMMENDATION" ||
+    value === "ACOS_OPTIMIZATION"
+  ) {
+    return value;
+  }
+
+  return "WEEKLY";
+}
+
+function normalizeAmazonAdsReportStatus(value: unknown): AmazonAdsReportStatus {
+  if (value === "DRAFT" || value === "PUBLISHED" || value === "ARCHIVED") {
+    return value;
+  }
+
+  return "DRAFT";
+}
+
+function normalizeAmazonAdsReportAcknowledgementStatus(
+  value: unknown,
+): AmazonAdsReportAcknowledgementStatus {
   if (
     value === "NOT_REQUESTED" ||
     value === "PENDING" ||

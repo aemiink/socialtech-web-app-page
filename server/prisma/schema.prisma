@@ -131,6 +131,24 @@ enum AmazonAdsSyncStatus {
   SKIPPED
 }
 
+enum AmazonAdsReportType {
+  WEEKLY
+  MONTHLY
+  SPONSORED_PRODUCTS_PERFORMANCE
+  SPONSORED_BRANDS_PERFORMANCE
+  SPONSORED_DISPLAY_PERFORMANCE
+  PRODUCT_PERFORMANCE
+  SEARCH_TERMS
+  BUDGET_RECOMMENDATION
+  ACOS_OPTIMIZATION
+}
+
+enum AmazonAdsReportStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
 enum TikTokAdsInsightLevel {
   ACCOUNT
   CAMPAIGN
@@ -461,6 +479,9 @@ model User {
   createdMetaAdsReports     MetaAdsReport[]            @relation("MetaAdsReportCreatedBy")
   publishedMetaAdsReports   MetaAdsReport[]            @relation("MetaAdsReportPublishedBy")
   acknowledgedMetaAdsReports MetaAdsReport[]           @relation("MetaAdsReportAcknowledgedBy")
+  createdAmazonAdsReports     AmazonAdsReport[]        @relation("AmazonAdsReportCreatedBy")
+  publishedAmazonAdsReports   AmazonAdsReport[]        @relation("AmazonAdsReportPublishedBy")
+  acknowledgedAmazonAdsReports AmazonAdsReport[]       @relation("AmazonAdsReportAcknowledgedBy")
   createdTikTokAdsReports     TikTokAdsReport[]        @relation("TikTokAdsReportCreatedBy")
   publishedTikTokAdsReports   TikTokAdsReport[]        @relation("TikTokAdsReportPublishedBy")
   acknowledgedTikTokAdsReports TikTokAdsReport[]       @relation("TikTokAdsReportAcknowledgedBy")
@@ -512,6 +533,7 @@ model ClientProfile {
   amazonAdsCredential ClientAmazonAdsCredential?
   amazonAdsInsights   AmazonAdsDailyInsight[]
   amazonAdsSyncLogs   AmazonAdsSyncLog[]
+  amazonAdsReports    AmazonAdsReport[]
   projects            Project[]
   files               ProjectFile[]
   convertedCrmLeads   CrmLead[]                  @relation("CrmLeadConvertedClient")
@@ -658,6 +680,45 @@ model AmazonAdsSyncLog {
   @@index([clientProfileId, startedAt])
   @@index([status, startedAt])
   @@index([profileId])
+}
+
+model AmazonAdsReport {
+  id                        String                 @id @default(uuid()) @db.Uuid
+  clientProfileId           String                 @db.Uuid
+  projectId                 String?                @db.Uuid
+  periodStart               DateTime
+  periodEnd                 DateTime
+  type                      AmazonAdsReportType
+  status                    AmazonAdsReportStatus  @default(DRAFT)
+  summary                   String?
+  metricsSnapshot           Json?
+  createdByUserId           String?                @db.Uuid
+  publishedByUserId         String?                @db.Uuid
+  clientVisible             Boolean                @default(false)
+  publishedAt               DateTime?
+  acknowledgementRequestedAt DateTime?
+  acknowledgedAt            DateTime?
+  acknowledgedByUserId      String?                @db.Uuid
+  acknowledgementTaskId     String?                @db.Uuid
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
+
+  clientProfile   ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  project         Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdBy       User?         @relation("AmazonAdsReportCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  publishedBy     User?         @relation("AmazonAdsReportPublishedBy", fields: [publishedByUserId], references: [id], onDelete: SetNull)
+  acknowledgedBy  User?         @relation("AmazonAdsReportAcknowledgedBy", fields: [acknowledgedByUserId], references: [id], onDelete: SetNull)
+  acknowledgementTask Task?     @relation("AmazonAdsReportAcknowledgementTask", fields: [acknowledgementTaskId], references: [id], onDelete: SetNull)
+
+  @@index([clientProfileId, createdAt])
+  @@index([clientProfileId, status, createdAt])
+  @@index([clientProfileId, type, periodStart, periodEnd])
+  @@index([clientVisible, status, createdAt])
+  @@index([projectId])
+  @@index([createdByUserId])
+  @@index([publishedByUserId])
+  @@index([acknowledgedByUserId])
+  @@index([acknowledgementTaskId])
 }
 
 model MetaAdsDailyInsight {
@@ -924,6 +985,7 @@ model Project {
   repository       ProjectRepository?
   files            ProjectFile[]
   fileFolders      ProjectFileFolder[]
+  amazonAdsReports AmazonAdsReport[]
   metaAdsReports   MetaAdsReport[]
   tikTokAdsReports TikTokAdsReport[]
   workspaceSections WebAppWorkspaceSection[]
@@ -982,6 +1044,7 @@ model Task {
   codePreparedBy User?           @relation("TaskCodePreparedBy", fields: [codePreparedByUserId], references: [id], onDelete: SetNull)
   approvalRespondedBy User?      @relation("TaskApprovalResponder", fields: [approvalRespondedByUserId], references: [id], onDelete: SetNull)
   referenceProjectFile ProjectFile? @relation("TaskReferenceProjectFile", fields: [referenceProjectFileId], references: [id], onDelete: SetNull)
+  amazonAdsReportAcknowledgements AmazonAdsReport[] @relation("AmazonAdsReportAcknowledgementTask")
   metaAdsReportAcknowledgements MetaAdsReport[] @relation("MetaAdsReportAcknowledgementTask")
   tikTokAdsReportAcknowledgements TikTokAdsReport[] @relation("TikTokAdsReportAcknowledgementTask")
   todos          TaskTodo[]

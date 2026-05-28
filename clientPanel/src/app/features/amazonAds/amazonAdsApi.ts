@@ -8,7 +8,12 @@ import type {
   AmazonAdsInsightsResponse,
   AmazonAdsProductType,
   AmazonAdsProductsResponse,
+  AmazonAdsReportsQuery,
+  AmazonAdsReportsResponse,
   AmazonAdsRegion,
+  AmazonAdsReportAcknowledgementStatus,
+  AmazonAdsReportStatus,
+  AmazonAdsReportType,
   AmazonAdsSummaryResponse,
   OwnAmazonAdsConfigResponse,
 } from "./amazonAdsTypes";
@@ -68,6 +73,15 @@ const amazonAdsApi = baseApi.injectEndpoints({
       transformResponse: (response: unknown) => normalizeAmazonAdsInsightsResponse(response),
       providesTags: ["AmazonAdsConfig"],
     }),
+    getOwnAmazonAdsReports: build.query<AmazonAdsReportsResponse, AmazonAdsReportsQuery | void>({
+      query: (query) => ({
+        url: "/clients/me/amazon-ads/reports",
+        method: "GET",
+        params: serializeDateRangeQuery(query),
+      }),
+      transformResponse: (response: unknown) => normalizeAmazonAdsReportsResponse(response),
+      providesTags: ["AmazonAdsConfig"],
+    }),
   }),
 });
 
@@ -77,6 +91,7 @@ export const {
   useGetOwnAmazonAdsCampaignsQuery,
   useGetOwnAmazonAdsProductsQuery,
   useGetOwnAmazonAdsInsightsQuery,
+  useGetOwnAmazonAdsReportsQuery,
 } = amazonAdsApi;
 
 function normalizeOwnAmazonAdsConfigResponse(response: unknown): OwnAmazonAdsConfigResponse {
@@ -162,6 +177,22 @@ function normalizeAmazonAdsInsightsResponse(response: unknown): AmazonAdsInsight
     level: normalizeInsightLevel(isRecord(candidate) ? candidate.level : undefined) ?? "ACCOUNT",
     dateRange: normalizeDateRange(isRecord(candidate) ? candidate.dateRange : undefined),
     lastSyncAt: readNullableString(isRecord(candidate) ? candidate.lastSyncAt : undefined),
+  };
+}
+
+function normalizeAmazonAdsReportsResponse(response: unknown): AmazonAdsReportsResponse {
+  const candidate = isRecord(response) && isRecord(response.data) ? response.data : response;
+  const data = isRecord(candidate) && Array.isArray(candidate.data) ? candidate.data : [];
+  const meta = isRecord(candidate) && isRecord(candidate.meta) ? candidate.meta : {};
+
+  return {
+    data: data.map(normalizeAmazonAdsReportItem).filter(isDefined),
+    meta: {
+      total: Math.trunc(readNumber(meta.total)),
+      draft: Math.trunc(readNumber(meta.draft)),
+      published: Math.trunc(readNumber(meta.published)),
+      clientVisible: Math.trunc(readNumber(meta.clientVisible)),
+    },
   };
 }
 
@@ -252,6 +283,43 @@ function normalizeAmazonAdsInsight(value: unknown) {
   };
 }
 
+function normalizeAmazonAdsReportItem(value: unknown) {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const id = typeof value.id === "string" ? value.id : "";
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    clientProfileId: typeof value.clientProfileId === "string" ? value.clientProfileId : "",
+    projectId: readNullableString(value.projectId),
+    projectName: readNullableString(value.projectName),
+    periodStart: typeof value.periodStart === "string" ? value.periodStart : "",
+    periodEnd: typeof value.periodEnd === "string" ? value.periodEnd : "",
+    type: normalizeReportType(value.type),
+    status: normalizeReportStatus(value.status),
+    summary: readNullableString(value.summary),
+    metricsSnapshot: isRecord(value.metricsSnapshot)
+      ? value.metricsSnapshot
+      : value.metricsSnapshot === null
+        ? null
+        : null,
+    clientVisible: typeof value.clientVisible === "boolean" ? value.clientVisible : false,
+    publishedAt: readNullableString(value.publishedAt),
+    acknowledgementRequestedAt: readNullableString(value.acknowledgementRequestedAt),
+    acknowledgedAt: readNullableString(value.acknowledgedAt),
+    acknowledgementStatus: normalizeReportAcknowledgementStatus(value.acknowledgementStatus),
+    acknowledgementTaskId: readNullableString(value.acknowledgementTaskId),
+    acknowledgementTaskUpdatedAt: readNullableString(value.acknowledgementTaskUpdatedAt),
+    createdAt: typeof value.createdAt === "string" ? value.createdAt : "",
+    updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : "",
+  };
+}
+
 function normalizeConnectionStatus(value: unknown): AmazonAdsConnectionStatus {
   if (
     value === "CONNECTED" ||
@@ -303,6 +371,45 @@ function normalizeProductType(value: unknown): AmazonAdsProductType | null {
   return null;
 }
 
+function normalizeReportType(value: unknown): AmazonAdsReportType {
+  if (
+    value === "WEEKLY" ||
+    value === "MONTHLY" ||
+    value === "SPONSORED_PRODUCTS_PERFORMANCE" ||
+    value === "SPONSORED_BRANDS_PERFORMANCE" ||
+    value === "SPONSORED_DISPLAY_PERFORMANCE" ||
+    value === "PRODUCT_PERFORMANCE" ||
+    value === "SEARCH_TERMS" ||
+    value === "BUDGET_RECOMMENDATION" ||
+    value === "ACOS_OPTIMIZATION"
+  ) {
+    return value;
+  }
+
+  return "WEEKLY";
+}
+
+function normalizeReportStatus(value: unknown): AmazonAdsReportStatus {
+  if (value === "DRAFT" || value === "PUBLISHED" || value === "ARCHIVED") {
+    return value;
+  }
+
+  return "DRAFT";
+}
+
+function normalizeReportAcknowledgementStatus(value: unknown): AmazonAdsReportAcknowledgementStatus {
+  if (
+    value === "NOT_REQUESTED" ||
+    value === "PENDING" ||
+    value === "ACKNOWLEDGED" ||
+    value === "CHANGES_REQUESTED"
+  ) {
+    return value;
+  }
+
+  return "NOT_REQUESTED";
+}
+
 function normalizeDateRange(value: unknown): { since: string; until: string } {
   if (!isRecord(value)) {
     return { since: "", until: "" };
@@ -321,6 +428,9 @@ function serializeDateRangeQuery(
         limit?: number;
         level?: AmazonAdsInsightLevel;
         adProduct?: AmazonAdsProductType;
+        status?: AmazonAdsReportStatus;
+        type?: AmazonAdsReportType;
+        clientVisible?: boolean;
         since?: string;
         until?: string;
       }
@@ -336,6 +446,13 @@ function serializeDateRangeQuery(
     ...("limit" in query && query.limit ? { limit: query.limit } : {}),
     ...("level" in query && query.level ? { level: query.level } : {}),
     ...("adProduct" in query && query.adProduct ? { adProduct: query.adProduct } : {}),
+    ...("status" in query && query.status ? { status: query.status } : {}),
+    ...("type" in query && query.type ? { type: query.type } : {}),
+    ...(
+      "clientVisible" in query && typeof query.clientVisible === "boolean"
+        ? { clientVisible: query.clientVisible }
+        : {}
+    ),
   };
 }
 

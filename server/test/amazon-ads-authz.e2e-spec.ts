@@ -4,12 +4,16 @@ import {
   AmazonAdsConnectionStatus,
   AmazonAdsInsightLevel,
   AmazonAdsProductType,
+  AmazonAdsReportStatus,
+  AmazonAdsReportType,
   AmazonAdsRegion,
   AmazonAdsSyncStatus,
   EmployeeClientAssignmentScope,
-  PrismaClient,
+  MetaAdsApprovalStatus,
   PurchasedServiceKey,
+  PrismaClient,
   PurchasedServiceStatus,
+  TaskStatus,
 } from "@prisma/client";
 import request from "supertest";
 import {
@@ -664,6 +668,159 @@ describe("Amazon Ads Config Authz (e2e)", () => {
     expect(reportNotReadyRes.body.message).toBe("Amazon Ads raporu henüz hazır değil.");
   });
 
+  it("admin can create Amazon Ads report draft", async () => {
+    if (!clientProfileId) return;
+
+    const res = await request(app.getHttpServer())
+      .post(`/api/v1/admin/clients/${clientProfileId}/amazon-ads/reports`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        periodStart: "2026-05-01T00:00:00.000Z",
+        periodEnd: "2026-05-07T23:59:59.999Z",
+        type: AmazonAdsReportType.WEEKLY,
+        summary: "Amazon haftalık performans özeti",
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.status).toBe(AmazonAdsReportStatus.DRAFT);
+    expect(res.body.clientVisible).toBe(false);
+    expect(res.body.acknowledgementStatus).toBe("NOT_REQUESTED");
+    expectResponseHasNoSensitiveTokenData(res.body);
+  });
+
+  it("assigned employee can create Amazon Ads report and request acknowledgement", async () => {
+    if (!clientProfileId) return;
+    const projectId = await ensureAmazonAdsProjectId(prisma, clientProfileId);
+
+    const res = await request(app.getHttpServer())
+      .post(`/api/v1/amazon-ads/clients/${clientProfileId}/reports`)
+      .set("Authorization", `Bearer ${employeeToken}`)
+      .send({
+        projectId,
+        periodStart: "2026-05-08T00:00:00.000Z",
+        periodEnd: "2026-05-14T23:59:59.999Z",
+        type: AmazonAdsReportType.PRODUCT_PERFORMANCE,
+        summary: "ASIN bazlı performans raporu",
+        requestAcknowledgement: true,
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.status).toBe(AmazonAdsReportStatus.PUBLISHED);
+    expect(res.body.clientVisible).toBe(true);
+    expect(res.body.acknowledgementStatus).toBe("PENDING");
+    expect(typeof res.body.acknowledgementTaskId).toBe("string");
+    expectResponseHasNoSensitiveTokenData(res.body);
+  });
+
+  it("draft Amazon Ads report is not visible in client own reports endpoint", async () => {
+    if (!clientProfileId) return;
+
+    const hiddenReport = await prisma.amazonAdsReport.create({
+      data: {
+        clientProfileId,
+        periodStart: new Date("2026-05-15T00:00:00.000Z"),
+        periodEnd: new Date("2026-05-21T23:59:59.999Z"),
+        type: AmazonAdsReportType.SEARCH_TERMS,
+        status: AmazonAdsReportStatus.DRAFT,
+        summary: "Client hidden draft report",
+        clientVisible: false,
+      },
+      select: { id: true },
+    });
+
+    const ownReportsRes = await request(app.getHttpServer())
+      .get("/api/v1/clients/me/amazon-ads/reports")
+      .set("Authorization", `Bearer ${clientToken}`);
+
+    expect(ownReportsRes.status).toBe(200);
+    expect(Array.isArray(ownReportsRes.body.data)).toBe(true);
+    expect(
+      ownReportsRes.body.data.some((row: { id: string }) => row.id === hiddenReport.id),
+    ).toBe(false);
+    expectResponseHasNoSensitiveTokenData(ownReportsRes.body);
+  });
+
+  it("clientVisible Amazon Ads report is visible in client own reports endpoint", async () => {
+    if (!clientProfileId) return;
+
+    const visibleReport = await prisma.amazonAdsReport.create({
+      data: {
+        clientProfileId,
+        periodStart: new Date("2026-05-22T00:00:00.000Z"),
+        periodEnd: new Date("2026-05-28T23:59:59.999Z"),
+        type: AmazonAdsReportType.ACOS_OPTIMIZATION,
+        status: AmazonAdsReportStatus.PUBLISHED,
+        summary: "ACOS optimization published report",
+        clientVisible: true,
+        publishedAt: new Date("2026-05-28T11:00:00.000Z"),
+      },
+      select: { id: true },
+    });
+
+    const ownReportsRes = await request(app.getHttpServer())
+      .get("/api/v1/clients/me/amazon-ads/reports")
+      .set("Authorization", `Bearer ${clientToken}`);
+
+    expect(ownReportsRes.status).toBe(200);
+    expect(Array.isArray(ownReportsRes.body.data)).toBe(true);
+    expect(
+      ownReportsRes.body.data.some((row: { id: string }) => row.id === visibleReport.id),
+    ).toBe(true);
+    expectResponseHasNoSensitiveTokenData(ownReportsRes.body);
+  });
+
+  it("publishing Amazon Ads report can request acknowledgement task", async () => {
+    if (!clientProfileId) return;
+    const projectId = await ensureAmazonAdsProjectId(prisma, clientProfileId);
+
+    const report = await prisma.amazonAdsReport.create({
+      data: {
+        clientProfileId,
+        projectId,
+        periodStart: new Date("2026-05-29T00:00:00.000Z"),
+        periodEnd: new Date("2026-06-04T23:59:59.999Z"),
+        type: AmazonAdsReportType.MONTHLY,
+        status: AmazonAdsReportStatus.DRAFT,
+        summary: "Publish with acknowledgement",
+        clientVisible: false,
+      },
+      select: { id: true },
+    });
+
+    const publishRes = await request(app.getHttpServer())
+      .patch(`/api/v1/admin/amazon-ads/reports/${report.id}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        status: AmazonAdsReportStatus.PUBLISHED,
+        requestAcknowledgement: true,
+      });
+
+    expect(publishRes.status).toBe(200);
+    expect(publishRes.body.status).toBe(AmazonAdsReportStatus.PUBLISHED);
+    expect(publishRes.body.clientVisible).toBe(true);
+    expect(publishRes.body.acknowledgementStatus).toBe("PENDING");
+    expect(typeof publishRes.body.acknowledgementTaskId).toBe("string");
+
+    const persisted = await prisma.amazonAdsReport.findUnique({
+      where: { id: report.id },
+      select: { acknowledgementTaskId: true },
+    });
+    expect(persisted?.acknowledgementTaskId).toEqual(expect.any(String));
+
+    if (!persisted?.acknowledgementTaskId) {
+      throw new Error("Expected acknowledgement task id to exist.");
+    }
+
+    const acknowledgementTask = await prisma.task.findUnique({
+      where: { id: persisted.acknowledgementTaskId },
+      select: { approvalStatus: true, status: true, approvalRequired: true },
+    });
+
+    expect(acknowledgementTask?.approvalRequired).toBe(true);
+    expect(acknowledgementTask?.approvalStatus).toBe(MetaAdsApprovalStatus.PENDING);
+    expect(acknowledgementTask?.status).toBe(TaskStatus.REVIEW);
+  });
+
   it("admin can read amazon ads global clients list without token leakage", async () => {
     if (!clientProfileId) return;
 
@@ -740,4 +897,35 @@ function expectResponseHasNoSensitiveTokenData(payload: unknown): void {
   for (const sensitiveToken of SENSITIVE_RESPONSE_TOKENS) {
     expect(serializedPayload).not.toContain(sensitiveToken);
   }
+}
+
+async function ensureAmazonAdsProjectId(
+  prisma: PrismaClient,
+  clientProfileId: string,
+): Promise<string> {
+  const existing = await prisma.project.findFirst({
+    where: {
+      clientProfileId,
+      serviceKey: PurchasedServiceKey.AMAZON_ADS,
+    },
+    select: { id: true },
+    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+  });
+  if (existing) {
+    return existing.id;
+  }
+
+  const created = await prisma.project.create({
+    data: {
+      clientProfileId,
+      serviceKey: PurchasedServiceKey.AMAZON_ADS,
+      name: "Amazon Ads Report Project",
+      slug: "amazon-ads-report-project",
+      status: "IN_PROGRESS",
+      priority: "MEDIUM",
+    },
+    select: { id: true },
+  });
+
+  return created.id;
 }

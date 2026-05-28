@@ -7,6 +7,7 @@ const mockUseGetOwnAmazonAdsSummaryQuery = vi.fn();
 const mockUseGetOwnAmazonAdsCampaignsQuery = vi.fn();
 const mockUseGetOwnAmazonAdsProductsQuery = vi.fn();
 const mockUseGetOwnAmazonAdsInsightsQuery = vi.fn();
+const mockUseGetOwnAmazonAdsReportsQuery = vi.fn();
 const mockUseGetClientTasksQuery = vi.fn();
 const mockUseUpdateClientTaskApprovalMutation = vi.fn();
 
@@ -16,6 +17,7 @@ vi.mock("../../features/amazonAds/amazonAdsApi", () => ({
   useGetOwnAmazonAdsCampaignsQuery: (...args: unknown[]) => mockUseGetOwnAmazonAdsCampaignsQuery(...args),
   useGetOwnAmazonAdsProductsQuery: (...args: unknown[]) => mockUseGetOwnAmazonAdsProductsQuery(...args),
   useGetOwnAmazonAdsInsightsQuery: (...args: unknown[]) => mockUseGetOwnAmazonAdsInsightsQuery(...args),
+  useGetOwnAmazonAdsReportsQuery: (...args: unknown[]) => mockUseGetOwnAmazonAdsReportsQuery(...args),
 }));
 
 vi.mock("../../features/metaAds/metaAdsApi", () => ({
@@ -92,6 +94,7 @@ describe("ServiceTabPage Amazon Ads tabs", () => {
     mockUseGetOwnAmazonAdsCampaignsQuery.mockReset();
     mockUseGetOwnAmazonAdsProductsQuery.mockReset();
     mockUseGetOwnAmazonAdsInsightsQuery.mockReset();
+    mockUseGetOwnAmazonAdsReportsQuery.mockReset();
     mockUseGetClientTasksQuery.mockReset();
     mockUseUpdateClientTaskApprovalMutation.mockReset();
 
@@ -242,6 +245,41 @@ describe("ServiceTabPage Amazon Ads tabs", () => {
       isLoading: false,
       isError: false,
     });
+    mockUseGetOwnAmazonAdsReportsQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "report-1",
+            clientProfileId: "client-1",
+            projectId: "project-1",
+            projectName: "Amazon Ads Ops",
+            periodStart: "2026-05-20T00:00:00.000Z",
+            periodEnd: "2026-05-26T23:59:59.999Z",
+            type: "WEEKLY",
+            status: "PUBLISHED",
+            summary: "Haftalık Amazon Ads performans özeti",
+            metricsSnapshot: { spend: 520, sales: 3100 },
+            clientVisible: true,
+            publishedAt: "2026-05-27T09:30:00.000Z",
+            acknowledgementRequestedAt: "2026-05-27T09:35:00.000Z",
+            acknowledgedAt: null,
+            acknowledgementStatus: "PENDING",
+            acknowledgementTaskId: "task-report-1",
+            acknowledgementTaskUpdatedAt: "2026-05-27T09:35:00.000Z",
+            createdAt: "2026-05-27T09:30:00.000Z",
+            updatedAt: "2026-05-27T09:35:00.000Z",
+          },
+        ],
+        meta: {
+          total: 1,
+          draft: 0,
+          published: 1,
+          clientVisible: 1,
+        },
+      },
+      isLoading: false,
+      isError: false,
+    });
     mockUseGetClientTasksQuery.mockReturnValue({
       data: [],
       isLoading: false,
@@ -295,6 +333,15 @@ describe("ServiceTabPage Amazon Ads tabs", () => {
 
     expect(screen.getByText('asin="B0TEST001"')).toBeInTheDocument();
     expect(screen.getByText("ASIN")).toBeInTheDocument();
+  });
+
+  it("renders amazon reports tab from report API", () => {
+    render(<ServiceTabPage serviceId="amazon-ads" tabId="amazon-reports" />);
+
+    expect(screen.getByText("Haftalık Amazon Ads performans özeti")).toBeInTheDocument();
+    expect(
+      screen.getByText((value) => value.includes("Müşteri Onayı Bekliyor")),
+    ).toBeInTheDocument();
   });
 
   it("renders approvals tab from task API data", () => {

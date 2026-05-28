@@ -3,9 +3,12 @@ import {
   AmazonAdsConnectionStatus,
   AmazonAdsInsightLevel,
   AmazonAdsProductType,
+  AmazonAdsReportStatus,
+  AmazonAdsReportType,
   AmazonAdsRegion,
   AmazonAdsSyncStatus,
   DeliveryReleaseApprovalStatus,
+  MetaAdsApprovalType,
   MetaAdsApprovalStatus,
   Prisma,
   PurchasedServiceKey,
@@ -38,10 +41,13 @@ import { AmazonAdsDateRangeQueryDto } from "./dto/amazon-ads-date-range-query.dt
 import { AmazonAdsInsightsQueryDto } from "./dto/amazon-ads-insights-query.dto";
 import { AmazonAdsOAuthStartQueryDto } from "./dto/amazon-ads-oauth-start-query.dto";
 import { AmazonAdsProductsQueryDto } from "./dto/amazon-ads-products-query.dto";
+import { AmazonAdsReportsQueryDto } from "./dto/amazon-ads-reports-query.dto";
 import { AmazonAdsSyncLogsQueryDto } from "./dto/amazon-ads-sync-logs-query.dto";
 import { ConnectManualAmazonAdsDto } from "./dto/connect-manual-amazon-ads.dto";
+import { CreateAmazonAdsReportDto } from "./dto/create-amazon-ads-report.dto";
 import { ExchangeAmazonAdsOAuthCodeDto } from "./dto/exchange-amazon-ads-oauth-code.dto";
 import { TestAmazonAdsConnectionDto } from "./dto/test-amazon-ads-connection.dto";
+import { UpdateAmazonAdsReportDto } from "./dto/update-amazon-ads-report.dto";
 import { UpdateAmazonAdsConfigDto } from "./dto/update-amazon-ads-config.dto";
 
 const AMAZON_ADS_CONFIG_READ_ANY_PERMISSION = "amazonAds.config.read.any";
@@ -51,8 +57,13 @@ const AMAZON_ADS_CONFIG_READ_OWN_PERMISSION = "amazonAds.config.read.own";
 const AMAZON_ADS_REPORTING_READ_ANY_PERMISSION = "amazonAds.reporting.read.any";
 const AMAZON_ADS_REPORTING_READ_ASSIGNED_PERMISSION = "amazonAds.reporting.read.assigned";
 const AMAZON_ADS_REPORTING_READ_OWN_PERMISSION = "amazonAds.reporting.read.own";
+const AMAZON_ADS_NOTES_MANAGE_ASSIGNED_PERMISSION = "amazonAds.notes.manage.assigned";
+const AMAZON_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION = "amazonAds.approvals.create.assigned";
 const AMAZON_ADS_SYNC_RUN_ANY_PERMISSION = "amazonAds.sync.run.any";
 const AMAZON_ADS_SYNC_READ_ASSIGNED_PERMISSION = "amazonAds.sync.read.assigned";
+const REPORTS_READ_PERMISSION = "reports.read";
+const REPORTS_MANAGE_PERMISSION = "reports.manage";
+const REPORTS_READ_OWN_PERMISSION = "reports.read.own";
 const CLIENT_SAFE_SYNC_ERROR_MESSAGE = "Bağlantı problemi var, ekibimiz ilgileniyor.";
 const DEFAULT_REPORTING_RANGE_DAYS = 7;
 const MAX_REPORTING_RANGE_DAYS = 31;
@@ -133,6 +144,38 @@ const amazonAdsSyncLogSelect = {
   createdAt: true,
 } satisfies Prisma.AmazonAdsSyncLogSelect;
 
+const amazonAdsReportSelect = {
+  id: true,
+  clientProfileId: true,
+  projectId: true,
+  periodStart: true,
+  periodEnd: true,
+  type: true,
+  status: true,
+  summary: true,
+  metricsSnapshot: true,
+  clientVisible: true,
+  publishedAt: true,
+  acknowledgementRequestedAt: true,
+  acknowledgedAt: true,
+  createdAt: true,
+  updatedAt: true,
+  project: {
+    select: {
+      id: true,
+      name: true,
+    },
+  },
+  acknowledgementTask: {
+    select: {
+      id: true,
+      approvalStatus: true,
+      status: true,
+      updatedAt: true,
+    },
+  },
+} satisfies Prisma.AmazonAdsReportSelect;
+
 type AdminAmazonAdsConfigModel = Prisma.ClientAmazonAdsConfigGetPayload<{
   select: typeof adminAmazonAdsConfigSelect;
 }>;
@@ -143,6 +186,10 @@ type AmazonAdsCredentialSummaryModel = Prisma.ClientAmazonAdsCredentialGetPayloa
 
 type AmazonAdsDailyInsightModel = Prisma.AmazonAdsDailyInsightGetPayload<{
   select: typeof amazonAdsDailyInsightSelect;
+}>;
+
+type AmazonAdsReportModel = Prisma.AmazonAdsReportGetPayload<{
+  select: typeof amazonAdsReportSelect;
 }>;
 
 type AmazonAdsConfigPatchData = {
@@ -472,6 +519,44 @@ type AdminAmazonAdsSyncLogsResponse = {
     failed: number;
     running: number;
     skipped: number;
+  };
+};
+
+type AmazonAdsReportAcknowledgementStatus =
+  | "NOT_REQUESTED"
+  | "PENDING"
+  | "ACKNOWLEDGED"
+  | "CHANGES_REQUESTED";
+
+type AmazonAdsReportItem = {
+  id: string;
+  clientProfileId: string;
+  projectId: string | null;
+  projectName: string | null;
+  periodStart: string;
+  periodEnd: string;
+  type: AmazonAdsReportType;
+  status: AmazonAdsReportStatus;
+  summary: string | null;
+  metricsSnapshot: Prisma.JsonValue | null;
+  clientVisible: boolean;
+  publishedAt: string | null;
+  acknowledgementRequestedAt: string | null;
+  acknowledgedAt: string | null;
+  acknowledgementStatus: AmazonAdsReportAcknowledgementStatus;
+  acknowledgementTaskId: string | null;
+  acknowledgementTaskUpdatedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type AmazonAdsReportsResponse = {
+  data: AmazonAdsReportItem[];
+  meta: {
+    total: number;
+    draft: number;
+    published: number;
+    clientVisible: number;
   };
 };
 
@@ -1167,6 +1252,47 @@ export class AmazonAdsService {
     });
   }
 
+  async getAdminClientReports(
+    clientId: string,
+    query: AmazonAdsReportsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<AmazonAdsReportsResponse> {
+    this.assertCanReadAnyConfig(actor);
+    this.assertCanReadReports(actor);
+    await this.assertClientExists(clientId);
+    await this.assertClientHasActiveAmazonAdsService(clientId);
+
+    return this.getReportsByClientProfileId(clientId, query, {
+      onlyClientVisible: false,
+    });
+  }
+
+  async createAdminClientReport(
+    clientId: string,
+    dto: CreateAmazonAdsReportDto,
+    actor: AuthenticatedUser,
+  ): Promise<AmazonAdsReportItem> {
+    this.assertCanManageAnyConfig(actor);
+    this.assertCanManageReports(actor);
+    await this.assertClientExists(clientId);
+    await this.assertClientHasActiveAmazonAdsService(clientId);
+
+    return this.createReportByClientProfileId(actor, clientId, dto);
+  }
+
+  async updateAdminReport(
+    reportId: string,
+    dto: UpdateAmazonAdsReportDto,
+    actor: AuthenticatedUser,
+  ): Promise<AmazonAdsReportItem> {
+    this.assertCanManageAnyConfig(actor);
+    this.assertCanManageReports(actor);
+
+    return this.updateReportById(actor, reportId, dto, {
+      scope: "ANY",
+    });
+  }
+
   async getAssignedClientConfig(
     clientId: string,
     actor: AuthenticatedUser,
@@ -1250,6 +1376,54 @@ export class AmazonAdsService {
       applySyncTtl: true,
       applyFailedSyncCooldown: true,
       revealDetailedError: true,
+    });
+  }
+
+  async getAssignedClientReports(
+    clientId: string,
+    query: AmazonAdsReportsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<AmazonAdsReportsResponse> {
+    this.assertCanReadAssignedConfig(actor);
+    this.assertCanReadAssignedReporting(actor);
+    await this.assertActiveAssignment(clientId, actor.id);
+    await this.assertClientHasActiveAmazonAdsService(clientId);
+
+    return this.getReportsByClientProfileId(clientId, query, {
+      onlyClientVisible: false,
+    });
+  }
+
+  async createAssignedClientReport(
+    clientId: string,
+    dto: CreateAmazonAdsReportDto,
+    actor: AuthenticatedUser,
+  ): Promise<AmazonAdsReportItem> {
+    this.assertCanReadAssignedConfig(actor);
+    this.assertCanManageAssignedNotes(actor);
+    if (dto.requestAcknowledgement === true) {
+      this.assertCanCreateAssignedApprovals(actor);
+    }
+    await this.assertActiveAssignment(clientId, actor.id);
+    await this.assertClientHasActiveAmazonAdsService(clientId);
+
+    return this.createReportByClientProfileId(actor, clientId, dto);
+  }
+
+  async updateAssignedReport(
+    reportId: string,
+    dto: UpdateAmazonAdsReportDto,
+    actor: AuthenticatedUser,
+  ): Promise<AmazonAdsReportItem> {
+    this.assertCanReadAssignedConfig(actor);
+    this.assertCanManageAssignedNotes(actor);
+    if (dto.requestAcknowledgement === true) {
+      this.assertCanCreateAssignedApprovals(actor);
+    }
+
+    return this.updateReportById(actor, reportId, dto, {
+      scope: "ASSIGNED",
+      employeeUserId: actor.id,
     });
   }
 
@@ -1357,6 +1531,22 @@ export class AmazonAdsService {
     return this.getInsightsByClientProfileId(clientProfileId, query);
   }
 
+  async getOwnClientReports(
+    query: AmazonAdsReportsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<AmazonAdsReportsResponse> {
+    this.assertCanReadOwnConfig(actor);
+    this.assertCanReadOwnReporting(actor);
+    this.assertCanReadOwnReports(actor);
+    const clientProfileId = this.getClientProfileIdOrFail(actor);
+    await this.assertClientExists(clientProfileId);
+    await this.assertClientHasActiveAmazonAdsService(clientProfileId);
+
+    return this.getReportsByClientProfileId(clientProfileId, query, {
+      onlyClientVisible: true,
+    });
+  }
+
   private async getOrCreateConfig(clientId: string): Promise<AdminAmazonAdsConfigModel> {
     const existing = await this.prisma.clientAmazonAdsConfig.findUnique({
       where: { clientProfileId: clientId },
@@ -1410,6 +1600,494 @@ export class AmazonAdsService {
       credential,
       hasActiveService: serviceCount > 0,
     };
+  }
+
+  private async getReportsByClientProfileId(
+    clientId: string,
+    query: AmazonAdsReportsQueryDto,
+    options: {
+      onlyClientVisible: boolean;
+    },
+  ): Promise<AmazonAdsReportsResponse> {
+    const where: Prisma.AmazonAdsReportWhereInput = {
+      clientProfileId: clientId,
+    };
+
+    if (options.onlyClientVisible) {
+      where.clientVisible = true;
+    } else if (query.clientVisible !== undefined) {
+      where.clientVisible = query.clientVisible;
+    }
+
+    if (query.status !== undefined) {
+      where.status = query.status;
+    }
+
+    if (query.type !== undefined) {
+      where.type = query.type;
+    }
+
+    const statsWhere: Prisma.AmazonAdsReportWhereInput = {
+      clientProfileId: clientId,
+      ...(options.onlyClientVisible ? { clientVisible: true } : {}),
+    };
+    const limit = query.limit ?? 30;
+
+    const [reports, total, draft, published, clientVisible] = await this.prisma.$transaction([
+      this.prisma.amazonAdsReport.findMany({
+        where,
+        select: amazonAdsReportSelect,
+        orderBy: [{ periodEnd: "desc" }, { createdAt: "desc" }],
+        take: limit,
+      }),
+      this.prisma.amazonAdsReport.count({ where }),
+      this.prisma.amazonAdsReport.count({
+        where: {
+          ...statsWhere,
+          status: AmazonAdsReportStatus.DRAFT,
+        },
+      }),
+      this.prisma.amazonAdsReport.count({
+        where: {
+          ...statsWhere,
+          status: AmazonAdsReportStatus.PUBLISHED,
+        },
+      }),
+      this.prisma.amazonAdsReport.count({
+        where: {
+          ...statsWhere,
+          clientVisible: true,
+        },
+      }),
+    ]);
+
+    return {
+      data: reports.map((report) => this.toAmazonAdsReportItem(report)),
+      meta: {
+        total,
+        draft,
+        published,
+        clientVisible,
+      },
+    };
+  }
+
+  private async createReportByClientProfileId(
+    actor: AuthenticatedUser,
+    clientId: string,
+    dto: CreateAmazonAdsReportDto,
+  ): Promise<AmazonAdsReportItem> {
+    const period = this.resolveAmazonAdsReportPeriod(dto.periodStart, dto.periodEnd);
+    const summary = this.normalizeAmazonAdsReportSummary(dto.summary);
+    const projectId = await this.resolveAmazonAdsReportProjectId(clientId, dto.projectId ?? null);
+    const shouldPublish = dto.clientVisible === true || dto.requestAcknowledgement === true;
+    const now = new Date();
+
+    let report = await this.prisma.amazonAdsReport.create({
+      data: {
+        clientProfileId: clientId,
+        projectId,
+        periodStart: period.periodStart,
+        periodEnd: period.periodEnd,
+        type: dto.type,
+        status: shouldPublish ? AmazonAdsReportStatus.PUBLISHED : AmazonAdsReportStatus.DRAFT,
+        summary,
+        metricsSnapshot: dto.metricsSnapshot as Prisma.InputJsonValue | undefined,
+        createdByUserId: actor.id,
+        publishedByUserId: shouldPublish ? actor.id : null,
+        clientVisible: shouldPublish,
+        publishedAt: shouldPublish ? now : null,
+      },
+      select: amazonAdsReportSelect,
+    });
+
+    if (dto.requestAcknowledgement === true) {
+      const acknowledgementProjectId =
+        projectId ?? (await this.resolveAmazonAdsReportProjectId(clientId, null));
+      if (!acknowledgementProjectId) {
+        throw new BadRequestException(
+          "AMAZON_ADS proje kaydı olmadan rapor acknowledgement talebi açılamaz.",
+        );
+      }
+
+      const task = await this.prisma.task.create({
+        data: {
+          projectId: acknowledgementProjectId,
+          title: this.buildReportAcknowledgementTaskTitle(
+            report.type,
+            report.periodStart,
+            report.periodEnd,
+          ),
+          description: this.buildReportAcknowledgementTaskDescription(summary),
+          status: TaskStatus.REVIEW,
+          type: TaskType.REVISION,
+          approvalRequired: true,
+          approvalType: MetaAdsApprovalType.AMAZON_ADS_REPORT_ACKNOWLEDGEMENT,
+          approvalStatus: MetaAdsApprovalStatus.PENDING,
+          approvalRequestedAt: now,
+          approvalContext: {
+            reportId: report.id,
+            reportType: report.type,
+            periodStart: report.periodStart.toISOString(),
+            periodEnd: report.periodEnd.toISOString(),
+          },
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      report = await this.prisma.amazonAdsReport.update({
+        where: {
+          id: report.id,
+        },
+        data: {
+          acknowledgementRequestedAt: now,
+          acknowledgementTaskId: task.id,
+        },
+        select: amazonAdsReportSelect,
+      });
+    }
+
+    return this.toAmazonAdsReportItem(report);
+  }
+
+  private async updateReportById(
+    actor: AuthenticatedUser,
+    reportId: string,
+    dto: UpdateAmazonAdsReportDto,
+    options: {
+      scope: "ANY" | "ASSIGNED";
+      employeeUserId?: string;
+    },
+  ): Promise<AmazonAdsReportItem> {
+    this.assertHasAmazonAdsReportUpdatePayload(dto);
+
+    const existing = await this.prisma.amazonAdsReport.findUnique({
+      where: {
+        id: reportId,
+      },
+      select: {
+        id: true,
+        clientProfileId: true,
+        projectId: true,
+        type: true,
+        periodStart: true,
+        periodEnd: true,
+        summary: true,
+        status: true,
+        clientVisible: true,
+        publishedAt: true,
+        publishedByUserId: true,
+        acknowledgementTaskId: true,
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundException("Amazon Ads report bulunamadı.");
+    }
+
+    if (options.scope === "ASSIGNED") {
+      if (!options.employeeUserId) {
+        throw new ForbiddenException("Assigned report update için employee context eksik.");
+      }
+      await this.assertActiveAssignment(existing.clientProfileId, options.employeeUserId);
+    }
+
+    await this.assertClientHasActiveAmazonAdsService(existing.clientProfileId);
+
+    const now = new Date();
+    const updateData: Prisma.AmazonAdsReportUpdateInput = {};
+    const normalizedSummary =
+      dto.summary !== undefined ? this.normalizeAmazonAdsReportSummary(dto.summary) : undefined;
+
+    if (dto.summary !== undefined) {
+      updateData.summary = normalizedSummary;
+    }
+
+    if (dto.metricsSnapshot !== undefined) {
+      updateData.metricsSnapshot = dto.metricsSnapshot as Prisma.InputJsonValue;
+    }
+
+    if (dto.clientVisible !== undefined) {
+      updateData.clientVisible = dto.clientVisible;
+    }
+
+    if (dto.status !== undefined) {
+      updateData.status = dto.status;
+      if (
+        dto.status === AmazonAdsReportStatus.DRAFT ||
+        dto.status === AmazonAdsReportStatus.ARCHIVED
+      ) {
+        updateData.clientVisible = false;
+      }
+    }
+
+    if (dto.status === AmazonAdsReportStatus.PUBLISHED && dto.clientVisible === false) {
+      throw new BadRequestException("Published report client görünürlüğü kapatılamaz.");
+    }
+
+    const shouldPublish =
+      dto.requestAcknowledgement === true ||
+      dto.clientVisible === true ||
+      dto.status === AmazonAdsReportStatus.PUBLISHED;
+
+    if (shouldPublish) {
+      if (!existing.publishedAt) {
+        updateData.publishedAt = now;
+      }
+      if (!existing.publishedByUserId) {
+        updateData.publishedBy = {
+          connect: {
+            id: actor.id,
+          },
+        };
+      }
+      if (dto.status === undefined) {
+        updateData.status = AmazonAdsReportStatus.PUBLISHED;
+      }
+      if (dto.clientVisible === undefined) {
+        updateData.clientVisible = true;
+      }
+    }
+
+    if (
+      dto.requestAcknowledgement === true &&
+      (dto.status === AmazonAdsReportStatus.DRAFT || dto.status === AmazonAdsReportStatus.ARCHIVED)
+    ) {
+      throw new BadRequestException(
+        "DRAFT veya ARCHIVED rapor için acknowledgement talebi oluşturulamaz.",
+      );
+    }
+
+    const fallbackProjectId =
+      existing.projectId ??
+      (await this.resolveAmazonAdsReportProjectId(existing.clientProfileId, null));
+
+    if (dto.requestAcknowledgement === true && !fallbackProjectId) {
+      throw new BadRequestException(
+        "AMAZON_ADS proje kaydı olmadan rapor acknowledgement talebi açılamaz.",
+      );
+    }
+
+    if (dto.requestAcknowledgement === true && fallbackProjectId && !existing.projectId) {
+      updateData.project = {
+        connect: {
+          id: fallbackProjectId,
+        },
+      };
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      let acknowledgementTaskId = existing.acknowledgementTaskId;
+
+      if (dto.requestAcknowledgement === true && fallbackProjectId) {
+        const taskPayload: Prisma.TaskUncheckedCreateInput = {
+          projectId: fallbackProjectId,
+          title: this.buildReportAcknowledgementTaskTitle(
+            existing.type,
+            existing.periodStart,
+            existing.periodEnd,
+          ),
+          description: this.buildReportAcknowledgementTaskDescription(
+            normalizedSummary ?? existing.summary ?? null,
+          ),
+          status: TaskStatus.REVIEW,
+          type: TaskType.REVISION,
+          approvalRequired: true,
+          approvalType: MetaAdsApprovalType.AMAZON_ADS_REPORT_ACKNOWLEDGEMENT,
+          approvalStatus: MetaAdsApprovalStatus.PENDING,
+          approvalRequestedAt: now,
+          approvalContext: {
+            reportId: existing.id,
+          },
+        };
+
+        if (acknowledgementTaskId) {
+          await tx.task.update({
+            where: {
+              id: acknowledgementTaskId,
+            },
+            data: {
+              title: taskPayload.title,
+              description: taskPayload.description,
+              status: TaskStatus.REVIEW,
+              approvalRequired: true,
+              approvalType: MetaAdsApprovalType.AMAZON_ADS_REPORT_ACKNOWLEDGEMENT,
+              approvalStatus: MetaAdsApprovalStatus.PENDING,
+              approvalRequestedAt: now,
+              approvalRespondedAt: null,
+              approvalRespondedByUserId: null,
+              approvalResponseNote: null,
+              approvalContext: taskPayload.approvalContext,
+            },
+          });
+        } else {
+          const createdTask = await tx.task.create({
+            data: taskPayload,
+            select: {
+              id: true,
+            },
+          });
+          acknowledgementTaskId = createdTask.id;
+        }
+
+        updateData.acknowledgementRequestedAt = now;
+        if (acknowledgementTaskId) {
+          updateData.acknowledgementTask = {
+            connect: {
+              id: acknowledgementTaskId,
+            },
+          };
+        }
+      }
+
+      return tx.amazonAdsReport.update({
+        where: {
+          id: existing.id,
+        },
+        data: updateData,
+        select: amazonAdsReportSelect,
+      });
+    });
+
+    return this.toAmazonAdsReportItem(updated);
+  }
+
+  private toAmazonAdsReportItem(report: AmazonAdsReportModel): AmazonAdsReportItem {
+    const acknowledgementStatus =
+      report.acknowledgementRequestedAt === null
+        ? "NOT_REQUESTED"
+        : report.acknowledgementTask?.approvalStatus === MetaAdsApprovalStatus.ACKNOWLEDGED ||
+            report.acknowledgementTask?.approvalStatus === MetaAdsApprovalStatus.APPROVED
+          ? "ACKNOWLEDGED"
+          : report.acknowledgementTask?.approvalStatus ===
+                MetaAdsApprovalStatus.CHANGES_REQUESTED ||
+              report.acknowledgementTask?.approvalStatus === MetaAdsApprovalStatus.REJECTED
+            ? "CHANGES_REQUESTED"
+            : "PENDING";
+
+    return {
+      id: report.id,
+      clientProfileId: report.clientProfileId,
+      projectId: report.projectId ?? null,
+      projectName: report.project?.name ?? null,
+      periodStart: report.periodStart.toISOString(),
+      periodEnd: report.periodEnd.toISOString(),
+      type: report.type,
+      status: report.status,
+      summary: report.summary ?? null,
+      metricsSnapshot: (report.metricsSnapshot as Prisma.JsonValue | null) ?? null,
+      clientVisible: report.clientVisible,
+      publishedAt: report.publishedAt?.toISOString() ?? null,
+      acknowledgementRequestedAt: report.acknowledgementRequestedAt?.toISOString() ?? null,
+      acknowledgedAt: report.acknowledgedAt?.toISOString() ?? null,
+      acknowledgementStatus,
+      acknowledgementTaskId: report.acknowledgementTask?.id ?? null,
+      acknowledgementTaskUpdatedAt: report.acknowledgementTask?.updatedAt.toISOString() ?? null,
+      createdAt: report.createdAt.toISOString(),
+      updatedAt: report.updatedAt.toISOString(),
+    };
+  }
+
+  private resolveAmazonAdsReportPeriod(periodStartRaw: string, periodEndRaw: string): {
+    periodStart: Date;
+    periodEnd: Date;
+  } {
+    const periodStart = new Date(periodStartRaw);
+    const periodEnd = new Date(periodEndRaw);
+
+    if (Number.isNaN(periodStart.getTime()) || Number.isNaN(periodEnd.getTime())) {
+      throw new BadRequestException(
+        "Report periodStart ve periodEnd alanları geçerli ISO date olmalıdır.",
+      );
+    }
+
+    if (periodStart > periodEnd) {
+      throw new BadRequestException("Report periodStart değeri periodEnd değerinden büyük olamaz.");
+    }
+
+    return {
+      periodStart,
+      periodEnd,
+    };
+  }
+
+  private normalizeAmazonAdsReportSummary(summary: string | undefined): string | null {
+    if (summary === undefined) {
+      return null;
+    }
+
+    const normalized = summary.trim();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  private async resolveAmazonAdsReportProjectId(
+    clientId: string,
+    projectId: string | null,
+  ): Promise<string | null> {
+    if (projectId) {
+      const project = await this.prisma.project.findFirst({
+        where: {
+          id: projectId,
+          clientProfileId: clientId,
+          serviceKey: PurchasedServiceKey.AMAZON_ADS,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (!project) {
+        throw new BadRequestException(
+          "Verilen projectId bu müşteri için AMAZON_ADS servis projesine ait değil.",
+        );
+      }
+
+      return project.id;
+    }
+
+    const project = await this.prisma.project.findFirst({
+      where: {
+        clientProfileId: clientId,
+        serviceKey: PurchasedServiceKey.AMAZON_ADS,
+      },
+      select: {
+        id: true,
+      },
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+    });
+
+    return project?.id ?? null;
+  }
+
+  private buildReportAcknowledgementTaskTitle(
+    reportType: AmazonAdsReportType,
+    periodStart: Date,
+    periodEnd: Date,
+  ): string {
+    const start = periodStart.toISOString().slice(0, 10);
+    const end = periodEnd.toISOString().slice(0, 10);
+    return `Amazon Ads Rapor Onayı · ${reportType} (${start} - ${end})`;
+  }
+
+  private buildReportAcknowledgementTaskDescription(summary: string | null): string {
+    if (summary) {
+      return `Rapor müşteri onayına açıldı. Özet: ${summary}`;
+    }
+    return "Rapor müşteri onayına açıldı.";
+  }
+
+  private assertHasAmazonAdsReportUpdatePayload(dto: UpdateAmazonAdsReportDto): void {
+    if (
+      dto.status === undefined &&
+      dto.summary === undefined &&
+      dto.metricsSnapshot === undefined &&
+      dto.clientVisible === undefined &&
+      dto.requestAcknowledgement === undefined
+    ) {
+      throw new BadRequestException("Report update için en az bir alan gönderilmelidir.");
+    }
   }
 
   private async getSummaryByClientProfileId(
@@ -3088,6 +3766,38 @@ export class AmazonAdsService {
     }
 
     this.assertHasPermission(actor, AMAZON_ADS_REPORTING_READ_OWN_PERMISSION);
+  }
+
+  private assertCanReadReports(actor: AuthenticatedUser): void {
+    this.assertHasPermission(actor, REPORTS_READ_PERMISSION);
+  }
+
+  private assertCanManageReports(actor: AuthenticatedUser): void {
+    this.assertHasPermission(actor, REPORTS_MANAGE_PERMISSION);
+  }
+
+  private assertCanReadOwnReports(actor: AuthenticatedUser): void {
+    this.assertHasPermission(actor, REPORTS_READ_OWN_PERMISSION);
+  }
+
+  private assertCanManageAssignedNotes(actor: AuthenticatedUser): void {
+    if (actor.accountType !== AccountType.EMPLOYEE) {
+      throw new ForbiddenException(
+        "Bu endpoint yalnızca atandığı müşterilerde not yönetebilen çalışanlar içindir.",
+      );
+    }
+
+    this.assertHasPermission(actor, AMAZON_ADS_NOTES_MANAGE_ASSIGNED_PERMISSION);
+  }
+
+  private assertCanCreateAssignedApprovals(actor: AuthenticatedUser): void {
+    if (actor.accountType !== AccountType.EMPLOYEE) {
+      throw new ForbiddenException(
+        "Bu endpoint yalnızca Amazon Ads approval talebi oluşturabilen çalışanlar içindir.",
+      );
+    }
+
+    this.assertHasPermission(actor, AMAZON_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION);
   }
 
   private assertHasPermission(actor: AuthenticatedUser, permission: string): void {

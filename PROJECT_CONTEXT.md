@@ -509,6 +509,12 @@ Amazon Ads Faz 3 ile read-only Reporting v3 lifecycle ve günlük snapshot read 
 - Backend `AmazonAdsService`, manual sync endpointinde refresh token’ı decrypt eder, snapshot satırlarını yazar, account-level aggregate üretir ve sync log/request/status metadata’sını saklar.
 - Admin, assigned employee ve client own read endpoints summary/campaigns/products/insights yüzeylerini snapshot’tan döndürür; client/admin UI mock performans metrikleri yerine API-driven summary/read model kullanır.
 - Admin ClientDetail Amazon Ads kartı performans özeti ve manual sync aksiyonu gösterir; client portal Amazon Ads dashboard connected durumda gerçek summary/campaign/product/search-term verisiyle çalışır.
+- Amazon Ads Faz 4 tamamlandı: client portal service-tab Amazon workspace mock içerikten API-driven tab yapısına taşındı; campaigns/products/search terms/approvals/notes alanları Amazon read-model endpointleriyle beslenir hale geldi.
+- Amazon Ads Faz 5 tamamlandı: admin global `/amazon-ads` paneli ile tüm Amazon Ads müşterileri için bağlantı/test/sync/disconnect/onay talebi aksiyonları merkezi yönetim modeline alındı.
+- Amazon Ads Faz 6 tamamlandı: `/employee/amazon-ads` assigned-scope workspace eklendi; Social/Performance/Designer rollerine göre kampanya, performans, creative, report ve approval aksiyonları role-aware hale getirildi.
+- Amazon Ads Faz 7 tamamlandı: approval enum/contract ve creative collaboration katmanı backend/frontend arasında hizalandı; client approve/revise/ack akışı Amazon type setiyle standardize edildi.
+- Amazon Ads Faz 8 tamamlandı: sync log observability, retry endpointi, assigned TTL/cooldown normalizasyonu ve client-safe sync error yüzeyi production-grade hale getirildi.
+- Amazon Ads Faz 9 tamamlandı: `AmazonAdsReport` entity/migration, admin+assigned draft/publish lifecycle endpointleri, own client report görünürlüğü ve publish->ack task bridge’i devreye alındı; admin/employee/client panel rapor yüzeyleri read-model tabanlı API akışına taşındı.
 
 Additional active Amazon Ads reporting endpoints:
 - `GET /api/v1/admin/clients/:clientId/amazon-ads/summary`
@@ -521,10 +527,17 @@ Additional active Amazon Ads reporting endpoints:
 - `GET /api/v1/amazon-ads/clients/:clientId/products`
 - `GET /api/v1/amazon-ads/clients/:clientId/insights`
 - `POST /api/v1/amazon-ads/clients/:clientId/sync`
+- `GET /api/v1/admin/clients/:clientId/amazon-ads/reports`
+- `POST /api/v1/admin/clients/:clientId/amazon-ads/reports`
+- `PATCH /api/v1/admin/amazon-ads/reports/:reportId`
+- `GET /api/v1/amazon-ads/clients/:clientId/reports`
+- `POST /api/v1/amazon-ads/clients/:clientId/reports`
+- `PATCH /api/v1/amazon-ads/reports/:reportId`
 - `GET /api/v1/clients/me/amazon-ads/summary`
 - `GET /api/v1/clients/me/amazon-ads/campaigns`
 - `GET /api/v1/clients/me/amazon-ads/products`
 - `GET /api/v1/clients/me/amazon-ads/insights`
+- `GET /api/v1/clients/me/amazon-ads/reports`
 
 Planned next backend phases:
 - Broader domain endpoint authorization rollout (beyond users/clients/admin-assignments/projects/tasks)
