@@ -33,7 +33,7 @@
 - CRM outbound email/WhatsApp sending integrations
 - Cloudinary asset malware scanning/quarantine flow
 - Advanced revision inbox/routing and reminder notifications
-- Social Media V2 API publishing integration (Instagram/Facebook Graph API publishing first; TikTok/LinkedIn publishing support subject to official API permissions)
+- Social Media V2 API publishing integration (Instagram/Facebook Graph API publishing first per `docs/social-media-phases/10-social-media-v2-integration-backlog.md`; insight sync follows as V2.1; TikTok/LinkedIn publishing support subject to official API permissions)
 
 ## In Progress
 
@@ -181,6 +181,7 @@
 - Social Media Faz 7: Publishing integration V1 (manual schedule/mark-published/cancel endpoints, admin/employee publishing actions, client external link visibility, V2 API publishing follow-up)
 - Social Media Faz 8: Insights/reporting V1 (manual post insight snapshots, Social Media report draft/publish/ack bridge, admin/employee reporting workspace, client performance/reports views)
 - Social Media Faz 9: Production hardening (report/insight authz scope tightening, internal file leak guard, date validation coverage, UI empty/error/permission states, check/build validation)
+- Social Media Faz 10: V2 integration backlog decision (Instagram/Facebook Graph API publishing first, insight sync V2.1 follow-up, TikTok/LinkedIn subject to official API permissions)
 
 ## Blocked
 
@@ -440,6 +441,10 @@ None identified.
   - `adminandemployeePanel`: `npm run test:run -- SocialMediaWorkspace.test.tsx` ✅ (`9/9`)
   - `clientPanel`: `npm run test -- service-tab-page.social-media.test.tsx` ✅ (`8/8`)
   - `server`, `adminandemployeePanel`, `clientPanel`: `npm run check` ✅
+- Latest Social Media Faz 10 checkpoint:
+  - V2 backlog contract added at `docs/social-media-phases/10-social-media-v2-integration-backlog.md` ✅
+  - Decision: Instagram/Facebook Graph API publishing is the first V2 integration target; insight sync remains V2.1 after stable `externalPostId` mapping ✅
+  - This is a documentation/roadmap-only phase; no runtime code or migration changes required ✅
 - Latest admin/employee frontend validation checkpoint: last recorded broad suite `25` test files, `153/153` tests; latest targeted Social Media workspace suite `9/9`.
 - Latest client portal frontend validation checkpoint: Social Media targeted suite `8/8`; broad recorded portal checkpoint remains `4` files, `17/17` tests.
 - Latest FAZ-05 validation checkpoint:

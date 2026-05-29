@@ -3340,3 +3340,25 @@ Affected files:
 - `PROJECT_CONTEXT.md`
 - `REPO_MAP.md`
 - `ROAD_MAP.md`
+
+## 2026-05-29 - Social Media Faz 10 V2 Publishing-First Backlog
+
+Context:
+Social Media V1 manual publishing, manual insight snapshots, client-visible reports and production hardening tamamlandı. Sıradaki V2 entegrasyonunda gerçek Instagram/Facebook publishing ile Graph API insight sync arasında öncelik belirlemek gerekiyordu.
+
+Decision:
+Social Media V2'nin ilk gerçek platform entegrasyonu Instagram/Facebook Graph API publishing olacak. Insight sync V2.1 follow-up olarak kalacak.
+
+- Faz 7 manual lifecycle (`APPROVED -> SCHEDULED -> PUBLISHED`) provider adapter arkasına taşınacak.
+- `SocialMediaPost.externalPostId` ve `externalPostUrl` Graph API publish sonucuyla doldurulacak.
+- Manual publish fallback korunacak.
+- Insight sync mevcut `SocialMediaPostInsight` modeline yazacak, ancak stable `externalPostId` mapping oluşmadan başlatılmayacak.
+- TikTok ve LinkedIn publishing ayrı follow-up olarak resmi API izin/app review durumuna bağlı kalacak.
+
+Reason:
+Publishing-first karar V1 operasyon akışına doğrudan bağlanır ve insight sync için gereken platform post id eşleşmesini üretir. Böylece V2, mevcut post lifecycle ve client-visible external link kontratını bozmadan ilerler; performans verisi de Faz 8 snapshot read model'ini daha sonra Graph API job'larıyla besleyebilir.
+
+Affected files:
+- `docs/social-media-phases/10-social-media-v2-integration-backlog.md`
+- `DECISIONS.md`
+- `ROAD_MAP.md`
