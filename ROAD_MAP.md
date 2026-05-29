@@ -33,6 +33,7 @@
 - CRM outbound email/WhatsApp sending integrations
 - Cloudinary asset malware scanning/quarantine flow
 - Advanced revision inbox/routing and reminder notifications
+- Social Media V2 API publishing integration (Instagram/Facebook Graph API publishing first; TikTok/LinkedIn publishing support subject to official API permissions)
 
 ## In Progress
 
@@ -177,6 +178,7 @@
 - Social Media Faz 4: Admin global panel + ClientDetail Social Media section (`GET /social-media/clients`, risk/overdue/pending summary, config edit modal, assignment/creative visibility)
 - Social Media Faz 5: Employee role workspace (`/employee/social-media`, assigned client filter, role-aware calendar/posts/creatives/approvals/reports/messages tabs, Social Media approval task bridge)
 - Social Media Faz 6: Approval + creative flow (Social Media approval enum values, client approval response bridge, post status update, revision task follow-up, client/employee approval UI)
+- Social Media Faz 7: Publishing integration V1 (manual schedule/mark-published/cancel endpoints, admin/employee publishing actions, client external link visibility, V2 API publishing follow-up)
 
 ## Blocked
 
@@ -408,6 +410,16 @@ None identified.
   - `adminandemployeePanel`: `npm run test:run -- src/app/employee/pages/__tests__/SocialMediaWorkspace.test.tsx` ✅ (`7/7`)
   - `adminandemployeePanel`: `npm run check` ✅
   - `clientPanel`: `npm test -- src/app/pages/__tests__/service-tab-page.social-media.test.tsx` ✅ (`3/3`)
+  - `clientPanel`: `npm run check` ✅
+- Latest Social Media Faz 7 checkpoint:
+  - `server`: manual publishing endpoints added (`schedule`, `mark-published`, `cancel`) with status/authz guards and client-safe external URL visibility ✅
+  - `adminandemployeePanel`: content calendar publishing actions added with schedule/publish modal, external URL/ID capture and invalid action disabled states ✅
+  - `clientPanel`: Social Media calendar filters scheduled/published items and published cards expose external post links ✅
+  - `server`: `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true npm run test:e2e -- social-media-authz.e2e-spec.ts` ✅ (`16/16`)
+  - `server`: `npm run check` ✅
+  - `adminandemployeePanel`: `npm run test:run -- src/app/employee/components/__tests__/SocialMediaContentCalendar.test.tsx` ✅ (`3/3`)
+  - `adminandemployeePanel`: `npm run check` ✅
+  - `clientPanel`: `npm test -- src/app/pages/__tests__/service-tab-page.social-media.test.tsx` ✅ (`4/4`)
   - `clientPanel`: `npm run check` ✅
 - Latest admin/employee frontend validation checkpoint: last recorded broad suite `25` test files, `153/153` tests; latest targeted Social Media Faz 6 workspace suite adds `1` file, `7/7` tests.
 - Latest client portal frontend validation checkpoint: `4` test files, `17/17` tests.

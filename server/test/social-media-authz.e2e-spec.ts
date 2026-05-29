@@ -530,6 +530,143 @@ describe("Social Media Config and Summary Authz (e2e)", () => {
     expect(invalidRes.status).toBe(400);
   });
 
+  it("manual publishing actions enforce schedule, publish, cancel, and visibility rules", async () => {
+    const approvedPost = await prisma.socialMediaPost.create({
+      data: {
+        clientProfileId,
+        platform: "INSTAGRAM",
+        type: "REEL",
+        status: SocialMediaPostStatus.APPROVED,
+        title: `Acme manual publish ${Date.now()}`,
+        clientVisible: false,
+      },
+      select: { id: true },
+    });
+
+    const scheduleRes = await request(app.getHttpServer())
+      .post(`/api/v1/social-media/posts/${approvedPost.id}/schedule`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        scheduledAt: "2026-06-25T10:00:00.000Z",
+        clientVisible: true,
+      });
+
+    expect(scheduleRes.status).toBe(201);
+    expect(scheduleRes.body.status).toBe(SocialMediaPostStatus.SCHEDULED);
+    expect(scheduleRes.body.clientVisible).toBe(true);
+    expect(scheduleRes.body.scheduledAt).toBe("2026-06-25T10:00:00.000Z");
+
+    const publishRes = await request(app.getHttpServer())
+      .post(`/api/v1/social-media/posts/${approvedPost.id}/mark-published`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        publishedAt: "2026-06-25T12:00:00.000Z",
+        externalPostUrl: "https://instagram.com/p/acme-phase-7",
+        externalPostId: "ig-acme-phase-7",
+      });
+
+    expect(publishRes.status).toBe(201);
+    expect(publishRes.body.status).toBe(SocialMediaPostStatus.PUBLISHED);
+    expect(publishRes.body.clientVisible).toBe(true);
+    expect(publishRes.body.externalPostUrl).toBe("https://instagram.com/p/acme-phase-7");
+    expect(publishRes.body.externalPostId).toBe("ig-acme-phase-7");
+
+    const ownListRes = await request(app.getHttpServer())
+      .get("/api/v1/clients/me/social-media/posts?status=PUBLISHED")
+      .set("Authorization", `Bearer ${clientToken}`);
+
+    expect(ownListRes.status).toBe(200);
+    const ownPublishedPost = ownListRes.body.find(
+      (post: { id: string }) => post.id === approvedPost.id,
+    );
+    expect(ownPublishedPost).toBeDefined();
+    expect(ownPublishedPost.externalPostUrl).toBe("https://instagram.com/p/acme-phase-7");
+    expect(ownPublishedPost).not.toHaveProperty("externalPostId");
+
+    const draftPost = await prisma.socialMediaPost.create({
+      data: {
+        clientProfileId,
+        platform: "FACEBOOK",
+        type: "FEED",
+        status: SocialMediaPostStatus.DRAFT,
+        title: `Acme draft publish block ${Date.now()}`,
+        clientVisible: true,
+      },
+      select: { id: true },
+    });
+
+    const invalidPublishRes = await request(app.getHttpServer())
+      .post(`/api/v1/social-media/posts/${draftPost.id}/mark-published`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        publishedAt: "2026-06-26T12:00:00.000Z",
+      });
+
+    expect(invalidPublishRes.status).toBe(400);
+
+    const clientBlockedPost = await prisma.socialMediaPost.create({
+      data: {
+        clientProfileId,
+        platform: "LINKEDIN",
+        type: "TEXT",
+        status: SocialMediaPostStatus.APPROVED,
+        title: `Acme client publish block ${Date.now()}`,
+        clientVisible: true,
+      },
+      select: { id: true },
+    });
+
+    const clientPublishRes = await request(app.getHttpServer())
+      .post(`/api/v1/social-media/posts/${clientBlockedPost.id}/mark-published`)
+      .set("Authorization", `Bearer ${clientToken}`)
+      .send({
+        publishedAt: "2026-06-27T12:00:00.000Z",
+      });
+
+    expect(clientPublishRes.status).toBe(403);
+
+    const outOfScopePost = await prisma.socialMediaPost.create({
+      data: {
+        clientProfileId: socialClientId,
+        projectId: socialProjectId,
+        platform: "INSTAGRAM",
+        type: "STATIC_IMAGE",
+        status: SocialMediaPostStatus.APPROVED,
+        title: `Mavi out of scope publish block ${Date.now()}`,
+      },
+      select: { id: true },
+    });
+
+    const outOfScopeScheduleRes = await request(app.getHttpServer())
+      .post(`/api/v1/social-media/posts/${outOfScopePost.id}/schedule`)
+      .set("Authorization", `Bearer ${performanceToken}`)
+      .send({
+        scheduledAt: "2026-06-28T10:00:00.000Z",
+      });
+
+    expect([403, 404]).toContain(outOfScopeScheduleRes.status);
+
+    const scheduledForCancel = await prisma.socialMediaPost.create({
+      data: {
+        clientProfileId,
+        platform: "PINTEREST",
+        type: "STATIC_IMAGE",
+        status: SocialMediaPostStatus.SCHEDULED,
+        title: `Acme cancel scheduled ${Date.now()}`,
+        scheduledAt: new Date("2026-06-29T10:00:00.000Z"),
+        clientVisible: true,
+      },
+      select: { id: true },
+    });
+
+    const cancelRes = await request(app.getHttpServer())
+      .post(`/api/v1/social-media/posts/${scheduledForCancel.id}/cancel`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    expect(cancelRes.status).toBe(201);
+    expect(cancelRes.body.status).toBe(SocialMediaPostStatus.CANCELLED);
+  });
+
   it("out-of-scope employee cannot read another Social Media client's posts", async () => {
     const res = await request(app.getHttpServer())
       .get(`/api/v1/social-media/clients/${socialClientId}/posts`)

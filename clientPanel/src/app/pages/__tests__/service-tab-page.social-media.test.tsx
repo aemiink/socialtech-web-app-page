@@ -103,7 +103,10 @@ describe("ServiceTabPage Social Media tabs", () => {
     });
     mockUseGetOwnSocialMediaCalendarQuery.mockReturnValue({
       data: {
-        posts: [buildPost({ id: "post-1", title: "API görünür Reels", status: "SCHEDULED" })],
+        posts: [
+          buildPost({ id: "post-1", title: "API görünür Reels", status: "SCHEDULED" }),
+          buildPost({ id: "post-draft", title: "Takvim dışı taslak", status: "DRAFT" }),
+        ],
         meta: {
           generatedAt: "2026-06-01T08:00:00.000Z",
           from: null,
@@ -116,7 +119,12 @@ describe("ServiceTabPage Social Media tabs", () => {
     mockUseGetOwnSocialMediaPostsQuery.mockReturnValue({
       data: [
         buildPost({ id: "post-2", title: "Caption onayı", status: "WAITING_APPROVAL" }),
-        buildPost({ id: "post-3", title: "Yayınlanan Post", status: "PUBLISHED" }),
+        buildPost({
+          id: "post-3",
+          title: "Yayınlanan Post",
+          status: "PUBLISHED",
+          externalPostUrl: "https://instagram.com/p/acme-phase-7",
+        }),
       ],
       isLoading: false,
       isError: false,
@@ -137,6 +145,7 @@ describe("ServiceTabPage Social Media tabs", () => {
     render(<ServiceTabPage serviceId="social-media" tabId="content-calendar" />);
 
     expect(screen.getByText("API görünür Reels")).toBeInTheDocument();
+    expect(screen.queryByText("Takvim dışı taslak")).not.toBeInTheDocument();
     expect(screen.queryByText("Planlanan İçerik")).not.toBeInTheDocument();
   });
 
@@ -195,6 +204,16 @@ describe("ServiceTabPage Social Media tabs", () => {
     expect(screen.getByText("Social Media ajans notu API data.")).toBeInTheDocument();
     expect(screen.queryByText("Problem/Çözüm Reels")).not.toBeInTheDocument();
   });
+
+  it("renders published posts with external platform links", () => {
+    render(<ServiceTabPage serviceId="social-media" tabId="published-content" />);
+
+    expect(screen.getByText("Yayınlanan Post")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Dış yayını aç/ })).toHaveAttribute(
+      "href",
+      "https://instagram.com/p/acme-phase-7",
+    );
+  });
 });
 
 type SocialPost = {
@@ -203,7 +222,7 @@ type SocialPost = {
   projectId: string;
   platform: "INSTAGRAM";
   type: "REEL";
-  status: "SCHEDULED" | "WAITING_APPROVAL" | "PUBLISHED";
+  status: "DRAFT" | "SCHEDULED" | "WAITING_APPROVAL" | "PUBLISHED";
   title: string;
   caption: string;
   scheduledAt: string;

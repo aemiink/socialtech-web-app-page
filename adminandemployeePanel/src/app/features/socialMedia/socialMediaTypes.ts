@@ -153,6 +153,17 @@ export type CreateSocialMediaPostRequest = {
 
 export type UpdateSocialMediaPostRequest = Partial<CreateSocialMediaPostRequest>;
 
+export type ScheduleSocialMediaPostRequest = {
+  scheduledAt: string;
+  clientVisible?: boolean;
+};
+
+export type MarkSocialMediaPostPublishedRequest = {
+  publishedAt: string;
+  externalPostUrl?: string | null;
+  externalPostId?: string | null;
+};
+
 export type CreateSocialMediaPostAssetRequest = {
   fileId: string;
   sortOrder?: number;

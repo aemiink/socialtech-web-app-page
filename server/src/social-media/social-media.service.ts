@@ -22,6 +22,8 @@ import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { PrismaService } from "../database/prisma.service";
 import { AttachSocialMediaPostAssetDto } from "./dto/attach-social-media-post-asset.dto";
 import { CreateSocialMediaPostDto } from "./dto/create-social-media-post.dto";
+import { MarkSocialMediaPostPublishedDto } from "./dto/mark-social-media-post-published.dto";
+import { ScheduleSocialMediaPostDto } from "./dto/schedule-social-media-post.dto";
 import { SocialMediaPostQueryDto } from "./dto/social-media-post-query.dto";
 import { UpdateSocialMediaConfigDto } from "./dto/update-social-media-config.dto";
 import { UpdateSocialMediaPostDto } from "./dto/update-social-media-post.dto";
@@ -574,6 +576,109 @@ export class SocialMediaService {
     return this.prisma.socialMediaPost.update({
       where: { id: postId },
       data,
+      select: socialMediaPostSelect,
+    });
+  }
+
+  async schedulePost(
+    currentUser: AuthenticatedUser,
+    postId: string,
+    dto: ScheduleSocialMediaPostDto,
+  ): Promise<SocialMediaPostModel> {
+    this.assertBodyObject(dto);
+
+    const existingPost = await this.getPostOrNotFound(postId);
+    await this.assertCanManagePosts(currentUser, existingPost.clientProfileId);
+    await this.assertClientHasActiveSocialMediaService(existingPost.clientProfileId);
+
+    if (existingPost.status !== SocialMediaPostStatus.APPROVED) {
+      throw new BadRequestException("Only APPROVED Social Media posts can be scheduled.");
+    }
+
+    const scheduledAt = this.parseNullableDate(dto.scheduledAt, "scheduledAt");
+    if (!scheduledAt) {
+      throw new BadRequestException("scheduledAt is required when scheduling a post.");
+    }
+
+    const data: Prisma.SocialMediaPostUncheckedUpdateInput = {
+      status: SocialMediaPostStatus.SCHEDULED,
+      scheduledAt,
+    };
+    this.assignIfDefined(data, "clientVisible", this.parseOptionalBoolean(dto.clientVisible));
+
+    return this.prisma.socialMediaPost.update({
+      where: { id: postId },
+      data,
+      select: socialMediaPostSelect,
+    });
+  }
+
+  async markPostPublished(
+    currentUser: AuthenticatedUser,
+    postId: string,
+    dto: MarkSocialMediaPostPublishedDto,
+  ): Promise<SocialMediaPostModel> {
+    this.assertBodyObject(dto);
+
+    const existingPost = await this.getPostOrNotFound(postId);
+    await this.assertCanManagePosts(currentUser, existingPost.clientProfileId);
+    await this.assertClientHasActiveSocialMediaService(existingPost.clientProfileId);
+
+    if (
+      existingPost.status !== SocialMediaPostStatus.APPROVED &&
+      existingPost.status !== SocialMediaPostStatus.SCHEDULED
+    ) {
+      throw new BadRequestException(
+        "Only APPROVED or SCHEDULED Social Media posts can be marked as published.",
+      );
+    }
+
+    const publishedAt = this.parseNullableDate(dto.publishedAt, "publishedAt");
+    if (!publishedAt) {
+      throw new BadRequestException("publishedAt is required when marking a post as published.");
+    }
+
+    const data: Prisma.SocialMediaPostUncheckedUpdateInput = {
+      status: SocialMediaPostStatus.PUBLISHED,
+      publishedAt,
+      clientVisible: true,
+    };
+    this.assignIfDefined(
+      data,
+      "externalPostUrl",
+      this.normalizeNullableText(dto.externalPostUrl, "externalPostUrl", 500),
+    );
+    this.assignIfDefined(
+      data,
+      "externalPostId",
+      this.normalizeNullableText(dto.externalPostId, "externalPostId", 180),
+    );
+
+    return this.prisma.socialMediaPost.update({
+      where: { id: postId },
+      data,
+      select: socialMediaPostSelect,
+    });
+  }
+
+  async cancelPost(
+    currentUser: AuthenticatedUser,
+    postId: string,
+  ): Promise<SocialMediaPostModel> {
+    const existingPost = await this.getPostOrNotFound(postId);
+    await this.assertCanManagePosts(currentUser, existingPost.clientProfileId);
+    await this.assertClientHasActiveSocialMediaService(existingPost.clientProfileId);
+
+    if (
+      existingPost.status === SocialMediaPostStatus.PUBLISHED ||
+      existingPost.status === SocialMediaPostStatus.CANCELLED
+    ) {
+      throw new BadRequestException("Published or already cancelled Social Media posts cannot be cancelled.");
+    }
+
+    return this.prisma.socialMediaPost.update({
+      where: { id: postId },
+      data: { status: SocialMediaPostStatus.CANCELLED },
       select: socialMediaPostSelect,
     });
   }

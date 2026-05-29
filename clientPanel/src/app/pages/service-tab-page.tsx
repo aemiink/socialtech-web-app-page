@@ -4313,7 +4313,9 @@ function SocialMediaClientWorkspace({ tabId }: { tabId: string }) {
   const [updateClientTaskApproval, { isLoading: approvalActionLoading }] =
     useUpdateClientTaskApprovalMutation();
 
-  const posts = isCalendarTab ? calendarData?.posts ?? [] : filterSocialMediaTabPosts(tabId, listPosts);
+  const posts = isCalendarTab
+    ? filterSocialMediaTabPosts('content-calendar', calendarData?.posts ?? [])
+    : filterSocialMediaTabPosts(tabId, listPosts);
   const socialApprovalTasks = useMemo(
     () => approvalTasks.filter((task) => task.projectServiceId === 'social-media' && task.approvalRequired),
     [approvalTasks],
@@ -4549,6 +4551,17 @@ function SocialMediaClientPostCard({ post }: { post: SocialMediaPost }) {
         </div>
       </div>
       {post.caption ? <p className="line-clamp-3 text-sm text-[#A0A0A0]">{post.caption}</p> : null}
+      {post.externalPostUrl ? (
+        <a
+          className="mt-4 inline-flex items-center gap-2 rounded-lg border border-[#AAFF01]/30 px-3 py-2 text-xs text-[#AAFF01] transition hover:border-[#AAFF01]/70 hover:text-[#C6FF4A]"
+          href={post.externalPostUrl}
+          rel="noreferrer"
+          target="_blank"
+        >
+          <Link className="h-3.5 w-3.5" />
+          Dış yayını aç
+        </a>
+      ) : null}
     </div>
   );
 }
@@ -4697,6 +4710,10 @@ function SocialMediaWorkspaceStatus({ title, description }: { title: string; des
 }
 
 function filterSocialMediaTabPosts(tabId: string, posts: SocialMediaPost[]): SocialMediaPost[] {
+  if (tabId === 'content-calendar') {
+    return posts.filter((post) => post.status === 'SCHEDULED' || post.status === 'PUBLISHED');
+  }
+
   if (tabId === 'published-content') {
     return posts.filter((post) => post.status === 'PUBLISHED');
   }

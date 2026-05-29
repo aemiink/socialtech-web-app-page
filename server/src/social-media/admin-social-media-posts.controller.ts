@@ -4,6 +4,8 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { AttachSocialMediaPostAssetDto } from "./dto/attach-social-media-post-asset.dto";
+import { MarkSocialMediaPostPublishedDto } from "./dto/mark-social-media-post-published.dto";
+import { ScheduleSocialMediaPostDto } from "./dto/schedule-social-media-post.dto";
 import { UpdateSocialMediaPostDto } from "./dto/update-social-media-post.dto";
 import { SocialMediaService } from "./social-media.service";
 
@@ -27,6 +29,32 @@ export class AdminSocialMediaPostsController {
     @Body() dto: UpdateSocialMediaPostDto,
   ) {
     return this.socialMediaService.updatePost(currentUser, postId, dto);
+  }
+
+  @Post(":id/schedule")
+  schedulePost(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("id", ParseUUIDPipe) postId: string,
+    @Body() dto: ScheduleSocialMediaPostDto,
+  ) {
+    return this.socialMediaService.schedulePost(currentUser, postId, dto);
+  }
+
+  @Post(":id/mark-published")
+  markPostPublished(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("id", ParseUUIDPipe) postId: string,
+    @Body() dto: MarkSocialMediaPostPublishedDto,
+  ) {
+    return this.socialMediaService.markPostPublished(currentUser, postId, dto);
+  }
+
+  @Post(":id/cancel")
+  cancelPost(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("id", ParseUUIDPipe) postId: string,
+  ) {
+    return this.socialMediaService.cancelPost(currentUser, postId);
   }
 
   @Delete(":id")

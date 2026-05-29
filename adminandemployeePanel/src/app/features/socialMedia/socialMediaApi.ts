@@ -9,6 +9,8 @@ import type {
   AdminSocialMediaClientsResponse,
   CreateSocialMediaPostAssetRequest,
   CreateSocialMediaPostRequest,
+  MarkSocialMediaPostPublishedRequest,
+  ScheduleSocialMediaPostRequest,
   SocialMediaPost,
   SocialMediaPostsListResponse,
   SocialMediaPostsQuery,
@@ -111,6 +113,53 @@ export const socialMediaApi = baseApi.injectEndpoints({
         { type: "SocialMediaSummary", id: clientId },
       ],
     }),
+    scheduleSocialMediaPost: builder.mutation<
+      SocialMediaPost,
+      { id: string; clientId: string; body: ScheduleSocialMediaPostRequest }
+    >({
+      query: ({ id, body }) => ({
+        url: `/social-media/posts/${id}/schedule`,
+        method: "POST",
+        body: serializeSocialMediaPostMutationBody(body),
+      }),
+      transformResponse: (response: unknown) => normalizeSocialMediaPostResponse(response),
+      invalidatesTags: (_result, _error, { id, clientId }) => [
+        { type: "SocialMediaPosts", id },
+        { type: "SocialMediaPosts", id: `${SOCIAL_MEDIA_POSTS_LIST_ID}:${clientId}` },
+        { type: "SocialMediaSummary", id: SOCIAL_MEDIA_ADMIN_CLIENTS_LIST_ID },
+        { type: "SocialMediaSummary", id: clientId },
+      ],
+    }),
+    markSocialMediaPostPublished: builder.mutation<
+      SocialMediaPost,
+      { id: string; clientId: string; body: MarkSocialMediaPostPublishedRequest }
+    >({
+      query: ({ id, body }) => ({
+        url: `/social-media/posts/${id}/mark-published`,
+        method: "POST",
+        body: serializeSocialMediaPostMutationBody(body),
+      }),
+      transformResponse: (response: unknown) => normalizeSocialMediaPostResponse(response),
+      invalidatesTags: (_result, _error, { id, clientId }) => [
+        { type: "SocialMediaPosts", id },
+        { type: "SocialMediaPosts", id: `${SOCIAL_MEDIA_POSTS_LIST_ID}:${clientId}` },
+        { type: "SocialMediaSummary", id: SOCIAL_MEDIA_ADMIN_CLIENTS_LIST_ID },
+        { type: "SocialMediaSummary", id: clientId },
+      ],
+    }),
+    cancelSocialMediaPost: builder.mutation<SocialMediaPost, { id: string; clientId: string }>({
+      query: ({ id }) => ({
+        url: `/social-media/posts/${id}/cancel`,
+        method: "POST",
+      }),
+      transformResponse: (response: unknown) => normalizeSocialMediaPostResponse(response),
+      invalidatesTags: (_result, _error, { id, clientId }) => [
+        { type: "SocialMediaPosts", id },
+        { type: "SocialMediaPosts", id: `${SOCIAL_MEDIA_POSTS_LIST_ID}:${clientId}` },
+        { type: "SocialMediaSummary", id: SOCIAL_MEDIA_ADMIN_CLIENTS_LIST_ID },
+        { type: "SocialMediaSummary", id: clientId },
+      ],
+    }),
     deleteSocialMediaPost: builder.mutation<{ success: boolean }, { id: string; clientId: string }>({
       query: ({ id }) => ({
         url: `/social-media/posts/${id}`,
@@ -166,6 +215,9 @@ export const {
   useCreateClientSocialMediaPostMutation,
   useGetSocialMediaPostQuery,
   useUpdateSocialMediaPostMutation,
+  useScheduleSocialMediaPostMutation,
+  useMarkSocialMediaPostPublishedMutation,
+  useCancelSocialMediaPostMutation,
   useDeleteSocialMediaPostMutation,
   useCreateSocialMediaPostAssetMutation,
   useDeleteSocialMediaPostAssetMutation,
@@ -228,7 +280,11 @@ function serializeSocialMediaPostsQuery(
 }
 
 function serializeSocialMediaPostMutationBody(
-  body: CreateSocialMediaPostRequest | UpdateSocialMediaPostRequest,
+  body:
+    | CreateSocialMediaPostRequest
+    | UpdateSocialMediaPostRequest
+    | ScheduleSocialMediaPostRequest
+    | MarkSocialMediaPostPublishedRequest,
 ): Record<string, unknown> {
   const serializedBody: Record<string, unknown> = {};
 
