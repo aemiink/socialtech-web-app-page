@@ -836,6 +836,62 @@ describe("Social Media Config and Summary Authz (e2e)", () => {
     );
   });
 
+  it("keeps Social Media reports and insights assignment-scoped for employees with generic report permissions", async () => {
+    const scopedPost = await prisma.socialMediaPost.create({
+      data: {
+        clientProfileId: socialClientId,
+        projectId: socialProjectId,
+        platform: "INSTAGRAM",
+        type: "REEL",
+        status: SocialMediaPostStatus.PUBLISHED,
+        title: `Mavi report scope hardening ${Date.now()}`,
+        publishedAt: new Date("2026-07-15T10:00:00.000Z"),
+        clientVisible: true,
+      },
+      select: { id: true },
+    });
+
+    const insightListRes = await request(app.getHttpServer())
+      .get(`/api/v1/social-media/clients/${socialClientId}/insights`)
+      .set("Authorization", `Bearer ${performanceToken}`);
+    const reportListRes = await request(app.getHttpServer())
+      .get(`/api/v1/social-media/clients/${socialClientId}/reports`)
+      .set("Authorization", `Bearer ${performanceToken}`);
+    const createInsightRes = await request(app.getHttpServer())
+      .post(`/api/v1/social-media/posts/${scopedPost.id}/insights`)
+      .set("Authorization", `Bearer ${performanceToken}`)
+      .send({
+        date: "2026-07-16T00:00:00.000Z",
+        impressions: 100,
+      });
+    const createReportRes = await request(app.getHttpServer())
+      .post(`/api/v1/social-media/clients/${socialClientId}/reports`)
+      .set("Authorization", `Bearer ${performanceToken}`)
+      .send({
+        periodStart: "2026-07-15T00:00:00.000Z",
+        periodEnd: "2026-07-16T23:59:59.999Z",
+        type: "WEEKLY",
+        summary: "Should not be created by out-of-scope employee.",
+      });
+
+    expect(insightListRes.status).toBe(404);
+    expect(reportListRes.status).toBe(404);
+    expect(createInsightRes.status).toBe(404);
+    expect(createReportRes.status).toBe(404);
+  });
+
+  it("validates Social Media report and insight date ranges", async () => {
+    const invalidInsightsRangeRes = await request(app.getHttpServer())
+      .get(`/api/v1/social-media/clients/${clientProfileId}/insights?from=2026-08-01&to=2026-07-01`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    const invalidReportsRangeRes = await request(app.getHttpServer())
+      .get(`/api/v1/social-media/clients/${clientProfileId}/reports?from=2026-08-01&to=2026-07-01`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    expect(invalidInsightsRangeRes.status).toBe(400);
+    expect(invalidReportsRangeRes.status).toBe(400);
+  });
+
   it("out-of-scope employee cannot read another Social Media client's posts", async () => {
     const res = await request(app.getHttpServer())
       .get(`/api/v1/social-media/clients/${socialClientId}/posts`)
@@ -906,6 +962,81 @@ describe("Social Media Config and Summary Authz (e2e)", () => {
     ].map((post: { id: string }) => post.id);
     expect(summaryPostIds).toContain(visibleRes.body.id);
     expect(summaryPostIds).not.toContain(hiddenRes.body.id);
+  });
+
+  it("client Social Media summary excludes internal creative files", async () => {
+    const clientSocialProject = await prisma.project.upsert({
+      where: {
+        clientProfileId_slug: {
+          clientProfileId,
+          slug: "acme-social-media-visibility",
+        },
+      },
+      update: {
+        serviceKey: PurchasedServiceKey.SOCIAL_MEDIA,
+        status: ProjectStatus.IN_PROGRESS,
+        priority: Priority.MEDIUM,
+      },
+      create: {
+        clientProfileId,
+        serviceKey: PurchasedServiceKey.SOCIAL_MEDIA,
+        name: "Acme Social Media Visibility",
+        slug: "acme-social-media-visibility",
+        status: ProjectStatus.IN_PROGRESS,
+        priority: Priority.MEDIUM,
+      },
+      select: { id: true },
+    });
+    const uniqueSuffix = Date.now();
+    const internalCreativeUrl = `https://cdn.socialtech.test/internal-social-${uniqueSuffix}.png`;
+    const clientVisibleCreativeUrl = `https://cdn.socialtech.test/client-social-${uniqueSuffix}.png`;
+
+    await prisma.projectFile.createMany({
+      data: [
+        {
+          projectId: clientSocialProject.id,
+          clientProfileId,
+          serviceKey: PurchasedServiceKey.SOCIAL_MEDIA,
+          category: ProjectFileCategory.ADS_CREATIVE,
+          visibility: ProjectFileVisibility.INTERNAL,
+          title: "Internal Social Creative",
+          publicId: `internal-social-${uniqueSuffix}`,
+          secureUrl: internalCreativeUrl,
+          resourceType: "image",
+          format: "png",
+          bytes: 2048,
+          mimeType: "image/png",
+          originalFileName: "internal-social.png",
+          uploadedByUserId: adminUserId,
+        },
+        {
+          projectId: clientSocialProject.id,
+          clientProfileId,
+          serviceKey: PurchasedServiceKey.SOCIAL_MEDIA,
+          category: ProjectFileCategory.ADS_CREATIVE,
+          visibility: ProjectFileVisibility.CLIENT_VISIBLE,
+          title: "Client Social Creative",
+          publicId: `client-social-${uniqueSuffix}`,
+          secureUrl: clientVisibleCreativeUrl,
+          resourceType: "image",
+          format: "png",
+          bytes: 2048,
+          mimeType: "image/png",
+          originalFileName: "client-social.png",
+          uploadedByUserId: adminUserId,
+        },
+      ],
+    });
+
+    const summaryRes = await request(app.getHttpServer())
+      .get("/api/v1/clients/me/social-media/summary")
+      .set("Authorization", `Bearer ${clientToken}`);
+
+    expect(summaryRes.status).toBe(200);
+    const serializedSummary = JSON.stringify(summaryRes.body);
+    expect(serializedSummary).toContain(clientVisibleCreativeUrl);
+    expect(serializedSummary).not.toContain(internalCreativeUrl);
+    expect(serializedSummary).not.toContain("Internal Social Creative");
   });
 
   it("assigned designer can attach and remove Social Media post assets", async () => {

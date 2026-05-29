@@ -446,6 +446,26 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 - `clientPanel/src/app/pages/__tests__/service-tab-page.social-media.test.tsx`
   - performance and reports tab API render coverage
 
+## 2026-05-29 Update Map (Social Media Faz 9 Production Hardening)
+
+### Backend
+- `server/src/social-media/social-media.service.ts`
+  - Social Media report/insight permissions hardened so admin users keep global report scope while employee users with generic `reports.read/manage` remain assigned-client scoped
+  - internal creative files remain excluded from own-client Social Media summary read model
+- `server/test/social-media-authz.e2e-spec.ts`
+  - employee generic report permission out-of-scope read/create coverage
+  - report/insight date range validation coverage
+  - client summary internal-vs-client-visible creative file leak guard coverage
+
+### Admin + Employee Panel Frontend
+- `adminandemployeePanel/src/app/employee/pages/__tests__/SocialMediaWorkspace.test.tsx`
+  - reports tab no-permission UI state coverage
+
+### Client Panel Frontend
+- `clientPanel/src/app/pages/__tests__/service-tab-page.social-media.test.tsx`
+  - Social Media performance/reports empty and error state coverage
+  - regression guard that performance/reports tabs do not fall back to static no-source text
+
 ### TikTok Ads Backend Module
 
 - `server/src/tiktok-ads/tiktok-ads.module.ts`

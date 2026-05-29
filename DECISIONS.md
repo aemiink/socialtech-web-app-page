@@ -3316,3 +3316,27 @@ Affected files:
 - `clientPanel/src/app/pages/service-tab-page.tsx`
 - `clientPanel/src/app/pages/__tests__/service-tab-page.social-media.test.tsx`
 - `ROAD_MAP.md`
+
+## 2026-05-29 - Social Media Faz 9 Report Permission Scoping
+
+Context:
+Faz 8 reporting/insights V1 ile Social Media raporları generic `reports.read/manage` permission family’sine bağlandı. Production hardening sırasında bu generic permission’ların employee kullanıcılar için diğer client’lara global Social Media report/insight erişimi açmaması gerekiyordu.
+
+Decision:
+Social Media report/insight permission modeli şu şekilde sabitlendi:
+- Admin kullanıcılar `reports.read/manage` veya Social Media global permissions ile tüm Social Media client report/insight yüzeylerini yönetebilir.
+- Employee kullanıcılar generic `reports.read/manage` permission’a sahip olsa bile Social Media report/insight read/create/manage işlemleri assigned Social Media client scope’u gerektirir.
+- Out-of-scope employee report/insight read/create denemeleri güvenli şekilde `404` döner.
+- Client-facing Social Media summary yalnızca `CLIENT_VISIBLE` creative files döndürür; internal creative files own-client response’a dahil edilmez.
+
+Reason:
+Bu karar generic reporting permission’larını korurken Social Media operasyon verisinin employee assignment boundary’sinden taşmasını engeller. Admin global yetki, assigned employee operasyonu ve own-client görünürlük kontratları birbirinden ayrışmış kalır.
+
+Affected files:
+- `server/src/social-media/social-media.service.ts`
+- `server/test/social-media-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/SocialMediaWorkspace.test.tsx`
+- `clientPanel/src/app/pages/__tests__/service-tab-page.social-media.test.tsx`
+- `PROJECT_CONTEXT.md`
+- `REPO_MAP.md`
+- `ROAD_MAP.md`

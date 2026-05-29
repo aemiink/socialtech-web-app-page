@@ -356,6 +356,42 @@ describe("ServiceTabPage Social Media tabs", () => {
     expect(screen.getByText("Onay: PENDING")).toBeInTheDocument();
     expect(screen.queryByText("Bu sekme için henüz Social Media API veri kaynağı aktif değil. Mock içerik gösterilmiyor.")).not.toBeInTheDocument();
   });
+
+  it("renders empty performance and reports states without static fallback", () => {
+    mockUseGetOwnSocialMediaInsightsQuery.mockReturnValue({
+      data: buildEmptyInsightsResponse(),
+      isLoading: false,
+      isError: false,
+    });
+
+    const { rerender } = render(<ServiceTabPage serviceId="social-media" tabId="performance" />);
+
+    expect(screen.getByText("Henüz client-visible performans snapshot yok.")).toBeInTheDocument();
+    expect(screen.queryByText("Bu sekme için henüz Social Media API veri kaynağı aktif değil. Mock içerik gösterilmiyor.")).not.toBeInTheDocument();
+
+    mockUseGetOwnSocialMediaReportsQuery.mockReturnValue({
+      data: buildEmptyReportsResponse(),
+      isLoading: false,
+      isError: false,
+    });
+
+    rerender(<ServiceTabPage serviceId="social-media" tabId="reports" />);
+
+    expect(screen.getByText("Henüz yayınlanmış Social Media raporu yok.")).toBeInTheDocument();
+    expect(screen.queryByText("Bu sekme için henüz Social Media API veri kaynağı aktif değil. Mock içerik gösterilmiyor.")).not.toBeInTheDocument();
+  });
+
+  it("renders Social Media performance error state", () => {
+    mockUseGetOwnSocialMediaInsightsQuery.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+    });
+
+    render(<ServiceTabPage serviceId="social-media" tabId="performance" />);
+
+    expect(screen.getByText("Sosyal medya verileri alınamadı")).toBeInTheDocument();
+  });
 });
 
 type SocialPost = {
@@ -461,6 +497,50 @@ function buildSummary() {
       generatedAt: "2026-06-01T08:00:00.000Z",
       lastUpdatedAt: "2026-06-01T08:00:00.000Z",
       sources: ["SocialMediaPost"],
+    },
+  };
+}
+
+function buildEmptyInsightsResponse() {
+  return {
+    data: [],
+    meta: {
+      page: 1,
+      limit: 50,
+      total: 0,
+      totalPages: 1,
+      generatedAt: "2026-06-05T00:00:00.000Z",
+      totals: {
+        impressions: 0,
+        reach: 0,
+        likes: 0,
+        comments: 0,
+        shares: 0,
+        saves: 0,
+        profileVisits: 0,
+        follows: 0,
+        clicks: 0,
+        engagementRate: 0,
+      },
+      topPosts: [],
+      platformBreakdown: [],
+      typeBreakdown: [],
+      trend: [],
+    },
+  };
+}
+
+function buildEmptyReportsResponse() {
+  return {
+    data: [],
+    meta: {
+      page: 1,
+      limit: 20,
+      total: 0,
+      totalPages: 1,
+      draft: 0,
+      published: 0,
+      clientVisible: 0,
     },
   };
 }

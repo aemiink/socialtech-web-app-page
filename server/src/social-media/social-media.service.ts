@@ -1898,8 +1898,9 @@ export class SocialMediaService {
     clientProfileId: string,
   ): Promise<void> {
     if (
-      this.hasPermission(currentUser, SOCIAL_MEDIA_POSTS_READ_ANY_PERMISSION) ||
-      this.hasPermission(currentUser, REPORTS_READ_PERMISSION)
+      this.isAdminUser(currentUser) &&
+      (this.hasPermission(currentUser, SOCIAL_MEDIA_POSTS_READ_ANY_PERMISSION) ||
+        this.hasPermission(currentUser, REPORTS_READ_PERMISSION))
     ) {
       await this.assertClientProfileExists(clientProfileId);
       return;
@@ -1907,6 +1908,7 @@ export class SocialMediaService {
 
     if (
       this.hasPermission(currentUser, SOCIAL_MEDIA_POSTS_READ_ASSIGNED_PERMISSION) ||
+      this.hasPermission(currentUser, REPORTS_READ_PERMISSION) ||
       this.hasPermission(currentUser, SOCIAL_MEDIA_REPORTS_MANAGE_ASSIGNED_PERMISSION)
     ) {
       await this.assertAssignedSocialMediaClientOrFail(currentUser, clientProfileId);
@@ -1921,8 +1923,9 @@ export class SocialMediaService {
     clientProfileId: string,
   ): Promise<void> {
     if (
-      this.hasPermission(currentUser, SOCIAL_MEDIA_POSTS_MANAGE_ANY_PERMISSION) ||
-      this.hasPermission(currentUser, REPORTS_MANAGE_PERMISSION)
+      this.isAdminUser(currentUser) &&
+      (this.hasPermission(currentUser, SOCIAL_MEDIA_POSTS_MANAGE_ANY_PERMISSION) ||
+        this.hasPermission(currentUser, REPORTS_MANAGE_PERMISSION))
     ) {
       await this.assertClientProfileExists(clientProfileId);
       return;
@@ -1930,6 +1933,7 @@ export class SocialMediaService {
 
     if (
       this.hasPermission(currentUser, SOCIAL_MEDIA_POSTS_MANAGE_ASSIGNED_PERMISSION) ||
+      this.hasPermission(currentUser, REPORTS_MANAGE_PERMISSION) ||
       this.hasPermission(currentUser, SOCIAL_MEDIA_REPORTS_MANAGE_ASSIGNED_PERMISSION)
     ) {
       await this.assertAssignedSocialMediaClientOrFail(currentUser, clientProfileId);
@@ -1943,12 +1947,15 @@ export class SocialMediaService {
     currentUser: AuthenticatedUser,
     clientProfileId: string,
   ): Promise<void> {
-    if (this.hasPermission(currentUser, REPORTS_READ_PERMISSION)) {
+    if (this.isAdminUser(currentUser) && this.hasPermission(currentUser, REPORTS_READ_PERMISSION)) {
       await this.assertClientProfileExists(clientProfileId);
       return;
     }
 
-    if (this.hasPermission(currentUser, SOCIAL_MEDIA_REPORTS_MANAGE_ASSIGNED_PERMISSION)) {
+    if (
+      this.hasPermission(currentUser, REPORTS_READ_PERMISSION) ||
+      this.hasPermission(currentUser, SOCIAL_MEDIA_REPORTS_MANAGE_ASSIGNED_PERMISSION)
+    ) {
       await this.assertAssignedSocialMediaClientOrFail(currentUser, clientProfileId);
       return;
     }
@@ -1960,12 +1967,15 @@ export class SocialMediaService {
     currentUser: AuthenticatedUser,
     clientProfileId: string,
   ): Promise<void> {
-    if (this.hasPermission(currentUser, REPORTS_MANAGE_PERMISSION)) {
+    if (this.isAdminUser(currentUser) && this.hasPermission(currentUser, REPORTS_MANAGE_PERMISSION)) {
       await this.assertClientProfileExists(clientProfileId);
       return;
     }
 
-    if (this.hasPermission(currentUser, SOCIAL_MEDIA_REPORTS_MANAGE_ASSIGNED_PERMISSION)) {
+    if (
+      this.hasPermission(currentUser, REPORTS_MANAGE_PERMISSION) ||
+      this.hasPermission(currentUser, SOCIAL_MEDIA_REPORTS_MANAGE_ASSIGNED_PERMISSION)
+    ) {
       await this.assertAssignedSocialMediaClientOrFail(currentUser, clientProfileId);
       return;
     }
@@ -2874,5 +2884,9 @@ export class SocialMediaService {
 
   private hasPermission(currentUser: AuthenticatedUser, permission: string): boolean {
     return currentUser.permissions.includes(permission);
+  }
+
+  private isAdminUser(currentUser: AuthenticatedUser): boolean {
+    return currentUser.accountType === AccountType.ADMIN && currentUser.role === UserRole.ADMIN;
   }
 }

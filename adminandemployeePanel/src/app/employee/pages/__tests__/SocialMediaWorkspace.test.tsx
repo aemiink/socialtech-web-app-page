@@ -583,6 +583,25 @@ describe("SocialMediaWorkspace", () => {
     }));
   });
 
+  it("shows report permission state when employee lacks Social Media report access", async () => {
+    currentUser = {
+      ...baseEmployeeUser,
+      permissions: baseEmployeeUser.permissions.filter(
+        (permission) =>
+          permission !== "socialMedia.reports.manage.assigned" &&
+          permission !== "reports.read" &&
+          permission !== "reports.manage",
+      ),
+    };
+
+    renderWorkspace("reports");
+
+    expect((await screen.findAllByText("Raporlar")).length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/Social Media raporlarını okumak için reports read veya assigned report yetkisi gerekiyor/i),
+    ).toBeInTheDocument();
+  });
+
   it("creates a Social Media approval task with assigned approval permission", async () => {
     renderWorkspace("approvals");
 

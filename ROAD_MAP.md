@@ -180,6 +180,7 @@
 - Social Media Faz 6: Approval + creative flow (Social Media approval enum values, client approval response bridge, post status update, revision task follow-up, client/employee approval UI)
 - Social Media Faz 7: Publishing integration V1 (manual schedule/mark-published/cancel endpoints, admin/employee publishing actions, client external link visibility, V2 API publishing follow-up)
 - Social Media Faz 8: Insights/reporting V1 (manual post insight snapshots, Social Media report draft/publish/ack bridge, admin/employee reporting workspace, client performance/reports views)
+- Social Media Faz 9: Production hardening (report/insight authz scope tightening, internal file leak guard, date validation coverage, UI empty/error/permission states, check/build validation)
 
 ## Blocked
 
@@ -430,8 +431,17 @@ None identified.
   - `server`: `DATABASE_URL=<.../socialtech_server_test> node ./test/run-e2e.cjs social-media-authz.e2e-spec.ts` ✅ (`17/17`)
   - `adminandemployeePanel`: `npm run typecheck`, `npm run test:run -- SocialMediaWorkspace.test.tsx` ✅ (`8/8`), `npm run build` ✅
   - `clientPanel`: `npm run typecheck`, `npm run test -- service-tab-page.social-media.test.tsx` ✅ (`6/6`), `npm run build` ✅
-- Latest admin/employee frontend validation checkpoint: last recorded broad suite `25` test files, `153/153` tests; latest targeted Social Media Faz 6 workspace suite adds `1` file, `7/7` tests.
-- Latest client portal frontend validation checkpoint: Social Media targeted suite `6/6`; broad recorded portal checkpoint remains `4` files, `17/17` tests.
+- Latest Social Media Faz 9 checkpoint:
+  - `server`: Social Media report/insight generic report permissions now stay admin-global but employee-assigned scoped; out-of-scope employee read/create returns safe `404` ✅
+  - `server`: invalid Social Media report/insight date ranges return `400`; client summary excludes internal creative files ✅
+  - `adminandemployeePanel`: workspace reports tab covers no-report-permission state ✅
+  - `clientPanel`: Social Media performance/reports tabs cover API empty/error states and no static fallback ✅
+  - `server`: `DATABASE_URL=<.../socialtech_server_test> node ./test/run-e2e.cjs social-media-authz.e2e-spec.ts` ✅ (`20/20`)
+  - `adminandemployeePanel`: `npm run test:run -- SocialMediaWorkspace.test.tsx` ✅ (`9/9`)
+  - `clientPanel`: `npm run test -- service-tab-page.social-media.test.tsx` ✅ (`8/8`)
+  - `server`, `adminandemployeePanel`, `clientPanel`: `npm run check` ✅
+- Latest admin/employee frontend validation checkpoint: last recorded broad suite `25` test files, `153/153` tests; latest targeted Social Media workspace suite `9/9`.
+- Latest client portal frontend validation checkpoint: Social Media targeted suite `8/8`; broad recorded portal checkpoint remains `4` files, `17/17` tests.
 - Latest FAZ-05 validation checkpoint:
   - `server`: `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true node ./test/run-e2e.cjs meta-ads-authz.e2e-spec.ts` ✅ (`38/38`)
   - `server`: `npm run prisma:seed` ✅

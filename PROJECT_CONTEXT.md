@@ -661,6 +661,22 @@ Active Social Media insights/reporting endpoints:
 - `GET /api/v1/clients/me/social-media/insights`
 - `GET /api/v1/clients/me/social-media/reports`
 
+## Social Media Faz 9 — Production Hardening (2026-05-29)
+
+Faz 9 Social Media V1 yüzeyini production hardening kontrolünden geçirdi. Özet:
+
+- Backend Social Media report/insight authorization netleştirildi: admin kullanıcılar global `reports.read/manage` yetkisiyle çalışır; employee kullanıcılar generic report yetkisine sahip olsa bile Social Media report/insight erişimi assigned client scope’una bağlıdır.
+- Out-of-scope employee report/insight read/create denemeleri safe `404` döner; invalid report/insight date range istekleri `400` validation response üretir.
+- Client Social Media summary creative file görünürlüğü yalnızca `CLIENT_VISIBLE` dosyaları döndürür; internal creative files own-client summary response’una sızmaz.
+- Employee Social Media workspace reports tabı permission-denied state test coverage aldı.
+- Client portal Social Media performance/reports tabları empty/error state coverage aldı ve static fallback’a dönmediği test edildi.
+
+Production hardening validation:
+- `server/test/social-media-authz.e2e-spec.ts` Social Media suite `20/20`
+- `adminandemployeePanel` targeted Social Media workspace suite `9/9`
+- `clientPanel` targeted Social Media service tab suite `8/8`
+- `server`, `adminandemployeePanel` ve `clientPanel` `npm run check` komutları geçer.
+
 Planned next backend phases:
 - Broader domain endpoint authorization rollout (beyond users/clients/admin-assignments/projects/tasks)
 - Forced password change on first login flow
