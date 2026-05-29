@@ -61,13 +61,16 @@ import {
   useCreateOrLinkClientOwnerMutation,
   useDeactivateAdminClientMutation,
   useGetClientsQuery,
+  useGetAdminClientGrowthHubConfigQuery,
   useGetAdminClientSocialMediaConfigQuery,
   useUpdateAdminClientAmazonAdsConfigMutation,
+  useUpdateAdminClientGrowthHubConfigMutation,
   useUpdateAdminClientSocialMediaConfigMutation,
   useUpdateAdminClientMutation,
 } from "../features/clients/clientsApi";
 import type {
   AmazonAdsRegion,
+  AdminClientGrowthHubConfig,
   AdminClientSocialMediaConfig,
   ClientProfile,
   ClientStatus,
@@ -76,9 +79,11 @@ import type {
   ClientsSortOrder,
   CreateAdminClientRequest,
   CreateOrLinkClientOwnerRequest,
+  GrowthHubGoal,
   ServiceKey,
   SocialMediaGoal,
   UpdateAdminClientAmazonAdsConfigRequest,
+  UpdateAdminClientGrowthHubConfigRequest,
   UpdateAdminClientSocialMediaConfigRequest,
   UpdateAdminClientRequest,
 } from "../features/clients/clientsTypes";
@@ -121,6 +126,7 @@ type ClientOwnerMode = "NONE" | "CREATE" | "LINK_EXISTING";
 type PendingClientStatusAction = "activate" | "deactivate";
 type AmazonAdsPaymentMethodState = "" | "true" | "false";
 type SocialMediaGoalState = "" | SocialMediaGoal;
+type GrowthHubGoalState = "" | GrowthHubGoal;
 type AssignmentFormState = {
   employee: AdminUser | null;
   scope: AdminAssignmentScope;
@@ -156,6 +162,13 @@ type ClientFormState = {
   socialToneOfVoice: string;
   socialHashtags: string;
   socialNotes: string;
+  growthPrimaryGoal: GrowthHubGoalState;
+  growthTargetLeads: string;
+  growthTargetRoas: string;
+  growthTargetCpa: string;
+  growthTargetRevenue: string;
+  growthReportingDay: string;
+  growthNotes: string;
 };
 
 type ClientFormField = keyof ClientFormState;
@@ -191,6 +204,13 @@ const initialClientForm: ClientFormState = {
   socialToneOfVoice: "",
   socialHashtags: "",
   socialNotes: "",
+  growthPrimaryGoal: "",
+  growthTargetLeads: "",
+  growthTargetRoas: "",
+  growthTargetCpa: "",
+  growthTargetRevenue: "",
+  growthReportingDay: "",
+  growthNotes: "",
 };
 
 const initialAssignmentForm: AssignmentFormState = {
@@ -205,6 +225,15 @@ const SOCIAL_MEDIA_GOAL_OPTIONS: Array<{ value: SocialMediaGoal; label: string }
   { value: "LEAD_GENERATION", label: "Lead Generation" },
   { value: "SALES_SUPPORT", label: "Sales Support" },
   { value: "REPUTATION", label: "Reputation" },
+  { value: "MIXED", label: "Mixed" },
+];
+
+const GROWTH_HUB_GOAL_OPTIONS: Array<{ value: GrowthHubGoal; label: string }> = [
+  { value: "LEAD_GENERATION", label: "Lead Generation" },
+  { value: "ECOMMERCE_SALES", label: "E-commerce Sales" },
+  { value: "BRAND_AWARENESS", label: "Brand Awareness" },
+  { value: "APP_GROWTH", label: "App Growth" },
+  { value: "RETENTION", label: "Retention" },
   { value: "MIXED", label: "Mixed" },
 ];
 
@@ -292,6 +321,8 @@ export function Clients() {
     useUpdateAdminClientAmazonAdsConfigMutation();
   const [updateAdminClientSocialMediaConfig, { isLoading: isUpdatingSocialMediaConfig }] =
     useUpdateAdminClientSocialMediaConfigMutation();
+  const [updateAdminClientGrowthHubConfig, { isLoading: isUpdatingGrowthHubConfig }] =
+    useUpdateAdminClientGrowthHubConfigMutation();
   const [deactivateAdminClient, { isLoading: isDeactivating }] =
     useDeactivateAdminClientMutation();
   const [activateAdminClient, { isLoading: isActivating }] = useActivateAdminClientMutation();
@@ -302,11 +333,20 @@ export function Clients() {
   const shouldLoadEditSocialMediaConfig = Boolean(
     editTarget && editForm && isSocialMediaSelected(editForm.purchasedServices),
   );
+  const shouldLoadEditGrowthHubConfig = Boolean(
+    editTarget && editForm && isGrowthHubSelected(editForm.purchasedServices),
+  );
   const {
     data: editSocialMediaConfig,
     isFetching: isFetchingEditSocialMediaConfig,
   } = useGetAdminClientSocialMediaConfigQuery(editTarget?.id ?? "", {
     skip: !shouldLoadEditSocialMediaConfig,
+  });
+  const {
+    data: editGrowthHubConfig,
+    isFetching: isFetchingEditGrowthHubConfig,
+  } = useGetAdminClientGrowthHubConfigQuery(editTarget?.id ?? "", {
+    skip: !shouldLoadEditGrowthHubConfig,
   });
 
   const clients = clientsResponse?.data ?? [];
@@ -339,6 +379,7 @@ export function Clients() {
     isLinkingOwner ||
     isUpdatingAmazonAdsConfig ||
     isUpdatingSocialMediaConfig ||
+    isUpdatingGrowthHubConfig ||
     isCreatingAssignment;
 
   const kpiCards = [
@@ -441,9 +482,32 @@ export function Clients() {
     });
   }, [editTarget, editSocialMediaConfig]);
 
+  useEffect(() => {
+    if (!editTarget || !editGrowthHubConfig) {
+      return;
+    }
+
+    setEditForm((prev) => {
+      if (!prev || editTarget.id !== editGrowthHubConfig.clientProfileId) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        ...growthHubConfigToFormFields(editGrowthHubConfig),
+      };
+    });
+  }, [editTarget, editGrowthHubConfig]);
+
   async function handleCreateSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isCreating || isLinkingOwner || isUpdatingAmazonAdsConfig || isUpdatingSocialMediaConfig) {
+    if (
+      isCreating ||
+      isLinkingOwner ||
+      isUpdatingAmazonAdsConfig ||
+      isUpdatingSocialMediaConfig ||
+      isUpdatingGrowthHubConfig
+    ) {
       return;
     }
 
@@ -462,6 +526,7 @@ export function Clients() {
       const ownerPayload = buildOwnerPayload(createForm);
       const amazonAdsPayload = buildAmazonAdsConfigPayload(createForm);
       const socialMediaPayload = buildSocialMediaConfigPayload(createForm);
+      const growthHubPayload = buildGrowthHubConfigPayload(createForm);
 
       if (ownerPayload) {
         try {
@@ -517,9 +582,27 @@ export function Clients() {
         }
       }
 
+      if (growthHubPayload) {
+        try {
+          await updateAdminClientGrowthHubConfig({
+            clientId: createdClient.id,
+            body: growthHubPayload,
+          }).unwrap();
+        } catch (error) {
+          closeCreateDialog();
+          setPageError(
+            `Müşteri oluşturuldu ancak Growth Hub yapılandırması kaydedilemedi: ${extractApiErrorMessage(
+              error,
+              "Growth Hub yapılandırması tamamlanamadı.",
+            )}`,
+          );
+          return;
+        }
+      }
+
       closeCreateDialog();
       setPageSuccess(
-        ownerPayload || amazonAdsPayload || socialMediaPayload
+        ownerPayload || amazonAdsPayload || socialMediaPayload || growthHubPayload
           ? "Müşteri bağlantı bilgileriyle birlikte başarıyla kaydedildi."
           : "Müşteri başarıyla oluşturuldu.",
       );
@@ -538,7 +621,9 @@ export function Clients() {
       isUpdating ||
       isUpdatingAmazonAdsConfig ||
       isUpdatingSocialMediaConfig ||
-      isFetchingEditSocialMediaConfig
+      isUpdatingGrowthHubConfig ||
+      isFetchingEditSocialMediaConfig ||
+      isFetchingEditGrowthHubConfig
     ) {
       return;
     }
@@ -588,6 +673,23 @@ export function Clients() {
             `Müşteri güncellendi ancak Social Media yapılandırması kaydedilemedi: ${extractApiErrorMessage(
               error,
               "Social Media yapılandırması tamamlanamadı.",
+            )}`,
+          );
+          return;
+        }
+      }
+      const growthHubPayload = buildGrowthHubConfigPayload(editForm);
+      if (growthHubPayload) {
+        try {
+          await updateAdminClientGrowthHubConfig({
+            clientId: editTarget.id,
+            body: growthHubPayload,
+          }).unwrap();
+        } catch (error) {
+          setEditSubmitError(
+            `Müşteri güncellendi ancak Growth Hub yapılandırması kaydedilemedi: ${extractApiErrorMessage(
+              error,
+              "Growth Hub yapılandırması tamamlanamadı.",
             )}`,
           );
           return;
@@ -1127,7 +1229,13 @@ export function Clients() {
               idPrefix="create-client"
               form={createForm}
               onChange={updateCreateForm}
-              disabled={isCreating || isLinkingOwner || isUpdatingAmazonAdsConfig || isUpdatingSocialMediaConfig}
+              disabled={
+                isCreating ||
+                isLinkingOwner ||
+                isUpdatingAmazonAdsConfig ||
+                isUpdatingSocialMediaConfig ||
+                isUpdatingGrowthHubConfig
+              }
               includeOwnerFields
               canLinkExistingOwner={canReadAdminUsers}
               selectedExistingOwner={createSelectedExistingOwner}
@@ -1142,16 +1250,32 @@ export function Clients() {
                 type="button"
                 variant="outline"
                 onClick={closeCreateDialog}
-                disabled={isCreating || isLinkingOwner || isUpdatingAmazonAdsConfig || isUpdatingSocialMediaConfig}
+                disabled={
+                  isCreating ||
+                  isLinkingOwner ||
+                  isUpdatingAmazonAdsConfig ||
+                  isUpdatingSocialMediaConfig ||
+                  isUpdatingGrowthHubConfig
+                }
               >
                 Vazgeç
               </Button>
               <Button
                 type="submit"
                 className="bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
-                disabled={isCreating || isLinkingOwner || isUpdatingAmazonAdsConfig || isUpdatingSocialMediaConfig}
+                disabled={
+                  isCreating ||
+                  isLinkingOwner ||
+                  isUpdatingAmazonAdsConfig ||
+                  isUpdatingSocialMediaConfig ||
+                  isUpdatingGrowthHubConfig
+                }
               >
-                {isCreating || isLinkingOwner || isUpdatingAmazonAdsConfig || isUpdatingSocialMediaConfig
+                {isCreating ||
+                isLinkingOwner ||
+                isUpdatingAmazonAdsConfig ||
+                isUpdatingSocialMediaConfig ||
+                isUpdatingGrowthHubConfig
                   ? "Kaydediliyor..."
                   : "Müşteri Oluştur"}
               </Button>
@@ -1186,23 +1310,47 @@ export function Clients() {
                 idPrefix="edit-client"
                 form={editForm}
                 onChange={updateEditForm}
-                disabled={isUpdating || isUpdatingAmazonAdsConfig || isUpdatingSocialMediaConfig || isFetchingEditSocialMediaConfig}
+                disabled={
+                  isUpdating ||
+                  isUpdatingAmazonAdsConfig ||
+                  isUpdatingSocialMediaConfig ||
+                  isUpdatingGrowthHubConfig ||
+                  isFetchingEditSocialMediaConfig ||
+                  isFetchingEditGrowthHubConfig
+                }
               />
               <DialogFooter>
                 <Button
                   type="button"
                   variant="outline"
                   onClick={closeEditDialog}
-                  disabled={isUpdating || isUpdatingAmazonAdsConfig || isUpdatingSocialMediaConfig || isFetchingEditSocialMediaConfig}
+                  disabled={
+                    isUpdating ||
+                    isUpdatingAmazonAdsConfig ||
+                    isUpdatingSocialMediaConfig ||
+                    isUpdatingGrowthHubConfig ||
+                    isFetchingEditSocialMediaConfig ||
+                    isFetchingEditGrowthHubConfig
+                  }
                 >
                   Vazgeç
                 </Button>
                 <Button
                   type="submit"
                   className="bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
-                  disabled={isUpdating || isUpdatingAmazonAdsConfig || isUpdatingSocialMediaConfig || isFetchingEditSocialMediaConfig}
+                  disabled={
+                    isUpdating ||
+                    isUpdatingAmazonAdsConfig ||
+                    isUpdatingSocialMediaConfig ||
+                    isUpdatingGrowthHubConfig ||
+                    isFetchingEditSocialMediaConfig ||
+                    isFetchingEditGrowthHubConfig
+                  }
                 >
-                  {isUpdating || isUpdatingAmazonAdsConfig || isUpdatingSocialMediaConfig
+                  {isUpdating ||
+                  isUpdatingAmazonAdsConfig ||
+                  isUpdatingSocialMediaConfig ||
+                  isUpdatingGrowthHubConfig
                     ? "Kaydediliyor..."
                     : "Değişiklikleri Kaydet"}
                 </Button>
@@ -1441,6 +1589,15 @@ function ClientFormFields({
         }}
       />
 
+      {isGrowthHubSelected(form.purchasedServices) && (
+        <GrowthHubConfigFields
+          idPrefix={idPrefix}
+          form={form}
+          disabled={disabled}
+          onChange={onChange}
+        />
+      )}
+
       {isAmazonAdsSelected(form.purchasedServices) && (
         <AmazonAdsConfigFields
           idPrefix={idPrefix}
@@ -1575,6 +1732,122 @@ function ServiceCheckboxGroup({
             </label>
           );
         })}
+      </div>
+    </fieldset>
+  );
+}
+
+function GrowthHubConfigFields({
+  idPrefix,
+  form,
+  disabled,
+  onChange,
+}: {
+  idPrefix: string;
+  form: ClientFormState;
+  disabled: boolean;
+  onChange: (field: ClientFormField, value: ClientFormValue) => void;
+}) {
+  return (
+    <fieldset className="space-y-3 rounded-lg border border-[#AAFF01]/20 bg-[#202020]/60 p-3">
+      <legend className="px-1 text-sm font-medium text-white">Growth Hub Yapılandırması</legend>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor={`${idPrefix}-growth-primary-goal`}>Primary Goal</Label>
+          <SelectControl
+            id={`${idPrefix}-growth-primary-goal`}
+            ariaLabel="Growth Hub Primary Goal"
+            value={form.growthPrimaryGoal}
+            onChange={(value) => onChange("growthPrimaryGoal", value as GrowthHubGoalState)}
+            disabled={disabled}
+          >
+            <option value="">Seçilmedi</option>
+            {GROWTH_HUB_GOAL_OPTIONS.map((goal) => (
+              <option key={goal.value} value={goal.value}>
+                {goal.label}
+              </option>
+            ))}
+          </SelectControl>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${idPrefix}-growth-reporting-day`}>Reporting Day</Label>
+          <Input
+            id={`${idPrefix}-growth-reporting-day`}
+            value={form.growthReportingDay}
+            onChange={(event) => onChange("growthReportingDay", event.target.value)}
+            className="border-white/[0.08] bg-[#1A1A1A]"
+            placeholder="MONDAY"
+            maxLength={40}
+            disabled={disabled}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${idPrefix}-growth-target-leads`}>Target Leads</Label>
+          <Input
+            id={`${idPrefix}-growth-target-leads`}
+            type="number"
+            min="0"
+            step="1"
+            value={form.growthTargetLeads}
+            onChange={(event) => onChange("growthTargetLeads", event.target.value)}
+            className="border-white/[0.08] bg-[#1A1A1A]"
+            placeholder="320"
+            disabled={disabled}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${idPrefix}-growth-target-roas`}>Target ROAS</Label>
+          <Input
+            id={`${idPrefix}-growth-target-roas`}
+            type="number"
+            min="0"
+            step="0.01"
+            value={form.growthTargetRoas}
+            onChange={(event) => onChange("growthTargetRoas", event.target.value)}
+            className="border-white/[0.08] bg-[#1A1A1A]"
+            placeholder="4.5"
+            disabled={disabled}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${idPrefix}-growth-target-cpa`}>Target CPA</Label>
+          <Input
+            id={`${idPrefix}-growth-target-cpa`}
+            type="number"
+            min="0"
+            step="0.01"
+            value={form.growthTargetCpa}
+            onChange={(event) => onChange("growthTargetCpa", event.target.value)}
+            className="border-white/[0.08] bg-[#1A1A1A]"
+            placeholder="125"
+            disabled={disabled}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${idPrefix}-growth-target-revenue`}>Target Revenue</Label>
+          <Input
+            id={`${idPrefix}-growth-target-revenue`}
+            type="number"
+            min="0"
+            step="0.01"
+            value={form.growthTargetRevenue}
+            onChange={(event) => onChange("growthTargetRevenue", event.target.value)}
+            className="border-white/[0.08] bg-[#1A1A1A]"
+            placeholder="500000"
+            disabled={disabled}
+          />
+        </div>
+        <div className="space-y-2 sm:col-span-2">
+          <Label htmlFor={`${idPrefix}-growth-notes`}>Notes</Label>
+          <Textarea
+            id={`${idPrefix}-growth-notes`}
+            value={form.growthNotes}
+            onChange={(event) => onChange("growthNotes", event.target.value)}
+            className="min-h-24 border-white/[0.08] bg-[#1A1A1A]"
+            maxLength={2000}
+            disabled={disabled}
+          />
+        </div>
       </div>
     </fieldset>
   );
@@ -2360,6 +2633,18 @@ function validateClientForm(
     return "En az bir satın alınan hizmet seçin.";
   }
 
+  if (isGrowthHubSelected(form.purchasedServices)) {
+    const growthHubError =
+      validateOptionalNonNegativeNumber(form.growthTargetLeads, "Target Leads", true) ??
+      validateOptionalNonNegativeNumber(form.growthTargetRoas, "Target ROAS") ??
+      validateOptionalNonNegativeNumber(form.growthTargetCpa, "Target CPA") ??
+      validateOptionalNonNegativeNumber(form.growthTargetRevenue, "Target Revenue");
+
+    if (growthHubError) {
+      return growthHubError;
+    }
+  }
+
   if (!includeOwnerFields || form.ownerMode === "NONE") {
     return null;
   }
@@ -2462,6 +2747,26 @@ function buildSocialMediaConfigPayload(
   };
 }
 
+function buildGrowthHubConfigPayload(
+  form: ClientFormState,
+): UpdateAdminClientGrowthHubConfigRequest | null {
+  if (!isGrowthHubSelected(form.purchasedServices)) {
+    return null;
+  }
+
+  const payload: UpdateAdminClientGrowthHubConfigRequest = {
+    primaryGoal: form.growthPrimaryGoal || null,
+    targetLeads: parseOptionalNumber(form.growthTargetLeads, true),
+    targetRoas: parseOptionalNumber(form.growthTargetRoas),
+    targetCpa: parseOptionalNumber(form.growthTargetCpa),
+    targetRevenue: parseOptionalNumber(form.growthTargetRevenue),
+    reportingDay: normalizeNullableText(form.growthReportingDay),
+    notes: normalizeNullableText(form.growthNotes),
+  };
+
+  return hasMeaningfulGrowthHubPayload(payload) ? payload : null;
+}
+
 function buildOwnerPayload(form: ClientFormState): CreateOrLinkClientOwnerRequest | null {
   if (form.ownerMode === "CREATE") {
     return {
@@ -2504,6 +2809,10 @@ function isAmazonAdsSelected(selectedServices: ServiceKey[]): boolean {
   return selectedServices.includes("amazon-ads");
 }
 
+function isGrowthHubSelected(selectedServices: ServiceKey[]): boolean {
+  return selectedServices.includes("growth-hub");
+}
+
 function isSocialMediaSelected(selectedServices: ServiceKey[]): boolean {
   return selectedServices.includes("social-media");
 }
@@ -2529,6 +2838,42 @@ function normalizeNullableText(value: string): string | null {
   return normalizedValue.length > 0 ? normalizedValue : null;
 }
 
+function parseOptionalNumber(value: string, integerOnly = false): number | null {
+  const normalizedValue = value.trim();
+  if (normalizedValue.length === 0) {
+    return null;
+  }
+
+  const parsed = Number(normalizedValue);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+
+  return integerOnly ? Math.trunc(parsed) : parsed;
+}
+
+function validateOptionalNonNegativeNumber(
+  value: string,
+  label: string,
+  integerOnly = false,
+): string | null {
+  const normalizedValue = value.trim();
+  if (normalizedValue.length === 0) {
+    return null;
+  }
+
+  const parsed = Number(normalizedValue);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return `${label} sıfır veya daha büyük bir sayı olmalı.`;
+  }
+
+  if (integerOnly && !Number.isInteger(parsed)) {
+    return `${label} tam sayı olmalı.`;
+  }
+
+  return null;
+}
+
 function normalizeSocialMediaHashtags(value: string): string[] {
   return value
     .split(",")
@@ -2552,6 +2897,34 @@ function socialMediaConfigToFormFields(
     socialHashtags: config.hashtags.join(", "),
     socialNotes: config.notes ?? "",
   };
+}
+
+function growthHubConfigToFormFields(
+  config: AdminClientGrowthHubConfig,
+): Partial<ClientFormState> {
+  return {
+    growthPrimaryGoal: config.primaryGoal ?? "",
+    growthTargetLeads: config.targetLeads === null ? "" : String(config.targetLeads),
+    growthTargetRoas: config.targetRoas === null ? "" : String(config.targetRoas),
+    growthTargetCpa: config.targetCpa === null ? "" : String(config.targetCpa),
+    growthTargetRevenue: config.targetRevenue === null ? "" : String(config.targetRevenue),
+    growthReportingDay: config.reportingDay ?? "",
+    growthNotes: config.notes ?? "",
+  };
+}
+
+function hasMeaningfulGrowthHubPayload(
+  payload: UpdateAdminClientGrowthHubConfigRequest,
+): boolean {
+  return [
+    payload.primaryGoal,
+    payload.targetLeads,
+    payload.targetRoas,
+    payload.targetCpa,
+    payload.targetRevenue,
+    payload.reportingDay,
+    payload.notes,
+  ].some((value) => value !== null && value !== undefined && value !== "");
 }
 
 function getMetricValue(value: number, isLoading: boolean, isError: boolean): string {

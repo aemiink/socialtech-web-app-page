@@ -213,6 +213,16 @@ export type SocialMediaGoal =
   | "REPUTATION"
   | "MIXED";
 
+export type GrowthHubGoal =
+  | "LEAD_GENERATION"
+  | "ECOMMERCE_SALES"
+  | "BRAND_AWARENESS"
+  | "APP_GROWTH"
+  | "RETENTION"
+  | "MIXED";
+
+export type GrowthHubStatus = "ACTIVE" | "PAUSED" | "ON_HOLD";
+
 export type AmazonAdsRegion = "NA" | "EU" | "FE";
 export type AmazonAdsProductType =
   | "SPONSORED_PRODUCTS"
@@ -361,6 +371,33 @@ export type UpdateAdminClientSocialMediaConfigRequest = {
   lastSyncAt?: string | null;
   syncError?: string | null;
   notes?: string | null;
+};
+
+export type AdminClientGrowthHubConfig = {
+  id: string;
+  clientProfileId: string;
+  hasActiveService: boolean;
+  primaryGoal: GrowthHubGoal | null;
+  targetLeads: number | null;
+  targetRoas: number | null;
+  targetCpa: number | null;
+  targetRevenue: number | null;
+  reportingDay: string | null;
+  notes: string | null;
+  status: GrowthHubStatus;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+export type UpdateAdminClientGrowthHubConfigRequest = {
+  primaryGoal?: GrowthHubGoal | null;
+  targetLeads?: number | null;
+  targetRoas?: number | null;
+  targetCpa?: number | null;
+  targetRevenue?: number | null;
+  reportingDay?: string | null;
+  notes?: string | null;
+  status?: GrowthHubStatus;
 };
 
 export type ConnectManualAmazonAdsRequest = {

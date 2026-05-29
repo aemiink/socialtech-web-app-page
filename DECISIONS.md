@@ -1,5 +1,45 @@
 # Architecture Decisions
 
+## 2026-05-29 - Growth Hub Faz 0 Discovery Contract (Strategic Orchestration Layer)
+
+Context:
+Meta, TikTok, Amazon ve Social Media domain modülleri backend/frontend tarafında aktif contract'lara sahipken Growth & Hub hâlâ client panelde static/mock dashboard olarak duruyordu. Google Ads için doküman/migration geçmişi ve phase contract'ları mevcut olsa da güncel `schema.prisma` ve `server/src` içinde aktif Google Ads module/model bulunmuyor. Growth Hub'ın kanal paneli gibi değil, satın alınmış hizmetlerden ve mevcut operasyon kaynaklarından stratejik büyüme özeti üreten bir orchestration layer olarak konumlandırılması gerekiyordu.
+
+Decision:
+
+- Growth Hub `GROWTH_HUB` purchased service'i üzerinden çalışacak; yeni service key açılmayacak.
+- Endpoint pattern'i mevcut ads/social convention ile hizalı olacak: admin `/admin/clients/:clientId/growth-hub/*`, assigned employee `/growth-hub/clients/:clientId/*`, own client `/clients/me/growth-hub/*`.
+- Client own endpointlerde eski draft'lardaki `/client/growth-hub/*` kullanılmayacak.
+- V1 summary mock dönmeyecek; veri yoksa null/empty/status state dönecek.
+- Source of truth olarak `ClientPurchasedService`, `Project.serviceKey`, `Task/TaskTodo`, `DeliverySprint/DeliveryRelease`, `ProjectFile`, Web App workspace records, channel-specific reports ve aktif platform summary modelleri kullanılacak.
+- `ClientApprovalRequest` modeli varsayılmayacak; approval kaynağı mevcut `Task`, `ProjectFile`, `DeliveryRelease` ve report acknowledgement task alanları olacak.
+- Meta/TikTok/Amazon/Social Media aktif adapter; Google Ads mevcut repo durumunda contract-only/future adapter olarak ele alınacak ve aktif module geri gelene kadar mock metric üretmeyecek.
+- Current assignment enum'da dedicated Growth scope olmadığı için V1 Growth Lead/Project Manager görünürlüğü `PROJECT` assignment scope + active `GROWTH_HUB` purchased service ile başlayacak.
+- Persisted `GrowthHubAction`, `GrowthHubWeeklyNote`, `GrowthHubReport` ve recommendation modelleri sonraki fazlara bırakılacak; Faz 1 summary/config foundation ve real-source read model üzerine kurulacak.
+
+Reason:
+Bu karar Growth Hub'ı mevcut NestJS/Prisma + Vite/React SPA mimarisiyle uyumlu şekilde başlatır, kanal modüllerini kopyalamadan üst seviye aggregate read-model oluşturur ve client-facing mock veriyi kaldırmak için net Faz 1/Faz 2 contract'ı sağlar.
+
+## 2026-05-29 - Growth Hub Faz 1 Backend Foundation
+
+Growth Hub Faz 0 contract'ı tamamlandıktan sonra ilk ihtiyaç, `GROWTH_HUB` purchased service'i için müşteri bazlı hedef/config saklamak ve mock olmayan summary yüzeyini mevcut operasyon/kanal tablolarından üretmekti.
+
+Faz 1 şu şekilde uygulandı:
+- `ClientGrowthHubConfig`, `GrowthHubGoal` ve `GrowthHubStatus` migration-first eklendi.
+- `server/src/growth-hub/` modülü admin, assigned employee ve own-client endpoint yüzeylerini sağlıyor: config, summary, channels, actions, activity ve admin global clients list.
+- Summary V1, yeni kanal kopyaları oluşturmadan mevcut `ClientPurchasedService`, `Project`, `Task/TaskTodo`, `ProjectFile`, `DeliveryRelease`, workspace messages, Meta/TikTok/Amazon insight tabloları, Social Media post/insight ve report acknowledgement alanlarından hesaplanıyor.
+- Google Ads aktif backend modeli olmadığı için V1'de contract-only/future adapter state olarak kalıyor.
+- Permission seed Growth Hub config/summary/actions slug'larını ekler; admin any, Project Manager assigned, client owner/member own read scope alır.
+- Admin Clients create/edit akışı `GROWTH_HUB` seçilince Growth Hub target/config alanlarını gösterir ve admin config endpointine kaydeder.
+
+Bu karar Growth Hub'ı kalıcı action/report/recommendation modellerine erken bölmeden, mevcut platform contract'ları üstünde gerçek read-model foundation ile başlatır. Faz 2 artık client paneldeki static Growth Hub dashboard'u bu own-client endpointlere taşıyabilir.
+
+Affected files:
+- `docs/growth-hub-phases/00-growth-hub-discovery-contract.md`
+- `ROAD_MAP.md`
+
+---
+
 ## 2026-05-28 - Social Media Faz 0 Discovery Contract (Organic Content Operations)
 
 Context:

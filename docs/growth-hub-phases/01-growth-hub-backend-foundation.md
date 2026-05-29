@@ -76,17 +76,29 @@ server/src/growth-hub/growth-hub.module.ts
 server/src/growth-hub/growth-hub.service.ts
 server/src/growth-hub/growth-hub-summary.service.ts
 server/src/growth-hub/admin-growth-hub.controller.ts
+server/src/growth-hub/assigned-growth-hub.controller.ts
 server/src/growth-hub/client-growth-hub.controller.ts
 server/src/growth-hub/dto/*
 ```
 
 ## Backend Endpointler
 
-Admin / Employee:
+Admin:
+
+```http
+GET /api/v1/admin/growth-hub/clients
+GET /api/v1/admin/clients/:clientId/growth-hub/config
+PATCH /api/v1/admin/clients/:clientId/growth-hub/config
+GET /api/v1/admin/clients/:clientId/growth-hub/summary
+GET /api/v1/admin/clients/:clientId/growth-hub/channels
+GET /api/v1/admin/clients/:clientId/growth-hub/actions
+GET /api/v1/admin/clients/:clientId/growth-hub/activity
+```
+
+Assigned employee:
 
 ```http
 GET /api/v1/growth-hub/clients/:clientId/config
-PATCH /api/v1/growth-hub/clients/:clientId/config
 GET /api/v1/growth-hub/clients/:clientId/summary
 GET /api/v1/growth-hub/clients/:clientId/channels
 GET /api/v1/growth-hub/clients/:clientId/actions
@@ -96,11 +108,11 @@ GET /api/v1/growth-hub/clients/:clientId/activity
 Client:
 
 ```http
-GET /api/v1/client/growth-hub/config
-GET /api/v1/client/growth-hub/summary
-GET /api/v1/client/growth-hub/channels
-GET /api/v1/client/growth-hub/actions
-GET /api/v1/client/growth-hub/activity
+GET /api/v1/clients/me/growth-hub/config
+GET /api/v1/clients/me/growth-hub/summary
+GET /api/v1/clients/me/growth-hub/channels
+GET /api/v1/clients/me/growth-hub/actions
+GET /api/v1/clients/me/growth-hub/activity
 ```
 
 ## Summary Kaynakları
@@ -112,11 +124,12 @@ Growth Hub summary V1’de şu kaynaklardan hesaplanmalı:
 - Task / TaskTodo
 - DeliverySprint
 - DeliveryRelease
-- ClientApprovalRequest
+- mevcut Task / ProjectFile / DeliveryRelease approval alanları
 - ProjectFile
 - Reports, mevcutsa
 - Web APP workspace reports/messages, varsa
-- Future ads platform summaries, varsa
+- Meta / TikTok / Amazon / Social Media aktif kaynakları
+- Google Ads contract-only / future adapter state
 - Yoksa kanal bazında `NO_DATA` / `WAITING_CONFIG` state
 
 Mock veri dönme.
@@ -143,9 +156,12 @@ Yeni permissionlar:
 growthHub.config.read.any
 growthHub.config.manage.any
 growthHub.config.read.assigned
+growthHub.config.read.own
 growthHub.summary.read.any
 growthHub.summary.read.assigned
+growthHub.summary.read.own
 growthHub.actions.read.assigned
+growthHub.actions.read.own
 ```
 
 Admin:
@@ -166,7 +182,11 @@ growthHub.actions.read.assigned
 
 Client:
 
-- own client scope endpoint üzerinden readonly.
+```text
+growthHub.config.read.own
+growthHub.summary.read.own
+growthHub.actions.read.own
+```
 
 ## Admin Client Create/Edit Entegrasyonu
 

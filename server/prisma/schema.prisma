@@ -60,6 +60,21 @@ enum PurchasedServiceStatus {
   INACTIVE
 }
 
+enum GrowthHubGoal {
+  LEAD_GENERATION
+  ECOMMERCE_SALES
+  BRAND_AWARENESS
+  APP_GROWTH
+  RETENTION
+  MIXED
+}
+
+enum GrowthHubStatus {
+  ACTIVE
+  PAUSED
+  ON_HOLD
+}
+
 enum MetaAdsConnectionStatus {
   NOT_CONNECTED
   PENDING
@@ -594,6 +609,7 @@ model ClientProfile {
   users                   User[]
   employeeAssignments     EmployeeClientAssignment[]
   purchasedServices       ClientPurchasedService[]
+  growthHubConfig         ClientGrowthHubConfig?
   metaAdsConfig           ClientMetaAdsConfig?
   metaAdsCredential       ClientMetaAdsCredential?
   metaAdsInsights         MetaAdsDailyInsight[]
@@ -618,6 +634,27 @@ model ClientProfile {
   convertedCrmLeads       CrmLead[]                  @relation("CrmLeadConvertedClient")
 
   @@index([status])
+}
+
+model ClientGrowthHubConfig {
+  id              String          @id @default(uuid()) @db.Uuid
+  clientProfileId String          @unique @db.Uuid
+  primaryGoal     GrowthHubGoal?
+  targetLeads     Int?
+  targetRoas      Decimal?        @db.Decimal(18, 6)
+  targetCpa       Decimal?        @db.Decimal(18, 6)
+  targetRevenue   Decimal?        @db.Decimal(18, 6)
+  reportingDay    String?
+  notes           String?
+  status          GrowthHubStatus @default(ACTIVE)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([primaryGoal])
+  @@index([updatedAt])
 }
 
 model ClientMetaAdsConfig {

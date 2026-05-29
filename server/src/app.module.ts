@@ -13,6 +13,7 @@ import { envValidationSchema } from "./config/env.validation";
 import { DatabaseModule } from "./database/database.module";
 import { DeliveryModule } from "./delivery/delivery.module";
 import { CrmModule } from "./crm/crm.module";
+import { GrowthHubModule } from "./growth-hub/growth-hub.module";
 import { HealthModule } from "./health/health.module";
 import { GithubModule } from "./integrations/github/github.module";
 import { MetaAdsModule } from "./meta-ads/meta-ads.module";
@@ -46,6 +47,7 @@ import { WebAppWorkspaceModule } from "./web-app-workspace/web-app-workspace.mod
     MetaAdsModule,
     TikTokAdsModule,
     AmazonAdsModule,
+    GrowthHubModule,
     SocialMediaModule,
     ProjectFilesModule,
     DeliveryModule,

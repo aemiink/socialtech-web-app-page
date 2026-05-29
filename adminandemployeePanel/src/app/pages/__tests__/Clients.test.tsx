@@ -12,6 +12,7 @@ import type {
 } from "../../features/adminUsers/adminUsersTypes";
 import type { AuthUserProfile } from "../../features/auth/authTypes";
 import type {
+  AdminClientGrowthHubConfig,
   AdminClientSocialMediaConfig,
   ClientProfile,
   ClientsListQuery,
@@ -19,6 +20,7 @@ import type {
   CreateAdminClientRequest,
   CreateOrLinkClientOwnerRequest,
   UpdateAdminClientAmazonAdsConfigRequest,
+  UpdateAdminClientGrowthHubConfigRequest,
   UpdateAdminClientRequest,
   UpdateAdminClientSocialMediaConfigRequest,
 } from "../../features/clients/clientsTypes";
@@ -60,6 +62,15 @@ type SocialMediaConfigQueryResult = {
   refetch: () => void;
 };
 
+type GrowthHubConfigQueryResult = {
+  data?: AdminClientGrowthHubConfig;
+  error?: unknown;
+  isError: boolean;
+  isLoading: boolean;
+  isFetching: boolean;
+  refetch: () => void;
+};
+
 type CreateAdminClientTrigger = (
   payload: CreateAdminClientRequest,
 ) => MutationResponse<ClientProfile>;
@@ -81,6 +92,11 @@ type UpdateAdminClientSocialMediaConfigTrigger = (payload: {
   body: UpdateAdminClientSocialMediaConfigRequest;
 }) => MutationResponse<AdminClientSocialMediaConfig>;
 
+type UpdateAdminClientGrowthHubConfigTrigger = (payload: {
+  clientId: string;
+  body: UpdateAdminClientGrowthHubConfigRequest;
+}) => MutationResponse<AdminClientGrowthHubConfig>;
+
 type CreateOrLinkClientOwnerTrigger = (payload: {
   clientId: string;
   body: CreateOrLinkClientOwnerRequest;
@@ -97,6 +113,9 @@ const mockUseGetAdminUsersQuery = vi.fn<
 const mockUseGetAdminClientSocialMediaConfigQuery = vi.fn<
   (clientId: string, options?: { skip?: boolean }) => SocialMediaConfigQueryResult
 >();
+const mockUseGetAdminClientGrowthHubConfigQuery = vi.fn<
+  (clientId: string, options?: { skip?: boolean }) => GrowthHubConfigQueryResult
+>();
 const mockUseCreateAdminClientMutation = vi.fn<
   () => [CreateAdminClientTrigger, { isLoading: boolean }]
 >();
@@ -108,6 +127,9 @@ const mockUseUpdateAdminClientAmazonAdsConfigMutation = vi.fn<
 >();
 const mockUseUpdateAdminClientSocialMediaConfigMutation = vi.fn<
   () => [UpdateAdminClientSocialMediaConfigTrigger, { isLoading: boolean }]
+>();
+const mockUseUpdateAdminClientGrowthHubConfigMutation = vi.fn<
+  () => [UpdateAdminClientGrowthHubConfigTrigger, { isLoading: boolean }]
 >();
 const mockUseDeactivateAdminClientMutation = vi.fn<
   () => [StatusClientTrigger, { isLoading: boolean }]
@@ -134,12 +156,18 @@ vi.mock("../../features/clients/clientsApi", () => ({
     clientId: string,
     options?: { skip?: boolean },
   ) => mockUseGetAdminClientSocialMediaConfigQuery(clientId, options),
+  useGetAdminClientGrowthHubConfigQuery: (
+    clientId: string,
+    options?: { skip?: boolean },
+  ) => mockUseGetAdminClientGrowthHubConfigQuery(clientId, options),
   useCreateAdminClientMutation: () => mockUseCreateAdminClientMutation(),
   useUpdateAdminClientMutation: () => mockUseUpdateAdminClientMutation(),
   useUpdateAdminClientAmazonAdsConfigMutation: () =>
     mockUseUpdateAdminClientAmazonAdsConfigMutation(),
   useUpdateAdminClientSocialMediaConfigMutation: () =>
     mockUseUpdateAdminClientSocialMediaConfigMutation(),
+  useUpdateAdminClientGrowthHubConfigMutation: () =>
+    mockUseUpdateAdminClientGrowthHubConfigMutation(),
   useDeactivateAdminClientMutation: () => mockUseDeactivateAdminClientMutation(),
   useActivateAdminClientMutation: () => mockUseActivateAdminClientMutation(),
   useCreateOrLinkClientOwnerMutation: () => mockUseCreateOrLinkClientOwnerMutation(),
@@ -252,6 +280,22 @@ const defaultSocialMediaConfig: AdminClientSocialMediaConfig = {
   updatedAt: "2026-04-30T10:00:00.000Z",
 };
 
+const defaultGrowthHubConfig: AdminClientGrowthHubConfig = {
+  id: "55555555-5555-4555-8555-555555555555",
+  clientProfileId: client.id,
+  hasActiveService: true,
+  primaryGoal: "ECOMMERCE_SALES",
+  targetLeads: 320,
+  targetRoas: 4.5,
+  targetCpa: 125,
+  targetRevenue: 500000,
+  reportingDay: "MONDAY",
+  notes: "Haftalık büyüme ritmi.",
+  status: "ACTIVE",
+  createdAt: "2026-04-30T10:00:00.000Z",
+  updatedAt: "2026-04-30T10:00:00.000Z",
+};
+
 function setupListState(overrides: Partial<ClientsQueryResult> = {}) {
   mockUseGetClientsQuery.mockReturnValue({
     data: defaultClientsResponse,
@@ -279,6 +323,18 @@ function setupOwnerPickerState(overrides: Partial<AdminUsersQueryResult> = {}) {
 
 function setupSocialMediaConfigState(overrides: Partial<SocialMediaConfigQueryResult> = {}) {
   mockUseGetAdminClientSocialMediaConfigQuery.mockReturnValue({
+    data: undefined,
+    error: undefined,
+    isError: false,
+    isLoading: false,
+    isFetching: false,
+    refetch: vi.fn(),
+    ...overrides,
+  });
+}
+
+function setupGrowthHubConfigState(overrides: Partial<GrowthHubConfigQueryResult> = {}) {
+  mockUseGetAdminClientGrowthHubConfigQuery.mockReturnValue({
     data: undefined,
     error: undefined,
     isError: false,
@@ -347,6 +403,22 @@ function setupMutationState() {
       }),
     }));
 
+  const updateAdminClientGrowthHubConfig =
+    vi.fn<UpdateAdminClientGrowthHubConfigTrigger>(({ clientId, body }) => ({
+      unwrap: async () => ({
+        ...defaultGrowthHubConfig,
+        clientProfileId: clientId,
+        primaryGoal: body.primaryGoal ?? null,
+        targetLeads: body.targetLeads ?? null,
+        targetRoas: body.targetRoas ?? null,
+        targetCpa: body.targetCpa ?? null,
+        targetRevenue: body.targetRevenue ?? null,
+        reportingDay: body.reportingDay ?? null,
+        notes: body.notes ?? null,
+        status: body.status ?? "ACTIVE",
+      }),
+    }));
+
   const deactivateAdminClient = vi.fn<StatusClientTrigger>((id) => ({
     unwrap: async () => ({
       ...activeClient,
@@ -407,6 +479,10 @@ function setupMutationState() {
     updateAdminClientSocialMediaConfig,
     { isLoading: false },
   ]);
+  mockUseUpdateAdminClientGrowthHubConfigMutation.mockReturnValue([
+    updateAdminClientGrowthHubConfig,
+    { isLoading: false },
+  ]);
   mockUseDeactivateAdminClientMutation.mockReturnValue([
     deactivateAdminClient,
     { isLoading: false },
@@ -426,6 +502,7 @@ function setupMutationState() {
     updateAdminClient,
     updateAdminClientAmazonAdsConfig,
     updateAdminClientSocialMediaConfig,
+    updateAdminClientGrowthHubConfig,
     deactivateAdminClient,
     activateAdminClient,
     createOrLinkClientOwner,
@@ -578,6 +655,7 @@ describe("Clients", () => {
     setupListState();
     setupOwnerPickerState();
     setupSocialMediaConfigState();
+    setupGrowthHubConfigState();
     setupMutationState();
   });
 
@@ -1071,6 +1149,60 @@ describe("Clients", () => {
         toneOfVoice: null,
         hashtags: ["#marka", "#growth"],
         notes: "Topluluk odaklı ilerle.",
+      },
+    });
+  });
+
+  it("submits growth hub config when Growth Hub service is selected", async () => {
+    const { createAdminClient, updateAdminClientGrowthHubConfig } = setupMutationState();
+
+    renderClients();
+    const dialog = openCreateDialog();
+
+    fireEvent.change(within(dialog).getByLabelText("Müşteri Adı"), {
+      target: { value: "Growth Marka" },
+    });
+    fireEvent.click(within(dialog).getByLabelText("Growth & Hub"));
+    fireEvent.change(within(dialog).getByLabelText("Growth Hub Primary Goal"), {
+      target: { value: "ECOMMERCE_SALES" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Target Leads"), {
+      target: { value: "320" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Target ROAS"), {
+      target: { value: "4.5" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Target CPA"), {
+      target: { value: "125" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Target Revenue"), {
+      target: { value: "500000" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Reporting Day"), {
+      target: { value: " MONDAY " },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Notes"), {
+      target: { value: "Haftalık büyüme hedefi." },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Müşteri Oluştur" }));
+
+    await waitFor(() => {
+      expect(createAdminClient).toHaveBeenCalledTimes(1);
+    });
+    expect(createAdminClient.mock.calls[0][0]).toMatchObject({
+      name: "Growth Marka",
+      purchasedServices: ["growth-hub"],
+    });
+    expect(updateAdminClientGrowthHubConfig).toHaveBeenCalledWith({
+      clientId: "33333333-3333-4333-8333-333333333333",
+      body: {
+        primaryGoal: "ECOMMERCE_SALES",
+        targetLeads: 320,
+        targetRoas: 4.5,
+        targetCpa: 125,
+        targetRevenue: 500000,
+        reportingDay: "MONDAY",
+        notes: "Haftalık büyüme hedefi.",
       },
     });
   });

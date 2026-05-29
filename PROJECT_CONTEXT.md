@@ -406,6 +406,35 @@ Current backend baseline includes:
   - manual auth flow tests passed (`login`, `me`, `refresh`, `logout`, `logout` sonrası `refresh=401`)
   - `server/tsconfig.build.json` uses `incremental: false` to avoid missing-module runtime issues from stale/incomplete dist output
 
+## Growth Hub Faz 1 — Backend Foundation (2026-05-29)
+
+Growth Hub Faz 0 discovery contract sonrası Growth Hub orchestration foundation uygulandı. Özet:
+- Prisma foundation: `GrowthHubGoal`, `GrowthHubStatus`, `ClientGrowthHubConfig`.
+- Backend module: `server/src/growth-hub/` admin global list, admin config read/update, admin/assigned/own summary, channels, actions ve activity endpointlerini sağlar.
+- Endpoint convention: admin `/api/v1/admin/clients/:clientId/growth-hub/*` + `/api/v1/admin/growth-hub/clients`, assigned employee `/api/v1/growth-hub/clients/:clientId/*`, own client `/api/v1/clients/me/growth-hub/*`.
+- Summary V1 mock veri dönmez; `ClientPurchasedService`, `ClientGrowthHubConfig`, `Project`, `Task`, `TaskTodo`, `ProjectFile`, `DeliveryRelease`, workspace messages, Meta/TikTok/Amazon insight tabloları, Social Media post/insight ve report acknowledgement kaynaklarından read model üretir.
+- Google Ads V1'de contract-only/future adapter state olarak kalır; aktif kaynak adapterleri Meta, TikTok, Amazon ve Social Media üzerinden okunur.
+- Permission seed: `growthHub.config.*`, `growthHub.summary.*`, `growthHub.actions.*` slug'ları eklendi; Project Manager assigned read scope alır, client owner/member own read scope alır.
+- Admin Clients create/edit formu `GROWTH_HUB` seçilince Growth Hub target/config alanlarını gösterir ve config endpointine kaydeder.
+
+Active Growth Hub endpoints:
+- `GET /api/v1/admin/growth-hub/clients`
+- `GET/PATCH /api/v1/admin/clients/:clientId/growth-hub/config`
+- `GET /api/v1/admin/clients/:clientId/growth-hub/summary`
+- `GET /api/v1/admin/clients/:clientId/growth-hub/channels`
+- `GET /api/v1/admin/clients/:clientId/growth-hub/actions`
+- `GET /api/v1/admin/clients/:clientId/growth-hub/activity`
+- `GET /api/v1/growth-hub/clients/:clientId/config`
+- `GET /api/v1/growth-hub/clients/:clientId/summary`
+- `GET /api/v1/growth-hub/clients/:clientId/channels`
+- `GET /api/v1/growth-hub/clients/:clientId/actions`
+- `GET /api/v1/growth-hub/clients/:clientId/activity`
+- `GET /api/v1/clients/me/growth-hub/config`
+- `GET /api/v1/clients/me/growth-hub/summary`
+- `GET /api/v1/clients/me/growth-hub/channels`
+- `GET /api/v1/clients/me/growth-hub/actions`
+- `GET /api/v1/clients/me/growth-hub/activity`
+
 ## TikTok Ads Faz 0 — Tamamlanan Contract (2026-05-27)
 
 TikTok Ads Faz 0 discovery tamamlandı. Detaylı karar DECISIONS.md'de mevcut. Özet:

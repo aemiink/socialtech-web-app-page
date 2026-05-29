@@ -9,6 +9,7 @@ import type {
   AdminMetaAdsSyncLogsResponse,
   AdminMetaAdsClientListItem,
   AdminMetaAdsClientListResponse,
+  AdminClientGrowthHubConfig,
   AmazonAdsCampaignsResponse,
   AmazonAdsInsightLevel,
   AmazonAdsInsightsResponse,
@@ -40,6 +41,8 @@ import type {
   ClientSummaryRecentProject,
   ClientSummaryRecentTask,
   ClientSummaryResponse,
+  GrowthHubGoal,
+  GrowthHubStatus,
   MetaAdsConnectionStatus,
   MetaAdsReportAcknowledgementStatus,
   MetaAdsReportItem,
@@ -601,6 +604,44 @@ export function normalizeAdminSocialMediaConfigResponse(
     lastSyncAt: isStringOrNull(candidate.lastSyncAt) ? candidate.lastSyncAt : null,
     syncError: isStringOrNull(candidate.syncError) ? candidate.syncError : null,
     notes: isStringOrNull(candidate.notes) ? candidate.notes : null,
+    createdAt: isStringOrNull(candidate.createdAt) ? candidate.createdAt : null,
+    updatedAt: isStringOrNull(candidate.updatedAt) ? candidate.updatedAt : null,
+  };
+}
+
+export function normalizeAdminGrowthHubConfigResponse(
+  response: unknown,
+): AdminClientGrowthHubConfig {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  if (!isRecord(candidate)) {
+    throw new Error("Growth Hub config response could not be parsed.");
+  }
+
+  return {
+    id: typeof candidate.id === "string" ? candidate.id : "",
+    clientProfileId: typeof candidate.clientProfileId === "string" ? candidate.clientProfileId : "",
+    hasActiveService:
+      typeof candidate.hasActiveService === "boolean" ? candidate.hasActiveService : false,
+    primaryGoal: normalizeGrowthHubGoal(candidate.primaryGoal),
+    targetLeads:
+      candidate.targetLeads === null || candidate.targetLeads === undefined
+        ? null
+        : Math.trunc(readNumber(candidate.targetLeads, 0)),
+    targetRoas:
+      candidate.targetRoas === null || candidate.targetRoas === undefined
+        ? null
+        : readNumber(candidate.targetRoas, 0),
+    targetCpa:
+      candidate.targetCpa === null || candidate.targetCpa === undefined
+        ? null
+        : readNumber(candidate.targetCpa, 0),
+    targetRevenue:
+      candidate.targetRevenue === null || candidate.targetRevenue === undefined
+        ? null
+        : readNumber(candidate.targetRevenue, 0),
+    reportingDay: isStringOrNull(candidate.reportingDay) ? candidate.reportingDay : null,
+    notes: isStringOrNull(candidate.notes) ? candidate.notes : null,
+    status: normalizeGrowthHubStatus(candidate.status),
     createdAt: isStringOrNull(candidate.createdAt) ? candidate.createdAt : null,
     updatedAt: isStringOrNull(candidate.updatedAt) ? candidate.updatedAt : null,
   };
@@ -2054,6 +2095,29 @@ function normalizeSocialMediaGoal(value: unknown): SocialMediaGoal | null {
   }
 
   return null;
+}
+
+function normalizeGrowthHubGoal(value: unknown): GrowthHubGoal | null {
+  if (
+    value === "LEAD_GENERATION" ||
+    value === "ECOMMERCE_SALES" ||
+    value === "BRAND_AWARENESS" ||
+    value === "APP_GROWTH" ||
+    value === "RETENTION" ||
+    value === "MIXED"
+  ) {
+    return value;
+  }
+
+  return null;
+}
+
+function normalizeGrowthHubStatus(value: unknown): GrowthHubStatus {
+  if (value === "PAUSED" || value === "ON_HOLD") {
+    return value;
+  }
+
+  return "ACTIVE";
 }
 
 function normalizeAmazonAdsProfile(value: unknown): AmazonAdsProfileSummary | null {

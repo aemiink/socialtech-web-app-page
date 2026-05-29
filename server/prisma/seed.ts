@@ -10,6 +10,8 @@ import {
   DeliveryReleaseStatus,
   DeliverySprintStatus,
   EmployeeClientAssignmentScope,
+  GrowthHubGoal,
+  GrowthHubStatus,
   Priority,
   ProjectStatus,
   PurchasedServiceKey,
@@ -57,6 +59,18 @@ type ClientPurchasedServiceSeed = {
   serviceKey: PurchasedServiceKey;
   status: PurchasedServiceStatus;
   startedAt?: Date;
+};
+
+type GrowthHubConfigSeed = {
+  clientSlug: string;
+  primaryGoal?: GrowthHubGoal;
+  targetLeads?: number;
+  targetRoas?: string;
+  targetCpa?: string;
+  targetRevenue?: string;
+  reportingDay?: string;
+  notes?: string;
+  status?: GrowthHubStatus;
 };
 
 type ProjectSeed = {
@@ -299,6 +313,20 @@ const CLIENT_PURCHASED_SERVICE_SEEDS: ClientPurchasedServiceSeed[] = [
     serviceKey: PurchasedServiceKey.WEB_MOBILE_DESIGN,
     status: PurchasedServiceStatus.PAUSED,
     startedAt: new Date("2026-05-10T00:00:00.000Z"),
+  },
+];
+
+const GROWTH_HUB_CONFIG_SEEDS: GrowthHubConfigSeed[] = [
+  {
+    clientSlug: "acme-e-ticaret",
+    primaryGoal: GrowthHubGoal.ECOMMERCE_SALES,
+    targetLeads: 320,
+    targetRoas: "4.500000",
+    targetCpa: "125.000000",
+    targetRevenue: "500000.000000",
+    reportingDay: "MONDAY",
+    notes: "Growth Hub launch hedefleri ve haftalık raporlama cadence'i.",
+    status: GrowthHubStatus.ACTIVE,
   },
 ];
 
@@ -730,6 +758,15 @@ const PERMISSIONS: PermissionSeed[] = [
   { slug: "crm.leads.convert", description: "Convert CRM leads to client profiles." },
   { slug: "crm.leadScan.read", description: "Read CRM lead scan logs." },
   { slug: "crm.leadScan.run", description: "Run CRM lead scans." },
+  { slug: "growthHub.config.read.any", description: "Read all Growth Hub configurations." },
+  { slug: "growthHub.config.manage.any", description: "Create and manage all Growth Hub configurations." },
+  { slug: "growthHub.config.read.assigned", description: "Read Growth Hub configurations in assigned scope." },
+  { slug: "growthHub.config.read.own", description: "Read own Growth Hub configuration." },
+  { slug: "growthHub.summary.read.any", description: "Read all Growth Hub summaries." },
+  { slug: "growthHub.summary.read.assigned", description: "Read Growth Hub summaries in assigned scope." },
+  { slug: "growthHub.summary.read.own", description: "Read own Growth Hub summary." },
+  { slug: "growthHub.actions.read.assigned", description: "Read assigned Growth Hub client actions." },
+  { slug: "growthHub.actions.read.own", description: "Read own Growth Hub client actions." },
   { slug: "metaAds.config.read.any", description: "Read all Meta Ads configurations." },
   { slug: "metaAds.config.manage.any", description: "Create and manage all Meta Ads configurations." },
   { slug: "metaAds.config.read.assigned", description: "Read Meta Ads configurations in assigned scope." },
@@ -815,6 +852,9 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
   PROJECT_MANAGER: [
     "dashboard.read",
     "clients.read.assigned",
+    "growthHub.config.read.assigned",
+    "growthHub.summary.read.assigned",
+    "growthHub.actions.read.assigned",
     "metaAds.config.read.assigned",
     "tiktokAds.config.read.assigned",
     "amazonAds.config.read.assigned",
@@ -1053,6 +1093,9 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
   CLIENT_OWNER: [
     "portal.read.own",
     "clients.read.own",
+    "growthHub.config.read.own",
+    "growthHub.summary.read.own",
+    "growthHub.actions.read.own",
     "metaAds.config.read.own",
     "tiktokAds.config.read.own",
     "amazonAds.config.read.own",
@@ -1077,6 +1120,9 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
   CLIENT_MEMBER: [
     "portal.read.own",
     "clients.read.own",
+    "growthHub.config.read.own",
+    "growthHub.summary.read.own",
+    "growthHub.actions.read.own",
     "metaAds.config.read.own",
     "tiktokAds.config.read.own",
     "amazonAds.config.read.own",
@@ -1326,6 +1372,40 @@ async function seedClientPurchasedServices(
         serviceKey: service.serviceKey,
         status: service.status,
         startedAt: service.startedAt ?? null,
+      },
+    });
+  }
+}
+
+async function seedGrowthHubConfigs(clientProfileIdBySlug: Map<string, string>): Promise<void> {
+  for (const config of GROWTH_HUB_CONFIG_SEEDS) {
+    const clientProfileId = clientProfileIdBySlug.get(config.clientSlug);
+    if (!clientProfileId) {
+      throw new Error(`Missing client profile for Growth Hub config: ${config.clientSlug}`);
+    }
+
+    await prisma.clientGrowthHubConfig.upsert({
+      where: { clientProfileId },
+      update: {
+        primaryGoal: config.primaryGoal ?? null,
+        targetLeads: config.targetLeads ?? null,
+        targetRoas: config.targetRoas ?? null,
+        targetCpa: config.targetCpa ?? null,
+        targetRevenue: config.targetRevenue ?? null,
+        reportingDay: config.reportingDay ?? null,
+        notes: config.notes ?? null,
+        status: config.status ?? GrowthHubStatus.ACTIVE,
+      },
+      create: {
+        clientProfileId,
+        primaryGoal: config.primaryGoal ?? null,
+        targetLeads: config.targetLeads ?? null,
+        targetRoas: config.targetRoas ?? null,
+        targetCpa: config.targetCpa ?? null,
+        targetRevenue: config.targetRevenue ?? null,
+        reportingDay: config.reportingDay ?? null,
+        notes: config.notes ?? null,
+        status: config.status ?? GrowthHubStatus.ACTIVE,
       },
     });
   }
@@ -1897,6 +1977,7 @@ async function main(): Promise<void> {
   await seedRolePermissions(permissionIdBySlug);
   const clientProfileIdBySlug = await seedClientProfiles();
   await seedClientPurchasedServices(clientProfileIdBySlug);
+  await seedGrowthHubConfigs(clientProfileIdBySlug);
   await seedUsers(clientProfileIdBySlug);
   await seedEmployeeClientAssignments(clientProfileIdBySlug);
   const projectIdByKey = await seedProjects(clientProfileIdBySlug);

@@ -34,6 +34,14 @@
 - Cloudinary asset malware scanning/quarantine flow
 - Advanced revision inbox/routing and reminder notifications
 - Social Media V2 API publishing integration (Instagram/Facebook Graph API publishing first per `docs/social-media-phases/10-social-media-v2-integration-backlog.md`; insight sync follows as V2.1; TikTok/LinkedIn publishing support subject to official API permissions)
+- Growth Hub Faz 2: Client Panel API-driven dashboard (mock/static Growth Hub dashboard removal, RTK Query feature, loading/error/empty states)
+- Growth Hub Faz 3: Admin global panel + ClientDetail Growth Hub section
+- Growth Hub Faz 4: Employee Growth Hub workspace for Project Manager/Growth Lead assigned scope
+- Growth Hub Faz 5: Growth actions + weekly notes persistence and client-visible filtering
+- Growth Hub Faz 6: Channel aggregation layer (Meta/TikTok/Amazon/Social active adapters, Google contract-only until active module exists)
+- Growth Hub Faz 7: Growth reports + approval/acknowledgement integration
+- Growth Hub Faz 8: Rule-based recommendation layer
+- Growth Hub Faz 9: Production hardening and visual QA
 
 ## In Progress
 
@@ -182,6 +190,8 @@
 - Social Media Faz 8: Insights/reporting V1 (manual post insight snapshots, Social Media report draft/publish/ack bridge, admin/employee reporting workspace, client performance/reports views)
 - Social Media Faz 9: Production hardening (report/insight authz scope tightening, internal file leak guard, date validation coverage, UI empty/error/permission states, check/build validation)
 - Social Media Faz 10: V2 integration backlog decision (Instagram/Facebook Graph API publishing first, insight sync V2.1 follow-up, TikTok/LinkedIn subject to official API permissions)
+- Growth Hub Faz 0: Discovery contract (orchestration layer positioning, active/future channel source map, no-mock V1 summary contract, endpoint convention, role-scope matrix, Faz 1 implementation contract)
+- Growth Hub Faz 1: Backend foundation (`ClientGrowthHubConfig`, Growth Hub config/summary/channels/actions/activity endpoints, permission seed, Admin Clients create/edit config fields)
 
 ## Blocked
 
@@ -445,6 +455,14 @@ None identified.
   - V2 backlog contract added at `docs/social-media-phases/10-social-media-v2-integration-backlog.md` ✅
   - Decision: Instagram/Facebook Graph API publishing is the first V2 integration target; insight sync remains V2.1 after stable `externalPostId` mapping ✅
   - This is a documentation/roadmap-only phase; no runtime code or migration changes required ✅
+- Latest Growth Hub Faz 1 checkpoint:
+  - `server`: `npm run prisma:generate` ✅
+  - `server`: `npm run typecheck` ✅
+  - `server`: `npm run typecheck:seed` ✅
+  - `server`: `npm run typecheck:spec` ✅
+  - `server`: `DATABASE_URL=<.../socialtech_test> ALLOW_E2E_DB_RESET=true node ./test/run-e2e.cjs growth-hub-authz.e2e-spec.ts` ✅ (`6/6`)
+  - `adminandemployeePanel`: `npm run typecheck` ✅
+  - `adminandemployeePanel`: `npm run test:run -- src/app/pages/__tests__/Clients.test.tsx` ✅ (`24/24`)
 - Latest admin/employee frontend validation checkpoint: last recorded broad suite `25` test files, `153/153` tests; latest targeted Social Media workspace suite `9/9`.
 - Latest client portal frontend validation checkpoint: Social Media targeted suite `8/8`; broad recorded portal checkpoint remains `4` files, `17/17` tests.
 - Latest FAZ-05 validation checkpoint:

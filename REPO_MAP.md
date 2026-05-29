@@ -262,7 +262,7 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 ### App Bootstrap
 
 - `server/src/main.ts` - Nest bootstrap, `/api/v1` global prefix, global ValidationPipe, global exception filter, CORS setup
-- `server/src/app.module.ts` - root module imports for config/database/health/auth/users/clients/admin-summary/admin-assignments/admin-clients/admin-users/admin-audit-logs/projects/tasks/crm/delivery/github integrations/social-media
+- `server/src/app.module.ts` - root module imports for config/database/health/auth/users/clients/admin-summary/admin-assignments/admin-clients/admin-users/admin-audit-logs/projects/tasks/crm/delivery/github integrations/social-media/growth-hub
 - `server/src/config/env.validation.ts` - Joi env validation schema, including `CLIENT_ORIGIN_PUBLIC`, CRM lead scan envs, Gemini scoring envs, `GITHUB_TOKEN_ENCRYPTION_KEY`, TikTok Ads envs, and Amazon Ads envs
 - `server/src/config/cors.config.ts` - env-based CORS whitelist, including public site origin support
 - `server/src/common/filters/global-exception.filter.ts` - centralized error response format
@@ -281,6 +281,7 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - CRM enums: `CrmLeadStatus`, `CrmLeadSource`, `CrmLeadActivityType`
   - TikTok Ads models: `ClientTikTokAdsConfig`, `ClientTikTokAdsCredential`, `TikTokAdsDailyInsight`, `TikTokAdsSyncLog`, `TikTokAdsReport`
   - Amazon Ads foundation models: `ClientAmazonAdsConfig`, `ClientAmazonAdsCredential`
+  - Growth Hub foundation model: `ClientGrowthHubConfig` with `GrowthHubGoal` and `GrowthHubStatus`
   - Social Media foundation models: `ClientSocialMediaConfig`, `SocialMediaPost`, `SocialMediaPostAsset`
   - `User.role` enum remains the primary fixed role field
   - `User.sessionInvalidatedAt` is used for access-token invalidation lifecycle
@@ -324,6 +325,24 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 - `server/prisma/migrations/20260529172000_add_social_media_insights_reports/migration.sql`
 - `server/test/social-media-authz.e2e-spec.ts`
   - admin global clients list, non-admin global endpoint denial, admin config update, assigned employee read/summary, own-client summary, admin-route denial for client accounts, unauthenticated request, post CRUD, status transition, out-of-scope read denial, client-visible filtering, and designer asset attach/delete coverage
+
+### Growth Hub Backend Module
+
+- `server/src/growth-hub/growth-hub.module.ts`
+- `server/src/growth-hub/admin-growth-hub.controller.ts`
+  - admin global clients list and admin client-scoped config/summary/channels/actions/activity endpoints under `/api/v1/admin/*growth-hub*`
+- `server/src/growth-hub/assigned-growth-hub.controller.ts`
+  - assigned Project Manager/Growth Lead read endpoints under `/api/v1/growth-hub/clients/:clientId/*`
+- `server/src/growth-hub/client-growth-hub.controller.ts`
+  - own-client read endpoints under `/api/v1/clients/me/growth-hub/*`
+- `server/src/growth-hub/growth-hub.service.ts`
+  - service-level admin/assigned/client permission checks, active `GROWTH_HUB` purchased-service checks, config response shaping, and endpoint orchestration
+- `server/src/growth-hub/growth-hub-summary.service.ts`
+  - V1 no-mock read model from purchased services, config, projects, tasks/todos, files, releases, workspace messages, Meta/TikTok/Amazon insight tables, Social Media posts/insights, and report acknowledgement fields
+- `server/src/growth-hub/dto/update-growth-hub-config.dto.ts`
+- `server/prisma/migrations/20260529090000_add_growth_hub_foundation/migration.sql`
+- `server/test/growth-hub-authz.e2e-spec.ts`
+  - admin config update, admin summary/global list, assigned project manager read, non-growth employee denial, own-client summary, and sensitive-response guard coverage
 
 ## 2026-05-28 Update Map (Social Media Faz 4 Admin Panel)
 
@@ -575,12 +594,15 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 - `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
   - admin/assigned Amazon Ads queries + admin/assigned scoped report export mutations (`GET .../amazon-ads/reports/:reportId/export`) under existing Clients API slice
   - Social Media admin config read/update RTK Query hooks (`GET/PATCH /social-media/clients/:clientId/config`)
+  - Growth Hub admin config read/update RTK Query hooks (`GET/PATCH /admin/clients/:clientId/growth-hub/config`)
 - `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`
   - Amazon Ads global client list + connection/config/OAuth/manual-connect/test/reporting/report-export request/response types and `AmazonAdsRegion`
   - Social Media config request/response types, `SocialMediaGoal`, and `SocialMediaConnectionStatus`
+  - Growth Hub config request/response types, `GrowthHubGoal`, and `GrowthHubStatus`
 - `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
   - Amazon Ads global client list + connection/test/OAuth/reporting response normalizers and status badge helpers
   - Social Media config response normalizer
+  - Growth Hub config response normalizer
 - `adminandemployeePanel/src/app/pages/AmazonAdsAdmin.tsx`
   - admin `/amazon-ads` merkezi yönetim ekranı: KPI, global müşteri listesi, config edit, test connection, manual sync, disconnect, onay talebi, hata odaklı sync tekrar aksiyonları ve CSV/JSON report export
 - `adminandemployeePanel/src/app/routes.tsx`
@@ -592,6 +614,7 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 - `adminandemployeePanel/src/app/pages/Clients.tsx`
   - `AMAZON_ADS` service selection reveals Amazon profile/account/marketplace config fields in create/edit forms
   - `SOCIAL_MEDIA` service selection reveals organic channel/strategy config fields in create/edit forms and saves them through the Social Media config endpoint
+  - `GROWTH_HUB` service selection reveals Growth Hub target/config fields in create/edit forms and saves them through the Growth Hub config endpoint
 - `adminandemployeePanel/src/app/pages/ClientDetail.tsx`
   - Amazon Ads config/status card with OAuth URL/code, manual refresh token, test connection, reporting summary, manual sync, disconnect, and config edit actions
 
@@ -725,6 +748,7 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - seeds task taxonomy coverage (bug/frontend/backend/revision/qa/deployment)
   - seeds developer/project-manager delivery/github permissions
   - seeds delivery sprints, releases, and demo repository linkage
+  - seeds Growth Hub config for `acme-e-ticaret` and Growth Hub read/manage permission mappings
   - uses `bcryptjs` hashes for demo passwords
 - `server/tsconfig.seed.json` - TypeScript check config for seed files
 
