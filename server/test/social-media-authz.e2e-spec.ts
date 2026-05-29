@@ -667,6 +667,175 @@ describe("Social Media Config and Summary Authz (e2e)", () => {
     expect(cancelRes.body.status).toBe(SocialMediaPostStatus.CANCELLED);
   });
 
+  it("supports Social Media insight snapshots and client-visible reports", async () => {
+    const clientSocialProject = await prisma.project.upsert({
+      where: {
+        clientProfileId_slug: {
+          clientProfileId,
+          slug: "acme-social-media-reporting",
+        },
+      },
+      update: {
+        serviceKey: PurchasedServiceKey.SOCIAL_MEDIA,
+        status: ProjectStatus.IN_PROGRESS,
+        priority: Priority.HIGH,
+      },
+      create: {
+        clientProfileId,
+        serviceKey: PurchasedServiceKey.SOCIAL_MEDIA,
+        name: "Acme Social Media Reporting",
+        slug: "acme-social-media-reporting",
+        status: ProjectStatus.IN_PROGRESS,
+        priority: Priority.HIGH,
+      },
+      select: { id: true },
+    });
+
+    const publishedPostRes = await request(app.getHttpServer())
+      .post(`/api/v1/social-media/clients/${clientProfileId}/posts`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        projectId: clientSocialProject.id,
+        platform: "INSTAGRAM",
+        type: "REEL",
+        status: "PUBLISHED",
+        title: `Acme performance reel ${Date.now()}`,
+        publishedAt: "2026-07-01T10:00:00.000Z",
+        externalPostUrl: "https://instagram.com/p/acme-performance",
+        clientVisible: true,
+      });
+
+    expect(publishedPostRes.status).toBe(201);
+
+    const adminInsightRes = await request(app.getHttpServer())
+      .post(`/api/v1/social-media/posts/${publishedPostRes.body.id}/insights`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        date: "2026-07-02T00:00:00.000Z",
+        impressions: 2400,
+        reach: 1800,
+        likes: 210,
+        comments: 24,
+        shares: 18,
+        saves: 33,
+        clicks: 45,
+        engagementRate: 18.33,
+      });
+
+    expect(adminInsightRes.status).toBe(201);
+    expect(adminInsightRes.body.postId).toBe(publishedPostRes.body.id);
+    expect(adminInsightRes.body.engagementRate).toBe(18.33);
+
+    const assignedEmployeePost = await prisma.socialMediaPost.create({
+      data: {
+        clientProfileId: socialClientId,
+        projectId: socialProjectId,
+        platform: "TIKTOK",
+        type: "SHORT_VIDEO",
+        status: SocialMediaPostStatus.PUBLISHED,
+        title: `Mavi assigned insight ${Date.now()}`,
+        publishedAt: new Date("2026-07-02T10:00:00.000Z"),
+        clientVisible: true,
+      },
+      select: { id: true },
+    });
+
+    const assignedInsightRes = await request(app.getHttpServer())
+      .post(`/api/v1/social-media/posts/${assignedEmployeePost.id}/insights`)
+      .set("Authorization", `Bearer ${socialEmployeeToken}`)
+      .send({
+        date: "2026-07-03T00:00:00.000Z",
+        impressions: 1000,
+        reach: 700,
+        likes: 80,
+        comments: 8,
+      });
+
+    expect(assignedInsightRes.status).toBe(201);
+    expect(assignedInsightRes.body.postId).toBe(assignedEmployeePost.id);
+
+    const ownInsightsRes = await request(app.getHttpServer())
+      .get("/api/v1/clients/me/social-media/insights")
+      .set("Authorization", `Bearer ${clientToken}`);
+
+    expect(ownInsightsRes.status).toBe(200);
+    const ownInsightIds = ownInsightsRes.body.data.map((insight: { id: string }) => insight.id);
+    expect(ownInsightIds).toContain(adminInsightRes.body.id);
+    expect(ownInsightIds).not.toContain(assignedInsightRes.body.id);
+    expect(ownInsightsRes.body.meta.totals.impressions).toBeGreaterThanOrEqual(2400);
+    expect(ownInsightsRes.body.meta.topPosts[0].title).toBeDefined();
+
+    const draftReportRes = await request(app.getHttpServer())
+      .post(`/api/v1/social-media/clients/${clientProfileId}/reports`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        projectId: clientSocialProject.id,
+        periodStart: "2026-07-01T00:00:00.000Z",
+        periodEnd: "2026-07-07T23:59:59.999Z",
+        type: "WEEKLY",
+        summary: "Taslak Social Media performans notu.",
+        clientVisible: false,
+      });
+
+    expect(draftReportRes.status).toBe(201);
+    expect(draftReportRes.body.status).toBe("DRAFT");
+
+    const ownDraftHiddenRes = await request(app.getHttpServer())
+      .get("/api/v1/clients/me/social-media/reports")
+      .set("Authorization", `Bearer ${clientToken}`);
+
+    expect(ownDraftHiddenRes.status).toBe(200);
+    expect(
+      ownDraftHiddenRes.body.data.some((report: { id: string }) => report.id === draftReportRes.body.id),
+    ).toBe(false);
+
+    const publishedReportRes = await request(app.getHttpServer())
+      .post(`/api/v1/social-media/reports/${draftReportRes.body.id}/publish`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    expect(publishedReportRes.status).toBe(201);
+    expect(publishedReportRes.body.status).toBe("PUBLISHED");
+    expect(publishedReportRes.body.clientVisible).toBe(true);
+
+    const acknowledgementReportRes = await request(app.getHttpServer())
+      .post(`/api/v1/social-media/clients/${clientProfileId}/reports`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        projectId: clientSocialProject.id,
+        periodStart: "2026-07-08T00:00:00.000Z",
+        periodEnd: "2026-07-14T23:59:59.999Z",
+        type: "ENGAGEMENT_REPORT",
+        summary: "Client onayı istenen Social Media raporu.",
+        clientVisible: true,
+        requestAcknowledgement: true,
+        metricsSnapshot: {
+          totals: ownInsightsRes.body.meta.totals,
+        },
+      });
+
+    expect(acknowledgementReportRes.status).toBe(201);
+    expect(acknowledgementReportRes.body.status).toBe("PUBLISHED");
+    expect(acknowledgementReportRes.body.acknowledgementStatus).toBe("PENDING");
+    expect(acknowledgementReportRes.body.acknowledgementTaskId).toBeDefined();
+
+    const ownReportsRes = await request(app.getHttpServer())
+      .get("/api/v1/clients/me/social-media/reports")
+      .set("Authorization", `Bearer ${clientToken}`);
+
+    expect(ownReportsRes.status).toBe(200);
+    const ownReportIds = ownReportsRes.body.data.map((report: { id: string }) => report.id);
+    expect(ownReportIds).toContain(publishedReportRes.body.id);
+    expect(ownReportIds).toContain(acknowledgementReportRes.body.id);
+    expect(ownReportsRes.body.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: acknowledgementReportRes.body.id,
+          acknowledgementStatus: "PENDING",
+        }),
+      ]),
+    );
+  });
+
   it("out-of-scope employee cannot read another Social Media client's posts", async () => {
     const res = await request(app.getHttpServer())
       .get(`/api/v1/social-media/clients/${socialClientId}/posts`)

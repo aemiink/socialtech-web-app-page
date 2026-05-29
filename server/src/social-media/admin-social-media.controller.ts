@@ -3,8 +3,11 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
+import { CreateSocialMediaReportDto } from "./dto/create-social-media-report.dto";
 import { CreateSocialMediaPostDto } from "./dto/create-social-media-post.dto";
+import { SocialMediaInsightsQueryDto } from "./dto/social-media-insights-query.dto";
 import { SocialMediaPostQueryDto } from "./dto/social-media-post-query.dto";
+import { SocialMediaReportsQueryDto } from "./dto/social-media-reports-query.dto";
 import { UpdateSocialMediaConfigDto } from "./dto/update-social-media-config.dto";
 import { SocialMediaService } from "./social-media.service";
 
@@ -59,5 +62,32 @@ export class AdminSocialMediaController {
     @Body() dto: CreateSocialMediaPostDto,
   ) {
     return this.socialMediaService.createClientPost(currentUser, clientId, dto);
+  }
+
+  @Get(":clientId/insights")
+  getClientInsights(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: SocialMediaInsightsQueryDto,
+  ) {
+    return this.socialMediaService.getClientInsights(currentUser, clientId, query);
+  }
+
+  @Get(":clientId/reports")
+  getClientReports(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: SocialMediaReportsQueryDto,
+  ) {
+    return this.socialMediaService.getClientReports(currentUser, clientId, query);
+  }
+
+  @Post(":clientId/reports")
+  createClientReport(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Body() dto: CreateSocialMediaReportDto,
+  ) {
+    return this.socialMediaService.createClientReport(currentUser, clientId, dto);
   }
 }

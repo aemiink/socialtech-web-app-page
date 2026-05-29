@@ -4,6 +4,7 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { AttachSocialMediaPostAssetDto } from "./dto/attach-social-media-post-asset.dto";
+import { CreateSocialMediaPostInsightDto } from "./dto/create-social-media-post-insight.dto";
 import { MarkSocialMediaPostPublishedDto } from "./dto/mark-social-media-post-published.dto";
 import { ScheduleSocialMediaPostDto } from "./dto/schedule-social-media-post.dto";
 import { UpdateSocialMediaPostDto } from "./dto/update-social-media-post.dto";
@@ -55,6 +56,15 @@ export class AdminSocialMediaPostsController {
     @Param("id", ParseUUIDPipe) postId: string,
   ) {
     return this.socialMediaService.cancelPost(currentUser, postId);
+  }
+
+  @Post(":id/insights")
+  createPostInsight(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("id", ParseUUIDPipe) postId: string,
+    @Body() dto: CreateSocialMediaPostInsightDto,
+  ) {
+    return this.socialMediaService.createPostInsight(currentUser, postId, dto);
   }
 
   @Delete(":id")

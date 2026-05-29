@@ -7,26 +7,38 @@ import {
 import {
   AccountType,
   EmployeeClientAssignmentScope,
+  MetaAdsApprovalStatus,
+  MetaAdsApprovalType,
+  Priority,
   Prisma,
   ProjectFileVisibility,
+  SocialMediaReportStatus,
+  SocialMediaReportType,
   PurchasedServiceKey,
   PurchasedServiceStatus,
   SocialMediaConnectionStatus,
   SocialMediaPlatform,
   SocialMediaPostStatus,
   SocialMediaPostType,
+  TaskStatus,
+  TaskType,
   UserRole,
   UserStatus,
 } from "@prisma/client";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { PrismaService } from "../database/prisma.service";
 import { AttachSocialMediaPostAssetDto } from "./dto/attach-social-media-post-asset.dto";
+import { CreateSocialMediaPostInsightDto } from "./dto/create-social-media-post-insight.dto";
+import { CreateSocialMediaReportDto } from "./dto/create-social-media-report.dto";
 import { CreateSocialMediaPostDto } from "./dto/create-social-media-post.dto";
 import { MarkSocialMediaPostPublishedDto } from "./dto/mark-social-media-post-published.dto";
 import { ScheduleSocialMediaPostDto } from "./dto/schedule-social-media-post.dto";
+import { SocialMediaInsightsQueryDto } from "./dto/social-media-insights-query.dto";
 import { SocialMediaPostQueryDto } from "./dto/social-media-post-query.dto";
+import { SocialMediaReportsQueryDto } from "./dto/social-media-reports-query.dto";
 import { UpdateSocialMediaConfigDto } from "./dto/update-social-media-config.dto";
 import { UpdateSocialMediaPostDto } from "./dto/update-social-media-post.dto";
+import { UpdateSocialMediaReportDto } from "./dto/update-social-media-report.dto";
 import {
   SocialMediaSummaryResponse,
   SocialMediaSummaryService,
@@ -48,6 +60,11 @@ const SOCIAL_MEDIA_POSTS_ASSETS_MANAGE_ASSIGNED_PERMISSION =
 const SOCIAL_MEDIA_CREATIVES_MANAGE_ASSIGNED_PERMISSION =
   "socialMedia.creatives.manage.assigned";
 const SOCIAL_MEDIA_POSTS_READ_OWN_PERMISSION = "socialMedia.posts.read.own";
+const SOCIAL_MEDIA_REPORTS_MANAGE_ASSIGNED_PERMISSION =
+  "socialMedia.reports.manage.assigned";
+const REPORTS_READ_PERMISSION = "reports.read";
+const REPORTS_MANAGE_PERMISSION = "reports.manage";
+const REPORTS_READ_OWN_PERMISSION = "reports.read.own";
 const SOCIAL_MEDIA_ADMIN_RELEVANT_ASSIGNMENT_SCOPES = [
   EmployeeClientAssignmentScope.SOCIAL_MEDIA,
   EmployeeClientAssignmentScope.DESIGN,
@@ -177,6 +194,73 @@ const socialMediaPostSelect = {
   },
 } satisfies Prisma.SocialMediaPostSelect;
 
+const socialMediaPostInsightSelect = {
+  id: true,
+  postId: true,
+  clientProfileId: true,
+  platform: true,
+  date: true,
+  impressions: true,
+  reach: true,
+  likes: true,
+  comments: true,
+  shares: true,
+  saves: true,
+  profileVisits: true,
+  follows: true,
+  clicks: true,
+  engagementRate: true,
+  raw: true,
+  createdAt: true,
+  updatedAt: true,
+  post: {
+    select: {
+      id: true,
+      title: true,
+      type: true,
+      status: true,
+      scheduledAt: true,
+      publishedAt: true,
+      externalPostUrl: true,
+      clientVisible: true,
+    },
+  },
+} satisfies Prisma.SocialMediaPostInsightSelect;
+
+const socialMediaReportSelect = {
+  id: true,
+  clientProfileId: true,
+  projectId: true,
+  periodStart: true,
+  periodEnd: true,
+  type: true,
+  status: true,
+  summary: true,
+  metricsSnapshot: true,
+  clientVisible: true,
+  publishedAt: true,
+  acknowledgementRequestedAt: true,
+  acknowledgedAt: true,
+  acknowledgementTaskId: true,
+  createdAt: true,
+  updatedAt: true,
+  project: {
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      serviceKey: true,
+    },
+  },
+  acknowledgementTask: {
+    select: {
+      id: true,
+      approvalStatus: true,
+      updatedAt: true,
+    },
+  },
+} satisfies Prisma.SocialMediaReportSelect;
+
 const adminSocialMediaClientSelect = {
   id: true,
   slug: true,
@@ -225,6 +309,14 @@ type SocialMediaConfigModel = Prisma.ClientSocialMediaConfigGetPayload<{
 
 type SocialMediaPostModel = Prisma.SocialMediaPostGetPayload<{
   select: typeof socialMediaPostSelect;
+}>;
+
+type SocialMediaPostInsightModel = Prisma.SocialMediaPostInsightGetPayload<{
+  select: typeof socialMediaPostInsightSelect;
+}>;
+
+type SocialMediaReportModel = Prisma.SocialMediaReportGetPayload<{
+  select: typeof socialMediaReportSelect;
 }>;
 
 type AdminSocialMediaClientModel = Prisma.ClientProfileGetPayload<{
@@ -811,6 +903,710 @@ export class SocialMediaService {
     };
   }
 
+  async createPostInsight(
+    currentUser: AuthenticatedUser,
+    postId: string,
+    dto: CreateSocialMediaPostInsightDto,
+  ) {
+    this.assertBodyObject(dto);
+
+    const post = await this.getPostOrNotFound(postId);
+    await this.assertCanManageInsights(currentUser, post.clientProfileId);
+    await this.assertClientHasActiveSocialMediaService(post.clientProfileId);
+
+    const insight = await this.prisma.socialMediaPostInsight.create({
+      data: {
+        postId,
+        clientProfileId: post.clientProfileId,
+        platform: post.platform,
+        date: this.parseRequiredDate(dto.date, "date"),
+        impressions: this.normalizeOptionalMetric(dto.impressions, "impressions"),
+        reach: this.normalizeOptionalMetric(dto.reach, "reach"),
+        likes: this.normalizeOptionalMetric(dto.likes, "likes"),
+        comments: this.normalizeOptionalMetric(dto.comments, "comments"),
+        shares: this.normalizeOptionalMetric(dto.shares, "shares"),
+        saves: this.normalizeOptionalMetric(dto.saves, "saves"),
+        profileVisits: this.normalizeOptionalMetric(dto.profileVisits, "profileVisits"),
+        follows: this.normalizeOptionalMetric(dto.follows, "follows"),
+        clicks: this.normalizeOptionalMetric(dto.clicks, "clicks"),
+        engagementRate: this.normalizeOptionalDecimal(dto.engagementRate, "engagementRate"),
+        raw: dto.raw as Prisma.InputJsonValue | undefined,
+      },
+      select: socialMediaPostInsightSelect,
+    });
+
+    return this.toInsightItem(insight);
+  }
+
+  async getClientInsights(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+    query: SocialMediaInsightsQueryDto,
+  ) {
+    await this.assertCanReadInsights(currentUser, clientProfileId);
+    await this.assertClientHasActiveSocialMediaService(clientProfileId);
+
+    return this.getInsightsByClientProfileId(clientProfileId, query, { clientVisibleOnly: false });
+  }
+
+  async getOwnInsights(currentUser: AuthenticatedUser, query: SocialMediaInsightsQueryDto) {
+    this.assertCanReadOwnPosts(currentUser);
+    if (!this.hasPermission(currentUser, REPORTS_READ_OWN_PERMISSION)) {
+      throw new ForbiddenException("Missing required report permission.");
+    }
+
+    const clientProfileId = this.getOwnClientProfileIdOrFail(currentUser);
+    await this.assertClientHasActiveSocialMediaService(clientProfileId);
+
+    return this.getInsightsByClientProfileId(clientProfileId, query, { clientVisibleOnly: true });
+  }
+
+  async getClientReports(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+    query: SocialMediaReportsQueryDto,
+  ) {
+    await this.assertCanReadReports(currentUser, clientProfileId);
+    await this.assertClientHasActiveSocialMediaService(clientProfileId);
+
+    return this.getReportsByClientProfileId(clientProfileId, query, { onlyPublished: false });
+  }
+
+  async createClientReport(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+    dto: CreateSocialMediaReportDto,
+  ) {
+    this.assertBodyObject(dto);
+    await this.assertCanManageReports(currentUser, clientProfileId);
+    await this.assertClientHasActiveSocialMediaService(clientProfileId);
+
+    return this.createReportByClientProfileId(currentUser, clientProfileId, dto);
+  }
+
+  async updateReport(
+    currentUser: AuthenticatedUser,
+    reportId: string,
+    dto: UpdateSocialMediaReportDto,
+  ) {
+    this.assertBodyObject(dto);
+    this.assertHasReportUpdatePayload(dto);
+
+    const existingReport = await this.prisma.socialMediaReport.findUnique({
+      where: { id: reportId },
+      select: socialMediaReportSelect,
+    });
+    if (!existingReport) {
+      throw new NotFoundException("Social Media report not found.");
+    }
+
+    await this.assertCanManageReports(currentUser, existingReport.clientProfileId);
+    await this.assertClientHasActiveSocialMediaService(existingReport.clientProfileId);
+
+    return this.updateReportModel(currentUser, existingReport, dto);
+  }
+
+  async publishReport(currentUser: AuthenticatedUser, reportId: string) {
+    const existingReport = await this.prisma.socialMediaReport.findUnique({
+      where: { id: reportId },
+      select: socialMediaReportSelect,
+    });
+    if (!existingReport) {
+      throw new NotFoundException("Social Media report not found.");
+    }
+
+    await this.assertCanManageReports(currentUser, existingReport.clientProfileId);
+    await this.assertClientHasActiveSocialMediaService(existingReport.clientProfileId);
+
+    return this.updateReportModel(currentUser, existingReport, {
+      status: SocialMediaReportStatus.PUBLISHED,
+      clientVisible: true,
+    });
+  }
+
+  async getOwnReports(currentUser: AuthenticatedUser, query: SocialMediaReportsQueryDto) {
+    if (
+      currentUser.accountType !== AccountType.CLIENT ||
+      !this.hasPermission(currentUser, REPORTS_READ_OWN_PERMISSION)
+    ) {
+      throw new ForbiddenException("Missing required report permission.");
+    }
+
+    const clientProfileId = this.getOwnClientProfileIdOrFail(currentUser);
+    await this.assertClientHasActiveSocialMediaService(clientProfileId);
+
+    return this.getReportsByClientProfileId(clientProfileId, query, { onlyPublished: true });
+  }
+
+  private async getInsightsByClientProfileId(
+    clientProfileId: string,
+    query: SocialMediaInsightsQueryDto,
+    options: { clientVisibleOnly: boolean },
+  ) {
+    const { page, limit } = this.normalizePagination(query);
+    const where = this.buildInsightWhere(clientProfileId, query, options);
+    const [insights, total, allInsights] = await this.prisma.$transaction([
+      this.prisma.socialMediaPostInsight.findMany({
+        where,
+        select: socialMediaPostInsightSelect,
+        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.socialMediaPostInsight.count({ where }),
+      this.prisma.socialMediaPostInsight.findMany({
+        where,
+        select: socialMediaPostInsightSelect,
+        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+        take: 500,
+      }),
+    ]);
+
+    return {
+      data: insights.map((insight) => this.toInsightItem(insight)),
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+        generatedAt: new Date().toISOString(),
+        ...this.buildInsightsSummary(allInsights),
+      },
+    };
+  }
+
+  private buildInsightWhere(
+    clientProfileId: string,
+    query: SocialMediaInsightsQueryDto,
+    options: { clientVisibleOnly: boolean },
+  ): Prisma.SocialMediaPostInsightWhereInput {
+    const date = this.buildScheduledAtWhere(query.from, query.to);
+    return {
+      clientProfileId,
+      ...(query.postId ? { postId: query.postId } : {}),
+      ...(query.platform ? { platform: query.platform } : {}),
+      ...(date ? { date } : {}),
+      ...(options.clientVisibleOnly
+        ? {
+            post: {
+              clientVisible: true,
+            },
+          }
+        : {}),
+    };
+  }
+
+  private buildInsightsSummary(insights: SocialMediaPostInsightModel[]) {
+    const totals = insights.reduce(
+      (accumulator, insight) => ({
+        impressions: accumulator.impressions + (insight.impressions ?? 0),
+        reach: accumulator.reach + (insight.reach ?? 0),
+        likes: accumulator.likes + (insight.likes ?? 0),
+        comments: accumulator.comments + (insight.comments ?? 0),
+        shares: accumulator.shares + (insight.shares ?? 0),
+        saves: accumulator.saves + (insight.saves ?? 0),
+        profileVisits: accumulator.profileVisits + (insight.profileVisits ?? 0),
+        follows: accumulator.follows + (insight.follows ?? 0),
+        clicks: accumulator.clicks + (insight.clicks ?? 0),
+      }),
+      {
+        impressions: 0,
+        reach: 0,
+        likes: 0,
+        comments: 0,
+        shares: 0,
+        saves: 0,
+        profileVisits: 0,
+        follows: 0,
+        clicks: 0,
+      },
+    );
+    const engagementActions =
+      totals.likes + totals.comments + totals.shares + totals.saves + totals.clicks;
+    const engagementRate = totals.reach > 0 ? this.round((engagementActions / totals.reach) * 100) : 0;
+
+    const topPosts = [...insights]
+      .sort((first, second) => this.getInsightScore(second) - this.getInsightScore(first))
+      .slice(0, 5)
+      .map((insight) => ({
+        postId: insight.postId,
+        title: insight.post.title,
+        platform: insight.platform,
+        type: insight.post.type,
+        engagementRate: this.round(this.readDecimalAsNumber(insight.engagementRate)),
+        engagementScore: this.getInsightScore(insight),
+      }));
+
+    return {
+      totals: {
+        ...totals,
+        engagementRate,
+      },
+      topPosts,
+      platformBreakdown: this.buildInsightBreakdown(insights, "platform"),
+      typeBreakdown: this.buildInsightBreakdown(insights, "type"),
+      trend: this.buildInsightTrend(insights),
+    };
+  }
+
+  private buildInsightBreakdown(
+    insights: SocialMediaPostInsightModel[],
+    field: "platform" | "type",
+  ) {
+    const grouped = new Map<string, { impressions: number; reach: number; engagements: number }>();
+
+    for (const insight of insights) {
+      const key = field === "platform" ? insight.platform : insight.post.type;
+      const current = grouped.get(key) ?? { impressions: 0, reach: 0, engagements: 0 };
+      current.impressions += insight.impressions ?? 0;
+      current.reach += insight.reach ?? 0;
+      current.engagements += this.getInsightScore(insight);
+      grouped.set(key, current);
+    }
+
+    return [...grouped.entries()].map(([key, value]) => ({
+      key,
+      ...value,
+      engagementRate: value.reach > 0 ? this.round((value.engagements / value.reach) * 100) : 0,
+    }));
+  }
+
+  private buildInsightTrend(insights: SocialMediaPostInsightModel[]) {
+    const grouped = new Map<string, { impressions: number; reach: number; engagements: number }>();
+
+    for (const insight of insights) {
+      const key = insight.date.toISOString().slice(0, 10);
+      const current = grouped.get(key) ?? { impressions: 0, reach: 0, engagements: 0 };
+      current.impressions += insight.impressions ?? 0;
+      current.reach += insight.reach ?? 0;
+      current.engagements += this.getInsightScore(insight);
+      grouped.set(key, current);
+    }
+
+    return [...grouped.entries()]
+      .sort(([first], [second]) => first.localeCompare(second))
+      .map(([date, value]) => ({
+        date,
+        ...value,
+        engagementRate: value.reach > 0 ? this.round((value.engagements / value.reach) * 100) : 0,
+      }));
+  }
+
+  private getInsightScore(insight: SocialMediaPostInsightModel): number {
+    return (
+      (insight.likes ?? 0) +
+      (insight.comments ?? 0) +
+      (insight.shares ?? 0) +
+      (insight.saves ?? 0) +
+      (insight.clicks ?? 0)
+    );
+  }
+
+  private async getReportsByClientProfileId(
+    clientProfileId: string,
+    query: SocialMediaReportsQueryDto,
+    options: { onlyPublished: boolean },
+  ) {
+    const { page, limit } = this.normalizePagination(query);
+    const where = this.buildReportWhere(clientProfileId, query, options);
+    const statsWhere: Prisma.SocialMediaReportWhereInput = {
+      clientProfileId,
+      ...(options.onlyPublished
+        ? { status: SocialMediaReportStatus.PUBLISHED, clientVisible: true }
+        : {}),
+    };
+    const [reports, total, draft, published, clientVisible] = await this.prisma.$transaction([
+      this.prisma.socialMediaReport.findMany({
+        where,
+        select: socialMediaReportSelect,
+        orderBy: [{ periodEnd: "desc" }, { createdAt: "desc" }],
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.socialMediaReport.count({ where }),
+      this.prisma.socialMediaReport.count({
+        where: { ...statsWhere, status: SocialMediaReportStatus.DRAFT },
+      }),
+      this.prisma.socialMediaReport.count({
+        where: { ...statsWhere, status: SocialMediaReportStatus.PUBLISHED },
+      }),
+      this.prisma.socialMediaReport.count({
+        where: { ...statsWhere, clientVisible: true },
+      }),
+    ]);
+
+    return {
+      data: reports.map((report) => this.toReportItem(report)),
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+        draft,
+        published,
+        clientVisible,
+      },
+    };
+  }
+
+  private buildReportWhere(
+    clientProfileId: string,
+    query: SocialMediaReportsQueryDto,
+    options: { onlyPublished: boolean },
+  ): Prisma.SocialMediaReportWhereInput {
+    const periodStart = this.parseOptionalDate(query.from, "from");
+    const periodEnd = this.parseOptionalDate(query.to, "to");
+    if (periodStart && periodEnd && periodStart.getTime() > periodEnd.getTime()) {
+      throw new BadRequestException("from must be before or equal to to.");
+    }
+
+    return {
+      clientProfileId,
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.type ? { type: query.type } : {}),
+      ...(periodStart || periodEnd
+        ? {
+            periodEnd: {
+              ...(periodStart ? { gte: periodStart } : {}),
+              ...(periodEnd ? { lte: periodEnd } : {}),
+            },
+          }
+        : {}),
+      ...(options.onlyPublished
+        ? { status: SocialMediaReportStatus.PUBLISHED, clientVisible: true }
+        : {}),
+    };
+  }
+
+  private resolveReportPeriod(
+    periodStartValue: unknown,
+    periodEndValue: unknown,
+  ): { periodStart: Date; periodEnd: Date } {
+    const periodStart = this.parseRequiredDate(periodStartValue, "periodStart");
+    const periodEnd = this.parseRequiredDate(periodEndValue, "periodEnd");
+    if (periodStart.getTime() > periodEnd.getTime()) {
+      throw new BadRequestException("periodStart must be before or equal to periodEnd.");
+    }
+
+    return { periodStart, periodEnd };
+  }
+
+  private async createReportByClientProfileId(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+    dto: CreateSocialMediaReportDto,
+  ) {
+    const period = this.resolveReportPeriod(dto.periodStart, dto.periodEnd);
+    const summary = this.normalizeNullableText(dto.summary, "summary", 4000) ?? null;
+    const projectId = await this.resolveSocialMediaReportProjectId(
+      clientProfileId,
+      dto.projectId ?? null,
+    );
+    const acknowledgementProjectId =
+      dto.requestAcknowledgement === true
+        ? projectId ?? (await this.resolveSocialMediaReportProjectId(clientProfileId, null))
+        : null;
+    const shouldPublish = dto.clientVisible === true || dto.requestAcknowledgement === true;
+    const now = new Date();
+
+    if (dto.requestAcknowledgement === true && !acknowledgementProjectId) {
+      throw new BadRequestException(
+        "A SOCIAL_MEDIA project is required to request report acknowledgement.",
+      );
+    }
+
+    const report = await this.prisma.$transaction(async (tx) => {
+      const createdReport = await tx.socialMediaReport.create({
+        data: {
+          clientProfileId,
+          projectId: projectId ?? acknowledgementProjectId,
+          periodStart: period.periodStart,
+          periodEnd: period.periodEnd,
+          type: dto.type,
+          status: shouldPublish ? SocialMediaReportStatus.PUBLISHED : SocialMediaReportStatus.DRAFT,
+          summary,
+          metricsSnapshot: dto.metricsSnapshot as Prisma.InputJsonValue | undefined,
+          createdByUserId: currentUser.id,
+          publishedByUserId: shouldPublish ? currentUser.id : null,
+          clientVisible: shouldPublish,
+          publishedAt: shouldPublish ? now : null,
+        },
+        select: socialMediaReportSelect,
+      });
+
+      if (dto.requestAcknowledgement !== true || !acknowledgementProjectId) {
+        return createdReport;
+      }
+
+      const task = await tx.task.create({
+        data: this.buildReportAcknowledgementTaskPayload(
+          acknowledgementProjectId,
+          createdReport,
+          summary,
+          now,
+        ),
+        select: { id: true },
+      });
+
+      return tx.socialMediaReport.update({
+        where: { id: createdReport.id },
+        data: {
+          acknowledgementRequestedAt: now,
+          acknowledgementTaskId: task.id,
+        },
+        select: socialMediaReportSelect,
+      });
+    });
+
+    return this.toReportItem(report);
+  }
+
+  private async updateReportModel(
+    currentUser: AuthenticatedUser,
+    existingReport: SocialMediaReportModel,
+    dto: UpdateSocialMediaReportDto,
+  ) {
+    const now = new Date();
+    const data: Prisma.SocialMediaReportUpdateInput = {};
+    const summary =
+      dto.summary !== undefined
+        ? this.normalizeNullableText(dto.summary, "summary", 4000) ?? null
+        : undefined;
+
+    if (dto.summary !== undefined) {
+      data.summary = summary;
+    }
+
+    if (dto.metricsSnapshot !== undefined) {
+      data.metricsSnapshot = dto.metricsSnapshot as Prisma.InputJsonValue;
+    }
+
+    if (dto.status !== undefined) {
+      data.status = dto.status;
+      if (
+        dto.status === SocialMediaReportStatus.DRAFT ||
+        dto.status === SocialMediaReportStatus.ARCHIVED
+      ) {
+        data.clientVisible = false;
+      }
+    }
+
+    if (dto.clientVisible !== undefined) {
+      data.clientVisible = dto.clientVisible;
+    }
+
+    if (dto.status === SocialMediaReportStatus.PUBLISHED && dto.clientVisible === false) {
+      throw new BadRequestException("Published report cannot be hidden from client.");
+    }
+
+    const shouldPublish =
+      dto.requestAcknowledgement === true ||
+      dto.clientVisible === true ||
+      dto.status === SocialMediaReportStatus.PUBLISHED;
+
+    if (shouldPublish) {
+      data.status = SocialMediaReportStatus.PUBLISHED;
+      data.clientVisible = true;
+      if (!existingReport.publishedAt) {
+        data.publishedAt = now;
+      }
+      data.publishedBy = { connect: { id: currentUser.id } };
+    }
+
+    const acknowledgementProjectId =
+      dto.requestAcknowledgement === true
+        ? existingReport.projectId ??
+          (await this.resolveSocialMediaReportProjectId(existingReport.clientProfileId, null))
+        : null;
+
+    if (dto.requestAcknowledgement === true && !acknowledgementProjectId) {
+      throw new BadRequestException(
+        "A SOCIAL_MEDIA project is required to request report acknowledgement.",
+      );
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      let acknowledgementTaskId = existingReport.acknowledgementTaskId;
+
+      if (dto.requestAcknowledgement === true && acknowledgementProjectId) {
+        const taskPayload = this.buildReportAcknowledgementTaskPayload(
+          acknowledgementProjectId,
+          existingReport,
+          summary ?? existingReport.summary ?? null,
+          now,
+        );
+
+        if (acknowledgementTaskId) {
+          await tx.task.update({
+            where: { id: acknowledgementTaskId },
+            data: {
+              title: taskPayload.title,
+              description: taskPayload.description,
+              status: TaskStatus.REVIEW,
+              approvalRequired: true,
+              approvalType: MetaAdsApprovalType.SOCIAL_MEDIA_REPORT_ACKNOWLEDGEMENT,
+              approvalStatus: MetaAdsApprovalStatus.PENDING,
+              approvalRequestedAt: now,
+              approvalRespondedAt: null,
+              approvalRespondedByUserId: null,
+              approvalResponseNote: null,
+              approvalContext: taskPayload.approvalContext,
+            },
+          });
+        } else {
+          const task = await tx.task.create({
+            data: taskPayload,
+            select: { id: true },
+          });
+          acknowledgementTaskId = task.id;
+        }
+
+        data.acknowledgementRequestedAt = now;
+        data.acknowledgementTask = { connect: { id: acknowledgementTaskId } };
+        if (!existingReport.projectId) {
+          data.project = { connect: { id: acknowledgementProjectId } };
+        }
+      }
+
+      return tx.socialMediaReport.update({
+        where: { id: existingReport.id },
+        data,
+        select: socialMediaReportSelect,
+      });
+    });
+
+    return this.toReportItem(updated);
+  }
+
+  private buildReportAcknowledgementTaskPayload(
+    projectId: string,
+    report: Pick<SocialMediaReportModel, "id" | "type" | "periodStart" | "periodEnd">,
+    summary: string | null,
+    requestedAt: Date,
+  ): Prisma.TaskUncheckedCreateInput {
+    return {
+      projectId,
+      title: this.buildReportAcknowledgementTaskTitle(
+        report.type,
+        report.periodStart,
+        report.periodEnd,
+      ),
+      description: summary
+        ? `Social Media raporu müşteri onayına açıldı. Özet: ${summary}`
+        : "Social Media raporu müşteri onayına açıldı.",
+      status: TaskStatus.REVIEW,
+      priority: Priority.MEDIUM,
+      type: TaskType.REVISION,
+      approvalRequired: true,
+      approvalType: MetaAdsApprovalType.SOCIAL_MEDIA_REPORT_ACKNOWLEDGEMENT,
+      approvalStatus: MetaAdsApprovalStatus.PENDING,
+      approvalRequestedAt: requestedAt,
+      approvalContext: {
+        reportId: report.id,
+        reportType: report.type,
+        periodStart: report.periodStart.toISOString(),
+        periodEnd: report.periodEnd.toISOString(),
+      },
+    };
+  }
+
+  private buildReportAcknowledgementTaskTitle(
+    reportType: SocialMediaReportType,
+    periodStart: Date,
+    periodEnd: Date,
+  ): string {
+    return `Social Media Rapor Onayı · ${reportType} (${periodStart.toISOString().slice(0, 10)} - ${periodEnd.toISOString().slice(0, 10)})`;
+  }
+
+  private async resolveSocialMediaReportProjectId(
+    clientProfileId: string,
+    projectId: string | null,
+  ): Promise<string | null> {
+    if (projectId) {
+      await this.assertProjectBelongsToSocialMediaClient(projectId, clientProfileId);
+      return projectId;
+    }
+
+    const project = await this.prisma.project.findFirst({
+      where: {
+        clientProfileId,
+        serviceKey: PurchasedServiceKey.SOCIAL_MEDIA,
+      },
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+    });
+
+    return project?.id ?? null;
+  }
+
+  private toInsightItem(insight: SocialMediaPostInsightModel) {
+    return {
+      id: insight.id,
+      postId: insight.postId,
+      clientProfileId: insight.clientProfileId,
+      platform: insight.platform,
+      date: insight.date.toISOString(),
+      impressions: insight.impressions ?? 0,
+      reach: insight.reach ?? 0,
+      likes: insight.likes ?? 0,
+      comments: insight.comments ?? 0,
+      shares: insight.shares ?? 0,
+      saves: insight.saves ?? 0,
+      profileVisits: insight.profileVisits ?? 0,
+      follows: insight.follows ?? 0,
+      clicks: insight.clicks ?? 0,
+      engagementRate: this.round(this.readDecimalAsNumber(insight.engagementRate)),
+      raw: (insight.raw as Prisma.JsonValue | null) ?? null,
+      createdAt: insight.createdAt.toISOString(),
+      updatedAt: insight.updatedAt.toISOString(),
+      post: {
+        id: insight.post.id,
+        title: insight.post.title,
+        type: insight.post.type,
+        status: insight.post.status,
+        scheduledAt: insight.post.scheduledAt?.toISOString() ?? null,
+        publishedAt: insight.post.publishedAt?.toISOString() ?? null,
+        externalPostUrl: insight.post.externalPostUrl ?? null,
+        clientVisible: insight.post.clientVisible,
+      },
+    };
+  }
+
+  private toReportItem(report: SocialMediaReportModel) {
+    const acknowledgementStatus =
+      report.acknowledgementRequestedAt === null
+        ? "NOT_REQUESTED"
+        : report.acknowledgementTask?.approvalStatus === MetaAdsApprovalStatus.ACKNOWLEDGED ||
+            report.acknowledgementTask?.approvalStatus === MetaAdsApprovalStatus.APPROVED
+          ? "ACKNOWLEDGED"
+          : report.acknowledgementTask?.approvalStatus === MetaAdsApprovalStatus.CHANGES_REQUESTED ||
+              report.acknowledgementTask?.approvalStatus === MetaAdsApprovalStatus.REJECTED
+            ? "CHANGES_REQUESTED"
+            : "PENDING";
+
+    return {
+      id: report.id,
+      clientProfileId: report.clientProfileId,
+      projectId: report.projectId ?? null,
+      projectName: report.project?.name ?? null,
+      periodStart: report.periodStart.toISOString(),
+      periodEnd: report.periodEnd.toISOString(),
+      type: report.type,
+      status: report.status,
+      summary: report.summary ?? null,
+      metricsSnapshot: (report.metricsSnapshot as Prisma.JsonValue | null) ?? null,
+      clientVisible: report.clientVisible,
+      publishedAt: report.publishedAt?.toISOString() ?? null,
+      acknowledgementRequestedAt: report.acknowledgementRequestedAt?.toISOString() ?? null,
+      acknowledgedAt: report.acknowledgedAt?.toISOString() ?? null,
+      acknowledgementStatus,
+      acknowledgementTaskId: report.acknowledgementTask?.id ?? null,
+      acknowledgementTaskUpdatedAt: report.acknowledgementTask?.updatedAt.toISOString() ?? null,
+      createdAt: report.createdAt.toISOString(),
+      updatedAt: report.updatedAt.toISOString(),
+    };
+  }
+
   private async findPosts(
     clientProfileId: string,
     query: SocialMediaPostQueryDto,
@@ -1097,6 +1893,86 @@ export class SocialMediaService {
     throw new ForbiddenException("Missing required Social Media post asset permission.");
   }
 
+  private async assertCanReadInsights(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+  ): Promise<void> {
+    if (
+      this.hasPermission(currentUser, SOCIAL_MEDIA_POSTS_READ_ANY_PERMISSION) ||
+      this.hasPermission(currentUser, REPORTS_READ_PERMISSION)
+    ) {
+      await this.assertClientProfileExists(clientProfileId);
+      return;
+    }
+
+    if (
+      this.hasPermission(currentUser, SOCIAL_MEDIA_POSTS_READ_ASSIGNED_PERMISSION) ||
+      this.hasPermission(currentUser, SOCIAL_MEDIA_REPORTS_MANAGE_ASSIGNED_PERMISSION)
+    ) {
+      await this.assertAssignedSocialMediaClientOrFail(currentUser, clientProfileId);
+      return;
+    }
+
+    throw new ForbiddenException("Missing required Social Media insights permission.");
+  }
+
+  private async assertCanManageInsights(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+  ): Promise<void> {
+    if (
+      this.hasPermission(currentUser, SOCIAL_MEDIA_POSTS_MANAGE_ANY_PERMISSION) ||
+      this.hasPermission(currentUser, REPORTS_MANAGE_PERMISSION)
+    ) {
+      await this.assertClientProfileExists(clientProfileId);
+      return;
+    }
+
+    if (
+      this.hasPermission(currentUser, SOCIAL_MEDIA_POSTS_MANAGE_ASSIGNED_PERMISSION) ||
+      this.hasPermission(currentUser, SOCIAL_MEDIA_REPORTS_MANAGE_ASSIGNED_PERMISSION)
+    ) {
+      await this.assertAssignedSocialMediaClientOrFail(currentUser, clientProfileId);
+      return;
+    }
+
+    throw new ForbiddenException("Missing required Social Media insights permission.");
+  }
+
+  private async assertCanReadReports(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+  ): Promise<void> {
+    if (this.hasPermission(currentUser, REPORTS_READ_PERMISSION)) {
+      await this.assertClientProfileExists(clientProfileId);
+      return;
+    }
+
+    if (this.hasPermission(currentUser, SOCIAL_MEDIA_REPORTS_MANAGE_ASSIGNED_PERMISSION)) {
+      await this.assertAssignedSocialMediaClientOrFail(currentUser, clientProfileId);
+      return;
+    }
+
+    throw new ForbiddenException("Missing required Social Media report permission.");
+  }
+
+  private async assertCanManageReports(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+  ): Promise<void> {
+    if (this.hasPermission(currentUser, REPORTS_MANAGE_PERMISSION)) {
+      await this.assertClientProfileExists(clientProfileId);
+      return;
+    }
+
+    if (this.hasPermission(currentUser, SOCIAL_MEDIA_REPORTS_MANAGE_ASSIGNED_PERMISSION)) {
+      await this.assertAssignedSocialMediaClientOrFail(currentUser, clientProfileId);
+      return;
+    }
+
+    throw new ForbiddenException("Missing required Social Media report permission.");
+  }
+
   private assertCanManageConfig(currentUser: AuthenticatedUser): void {
     if (!this.hasPermission(currentUser, SOCIAL_MEDIA_CONFIG_MANAGE_ANY_PERMISSION)) {
       throw new ForbiddenException("Missing required Social Media config permission.");
@@ -1338,6 +2214,12 @@ export class SocialMediaService {
   private assertHasPostUpdatePayload(dto: UpdateSocialMediaPostDto): void {
     if (Object.keys(dto).length === 0) {
       throw new BadRequestException("At least one Social Media post field is required.");
+    }
+  }
+
+  private assertHasReportUpdatePayload(dto: UpdateSocialMediaReportDto): void {
+    if (Object.keys(dto).length === 0) {
+      throw new BadRequestException("At least one Social Media report field is required.");
     }
   }
 
@@ -1712,7 +2594,7 @@ export class SocialMediaService {
   private buildScheduledAtWhere(
     fromValue: unknown,
     toValue: unknown,
-  ): Prisma.DateTimeNullableFilter<"SocialMediaPost"> | undefined {
+  ): { gte?: Date; lte?: Date } | undefined {
     const from = this.parseOptionalDate(fromValue, "from");
     const to = this.parseOptionalDate(toValue, "to");
     if (!from && !to) {
@@ -1740,6 +2622,63 @@ export class SocialMediaService {
     }
 
     return date;
+  }
+
+  private parseRequiredDate(value: unknown, fieldName: string): Date {
+    const date = this.parseNullableDate(value, fieldName);
+    if (!date) {
+      throw new BadRequestException(`${fieldName} is required.`);
+    }
+
+    return date;
+  }
+
+  private normalizeOptionalMetric(
+    value: unknown,
+    fieldName: string,
+  ): number | null | undefined {
+    if (value === undefined || value === null) {
+      return value;
+    }
+
+    const parsedValue =
+      typeof value === "number" ? value : Number.parseInt(String(value).trim(), 10);
+    if (!Number.isInteger(parsedValue) || parsedValue < 0) {
+      throw new BadRequestException(`${fieldName} must be a non-negative integer.`);
+    }
+
+    return parsedValue;
+  }
+
+  private normalizeOptionalDecimal(
+    value: unknown,
+    fieldName: string,
+  ): number | null | undefined {
+    if (value === undefined || value === null) {
+      return value;
+    }
+
+    const parsedValue = typeof value === "number" ? value : Number(String(value).trim());
+    if (!Number.isFinite(parsedValue) || parsedValue < 0) {
+      throw new BadRequestException(`${fieldName} must be a non-negative number.`);
+    }
+
+    return this.round(parsedValue);
+  }
+
+  private readDecimalAsNumber(
+    value: Prisma.Decimal | number | string | null | undefined,
+  ): number {
+    if (value === undefined || value === null) {
+      return 0;
+    }
+
+    const parsedValue = typeof value === "object" ? Number(value.toString()) : Number(value);
+    return Number.isFinite(parsedValue) ? parsedValue : 0;
+  }
+
+  private round(value: number): number {
+    return Math.round(value * 100) / 100;
   }
 
   private parseEnumValue<T extends string>(
@@ -1804,7 +2743,10 @@ export class SocialMediaService {
     return parsedValue;
   }
 
-  private normalizePagination(query: SocialMediaPostQueryDto): { page: number; limit: number } {
+  private normalizePagination(query: { page?: unknown; limit?: unknown }): {
+    page: number;
+    limit: number;
+  } {
     return {
       page: this.normalizePositiveInteger(query.page, "page", 1, 1, Number.MAX_SAFE_INTEGER),
       limit: this.normalizePositiveInteger(query.limit, "limit", 50, 1, 100),

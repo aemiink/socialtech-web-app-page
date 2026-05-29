@@ -179,6 +179,7 @@
 - Social Media Faz 5: Employee role workspace (`/employee/social-media`, assigned client filter, role-aware calendar/posts/creatives/approvals/reports/messages tabs, Social Media approval task bridge)
 - Social Media Faz 6: Approval + creative flow (Social Media approval enum values, client approval response bridge, post status update, revision task follow-up, client/employee approval UI)
 - Social Media Faz 7: Publishing integration V1 (manual schedule/mark-published/cancel endpoints, admin/employee publishing actions, client external link visibility, V2 API publishing follow-up)
+- Social Media Faz 8: Insights/reporting V1 (manual post insight snapshots, Social Media report draft/publish/ack bridge, admin/employee reporting workspace, client performance/reports views)
 
 ## Blocked
 
@@ -421,8 +422,16 @@ None identified.
   - `adminandemployeePanel`: `npm run check` ✅
   - `clientPanel`: `npm test -- src/app/pages/__tests__/service-tab-page.social-media.test.tsx` ✅ (`4/4`)
   - `clientPanel`: `npm run check` ✅
+- Latest Social Media Faz 8 checkpoint:
+  - `server`: `SocialMediaPostInsight` + `SocialMediaReport` models/migration, admin/assigned/own insight/report endpoints, publish->client-visible report flow and acknowledgement task bridge ✅
+  - `adminandemployeePanel`: Social Media reports workspace now supports manual post performance snapshot input, KPI/top report lists, report draft creation and publish action ✅
+  - `clientPanel`: Social Media `performance` and `reports` tabs now consume own insights/reports APIs instead of no-source fallback ✅
+  - `server`: `npm run prisma:generate`, `npm run typecheck`, `npm run typecheck:spec`, `npm run build` ✅
+  - `server`: `DATABASE_URL=<.../socialtech_server_test> node ./test/run-e2e.cjs social-media-authz.e2e-spec.ts` ✅ (`17/17`)
+  - `adminandemployeePanel`: `npm run typecheck`, `npm run test:run -- SocialMediaWorkspace.test.tsx` ✅ (`8/8`), `npm run build` ✅
+  - `clientPanel`: `npm run typecheck`, `npm run test -- service-tab-page.social-media.test.tsx` ✅ (`6/6`), `npm run build` ✅
 - Latest admin/employee frontend validation checkpoint: last recorded broad suite `25` test files, `153/153` tests; latest targeted Social Media Faz 6 workspace suite adds `1` file, `7/7` tests.
-- Latest client portal frontend validation checkpoint: `4` test files, `17/17` tests.
+- Latest client portal frontend validation checkpoint: Social Media targeted suite `6/6`; broad recorded portal checkpoint remains `4` files, `17/17` tests.
 - Latest FAZ-05 validation checkpoint:
   - `server`: `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true node ./test/run-e2e.cjs meta-ads-authz.e2e-spec.ts` ✅ (`38/38`)
   - `server`: `npm run prisma:seed` ✅

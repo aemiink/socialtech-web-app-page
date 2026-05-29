@@ -56,6 +56,22 @@ export type SocialMediaApprovalStatus =
   | "REJECTED"
   | "ACKNOWLEDGED";
 
+export type SocialMediaReportType =
+  | "WEEKLY"
+  | "MONTHLY"
+  | "POST_PERFORMANCE"
+  | "CONTENT_CALENDAR"
+  | "CREATIVE_PERFORMANCE"
+  | "ENGAGEMENT_REPORT";
+
+export type SocialMediaReportStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
+
+export type SocialMediaReportAcknowledgementStatus =
+  | "NOT_REQUESTED"
+  | "PENDING"
+  | "ACKNOWLEDGED"
+  | "CHANGES_REQUESTED";
+
 export type SocialMediaProjectSummary = {
   id: string;
   name: string;
@@ -116,6 +132,144 @@ export type SocialMediaCalendarResponse = {
     from: string | null;
     to: string | null;
   };
+};
+
+export type SocialMediaInsightPostSummary = {
+  id: string;
+  title: string;
+  type: SocialMediaPostType;
+  status: SocialMediaPostStatus;
+  scheduledAt: string | null;
+  publishedAt: string | null;
+  externalPostUrl: string | null;
+  clientVisible: boolean;
+};
+
+export type SocialMediaInsightItem = {
+  id: string;
+  postId: string;
+  clientProfileId: string;
+  platform: SocialMediaPlatform;
+  date: string;
+  impressions: number;
+  reach: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  saves: number;
+  profileVisits: number;
+  follows: number;
+  clicks: number;
+  engagementRate: number;
+  raw: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+  post: SocialMediaInsightPostSummary;
+};
+
+export type SocialMediaInsightBreakdownItem = {
+  key: string;
+  impressions: number;
+  reach: number;
+  engagements: number;
+  engagementRate: number;
+};
+
+export type SocialMediaInsightTrendItem = {
+  date: string;
+  impressions: number;
+  reach: number;
+  engagements: number;
+  engagementRate: number;
+};
+
+export type SocialMediaTopPostInsight = {
+  postId: string;
+  title: string;
+  platform: SocialMediaPlatform;
+  type: SocialMediaPostType;
+  engagementRate: number;
+  engagementScore: number;
+};
+
+export type SocialMediaInsightsResponse = {
+  data: SocialMediaInsightItem[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    generatedAt: string | null;
+    totals: {
+      impressions: number;
+      reach: number;
+      likes: number;
+      comments: number;
+      shares: number;
+      saves: number;
+      profileVisits: number;
+      follows: number;
+      clicks: number;
+      engagementRate: number;
+    };
+    topPosts: SocialMediaTopPostInsight[];
+    platformBreakdown: SocialMediaInsightBreakdownItem[];
+    typeBreakdown: SocialMediaInsightBreakdownItem[];
+    trend: SocialMediaInsightTrendItem[];
+  };
+};
+
+export type SocialMediaInsightsQuery = {
+  postId?: string;
+  platform?: SocialMediaPlatform;
+  from?: string;
+  to?: string;
+  page?: number;
+  limit?: number;
+};
+
+export type SocialMediaReportItem = {
+  id: string;
+  clientProfileId: string;
+  projectId: string | null;
+  projectName: string | null;
+  periodStart: string;
+  periodEnd: string;
+  type: SocialMediaReportType;
+  status: SocialMediaReportStatus;
+  summary: string | null;
+  metricsSnapshot: Record<string, unknown> | null;
+  clientVisible: boolean;
+  publishedAt: string | null;
+  acknowledgementRequestedAt: string | null;
+  acknowledgedAt: string | null;
+  acknowledgementStatus: SocialMediaReportAcknowledgementStatus;
+  acknowledgementTaskId: string | null;
+  acknowledgementTaskUpdatedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SocialMediaReportsResponse = {
+  data: SocialMediaReportItem[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    draft: number;
+    published: number;
+    clientVisible: number;
+  };
+};
+
+export type SocialMediaReportsQuery = {
+  status?: SocialMediaReportStatus;
+  type?: SocialMediaReportType;
+  from?: string;
+  to?: string;
+  page?: number;
+  limit?: number;
 };
 
 export type SocialMediaConfig = {

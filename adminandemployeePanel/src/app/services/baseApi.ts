@@ -83,6 +83,8 @@ export const baseApi = createApi({
     "SocialMediaConfig",
     "SocialMediaSummary",
     "SocialMediaPosts",
+    "SocialMediaInsights",
+    "SocialMediaReports",
     "TikTokAdsConfig",
   ],
   endpoints: () => ({}),

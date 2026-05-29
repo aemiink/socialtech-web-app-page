@@ -5,10 +5,19 @@ import type {
   SocialMediaConnectionStatus,
   SocialMediaCreativeAsset,
   SocialMediaGoal,
+  SocialMediaInsightBreakdownItem,
+  SocialMediaInsightItem,
+  SocialMediaInsightsResponse,
+  SocialMediaInsightTrendItem,
   SocialMediaPlatform,
   SocialMediaPost,
   SocialMediaPostAsset,
   SocialMediaPostAssetFile,
+  SocialMediaReportAcknowledgementStatus,
+  SocialMediaReportItem,
+  SocialMediaReportsResponse,
+  SocialMediaReportStatus,
+  SocialMediaReportType,
   SocialMediaPostStatus,
   SocialMediaPostType,
   SocialMediaProjectSummary,
@@ -83,6 +92,28 @@ const SOCIAL_MEDIA_APPROVAL_STATUS_OPTIONS: SocialMediaApprovalStatus[] = [
   "ACKNOWLEDGED",
 ];
 
+export const SOCIAL_MEDIA_REPORT_TYPE_OPTIONS: SocialMediaReportType[] = [
+  "WEEKLY",
+  "MONTHLY",
+  "POST_PERFORMANCE",
+  "CONTENT_CALENDAR",
+  "CREATIVE_PERFORMANCE",
+  "ENGAGEMENT_REPORT",
+];
+
+const SOCIAL_MEDIA_REPORT_STATUS_OPTIONS: SocialMediaReportStatus[] = [
+  "DRAFT",
+  "PUBLISHED",
+  "ARCHIVED",
+];
+
+const SOCIAL_MEDIA_REPORT_ACKNOWLEDGEMENT_STATUS_OPTIONS: SocialMediaReportAcknowledgementStatus[] = [
+  "NOT_REQUESTED",
+  "PENDING",
+  "ACKNOWLEDGED",
+  "CHANGES_REQUESTED",
+];
+
 const PLATFORM_LABELS: Record<SocialMediaPlatform, string> = {
   INSTAGRAM: "Instagram",
   FACEBOOK: "Facebook",
@@ -132,6 +163,21 @@ const SUMMARY_STATE_LABELS: Record<SocialMediaSummaryState, string> = {
   WAITING_CONTENT_PLAN: "İçerik planı bekliyor",
 };
 
+const REPORT_TYPE_LABELS: Record<SocialMediaReportType, string> = {
+  WEEKLY: "Haftalık",
+  MONTHLY: "Aylık",
+  POST_PERFORMANCE: "Post Performansı",
+  CONTENT_CALENDAR: "İçerik Takvimi",
+  CREATIVE_PERFORMANCE: "Kreatif Performansı",
+  ENGAGEMENT_REPORT: "Etkileşim Raporu",
+};
+
+const REPORT_STATUS_LABELS: Record<SocialMediaReportStatus, string> = {
+  DRAFT: "Taslak",
+  PUBLISHED: "Yayınlandı",
+  ARCHIVED: "Arşivlendi",
+};
+
 export function normalizeOwnSocialMediaPostsResponse(response: unknown): SocialMediaPost[] {
   const responseData = isRecord(response) && "data" in response ? response.data : response;
   return Array.isArray(responseData) ? responseData.map(normalizeSocialMediaPost).filter(isDefined) : [];
@@ -151,6 +197,32 @@ export function normalizeOwnSocialMediaCalendarResponse(response: unknown): Soci
       from: readNullableString(meta.from),
       to: readNullableString(meta.to),
     },
+  };
+}
+
+export function normalizeOwnSocialMediaInsightsResponse(response: unknown): SocialMediaInsightsResponse {
+  const responseData = isRecord(response) && "data" in response ? response.data : response;
+  const data = Array.isArray(responseData)
+    ? responseData.map(normalizeSocialMediaInsight).filter(isDefined)
+    : [];
+  const meta = isRecord(response) ? response.meta : null;
+
+  return {
+    data,
+    meta: normalizeInsightsMeta(meta, data.length),
+  };
+}
+
+export function normalizeOwnSocialMediaReportsResponse(response: unknown): SocialMediaReportsResponse {
+  const responseData = isRecord(response) && "data" in response ? response.data : response;
+  const data = Array.isArray(responseData)
+    ? responseData.map(normalizeSocialMediaReport).filter(isDefined)
+    : [];
+  const meta = isRecord(response) ? response.meta : null;
+
+  return {
+    data,
+    meta: normalizeReportsMeta(meta, data.length),
   };
 }
 
@@ -243,6 +315,14 @@ export function getSocialMediaSummaryStateLabel(state: SocialMediaSummaryState):
   return SUMMARY_STATE_LABELS[state] ?? state;
 }
 
+export function getSocialMediaReportTypeLabel(type: SocialMediaReportType): string {
+  return REPORT_TYPE_LABELS[type] ?? type;
+}
+
+export function getSocialMediaReportStatusLabel(status: SocialMediaReportStatus): string {
+  return REPORT_STATUS_LABELS[status] ?? status;
+}
+
 export function getSocialMediaStatusTone(status: SocialMediaPostStatus): string {
   if (status === "PUBLISHED" || status === "APPROVED") {
     return "border-[#AAFF01]/20 bg-[#AAFF01]/10 text-[#AAFF01]";
@@ -292,6 +372,120 @@ export function groupPostsByDay(posts: SocialMediaPost[]): Array<{ day: string; 
   }, {});
 
   return Object.entries(grouped).map(([day, groupedPosts]) => ({ day, posts: groupedPosts }));
+}
+
+function normalizeSocialMediaInsight(value: unknown): SocialMediaInsightItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const platform = readEnumValue(value.platform, SOCIAL_MEDIA_PLATFORM_OPTIONS);
+  const post = normalizeInsightPost(value.post);
+  if (
+    typeof value.id !== "string" ||
+    typeof value.postId !== "string" ||
+    typeof value.clientProfileId !== "string" ||
+    typeof value.date !== "string" ||
+    typeof value.createdAt !== "string" ||
+    typeof value.updatedAt !== "string" ||
+    !platform ||
+    !post
+  ) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    postId: value.postId,
+    clientProfileId: value.clientProfileId,
+    platform,
+    date: value.date,
+    impressions: readNumber(value.impressions),
+    reach: readNumber(value.reach),
+    likes: readNumber(value.likes),
+    comments: readNumber(value.comments),
+    shares: readNumber(value.shares),
+    saves: readNumber(value.saves),
+    profileVisits: readNumber(value.profileVisits),
+    follows: readNumber(value.follows),
+    clicks: readNumber(value.clicks),
+    engagementRate: readNumber(value.engagementRate),
+    raw: isRecord(value.raw) ? value.raw : null,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+    post,
+  };
+}
+
+function normalizeInsightPost(value: unknown): SocialMediaInsightItem["post"] | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const type = readEnumValue(value.type, SOCIAL_MEDIA_POST_TYPE_OPTIONS);
+  const status = readEnumValue(value.status, SOCIAL_MEDIA_POST_STATUS_OPTIONS);
+  if (typeof value.id !== "string" || typeof value.title !== "string" || !type || !status) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    title: value.title,
+    type,
+    status,
+    scheduledAt: readNullableString(value.scheduledAt),
+    publishedAt: readNullableString(value.publishedAt),
+    externalPostUrl: readNullableString(value.externalPostUrl),
+    clientVisible: value.clientVisible === true,
+  };
+}
+
+function normalizeSocialMediaReport(value: unknown): SocialMediaReportItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const type = readEnumValue(value.type, SOCIAL_MEDIA_REPORT_TYPE_OPTIONS);
+  const status = readEnumValue(value.status, SOCIAL_MEDIA_REPORT_STATUS_OPTIONS);
+  const acknowledgementStatus =
+    readEnumValue(
+      value.acknowledgementStatus,
+      SOCIAL_MEDIA_REPORT_ACKNOWLEDGEMENT_STATUS_OPTIONS,
+    ) ?? "NOT_REQUESTED";
+  if (
+    typeof value.id !== "string" ||
+    typeof value.clientProfileId !== "string" ||
+    typeof value.periodStart !== "string" ||
+    typeof value.periodEnd !== "string" ||
+    typeof value.createdAt !== "string" ||
+    typeof value.updatedAt !== "string" ||
+    !type ||
+    !status
+  ) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    clientProfileId: value.clientProfileId,
+    projectId: readNullableString(value.projectId),
+    projectName: readNullableString(value.projectName),
+    periodStart: value.periodStart,
+    periodEnd: value.periodEnd,
+    type,
+    status,
+    summary: readNullableString(value.summary),
+    metricsSnapshot: isRecord(value.metricsSnapshot) ? value.metricsSnapshot : null,
+    clientVisible: value.clientVisible === true,
+    publishedAt: readNullableString(value.publishedAt),
+    acknowledgementRequestedAt: readNullableString(value.acknowledgementRequestedAt),
+    acknowledgedAt: readNullableString(value.acknowledgedAt),
+    acknowledgementStatus,
+    acknowledgementTaskId: readNullableString(value.acknowledgementTaskId),
+    acknowledgementTaskUpdatedAt: readNullableString(value.acknowledgementTaskUpdatedAt),
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+  };
 }
 
 function normalizeSocialMediaPost(value: unknown): SocialMediaPost | null {
@@ -509,6 +703,117 @@ function normalizeProjectSummary(value: unknown): SocialMediaProjectSummary | nu
   };
 }
 
+function normalizeInsightsMeta(
+  meta: unknown,
+  dataLength: number,
+): SocialMediaInsightsResponse["meta"] {
+  const source = isRecord(meta) ? meta : {};
+  const total = readNumber(source.total, dataLength);
+  const limit = Math.max(readNumber(source.limit, dataLength || 1), 1);
+  const totalPages = Math.max(readNumber(source.totalPages, Math.ceil(total / limit) || 1), 1);
+  const totals = isRecord(source.totals) ? source.totals : {};
+
+  return {
+    page: Math.min(Math.max(readNumber(source.page, 1), 1), totalPages),
+    limit,
+    total,
+    totalPages,
+    generatedAt: readNullableString(source.generatedAt),
+    totals: {
+      impressions: readNumber(totals.impressions),
+      reach: readNumber(totals.reach),
+      likes: readNumber(totals.likes),
+      comments: readNumber(totals.comments),
+      shares: readNumber(totals.shares),
+      saves: readNumber(totals.saves),
+      profileVisits: readNumber(totals.profileVisits),
+      follows: readNumber(totals.follows),
+      clicks: readNumber(totals.clicks),
+      engagementRate: readNumber(totals.engagementRate),
+    },
+    topPosts: Array.isArray(source.topPosts)
+      ? source.topPosts.map(normalizeTopPostInsight).filter(isDefined)
+      : [],
+    platformBreakdown: Array.isArray(source.platformBreakdown)
+      ? source.platformBreakdown.map(normalizeInsightBreakdown).filter(isDefined)
+      : [],
+    typeBreakdown: Array.isArray(source.typeBreakdown)
+      ? source.typeBreakdown.map(normalizeInsightBreakdown).filter(isDefined)
+      : [],
+    trend: Array.isArray(source.trend)
+      ? source.trend.map(normalizeInsightTrend).filter(isDefined)
+      : [],
+  };
+}
+
+function normalizeReportsMeta(meta: unknown, dataLength: number): SocialMediaReportsResponse["meta"] {
+  const source = isRecord(meta) ? meta : {};
+  const total = readNumber(source.total, dataLength);
+  const limit = Math.max(readNumber(source.limit, dataLength || 1), 1);
+  const totalPages = Math.max(readNumber(source.totalPages, Math.ceil(total / limit) || 1), 1);
+
+  return {
+    page: Math.min(Math.max(readNumber(source.page, 1), 1), totalPages),
+    limit,
+    total,
+    totalPages,
+    draft: readNumber(source.draft),
+    published: readNumber(source.published),
+    clientVisible: readNumber(source.clientVisible),
+  };
+}
+
+function normalizeTopPostInsight(
+  value: unknown,
+): SocialMediaInsightsResponse["meta"]["topPosts"][number] | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const platform = readEnumValue(value.platform, SOCIAL_MEDIA_PLATFORM_OPTIONS);
+  const type = readEnumValue(value.type, SOCIAL_MEDIA_POST_TYPE_OPTIONS);
+  if (typeof value.postId !== "string" || typeof value.title !== "string" || !platform || !type) {
+    return null;
+  }
+
+  return {
+    postId: value.postId,
+    title: value.title,
+    platform,
+    type,
+    engagementRate: readNumber(value.engagementRate),
+    engagementScore: readNumber(value.engagementScore),
+  };
+}
+
+function normalizeInsightBreakdown(value: unknown): SocialMediaInsightBreakdownItem | null {
+  if (!isRecord(value) || typeof value.key !== "string") {
+    return null;
+  }
+
+  return {
+    key: value.key,
+    impressions: readNumber(value.impressions),
+    reach: readNumber(value.reach),
+    engagements: readNumber(value.engagements),
+    engagementRate: readNumber(value.engagementRate),
+  };
+}
+
+function normalizeInsightTrend(value: unknown): SocialMediaInsightTrendItem | null {
+  if (!isRecord(value) || typeof value.date !== "string") {
+    return null;
+  }
+
+  return {
+    date: value.date,
+    impressions: readNumber(value.impressions),
+    reach: readNumber(value.reach),
+    engagements: readNumber(value.engagements),
+    engagementRate: readNumber(value.engagementRate),
+  };
+}
+
 function isSocialMediaPlatform(value: unknown): value is SocialMediaPlatform {
   return typeof value === "string" && SOCIAL_MEDIA_PLATFORM_OPTIONS.includes(value as SocialMediaPlatform);
 }
@@ -529,8 +834,8 @@ function readString(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
-function readNumber(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+function readNumber(value: unknown, fallback = 0): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
 function readStringArray(value: unknown): string[] {

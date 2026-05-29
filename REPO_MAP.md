@@ -298,22 +298,30 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 - `server/src/social-media/social-media.module.ts`
 - `server/src/social-media/admin-social-media.controller.ts`
   - admin global clients overview endpoint under `/api/v1/social-media/clients`
-  - admin/assigned config read, admin config update, admin/assigned summary, and client-scoped post list/create endpoints under `/api/v1/social-media/clients/:clientId/*`
+  - admin/assigned config read, admin config update, admin/assigned summary, client-scoped post list/create, insight list, and report list/create endpoints under `/api/v1/social-media/clients/:clientId/*`
 - `server/src/social-media/admin-social-media-posts.controller.ts`
-  - post detail/update/delete and asset attach/delete endpoints under `/api/v1/social-media/posts/:id*`
+  - post detail/update/delete, schedule/mark-published/cancel, insight create, and asset attach/delete endpoints under `/api/v1/social-media/posts/:id*`
+- `server/src/social-media/admin-social-media-reports.controller.ts`
+  - Social Media report update/publish endpoints under `/api/v1/social-media/reports/:id*`
 - `server/src/social-media/client-social-media.controller.ts`
-  - own-client config/summary/posts/calendar endpoints under `/api/v1/clients/me/social-media/*` plus `/api/v1/client/social-media/*` compatibility aliases
+  - own-client config/summary/posts/calendar/insights/reports endpoints under `/api/v1/clients/me/social-media/*` plus `/api/v1/client/social-media/*` compatibility aliases
 - `server/src/social-media/social-media.service.ts`
-  - service-level admin/assigned/client permission checks, admin global client list aggregation, active `SOCIAL_MEDIA` purchased-service checks, safe config/own post response shaping, post CRUD, status transition guard, and `ProjectFile` asset binding
+  - service-level admin/assigned/client permission checks, admin global client list aggregation, active `SOCIAL_MEDIA` purchased-service checks, safe config/own post response shaping, post CRUD/publishing, insight aggregation, report draft/publish/acknowledgement bridge, status transition guard, and `ProjectFile` asset binding
 - `server/src/social-media/social-media-summary.service.ts`
   - V1 summary read model from `ClientPurchasedService`, `ClientSocialMediaConfig`, `Project`, `Task`, `TaskTodo`, `ProjectFile`, and `SocialMediaPost`; own-client callers can request client-visible-only post/asset shaping
 - `server/src/social-media/dto/attach-social-media-post-asset.dto.ts`
 - `server/src/social-media/dto/create-social-media-post.dto.ts`
+- `server/src/social-media/dto/create-social-media-post-insight.dto.ts`
+- `server/src/social-media/dto/create-social-media-report.dto.ts`
+- `server/src/social-media/dto/social-media-insights-query.dto.ts`
 - `server/src/social-media/dto/social-media-post-query.dto.ts`
+- `server/src/social-media/dto/social-media-reports-query.dto.ts`
+- `server/src/social-media/dto/update-social-media-report.dto.ts`
 - `server/src/social-media/dto/update-social-media-post.dto.ts`
 - `server/src/social-media/dto/update-social-media-config.dto.ts`
 - `server/prisma/migrations/20260528183000_add_social_media_config/migration.sql`
 - `server/prisma/migrations/20260528193000_add_social_media_posts/migration.sql`
+- `server/prisma/migrations/20260529172000_add_social_media_insights_reports/migration.sql`
 - `server/test/social-media-authz.e2e-spec.ts`
   - admin global clients list, non-admin global endpoint denial, admin config update, assigned employee read/summary, own-client summary, admin-route denial for client accounts, unauthenticated request, post CRUD, status transition, out-of-scope read denial, client-visible filtering, and designer asset attach/delete coverage
 
@@ -397,6 +405,46 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - Social Media approval type label rendering through the shared approvals panel
 - `clientPanel/src/app/pages/__tests__/service-tab-page.social-media.test.tsx`
   - pending Social Media approval render + approve mutation coverage
+
+## 2026-05-29 Update Map (Social Media Faz 8 Insights + Reporting)
+
+### Backend
+- `server/prisma/schema.prisma`
+  - `SocialMediaPostInsight`, `SocialMediaReport`, report type/status enums and relations added
+- `server/prisma/migrations/20260529172000_add_social_media_insights_reports/migration.sql`
+  - PostgreSQL tables/indexes/FKs for Social Media insights and reports
+- `server/src/social-media/admin-social-media.controller.ts`
+  - client insight/report list and report create endpoints
+- `server/src/social-media/admin-social-media-posts.controller.ts`
+  - post insight create endpoint
+- `server/src/social-media/admin-social-media-reports.controller.ts`
+  - report update and publish endpoints
+- `server/src/social-media/client-social-media.controller.ts`
+  - own-client visible insights and reports endpoints
+- `server/src/social-media/social-media.service.ts`
+  - insight aggregation/read model, report draft/publish/read model, assigned/admin/client authz and report acknowledgement task bridge
+- `server/test/social-media-authz.e2e-spec.ts`
+  - admin/assigned insight create, own client visible insights, draft-hidden/published-visible reports and acknowledgement task coverage
+
+### Admin + Employee Panel Frontend
+- `adminandemployeePanel/src/app/features/socialMedia/socialMediaApi.ts`
+- `adminandemployeePanel/src/app/features/socialMedia/socialMediaTypes.ts`
+- `adminandemployeePanel/src/app/features/socialMedia/socialMediaUtils.ts`
+  - RTK Query hooks, types and normalizers for Social Media insights/reports
+- `adminandemployeePanel/src/app/employee/components/SocialMediaWorkspace.tsx`
+  - reports tab supports performance snapshot input, KPI/report lists, report draft create and publish action
+- `adminandemployeePanel/src/app/employee/pages/__tests__/SocialMediaWorkspace.test.tsx`
+  - reports workspace insight/report/publish mutation coverage
+
+### Client Panel Frontend
+- `clientPanel/src/app/features/socialMedia/socialMediaApi.ts`
+- `clientPanel/src/app/features/socialMedia/socialMediaTypes.ts`
+- `clientPanel/src/app/features/socialMedia/socialMediaUtils.ts`
+  - own-client insights/reports hooks, types and normalizers
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+  - Social Media `performance` and `reports` tabs render API-driven data
+- `clientPanel/src/app/pages/__tests__/service-tab-page.social-media.test.tsx`
+  - performance and reports tab API render coverage
 
 ### TikTok Ads Backend Module
 

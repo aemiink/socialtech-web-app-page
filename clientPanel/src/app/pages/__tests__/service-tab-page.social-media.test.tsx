@@ -6,6 +6,8 @@ const mockUseGetOwnSocialMediaSummaryQuery = vi.fn();
 const mockUseGetOwnSocialMediaConfigQuery = vi.fn();
 const mockUseGetOwnSocialMediaCalendarQuery = vi.fn();
 const mockUseGetOwnSocialMediaPostsQuery = vi.fn();
+const mockUseGetOwnSocialMediaInsightsQuery = vi.fn();
+const mockUseGetOwnSocialMediaReportsQuery = vi.fn();
 const mockUseGetClientTasksQuery = vi.fn();
 const mockUseUpdateClientTaskApprovalMutation = vi.fn();
 const mockUpdateClientTaskApproval = vi.fn();
@@ -19,6 +21,10 @@ vi.mock("../../features/socialMedia/socialMediaApi", () => ({
     mockUseGetOwnSocialMediaCalendarQuery(...args),
   useGetOwnSocialMediaPostsQuery: (...args: unknown[]) =>
     mockUseGetOwnSocialMediaPostsQuery(...args),
+  useGetOwnSocialMediaInsightsQuery: (...args: unknown[]) =>
+    mockUseGetOwnSocialMediaInsightsQuery(...args),
+  useGetOwnSocialMediaReportsQuery: (...args: unknown[]) =>
+    mockUseGetOwnSocialMediaReportsQuery(...args),
 }));
 
 vi.mock("../../features/webAppWorkspace/webAppWorkspaceApi", () => ({
@@ -74,6 +80,8 @@ describe("ServiceTabPage Social Media tabs", () => {
     mockUseGetOwnSocialMediaConfigQuery.mockReset();
     mockUseGetOwnSocialMediaCalendarQuery.mockReset();
     mockUseGetOwnSocialMediaPostsQuery.mockReset();
+    mockUseGetOwnSocialMediaInsightsQuery.mockReset();
+    mockUseGetOwnSocialMediaReportsQuery.mockReset();
     mockUseGetClientTasksQuery.mockReset();
     mockUseUpdateClientTaskApprovalMutation.mockReset();
 
@@ -126,6 +134,122 @@ describe("ServiceTabPage Social Media tabs", () => {
           externalPostUrl: "https://instagram.com/p/acme-phase-7",
         }),
       ],
+      isLoading: false,
+      isError: false,
+    });
+    mockUseGetOwnSocialMediaInsightsQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "insight-1",
+            postId: "post-3",
+            clientProfileId: "client-1",
+            platform: "INSTAGRAM",
+            date: "2026-06-05T00:00:00.000Z",
+            impressions: 2400,
+            reach: 1800,
+            likes: 210,
+            comments: 24,
+            shares: 18,
+            saves: 33,
+            profileVisits: 20,
+            follows: 7,
+            clicks: 45,
+            engagementRate: 18.33,
+            raw: null,
+            createdAt: "2026-06-05T00:00:00.000Z",
+            updatedAt: "2026-06-05T00:00:00.000Z",
+            post: {
+              id: "post-3",
+              title: "Yayınlanan Post",
+              type: "REEL",
+              status: "PUBLISHED",
+              scheduledAt: "2026-06-01T10:00:00.000Z",
+              publishedAt: "2026-06-01T12:00:00.000Z",
+              externalPostUrl: "https://instagram.com/p/acme-phase-7",
+              clientVisible: true,
+            },
+          },
+        ],
+        meta: {
+          page: 1,
+          limit: 50,
+          total: 1,
+          totalPages: 1,
+          generatedAt: "2026-06-05T00:00:00.000Z",
+          totals: {
+            impressions: 2400,
+            reach: 1800,
+            likes: 210,
+            comments: 24,
+            shares: 18,
+            saves: 33,
+            profileVisits: 20,
+            follows: 7,
+            clicks: 45,
+            engagementRate: 18.33,
+          },
+          topPosts: [
+            {
+              postId: "post-3",
+              title: "Yayınlanan Post",
+              platform: "INSTAGRAM",
+              type: "REEL",
+              engagementRate: 18.33,
+              engagementScore: 330,
+            },
+          ],
+          platformBreakdown: [
+            {
+              key: "INSTAGRAM",
+              impressions: 2400,
+              reach: 1800,
+              engagements: 330,
+              engagementRate: 18.33,
+            },
+          ],
+          typeBreakdown: [],
+          trend: [],
+        },
+      },
+      isLoading: false,
+      isError: false,
+    });
+    mockUseGetOwnSocialMediaReportsQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "report-1",
+            clientProfileId: "client-1",
+            projectId: "project-1",
+            projectName: "Social Media",
+            periodStart: "2026-06-01T00:00:00.000Z",
+            periodEnd: "2026-06-07T23:59:59.999Z",
+            type: "WEEKLY",
+            status: "PUBLISHED",
+            summary: "Haftalık Social Media performans özeti.",
+            metricsSnapshot: null,
+            clientVisible: true,
+            publishedAt: "2026-06-08T09:00:00.000Z",
+            acknowledgementRequestedAt: "2026-06-08T09:00:00.000Z",
+            acknowledgedAt: null,
+            acknowledgementStatus: "PENDING",
+            acknowledgementTaskId: "task-report-1",
+            acknowledgementTaskUpdatedAt: "2026-06-08T09:00:00.000Z",
+            createdAt: "2026-06-08T08:00:00.000Z",
+            updatedAt: "2026-06-08T09:00:00.000Z",
+          },
+        ],
+        meta: {
+          page: 1,
+          limit: 20,
+          total: 1,
+          totalPages: 1,
+          draft: 0,
+          published: 1,
+          clientVisible: 1,
+        },
+      },
       isLoading: false,
       isError: false,
     });
@@ -213,6 +337,24 @@ describe("ServiceTabPage Social Media tabs", () => {
       "href",
       "https://instagram.com/p/acme-phase-7",
     );
+  });
+
+  it("renders performance tab from Social Media insights API", () => {
+    render(<ServiceTabPage serviceId="social-media" tabId="performance" />);
+
+    expect(screen.getByText("Performans")).toBeInTheDocument();
+    expect(screen.getAllByText("Yayınlanan Post").length).toBeGreaterThan(0);
+    expect(screen.getByText("2.400")).toBeInTheDocument();
+    expect(screen.getByText("INSTAGRAM")).toBeInTheDocument();
+  });
+
+  it("renders reports tab from Social Media reports API", () => {
+    render(<ServiceTabPage serviceId="social-media" tabId="reports" />);
+
+    expect(screen.getByText("Raporlar")).toBeInTheDocument();
+    expect(screen.getByText("Haftalık Social Media performans özeti.")).toBeInTheDocument();
+    expect(screen.getByText("Onay: PENDING")).toBeInTheDocument();
+    expect(screen.queryByText("Bu sekme için henüz Social Media API veri kaynağı aktif değil. Mock içerik gösterilmiyor.")).not.toBeInTheDocument();
   });
 });
 

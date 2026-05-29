@@ -80,16 +80,26 @@ import type {
 import {
   useGetOwnSocialMediaCalendarQuery,
   useGetOwnSocialMediaConfigQuery,
+  useGetOwnSocialMediaInsightsQuery,
   useGetOwnSocialMediaPostsQuery,
+  useGetOwnSocialMediaReportsQuery,
   useGetOwnSocialMediaSummaryQuery,
 } from '../features/socialMedia/socialMediaApi';
-import type { SocialMediaCreativeAsset, SocialMediaPost, SocialMediaSummary } from '../features/socialMedia/socialMediaTypes';
+import type {
+  SocialMediaCreativeAsset,
+  SocialMediaInsightsResponse,
+  SocialMediaPost,
+  SocialMediaReportsResponse,
+  SocialMediaSummary,
+} from '../features/socialMedia/socialMediaTypes';
 import {
   formatSocialMediaDate,
   getSocialMediaGoalLabel,
   getSocialMediaPlatformLabel,
   getSocialMediaPostStatusLabel,
   getSocialMediaPostTypeLabel,
+  getSocialMediaReportStatusLabel,
+  getSocialMediaReportTypeLabel,
   getSocialMediaSummaryStateLabel,
   getSocialMediaStatusTone,
   groupPostsByDay,
@@ -4281,6 +4291,8 @@ function SocialMediaClientWorkspace({ tabId }: { tabId: string }) {
   const isCalendarTab = tabId === 'content-calendar';
   const isPostListTab = tabId === 'pending-approvals' || tabId === 'published-content';
   const isApprovalTab = tabId === 'pending-approvals' || tabId === 'approvals';
+  const isPerformanceTab = tabId === 'performance';
+  const isReportsTab = tabId === 'reports';
   const [activeApprovalTaskId, setActiveApprovalTaskId] = useState<string | null>(null);
   const {
     data: summary,
@@ -4302,6 +4314,16 @@ function SocialMediaClientWorkspace({ tabId }: { tabId: string }) {
     isLoading: postsLoading,
     isError: postsError,
   } = useGetOwnSocialMediaPostsQuery({ limit: 80 }, { skip: !isPostListTab });
+  const {
+    data: insightsResponse,
+    isLoading: insightsLoading,
+    isError: insightsError,
+  } = useGetOwnSocialMediaInsightsQuery({ limit: 50 }, { skip: !isPerformanceTab });
+  const {
+    data: reportsResponse,
+    isLoading: socialReportsLoading,
+    isError: socialReportsError,
+  } = useGetOwnSocialMediaReportsQuery({ limit: 20 }, { skip: !isReportsTab });
   const {
     data: approvalTasks = [],
     isLoading: approvalsLoading,
@@ -4336,12 +4358,16 @@ function SocialMediaClientWorkspace({ tabId }: { tabId: string }) {
     configLoading ||
     (isCalendarTab && calendarLoading) ||
     (isPostListTab && postsLoading) ||
+    (isPerformanceTab && insightsLoading) ||
+    (isReportsTab && socialReportsLoading) ||
     (isApprovalTab && approvalsLoading);
   const isError =
     summaryError ||
     configError ||
     (isCalendarTab && calendarError) ||
     (isPostListTab && postsError) ||
+    (isPerformanceTab && insightsError) ||
+    (isReportsTab && socialReportsError) ||
     (isApprovalTab && approvalsError);
 
   const handleApprovalDecision = async (
@@ -4489,7 +4515,15 @@ function SocialMediaClientWorkspace({ tabId }: { tabId: string }) {
     );
   }
 
-  if (tabId === 'dm-comments' || tabId === 'competitor-analysis' || tabId === 'performance' || tabId === 'reports') {
+  if (isPerformanceTab) {
+    return <SocialMediaPerformanceWorkspace insightsResponse={insightsResponse ?? null} summary={summary} />;
+  }
+
+  if (isReportsTab) {
+    return <SocialMediaReportsWorkspace reportsResponse={reportsResponse ?? null} />;
+  }
+
+  if (tabId === 'dm-comments' || tabId === 'competitor-analysis') {
     return <SocialMediaUnavailableWorkspace tabId={tabId} summary={summary} />;
   }
 
@@ -4667,6 +4701,191 @@ function SocialMediaAgencyNotesWorkspace({
   );
 }
 
+function SocialMediaPerformanceWorkspace({
+  insightsResponse,
+  summary,
+}: {
+  insightsResponse: SocialMediaInsightsResponse | null;
+  summary: SocialMediaSummary | null | undefined;
+}) {
+  const meta = insightsResponse?.meta ?? null;
+  const insights = insightsResponse?.data ?? [];
+  const totals = meta?.totals;
+
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className={`${cardClass} xl:col-span-2`}>
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h2 className="text-xl text-white mb-1">Performans</h2>
+            <p className="text-sm text-[#A0A0A0]">Yayın sonrası görünür Social Media metrikleri.</p>
+          </div>
+          <span className={`text-xs px-2 py-1 rounded border ${statusTone.info}`}>
+            {insights.length} snapshot
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6">
+          {[
+            ['Impression', totals?.impressions ?? 0],
+            ['Reach', totals?.reach ?? 0],
+            ['Engagement', `${formatCompactNumber(totals?.engagementRate ?? 0)}%`],
+            ['Yayınlanan', summary?.metrics.publishedPosts ?? 0],
+          ].map(([label, value]) => (
+            <div key={label} className="rounded-xl border border-white/[0.08] bg-[#202020] p-4">
+              <p className="text-xs text-[#A0A0A0]">{label}</p>
+              <p className="mt-2 text-2xl text-white">{typeof value === 'number' ? formatCompactNumber(value) : value}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {insights.length > 0 ? (
+            insights.slice(0, 6).map((insight) => (
+              <div key={insight.id} className={innerClass}>
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm text-white">{insight.post.title}</h3>
+                    <p className="mt-1 text-xs text-[#A0A0A0]">
+                      {getSocialMediaPlatformLabel(insight.platform)} · {formatSocialMediaDate(insight.date)}
+                    </p>
+                  </div>
+                  <span className={`text-xs px-2 py-1 rounded border ${statusTone.good}`}>
+                    {formatCompactNumber(insight.engagementRate)}%
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-xs text-[#A0A0A0]">
+                  <span>Reach {formatCompactNumber(insight.reach)}</span>
+                  <span>Like {formatCompactNumber(insight.likes)}</span>
+                  <span>Click {formatCompactNumber(insight.clicks)}</span>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="md:col-span-2 rounded-xl bg-[#202020] p-4 border border-white/[0.08] text-sm text-[#A0A0A0]">
+              Henüz client-visible performans snapshot yok.
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className={`${cardClass} space-y-5`}>
+        <div>
+          <h2 className="text-xl text-white mb-4">Top Postlar</h2>
+          <div className="space-y-3">
+            {(meta?.topPosts ?? []).length > 0 ? (
+              meta?.topPosts.map((post) => (
+                <div key={post.postId} className="rounded-xl bg-[#202020] p-3 border border-white/[0.08]">
+                  <p className="text-sm text-white">{post.title}</p>
+                  <p className="mt-1 text-xs text-[#A0A0A0]">
+                    {getSocialMediaPlatformLabel(post.platform)} · {formatCompactNumber(post.engagementScore)} etkileşim
+                  </p>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-[#A0A0A0]">Top post verisi henüz yok.</p>
+            )}
+          </div>
+        </div>
+
+        <div>
+          <h2 className="text-xl text-white mb-4">Platform Dağılımı</h2>
+          <div className="space-y-3">
+            {(meta?.platformBreakdown ?? []).map((item) => (
+              <div key={item.key} className="rounded-xl bg-[#202020] p-3 border border-white/[0.08]">
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="text-white">{item.key}</span>
+                  <span className="text-[#AAFF01]">{formatCompactNumber(item.engagementRate)}%</span>
+                </div>
+              </div>
+            ))}
+            {(meta?.platformBreakdown ?? []).length === 0 ? (
+              <p className="text-sm text-[#A0A0A0]">Platform kırılımı henüz yok.</p>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SocialMediaReportsWorkspace({
+  reportsResponse,
+}: {
+  reportsResponse: SocialMediaReportsResponse | null;
+}) {
+  const reports = reportsResponse?.data ?? [];
+
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className={`${cardClass} xl:col-span-2`}>
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h2 className="text-xl text-white mb-1">Raporlar</h2>
+            <p className="text-sm text-[#A0A0A0]">Ajans tarafından yayınlanan Social Media raporları.</p>
+          </div>
+          <span className={`text-xs px-2 py-1 rounded border ${statusTone.violet}`}>
+            {reports.length} rapor
+          </span>
+        </div>
+
+        <div className="space-y-4">
+          {reports.length > 0 ? (
+            reports.map((report) => (
+              <div key={report.id} className={innerClass}>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h3 className="text-white">{getSocialMediaReportTypeLabel(report.type)}</h3>
+                    <p className="mt-1 text-xs text-[#A0A0A0]">
+                      {formatSocialMediaDate(report.periodStart)} - {formatSocialMediaDate(report.periodEnd)}
+                    </p>
+                  </div>
+                  <span className={`text-xs px-2 py-1 rounded border ${statusTone.good}`}>
+                    {getSocialMediaReportStatusLabel(report.status)}
+                  </span>
+                </div>
+                {report.summary ? (
+                  <p className="mt-4 text-sm leading-relaxed text-[#D7D7D7]">{report.summary}</p>
+                ) : null}
+                <div className="mt-4 flex flex-wrap gap-2 text-xs">
+                  <span className={`px-2 py-1 rounded border ${statusTone.info}`}>
+                    {report.acknowledgementStatus === 'NOT_REQUESTED'
+                      ? 'Bilgilendirme'
+                      : `Onay: ${report.acknowledgementStatus}`}
+                  </span>
+                  {report.publishedAt ? (
+                    <span className="px-2 py-1 rounded border border-white/[0.08] text-[#A0A0A0]">
+                      Yayın: {formatSocialMediaDate(report.publishedAt)}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-xl bg-[#202020] p-4 border border-white/[0.08] text-sm text-[#A0A0A0]">
+              Henüz yayınlanmış Social Media raporu yok.
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className={cardClass}>
+        <h2 className="text-xl text-white mb-4">Rapor Özeti</h2>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between rounded-xl bg-[#202020] p-3 border border-white/[0.08]">
+            <span className="text-sm text-[#A0A0A0]">Yayınlandı</span>
+            <span className="text-sm text-white">{reportsResponse?.meta.published ?? 0}</span>
+          </div>
+          <div className="flex items-center justify-between rounded-xl bg-[#202020] p-3 border border-white/[0.08]">
+            <span className="text-sm text-[#A0A0A0]">Client-visible</span>
+            <span className="text-sm text-white">{reportsResponse?.meta.clientVisible ?? 0}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SocialMediaUnavailableWorkspace({
   tabId,
   summary,
@@ -4735,6 +4954,10 @@ function buildStatusSummary(posts: SocialMediaPost[]): Array<{ status: SocialMed
     status: status as SocialMediaPost['status'],
     count: count ?? 0,
   }));
+}
+
+function formatCompactNumber(value: number): string {
+  return new Intl.NumberFormat('tr-TR', { maximumFractionDigits: 2 }).format(value);
 }
 
 function getSocialMediaUnavailableTabLabel(tabId: string): string {

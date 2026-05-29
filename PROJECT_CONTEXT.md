@@ -640,6 +640,27 @@ Active Social Media approval bridge:
 - `PATCH /api/v1/tasks/:taskId` client approval response
 - `PATCH /api/v1/social-media/posts/:postId` post approval task link/status update
 
+## Social Media Faz 8 — Insights + Reporting V1 (2026-05-29)
+
+Faz 8 Social Media publishing sonrası performans ve raporlama katmanını manuel snapshot V1 olarak açtı. Özet:
+
+- Backend `SocialMediaPostInsight` ile post bazlı günlük metric snapshotlarını; `SocialMediaReport` ile draft/published/client-visible raporları modelledi.
+- Admin/assigned employee endpointleri client insight listesi, post insight create, report list/create/update/publish akışını sağlar.
+- Own-client endpointleri yalnızca kendi client-visible post insightlarını ve published/client-visible reportlarını döndürür.
+- Report acknowledgement mevcut `Task` approval sistemi üzerinden `SOCIAL_MEDIA_REPORT_ACKNOWLEDGEMENT` taskı üretir.
+- Employee Social Media workspace reports tabı performans snapshot girişi, KPI özeti, report draft create ve publish aksiyonlarını kullanır.
+- Client portal Social Media `performance` ve `reports` sekmeleri artık API-driven insight/report verisini render eder; no-source fallback bu iki sekmeden kaldırıldı.
+
+Active Social Media insights/reporting endpoints:
+- `GET /api/v1/social-media/clients/:clientId/insights`
+- `POST /api/v1/social-media/posts/:postId/insights`
+- `GET /api/v1/social-media/clients/:clientId/reports`
+- `POST /api/v1/social-media/clients/:clientId/reports`
+- `PATCH /api/v1/social-media/reports/:id`
+- `POST /api/v1/social-media/reports/:id/publish`
+- `GET /api/v1/clients/me/social-media/insights`
+- `GET /api/v1/clients/me/social-media/reports`
+
 Planned next backend phases:
 - Broader domain endpoint authorization rollout (beyond users/clients/admin-assignments/projects/tasks)
 - Forced password change on first login flow

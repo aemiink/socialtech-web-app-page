@@ -118,6 +118,21 @@ enum SocialMediaPostStatus {
   CANCELLED
 }
 
+enum SocialMediaReportType {
+  WEEKLY
+  MONTHLY
+  POST_PERFORMANCE
+  CONTENT_CALENDAR
+  CREATIVE_PERFORMANCE
+  ENGAGEMENT_REPORT
+}
+
+enum SocialMediaReportStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
 enum MetaAdsInsightLevel {
   ACCOUNT
   CAMPAIGN
@@ -505,43 +520,46 @@ model User {
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
 
-  refreshTokens                RefreshToken[]
-  clientProfile                ClientProfile?                      @relation(fields: [clientProfileId], references: [id], onDelete: SetNull)
-  employeeClientAssignments    EmployeeClientAssignment[]          @relation("EmployeeClientAssignments")
-  assignedTasks                Task[]                              @relation("TaskAssignee")
-  codePreparedTasks            Task[]                              @relation("TaskCodePreparedBy")
-  taskApprovalActions          Task[]                              @relation("TaskApprovalResponder")
-  completedTaskTodos           TaskTodo[]                          @relation("TaskTodoCompletedBy")
-  taskWorkNotes                TaskWorkNote[]                      @relation("TaskWorkNoteAuthor")
-  uploadedProjectFiles         ProjectFile[]                       @relation("ProjectFileUploadedBy")
-  projectFileApprovalActions   ProjectFile[]                       @relation("ProjectFileApprovalResponder")
-  createdProjectFileFolders    ProjectFileFolder[]                 @relation("ProjectFileFolderCreatedBy")
-  assignedProjectFileFolders   ProjectFileFolderAssignment[]       @relation("ProjectFileFolderAssignedUser")
-  projectFileShareLinks        ProjectFileShareLink[]              @relation("ProjectFileShareLinkCreatedBy")
-  createdWorkspaceSections     WebAppWorkspaceSection[]            @relation("WorkspaceSectionCreatedBy")
-  workspaceMessages            WebAppWorkspaceMessage[]            @relation("WorkspaceMessageAuthor")
-  requestedWorkspaceRevisions  WebAppWorkspaceRevision[]           @relation("WorkspaceRevisionRequestedBy")
-  assignedWorkspaceRevisions   WebAppWorkspaceRevision[]           @relation("WorkspaceRevisionAssignedTo")
-  workspaceRevisionTransitions WebAppWorkspaceRevisionTransition[] @relation("WorkspaceRevisionTransitionActor")
-  createdWeeklyReports         WebAppWorkspaceWeeklyReport[]       @relation("WorkspaceWeeklyReportAuthor")
-  requestedMeetingRequests     WebAppWorkspaceMeetingRequest[]     @relation("WorkspaceMeetingRequestedBy")
-  respondedMeetingRequests     WebAppWorkspaceMeetingRequest[]     @relation("WorkspaceMeetingRespondedBy")
-  ownedCrmLeads                CrmLead[]                           @relation("CrmLeadOwner")
-  crmLeadActivities            CrmLeadActivity[]                   @relation("CrmLeadActivityActor")
-  releaseApprovalActions       DeliveryRelease[]                   @relation("DeliveryReleaseApprovalActor")
-  triggeredCrmLeadScans        CrmLeadScanLog[]                    @relation("CrmLeadScanTriggeredBy")
-  auditLogs                    AuditLog[]                          @relation("AuditActor")
-  createdMetaAdsReports        MetaAdsReport[]                     @relation("MetaAdsReportCreatedBy")
-  publishedMetaAdsReports      MetaAdsReport[]                     @relation("MetaAdsReportPublishedBy")
-  acknowledgedMetaAdsReports   MetaAdsReport[]                     @relation("MetaAdsReportAcknowledgedBy")
-  createdAmazonAdsReports      AmazonAdsReport[]                   @relation("AmazonAdsReportCreatedBy")
-  publishedAmazonAdsReports    AmazonAdsReport[]                   @relation("AmazonAdsReportPublishedBy")
-  acknowledgedAmazonAdsReports AmazonAdsReport[]                   @relation("AmazonAdsReportAcknowledgedBy")
-  createdTikTokAdsReports      TikTokAdsReport[]                   @relation("TikTokAdsReportCreatedBy")
-  publishedTikTokAdsReports    TikTokAdsReport[]                   @relation("TikTokAdsReportPublishedBy")
-  acknowledgedTikTokAdsReports TikTokAdsReport[]                   @relation("TikTokAdsReportAcknowledgedBy")
-  createdSocialMediaPosts      SocialMediaPost[]                   @relation("SocialMediaPostCreatedBy")
-  assignedSocialMediaPosts     SocialMediaPost[]                   @relation("SocialMediaPostAssignedTo")
+  refreshTokens                  RefreshToken[]
+  clientProfile                  ClientProfile?                      @relation(fields: [clientProfileId], references: [id], onDelete: SetNull)
+  employeeClientAssignments      EmployeeClientAssignment[]          @relation("EmployeeClientAssignments")
+  assignedTasks                  Task[]                              @relation("TaskAssignee")
+  codePreparedTasks              Task[]                              @relation("TaskCodePreparedBy")
+  taskApprovalActions            Task[]                              @relation("TaskApprovalResponder")
+  completedTaskTodos             TaskTodo[]                          @relation("TaskTodoCompletedBy")
+  taskWorkNotes                  TaskWorkNote[]                      @relation("TaskWorkNoteAuthor")
+  uploadedProjectFiles           ProjectFile[]                       @relation("ProjectFileUploadedBy")
+  projectFileApprovalActions     ProjectFile[]                       @relation("ProjectFileApprovalResponder")
+  createdProjectFileFolders      ProjectFileFolder[]                 @relation("ProjectFileFolderCreatedBy")
+  assignedProjectFileFolders     ProjectFileFolderAssignment[]       @relation("ProjectFileFolderAssignedUser")
+  projectFileShareLinks          ProjectFileShareLink[]              @relation("ProjectFileShareLinkCreatedBy")
+  createdWorkspaceSections       WebAppWorkspaceSection[]            @relation("WorkspaceSectionCreatedBy")
+  workspaceMessages              WebAppWorkspaceMessage[]            @relation("WorkspaceMessageAuthor")
+  requestedWorkspaceRevisions    WebAppWorkspaceRevision[]           @relation("WorkspaceRevisionRequestedBy")
+  assignedWorkspaceRevisions     WebAppWorkspaceRevision[]           @relation("WorkspaceRevisionAssignedTo")
+  workspaceRevisionTransitions   WebAppWorkspaceRevisionTransition[] @relation("WorkspaceRevisionTransitionActor")
+  createdWeeklyReports           WebAppWorkspaceWeeklyReport[]       @relation("WorkspaceWeeklyReportAuthor")
+  requestedMeetingRequests       WebAppWorkspaceMeetingRequest[]     @relation("WorkspaceMeetingRequestedBy")
+  respondedMeetingRequests       WebAppWorkspaceMeetingRequest[]     @relation("WorkspaceMeetingRespondedBy")
+  ownedCrmLeads                  CrmLead[]                           @relation("CrmLeadOwner")
+  crmLeadActivities              CrmLeadActivity[]                   @relation("CrmLeadActivityActor")
+  releaseApprovalActions         DeliveryRelease[]                   @relation("DeliveryReleaseApprovalActor")
+  triggeredCrmLeadScans          CrmLeadScanLog[]                    @relation("CrmLeadScanTriggeredBy")
+  auditLogs                      AuditLog[]                          @relation("AuditActor")
+  createdMetaAdsReports          MetaAdsReport[]                     @relation("MetaAdsReportCreatedBy")
+  publishedMetaAdsReports        MetaAdsReport[]                     @relation("MetaAdsReportPublishedBy")
+  acknowledgedMetaAdsReports     MetaAdsReport[]                     @relation("MetaAdsReportAcknowledgedBy")
+  createdAmazonAdsReports        AmazonAdsReport[]                   @relation("AmazonAdsReportCreatedBy")
+  publishedAmazonAdsReports      AmazonAdsReport[]                   @relation("AmazonAdsReportPublishedBy")
+  acknowledgedAmazonAdsReports   AmazonAdsReport[]                   @relation("AmazonAdsReportAcknowledgedBy")
+  createdTikTokAdsReports        TikTokAdsReport[]                   @relation("TikTokAdsReportCreatedBy")
+  publishedTikTokAdsReports      TikTokAdsReport[]                   @relation("TikTokAdsReportPublishedBy")
+  acknowledgedTikTokAdsReports   TikTokAdsReport[]                   @relation("TikTokAdsReportAcknowledgedBy")
+  createdSocialMediaPosts        SocialMediaPost[]                   @relation("SocialMediaPostCreatedBy")
+  assignedSocialMediaPosts       SocialMediaPost[]                   @relation("SocialMediaPostAssignedTo")
+  createdSocialMediaReports      SocialMediaReport[]                 @relation("SocialMediaReportCreatedBy")
+  publishedSocialMediaReports    SocialMediaReport[]                 @relation("SocialMediaReportPublishedBy")
+  acknowledgedSocialMediaReports SocialMediaReport[]                 @relation("SocialMediaReportAcknowledgedBy")
 
   @@index([accountType, role])
   @@index([accountType, status])
@@ -573,29 +591,31 @@ model ClientProfile {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
-  users               User[]
-  employeeAssignments EmployeeClientAssignment[]
-  purchasedServices   ClientPurchasedService[]
-  metaAdsConfig       ClientMetaAdsConfig?
-  metaAdsCredential   ClientMetaAdsCredential?
-  metaAdsInsights     MetaAdsDailyInsight[]
-  metaAdsSyncLogs     MetaAdsSyncLog[]
-  metaAdsReports      MetaAdsReport[]
-  socialMediaConfig   ClientSocialMediaConfig?
-  tikTokAdsConfig     ClientTikTokAdsConfig?
-  tikTokAdsCredential ClientTikTokAdsCredential?
-  tikTokAdsInsights   TikTokAdsDailyInsight[]
-  tikTokAdsSyncLogs   TikTokAdsSyncLog[]
-  tikTokAdsReports    TikTokAdsReport[]
-  amazonAdsConfig     ClientAmazonAdsConfig?
-  amazonAdsCredential ClientAmazonAdsCredential?
-  amazonAdsInsights   AmazonAdsDailyInsight[]
-  amazonAdsSyncLogs   AmazonAdsSyncLog[]
-  amazonAdsReports    AmazonAdsReport[]
-  socialMediaPosts    SocialMediaPost[]
-  projects            Project[]
-  files               ProjectFile[]
-  convertedCrmLeads   CrmLead[]                  @relation("CrmLeadConvertedClient")
+  users                   User[]
+  employeeAssignments     EmployeeClientAssignment[]
+  purchasedServices       ClientPurchasedService[]
+  metaAdsConfig           ClientMetaAdsConfig?
+  metaAdsCredential       ClientMetaAdsCredential?
+  metaAdsInsights         MetaAdsDailyInsight[]
+  metaAdsSyncLogs         MetaAdsSyncLog[]
+  metaAdsReports          MetaAdsReport[]
+  socialMediaConfig       ClientSocialMediaConfig?
+  tikTokAdsConfig         ClientTikTokAdsConfig?
+  tikTokAdsCredential     ClientTikTokAdsCredential?
+  tikTokAdsInsights       TikTokAdsDailyInsight[]
+  tikTokAdsSyncLogs       TikTokAdsSyncLog[]
+  tikTokAdsReports        TikTokAdsReport[]
+  amazonAdsConfig         ClientAmazonAdsConfig?
+  amazonAdsCredential     ClientAmazonAdsCredential?
+  amazonAdsInsights       AmazonAdsDailyInsight[]
+  amazonAdsSyncLogs       AmazonAdsSyncLog[]
+  amazonAdsReports        AmazonAdsReport[]
+  socialMediaPosts        SocialMediaPost[]
+  socialMediaPostInsights SocialMediaPostInsight[]
+  socialMediaReports      SocialMediaReport[]
+  projects                Project[]
+  files                   ProjectFile[]
+  convertedCrmLeads       CrmLead[]                  @relation("CrmLeadConvertedClient")
 
   @@index([status])
 }
@@ -684,12 +704,13 @@ model SocialMediaPost {
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
 
-  clientProfile ClientProfile          @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
-  project       Project?               @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  approvalTask  Task?                  @relation("SocialMediaPostApprovalTask", fields: [approvalTaskId], references: [id], onDelete: SetNull)
-  createdBy     User?                  @relation("SocialMediaPostCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  assignedTo    User?                  @relation("SocialMediaPostAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  clientProfile ClientProfile            @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  project       Project?                 @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  approvalTask  Task?                    @relation("SocialMediaPostApprovalTask", fields: [approvalTaskId], references: [id], onDelete: SetNull)
+  createdBy     User?                    @relation("SocialMediaPostCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  assignedTo    User?                    @relation("SocialMediaPostAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
   assets        SocialMediaPostAsset[]
+  insights      SocialMediaPostInsight[]
 
   @@index([clientProfileId, scheduledAt])
   @@index([clientProfileId, status, scheduledAt])
@@ -715,6 +736,74 @@ model SocialMediaPostAsset {
   @@unique([postId, fileId])
   @@index([postId, sortOrder])
   @@index([fileId])
+}
+
+model SocialMediaPostInsight {
+  id              String              @id @default(uuid()) @db.Uuid
+  postId          String              @db.Uuid
+  clientProfileId String              @db.Uuid
+  platform        SocialMediaPlatform
+  date            DateTime
+  impressions     Int?
+  reach           Int?
+  likes           Int?
+  comments        Int?
+  shares          Int?
+  saves           Int?
+  profileVisits   Int?
+  follows         Int?
+  clicks          Int?
+  engagementRate  Decimal?
+  raw             Json?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  post          SocialMediaPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  clientProfile ClientProfile   @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@index([clientProfileId, date])
+  @@index([postId, date])
+  @@index([platform, date])
+  @@index([createdAt])
+}
+
+model SocialMediaReport {
+  id                         String                  @id @default(uuid()) @db.Uuid
+  clientProfileId            String                  @db.Uuid
+  projectId                  String?                 @db.Uuid
+  periodStart                DateTime
+  periodEnd                  DateTime
+  type                       SocialMediaReportType
+  status                     SocialMediaReportStatus @default(DRAFT)
+  summary                    String?
+  metricsSnapshot            Json?
+  createdByUserId            String?                 @db.Uuid
+  publishedByUserId          String?                 @db.Uuid
+  clientVisible              Boolean                 @default(false)
+  publishedAt                DateTime?
+  acknowledgementRequestedAt DateTime?
+  acknowledgedAt             DateTime?
+  acknowledgedByUserId       String?                 @db.Uuid
+  acknowledgementTaskId      String?                 @db.Uuid
+  createdAt                  DateTime                @default(now())
+  updatedAt                  DateTime                @updatedAt
+
+  clientProfile       ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  project             Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdBy           User?         @relation("SocialMediaReportCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  publishedBy         User?         @relation("SocialMediaReportPublishedBy", fields: [publishedByUserId], references: [id], onDelete: SetNull)
+  acknowledgedBy      User?         @relation("SocialMediaReportAcknowledgedBy", fields: [acknowledgedByUserId], references: [id], onDelete: SetNull)
+  acknowledgementTask Task?         @relation("SocialMediaReportAcknowledgementTask", fields: [acknowledgementTaskId], references: [id], onDelete: SetNull)
+
+  @@index([clientProfileId, createdAt])
+  @@index([clientProfileId, status, createdAt])
+  @@index([clientProfileId, type, periodStart, periodEnd])
+  @@index([clientVisible, status, createdAt])
+  @@index([projectId])
+  @@index([createdByUserId])
+  @@index([publishedByUserId])
+  @@index([acknowledgedByUserId])
+  @@index([acknowledgementTaskId])
 }
 
 model ClientAmazonAdsConfig {
@@ -1127,6 +1216,7 @@ model Project {
   metaAdsReports           MetaAdsReport[]
   tikTokAdsReports         TikTokAdsReport[]
   socialMediaPosts         SocialMediaPost[]
+  socialMediaReports       SocialMediaReport[]
   workspaceSections        WebAppWorkspaceSection[]
   workspaceMessages        WebAppWorkspaceMessage[]
   workspaceRevisions       WebAppWorkspaceRevision[]
@@ -1177,19 +1267,20 @@ model Task {
   createdAt                 DateTime               @default(now())
   updatedAt                 DateTime               @updatedAt
 
-  project                         Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  sprint                          DeliverySprint?           @relation(fields: [sprintId], references: [id], onDelete: SetNull)
-  assignee                        User?                     @relation("TaskAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
-  codePreparedBy                  User?                     @relation("TaskCodePreparedBy", fields: [codePreparedByUserId], references: [id], onDelete: SetNull)
-  approvalRespondedBy             User?                     @relation("TaskApprovalResponder", fields: [approvalRespondedByUserId], references: [id], onDelete: SetNull)
-  referenceProjectFile            ProjectFile?              @relation("TaskReferenceProjectFile", fields: [referenceProjectFileId], references: [id], onDelete: SetNull)
-  amazonAdsReportAcknowledgements AmazonAdsReport[]         @relation("AmazonAdsReportAcknowledgementTask")
-  metaAdsReportAcknowledgements   MetaAdsReport[]           @relation("MetaAdsReportAcknowledgementTask")
-  tikTokAdsReportAcknowledgements TikTokAdsReport[]         @relation("TikTokAdsReportAcknowledgementTask")
-  socialMediaPostApprovals        SocialMediaPost[]         @relation("SocialMediaPostApprovalTask")
-  todos                           TaskTodo[]
-  workNotes                       TaskWorkNote[]
-  workspaceRevisions              WebAppWorkspaceRevision[]
+  project                           Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sprint                            DeliverySprint?           @relation(fields: [sprintId], references: [id], onDelete: SetNull)
+  assignee                          User?                     @relation("TaskAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
+  codePreparedBy                    User?                     @relation("TaskCodePreparedBy", fields: [codePreparedByUserId], references: [id], onDelete: SetNull)
+  approvalRespondedBy               User?                     @relation("TaskApprovalResponder", fields: [approvalRespondedByUserId], references: [id], onDelete: SetNull)
+  referenceProjectFile              ProjectFile?              @relation("TaskReferenceProjectFile", fields: [referenceProjectFileId], references: [id], onDelete: SetNull)
+  amazonAdsReportAcknowledgements   AmazonAdsReport[]         @relation("AmazonAdsReportAcknowledgementTask")
+  metaAdsReportAcknowledgements     MetaAdsReport[]           @relation("MetaAdsReportAcknowledgementTask")
+  tikTokAdsReportAcknowledgements   TikTokAdsReport[]         @relation("TikTokAdsReportAcknowledgementTask")
+  socialMediaPostApprovals          SocialMediaPost[]         @relation("SocialMediaPostApprovalTask")
+  socialMediaReportAcknowledgements SocialMediaReport[]       @relation("SocialMediaReportAcknowledgementTask")
+  todos                             TaskTodo[]
+  workNotes                         TaskWorkNote[]
+  workspaceRevisions                WebAppWorkspaceRevision[]
 
   @@index([projectId])
   @@index([sprintId])

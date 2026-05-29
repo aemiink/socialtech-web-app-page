@@ -3287,3 +3287,32 @@ Affected files:
 - `PROJECT_CONTEXT.md`
 - `REPO_MAP.md`
 - `ROAD_MAP.md`
+
+## 2026-05-29 - Social Media Faz 8 Insights + Reporting V1
+
+Context:
+Social Media Faz 7 ile manuel publishing akışı tamamlandı. Faz 8 ihtiyacı, publishing sonrası post performansını API-driven göstermek ve client-visible Social Media raporlarını draft/publish/acknowledgement akışıyla yönetmekti.
+
+Decision:
+Faz 8 V1, gerçek platform insight sync entegrasyonu yerine manuel/snapshot performans modeliyle ilerler:
+- `SocialMediaPostInsight` post bazlı günlük KPI snapshotlarını tutar ve admin/assigned employee create, own client read contractını sağlar.
+- `SocialMediaReport` weekly/monthly/performance raporlarını draft/published/clientVisible durumlarıyla tutar.
+- Rapor acknowledgement yeni bir domain açmadan mevcut `Task` approval altyapısındaki `SOCIAL_MEDIA_REPORT_ACKNOWLEDGEMENT` type’ına bağlanır.
+- Admin/employee workspace reports tabı insight girişi, KPI özeti, report draft create ve publish aksiyonlarını kullanır.
+- Client portal Social Media `performance` ve `reports` tabları yalnızca own/client-visible insight ve report API verisini render eder.
+
+Reason:
+Bu karar Faz 8’i platform API izinlerine bağlı bırakmadan production-safe bir reporting contractına taşır. Manuel snapshot modeli daha sonra Instagram/Facebook Graph API veya diğer platform sync job’larıyla aynı tabloya yazacak şekilde genişletilebilir.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260529172000_add_social_media_insights_reports/migration.sql`
+- `server/src/social-media/*`
+- `server/test/social-media-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/socialMedia/*`
+- `adminandemployeePanel/src/app/employee/components/SocialMediaWorkspace.tsx`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/SocialMediaWorkspace.test.tsx`
+- `clientPanel/src/app/features/socialMedia/*`
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+- `clientPanel/src/app/pages/__tests__/service-tab-page.social-media.test.tsx`
+- `ROAD_MAP.md`

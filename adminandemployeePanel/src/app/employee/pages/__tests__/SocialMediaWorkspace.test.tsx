@@ -11,12 +11,20 @@ let currentUser: AuthUserProfile | null = null;
 const mockUseGetClientsQuery = vi.fn();
 const mockUseGetClientSocialMediaSummaryQuery = vi.fn();
 const mockUseGetClientSocialMediaPostsQuery = vi.fn();
+const mockUseGetClientSocialMediaInsightsQuery = vi.fn();
+const mockUseGetClientSocialMediaReportsQuery = vi.fn();
 const mockUseGetProjectsQuery = vi.fn();
 const mockUseGetTasksQuery = vi.fn();
 const mockUseCreateTaskMutation = vi.fn();
 const mockCreateTask = vi.fn();
 const mockUseUpdateSocialMediaPostMutation = vi.fn();
 const mockUpdateSocialMediaPost = vi.fn();
+const mockUseCreateSocialMediaPostInsightMutation = vi.fn();
+const mockCreateSocialMediaPostInsight = vi.fn();
+const mockUseCreateClientSocialMediaReportMutation = vi.fn();
+const mockCreateClientSocialMediaReport = vi.fn();
+const mockUsePublishSocialMediaReportMutation = vi.fn();
+const mockPublishSocialMediaReport = vi.fn();
 
 vi.mock("../../../store/hooks", () => ({
   useAppSelector: (selector: (state: unknown) => unknown) =>
@@ -41,8 +49,18 @@ vi.mock("../../../features/socialMedia/socialMediaApi", () => ({
     mockUseGetClientSocialMediaSummaryQuery(...args),
   useGetClientSocialMediaPostsQuery: (...args: unknown[]) =>
     mockUseGetClientSocialMediaPostsQuery(...args),
+  useGetClientSocialMediaInsightsQuery: (...args: unknown[]) =>
+    mockUseGetClientSocialMediaInsightsQuery(...args),
+  useGetClientSocialMediaReportsQuery: (...args: unknown[]) =>
+    mockUseGetClientSocialMediaReportsQuery(...args),
   useUpdateSocialMediaPostMutation: (...args: unknown[]) =>
     mockUseUpdateSocialMediaPostMutation(...args),
+  useCreateSocialMediaPostInsightMutation: (...args: unknown[]) =>
+    mockUseCreateSocialMediaPostInsightMutation(...args),
+  useCreateClientSocialMediaReportMutation: (...args: unknown[]) =>
+    mockUseCreateClientSocialMediaReportMutation(...args),
+  usePublishSocialMediaReportMutation: (...args: unknown[]) =>
+    mockUsePublishSocialMediaReportMutation(...args),
 }));
 
 vi.mock("../../../features/projects/projectsApi", () => ({
@@ -256,8 +274,33 @@ function setupBaseMocks() {
           assignedTo: null,
           assets: [],
         },
+        {
+          id: "post-3",
+          clientProfileId: "client-social",
+          projectId: "project-social-1",
+          platform: "INSTAGRAM",
+          type: "REEL",
+          status: "PUBLISHED",
+          title: "Published Reel",
+          caption: "Yayınlandı",
+          scheduledAt: "2026-06-04T08:00:00.000Z",
+          publishedAt: "2026-06-04T10:00:00.000Z",
+          clientVisible: true,
+          approvalTaskId: null,
+          createdByUserId: "employee-1",
+          assignedToUserId: null,
+          externalPostId: "ig-post-3",
+          externalPostUrl: "https://instagram.com/p/post-3",
+          createdAt: "2026-05-28T08:00:00.000Z",
+          updatedAt: "2026-05-28T08:00:00.000Z",
+          project: null,
+          approvalTask: null,
+          createdBy: null,
+          assignedTo: null,
+          assets: [],
+        },
       ],
-      meta: { page: 1, limit: 100, total: 2, totalPages: 1 },
+      meta: { page: 1, limit: 100, total: 3, totalPages: 1 },
     },
     isLoading: false,
     isFetching: false,
@@ -322,9 +365,135 @@ function setupBaseMocks() {
 
   mockCreateTask.mockReturnValue({ unwrap: () => Promise.resolve({ id: "task-new" }) });
   mockUpdateSocialMediaPost.mockReturnValue({ unwrap: () => Promise.resolve({ id: "post-1" }) });
+  mockCreateSocialMediaPostInsight.mockReturnValue({
+    unwrap: () => Promise.resolve({ id: "insight-new" }),
+  });
+  mockCreateClientSocialMediaReport.mockReturnValue({
+    unwrap: () => Promise.resolve({ id: "report-new" }),
+  });
+  mockPublishSocialMediaReport.mockReturnValue({
+    unwrap: () => Promise.resolve({ id: "report-1", status: "PUBLISHED" }),
+  });
   mockUseCreateTaskMutation.mockReturnValue([mockCreateTask, { isLoading: false }]);
   mockUseUpdateSocialMediaPostMutation.mockReturnValue([
     mockUpdateSocialMediaPost,
+    { isLoading: false },
+  ]);
+  mockUseGetClientSocialMediaInsightsQuery.mockReturnValue({
+    data: {
+      data: [
+        {
+          id: "insight-1",
+          postId: "post-3",
+          clientProfileId: "client-social",
+          platform: "INSTAGRAM",
+          date: "2026-06-05T00:00:00.000Z",
+          impressions: 1200,
+          reach: 900,
+          likes: 120,
+          comments: 12,
+          shares: 8,
+          saves: 15,
+          profileVisits: 20,
+          follows: 5,
+          clicks: 30,
+          engagementRate: 20.56,
+          raw: null,
+          createdAt: "2026-06-05T00:00:00.000Z",
+          updatedAt: "2026-06-05T00:00:00.000Z",
+          post: {
+            id: "post-3",
+            title: "Published Reel",
+            type: "REEL",
+            status: "PUBLISHED",
+            scheduledAt: "2026-06-04T08:00:00.000Z",
+            publishedAt: "2026-06-04T10:00:00.000Z",
+            externalPostUrl: "https://instagram.com/p/post-3",
+            clientVisible: true,
+          },
+        },
+      ],
+      meta: {
+        page: 1,
+        limit: 50,
+        total: 1,
+        totalPages: 1,
+        generatedAt: "2026-06-05T00:00:00.000Z",
+        totals: {
+          impressions: 1200,
+          reach: 900,
+          likes: 120,
+          comments: 12,
+          shares: 8,
+          saves: 15,
+          profileVisits: 20,
+          follows: 5,
+          clicks: 30,
+          engagementRate: 20.56,
+        },
+        topPosts: [],
+        platformBreakdown: [],
+        typeBreakdown: [],
+        trend: [],
+      },
+    },
+    isLoading: false,
+    isFetching: false,
+    isError: false,
+    error: undefined,
+    refetch: vi.fn(),
+  });
+  mockUseGetClientSocialMediaReportsQuery.mockReturnValue({
+    data: {
+      data: [
+        {
+          id: "report-1",
+          clientProfileId: "client-social",
+          projectId: "project-social-1",
+          projectName: "Social Project",
+          periodStart: "2026-06-01T00:00:00.000Z",
+          periodEnd: "2026-06-07T23:59:59.999Z",
+          type: "WEEKLY",
+          status: "DRAFT",
+          summary: "Haftalık performans taslağı.",
+          metricsSnapshot: null,
+          clientVisible: false,
+          publishedAt: null,
+          acknowledgementRequestedAt: null,
+          acknowledgedAt: null,
+          acknowledgementStatus: "NOT_REQUESTED",
+          acknowledgementTaskId: null,
+          acknowledgementTaskUpdatedAt: null,
+          createdAt: "2026-06-05T00:00:00.000Z",
+          updatedAt: "2026-06-05T00:00:00.000Z",
+        },
+      ],
+      meta: {
+        page: 1,
+        limit: 30,
+        total: 1,
+        totalPages: 1,
+        draft: 1,
+        published: 0,
+        clientVisible: 0,
+      },
+    },
+    isLoading: false,
+    isFetching: false,
+    isError: false,
+    error: undefined,
+    refetch: vi.fn(),
+  });
+  mockUseCreateSocialMediaPostInsightMutation.mockReturnValue([
+    mockCreateSocialMediaPostInsight,
+    { isLoading: false },
+  ]);
+  mockUseCreateClientSocialMediaReportMutation.mockReturnValue([
+    mockCreateClientSocialMediaReport,
+    { isLoading: false },
+  ]);
+  mockUsePublishSocialMediaReportMutation.mockReturnValue([
+    mockPublishSocialMediaReport,
     { isLoading: false },
   ]);
 }
@@ -374,6 +543,44 @@ describe("SocialMediaWorkspace", () => {
     expect(await screen.findByTestId("social-media-calendar")).toHaveTextContent(
       "Calendar employee",
     );
+  });
+
+  it("renders report workspace and creates insight/report actions", async () => {
+    renderWorkspace("reports");
+
+    expect(await screen.findByText("Performans Snapshot")).toBeInTheDocument();
+    expect(screen.getAllByText("Published Reel").length).toBeGreaterThan(0);
+    expect(screen.getByText("Haftalık performans taslağı.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Snapshot Kaydet" }));
+    await waitFor(() => expect(mockCreateSocialMediaPostInsight).toHaveBeenCalled());
+    expect(mockCreateSocialMediaPostInsight.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        id: "post-3",
+        clientId: "client-social",
+      }),
+    );
+
+    fireEvent.change(screen.getByLabelText("Özet"), {
+      target: { value: "Yeni rapor özeti" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Rapor Oluştur" }));
+    await waitFor(() => expect(mockCreateClientSocialMediaReport).toHaveBeenCalled());
+    expect(mockCreateClientSocialMediaReport.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        clientId: "client-social",
+        body: expect.objectContaining({
+          summary: "Yeni rapor özeti",
+          type: "WEEKLY",
+        }),
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Yayınla" }));
+    await waitFor(() => expect(mockPublishSocialMediaReport).toHaveBeenCalledWith({
+      id: "report-1",
+      clientId: "client-social",
+    }));
   });
 
   it("creates a Social Media approval task with assigned approval permission", async () => {
