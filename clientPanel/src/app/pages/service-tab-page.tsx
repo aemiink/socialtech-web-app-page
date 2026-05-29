@@ -77,6 +77,23 @@ import type {
   AmazonAdsReportExportFormat,
   AmazonAdsReportItem,
 } from '../features/amazonAds/amazonAdsTypes';
+import {
+  useGetOwnSocialMediaCalendarQuery,
+  useGetOwnSocialMediaConfigQuery,
+  useGetOwnSocialMediaPostsQuery,
+  useGetOwnSocialMediaSummaryQuery,
+} from '../features/socialMedia/socialMediaApi';
+import type { SocialMediaCreativeAsset, SocialMediaPost, SocialMediaSummary } from '../features/socialMedia/socialMediaTypes';
+import {
+  formatSocialMediaDate,
+  getSocialMediaGoalLabel,
+  getSocialMediaPlatformLabel,
+  getSocialMediaPostStatusLabel,
+  getSocialMediaPostTypeLabel,
+  getSocialMediaSummaryStateLabel,
+  getSocialMediaStatusTone,
+  groupPostsByDay,
+} from '../features/socialMedia/socialMediaUtils';
 import type { ProjectFile } from '../features/projectFiles/projectFilesTypes';
 import { useGetClientProjectFilesQuery } from '../features/projectFiles/projectFilesApi';
 import { useGetClientTasksQuery, useUpdateClientTaskApprovalMutation } from '../features/tasks/tasksApi';
@@ -358,6 +375,14 @@ export function ServiceTabPage({ serviceId, tabId, projectId }: ServiceTabPagePr
 
   if (serviceId === "amazon-ads" && tabId !== "service-dashboard") {
     return <AmazonAdsServiceTab tabId={tabId} content={content} />;
+  }
+
+  if (serviceId === "social-media" && tabId !== "service-dashboard") {
+    return (
+      <div className="p-8 space-y-6">
+        <SocialMediaClientWorkspace tabId={tabId} />
+      </div>
+    );
   }
 
   if (shouldUseTaskBasedRevisions) {
@@ -3965,6 +3990,7 @@ function formatAdsApprovalType(value: string): string {
     .replace("META_ADS_", "")
     .replace("TIKTOK_ADS_", "")
     .replace("AMAZON_ADS_", "")
+    .replace("SOCIAL_MEDIA_", "SOCIAL MEDIA ")
     .replace(/_/g, " ");
 }
 
@@ -4211,6 +4237,10 @@ function renderWorkspace(
   tabId: string,
   projectId?: string | null,
 ) {
+  if (serviceId === 'social-media') {
+    return <SocialMediaClientWorkspace tabId={tabId} />;
+  }
+
   switch (kind) {
     case 'growth':
       return <GrowthWorkspace content={content} />;
@@ -4245,6 +4275,460 @@ function renderWorkspace(
     default:
       return <ProjectWorkspace content={content} tabId={tabId} />;
   }
+}
+
+function SocialMediaClientWorkspace({ tabId }: { tabId: string }) {
+  const isCalendarTab = tabId === 'content-calendar';
+  const isPostListTab = tabId === 'pending-approvals' || tabId === 'published-content';
+  const isApprovalTab = tabId === 'pending-approvals' || tabId === 'approvals';
+  const [activeApprovalTaskId, setActiveApprovalTaskId] = useState<string | null>(null);
+  const {
+    data: summary,
+    isLoading: summaryLoading,
+    isError: summaryError,
+  } = useGetOwnSocialMediaSummaryQuery();
+  const {
+    data: config,
+    isLoading: configLoading,
+    isError: configError,
+  } = useGetOwnSocialMediaConfigQuery();
+  const {
+    data: calendarData,
+    isLoading: calendarLoading,
+    isError: calendarError,
+  } = useGetOwnSocialMediaCalendarQuery({ limit: 80 }, { skip: !isCalendarTab });
+  const {
+    data: listPosts = [],
+    isLoading: postsLoading,
+    isError: postsError,
+  } = useGetOwnSocialMediaPostsQuery({ limit: 80 }, { skip: !isPostListTab });
+  const {
+    data: approvalTasks = [],
+    isLoading: approvalsLoading,
+    isError: approvalsError,
+  } = useGetClientTasksQuery(
+    { approvalRequired: true },
+    { skip: !isApprovalTab },
+  );
+  const [updateClientTaskApproval, { isLoading: approvalActionLoading }] =
+    useUpdateClientTaskApprovalMutation();
+
+  const posts = isCalendarTab ? calendarData?.posts ?? [] : filterSocialMediaTabPosts(tabId, listPosts);
+  const socialApprovalTasks = useMemo(
+    () => approvalTasks.filter((task) => task.projectServiceId === 'social-media' && task.approvalRequired),
+    [approvalTasks],
+  );
+  const pendingApprovalTasks = useMemo(
+    () => socialApprovalTasks.filter((task) => task.approvalStatus === 'PENDING').slice(0, 10),
+    [socialApprovalTasks],
+  );
+  const approvalHistoryTasks = useMemo(
+    () =>
+      socialApprovalTasks
+        .filter((task) => task.approvalStatus && task.approvalStatus !== 'PENDING')
+        .slice(0, 8),
+    [socialApprovalTasks],
+  );
+  const isLoading =
+    summaryLoading ||
+    configLoading ||
+    (isCalendarTab && calendarLoading) ||
+    (isPostListTab && postsLoading) ||
+    (isApprovalTab && approvalsLoading);
+  const isError =
+    summaryError ||
+    configError ||
+    (isCalendarTab && calendarError) ||
+    (isPostListTab && postsError) ||
+    (isApprovalTab && approvalsError);
+
+  const handleApprovalDecision = async (
+    task: ClientTask,
+    approvalStatus: ClientTaskMetaAdsApprovalStatus,
+    approvalResponseNote?: string,
+  ) => {
+    setActiveApprovalTaskId(task.id);
+    try {
+      await updateClientTaskApproval({
+        taskId: task.id,
+        body: {
+          approvalStatus,
+          approvalResponseNote: approvalResponseNote?.trim() || undefined,
+        },
+      }).unwrap();
+      const feedback = getApprovalDecisionFeedback(task.title, approvalStatus);
+      runClientAction(feedback.message, feedback.action);
+    } catch {
+      runClientAction(`${task.title} onayı güncellenemedi`, 'comment');
+    } finally {
+      setActiveApprovalTaskId(null);
+    }
+  };
+
+  if (isLoading) {
+    return <SocialMediaWorkspaceStatus title="Sosyal medya verileri yükleniyor" description="Görünür kayıtlar hazırlanıyor." />;
+  }
+
+  if (isError) {
+    return <SocialMediaWorkspaceStatus title="Sosyal medya verileri alınamadı" description="Bu sekme şu anda görüntülenemiyor." />;
+  }
+
+  if (isCalendarTab) {
+    const groups = groupPostsByDay(posts).slice(0, 7);
+    return (
+      <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+        <div className={`${cardClass} xl:col-span-3`}>
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl text-white mb-1">İçerik Takvimi</h2>
+              <p className="text-sm text-[#A0A0A0]">Portalda görünür yayın planı.</p>
+            </div>
+            <span className={`text-xs px-2 py-1 rounded border ${statusTone.info}`}>{posts.length} içerik</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
+            {groups.length > 0 ? (
+              groups.map((group) => (
+                <div key={group.day} className="min-h-44 rounded-2xl border border-white/[0.08] bg-[#131313] p-3">
+                  <div className="text-xs text-[#A0A0A0] mb-3">{group.day}</div>
+                  <div className="space-y-2">
+                    {group.posts.slice(0, 4).map((post) => (
+                      <div key={post.id} className="rounded-xl bg-[#202020] p-3 border border-white/[0.08]">
+                        <span className={`text-[11px] px-2 py-1 rounded border ${getSocialMediaStatusTone(post.status)}`}>
+                          {getSocialMediaPostStatusLabel(post.status)}
+                        </span>
+                        <p className="text-white text-sm mt-3 line-clamp-2">{post.title}</p>
+                        <p className="text-xs text-[#A0A0A0] mt-2">
+                          {getSocialMediaPlatformLabel(post.platform)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="md:col-span-7 rounded-2xl border border-white/[0.08] bg-[#131313] p-6 text-sm text-[#A0A0A0]">
+                Takvimde gösterilecek görünür içerik bulunmuyor.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className={`${cardClass} space-y-4`}>
+          <h2 className="text-xl text-white">Yayın Özeti</h2>
+          {[
+            ['Planlanan', posts.filter((post) => post.status === 'SCHEDULED').length],
+            ['Onay Akışı', posts.filter((post) => ['WAITING_APPROVAL', 'REVISION_REQUIRED', 'DESIGN'].includes(post.status)).length],
+            ['Yayınlanan', posts.filter((post) => post.status === 'PUBLISHED').length],
+          ].map(([label, value]) => (
+            <div key={label} className="flex items-center justify-between rounded-xl bg-[#202020] p-3 border border-white/[0.08]">
+              <span className="text-white text-sm">{label}</span>
+              <span className="text-sm text-[#AAFF01]">{value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (tabId === 'pending-approvals' || tabId === 'approvals') {
+    const postApprovals = filterSocialMediaTabPosts('pending-approvals', listPosts);
+    return (
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div className={`${cardClass} xl:col-span-2`}>
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl text-white mb-1">Onay Akışı</h2>
+              <p className="text-sm text-[#A0A0A0]">Müşteri görünür postlar ve onay görevleri.</p>
+            </div>
+            <span className={`text-xs px-2 py-1 rounded border ${statusTone.warn}`}>
+              {postApprovals.length + pendingApprovalTasks.length} kayıt
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {postApprovals.length > 0 ? (
+              postApprovals.map((post) => <SocialMediaClientPostCard key={post.id} post={post} />)
+            ) : (
+              <div className="md:col-span-2 rounded-xl bg-[#202020] p-4 border border-white/[0.08] text-sm text-[#A0A0A0]">
+                Onay bekleyen görünür post yok.
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="space-y-3">
+          <MetaAdsApprovalsPanel
+            serviceLabel="Social Media"
+            tasks={pendingApprovalTasks}
+            history={approvalHistoryTasks}
+            creativeFiles={[]}
+            loading={false}
+            isError={false}
+            isActionLoading={approvalActionLoading}
+            activeTaskId={activeApprovalTaskId}
+            onDecision={handleApprovalDecision}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (tabId === 'creatives') {
+    return <SocialMediaCreativesWorkspace assets={summary?.creativeAssets ?? []} />;
+  }
+
+  if (tabId === 'agency-notes' || tabId === 'trend-notes') {
+    return (
+      <SocialMediaAgencyNotesWorkspace
+        note={config?.notes ?? summary?.config?.notes ?? null}
+        frequency={config?.contentFrequency ?? summary?.config?.contentFrequency ?? null}
+        goal={getSocialMediaGoalLabel(config?.primaryGoal ?? summary?.config?.primaryGoal ?? null)}
+        tone={config?.toneOfVoice ?? summary?.config?.toneOfVoice ?? null}
+        hashtags={config?.hashtags ?? summary?.config?.hashtags ?? []}
+      />
+    );
+  }
+
+  if (tabId === 'dm-comments' || tabId === 'competitor-analysis' || tabId === 'performance' || tabId === 'reports') {
+    return <SocialMediaUnavailableWorkspace tabId={tabId} summary={summary} />;
+  }
+
+  const title = tabId === 'published-content' ? 'Yayınlanan İçerikler' : 'Onay Akışı';
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className={`${cardClass} xl:col-span-2`}>
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-xl text-white mb-1">{title}</h2>
+            <p className="text-sm text-[#A0A0A0]">Müşteri görünürlüğü açık kayıtlar.</p>
+          </div>
+          <span className={`text-xs px-2 py-1 rounded border ${statusTone.violet}`}>{posts.length} içerik</span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {posts.length > 0 ? (
+            posts.map((post) => <SocialMediaClientPostCard key={post.id} post={post} />)
+          ) : (
+            <div className="md:col-span-2 rounded-xl bg-[#202020] p-4 border border-white/[0.08] text-sm text-[#A0A0A0]">
+              Bu bölüm için görünür içerik yok.
+            </div>
+          )}
+        </div>
+      </div>
+      <div className={cardClass}>
+        <h2 className="text-xl text-white mb-4">Durum Dağılımı</h2>
+        {buildStatusSummary(posts).map((item) => (
+          <div key={item.status} className="mb-3 flex items-center justify-between rounded-xl bg-[#202020] p-3 border border-white/[0.08]">
+            <span className="text-sm text-white">{getSocialMediaPostStatusLabel(item.status)}</span>
+            <span className="text-sm text-[#AAFF01]">{item.count}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SocialMediaClientPostCard({ post }: { post: SocialMediaPost }) {
+  return (
+    <div className={innerClass}>
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <h3 className="min-w-0 break-words text-white text-sm">{post.title}</h3>
+        <span className={`shrink-0 text-xs px-2 py-1 rounded border ${getSocialMediaStatusTone(post.status)}`}>
+          {getSocialMediaPostStatusLabel(post.status)}
+        </span>
+      </div>
+      <div className="space-y-2 mb-4 text-sm">
+        <div className="flex justify-between gap-4">
+          <span className="text-[#A0A0A0]">Platform</span>
+          <span className="text-white text-right">{getSocialMediaPlatformLabel(post.platform)}</span>
+        </div>
+        <div className="flex justify-between gap-4">
+          <span className="text-[#A0A0A0]">Format</span>
+          <span className="text-white text-right">{getSocialMediaPostTypeLabel(post.type)}</span>
+        </div>
+        <div className="flex justify-between gap-4">
+          <span className="text-[#A0A0A0]">Tarih</span>
+          <span className="text-white text-right">{formatSocialMediaDate(post.scheduledAt ?? post.publishedAt)}</span>
+        </div>
+      </div>
+      {post.caption ? <p className="line-clamp-3 text-sm text-[#A0A0A0]">{post.caption}</p> : null}
+    </div>
+  );
+}
+
+function SocialMediaCreativesWorkspace({ assets }: { assets: SocialMediaCreativeAsset[] }) {
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className={`${cardClass} xl:col-span-2`}>
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h2 className="text-xl text-white mb-1">Kreatifler</h2>
+            <p className="text-sm text-[#A0A0A0]">Müşteri görünür Social Media assetleri.</p>
+          </div>
+          <span className={`text-xs px-2 py-1 rounded border ${statusTone.info}`}>{assets.length} dosya</span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {assets.length > 0 ? (
+            assets.map((asset) => <SocialMediaCreativeCard key={asset.id} asset={asset} />)
+          ) : (
+            <div className="md:col-span-2 rounded-xl bg-[#202020] p-4 border border-white/[0.08] text-sm text-[#A0A0A0]">
+              Paylaşılan kreatif dosya yok.
+            </div>
+          )}
+        </div>
+      </div>
+      <div className={cardClass}>
+        <h2 className="text-xl text-white mb-4">Kapsam</h2>
+        <p className="text-sm text-[#A0A0A0]">
+          Bu alanda yalnızca client-visible dosyalar ve Social Media projesine bağlı kreatifler gösterilir.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function SocialMediaCreativeCard({ asset }: { asset: SocialMediaCreativeAsset }) {
+  return (
+    <a
+      href={asset.secureUrl}
+      target="_blank"
+      rel="noreferrer"
+      className={`${innerClass} block transition-colors hover:border-[#AAFF01]/30`}
+    >
+      <div className="mb-3 h-40 overflow-hidden rounded-xl border border-white/[0.08] bg-[#131313]">
+        {asset.mimeType.startsWith('image/') ? (
+          <img src={asset.secureUrl} alt="" className="h-full w-full object-cover" />
+        ) : asset.mimeType.startsWith('video/') ? (
+          <video src={asset.secureUrl} className="h-full w-full object-cover" muted />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center">
+            <FileText className="h-6 w-6 text-[#AAFF01]" />
+          </div>
+        )}
+      </div>
+      <h3 className="text-sm text-white">{asset.title}</h3>
+      <p className="mt-2 text-xs text-[#A0A0A0]">{asset.project.name || asset.category}</p>
+    </a>
+  );
+}
+
+function SocialMediaAgencyNotesWorkspace({
+  note,
+  frequency,
+  goal,
+  tone,
+  hashtags,
+}: {
+  note: string | null;
+  frequency: string | null;
+  goal: string;
+  tone: string | null;
+  hashtags: string[];
+}) {
+  const rows = [
+    ['İçerik Ritmi', frequency ?? 'Tanımlı değil'],
+    ['Ana Hedef', goal],
+    ['Marka Tonu', tone ?? 'Tanımlı değil'],
+    ['Hashtag Seti', hashtags.length > 0 ? hashtags.join(', ') : 'Tanımlı değil'],
+  ];
+
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className={`${cardClass} xl:col-span-2`}>
+        <h2 className="text-xl text-white mb-4">Ajans Notları</h2>
+        {note ? (
+          <p className="text-sm leading-relaxed text-[#d7d7d7]">{note}</p>
+        ) : (
+          <p className="text-sm text-[#A0A0A0]">Ajans notu paylaşıldığında burada görünecek.</p>
+        )}
+      </div>
+      <div className={cardClass}>
+        <h2 className="text-xl text-white mb-4">Strateji Alanları</h2>
+        <div className="space-y-3">
+          {rows.map(([label, value]) => (
+            <div key={label} className="rounded-xl border border-white/[0.08] bg-[#202020] p-3">
+              <p className="text-xs text-[#A0A0A0]">{label}</p>
+              <p className="mt-1 break-words text-sm text-white">{value}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SocialMediaUnavailableWorkspace({
+  tabId,
+  summary,
+}: {
+  tabId: string;
+  summary: SocialMediaSummary | null | undefined;
+}) {
+  const tabLabel = getSocialMediaUnavailableTabLabel(tabId);
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className={`${cardClass} xl:col-span-2`}>
+        <h2 className="text-xl text-white mb-2">{tabLabel}</h2>
+        <p className="text-sm text-[#A0A0A0]">
+          Bu sekme için henüz Social Media API veri kaynağı aktif değil. Mock içerik gösterilmiyor.
+        </p>
+      </div>
+      <div className={cardClass}>
+        <h2 className="text-xl text-white mb-4">Panel Durumu</h2>
+        <div className="space-y-3 text-sm">
+          <div className="flex items-center justify-between gap-3 rounded-xl bg-[#202020] p-3 border border-white/[0.08]">
+            <span className="text-[#A0A0A0]">Durum</span>
+            <span className="text-white">{summary ? getSocialMediaSummaryStateLabel(summary.state) : 'Hazırlanıyor'}</span>
+          </div>
+          <div className="flex items-center justify-between gap-3 rounded-xl bg-[#202020] p-3 border border-white/[0.08]">
+            <span className="text-[#A0A0A0]">Görünür İçerik</span>
+            <span className="text-white">{summary?.metrics.plannedPosts ?? 0}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SocialMediaWorkspaceStatus({ title, description }: { title: string; description: string }) {
+  return (
+    <div className={cardClass}>
+      <p className="text-white">{title}</p>
+      <p className="mt-1 text-sm text-[#A0A0A0]">{description}</p>
+    </div>
+  );
+}
+
+function filterSocialMediaTabPosts(tabId: string, posts: SocialMediaPost[]): SocialMediaPost[] {
+  if (tabId === 'published-content') {
+    return posts.filter((post) => post.status === 'PUBLISHED');
+  }
+
+  if (tabId === 'pending-approvals') {
+    return posts.filter((post) => ['WAITING_APPROVAL', 'REVISION_REQUIRED', 'DESIGN'].includes(post.status));
+  }
+
+  return posts;
+}
+
+function buildStatusSummary(posts: SocialMediaPost[]): Array<{ status: SocialMediaPost['status']; count: number }> {
+  const summary = posts.reduce<Partial<Record<SocialMediaPost['status'], number>>>((accumulator, post) => {
+    accumulator[post.status] = (accumulator[post.status] ?? 0) + 1;
+    return accumulator;
+  }, {});
+
+  return Object.entries(summary).map(([status, count]) => ({
+    status: status as SocialMediaPost['status'],
+    count: count ?? 0,
+  }));
+}
+
+function getSocialMediaUnavailableTabLabel(tabId: string): string {
+  const labels: Record<string, string> = {
+    'dm-comments': 'DM & Yorumlar',
+    'competitor-analysis': 'Rakip Analizi',
+    performance: 'Performans',
+    reports: 'Raporlar',
+  };
+
+  return labels[tabId] ?? 'Social Media Sekmesi';
 }
 
 function GrowthWorkspace({ content }: { content: ServiceTabContent }) {

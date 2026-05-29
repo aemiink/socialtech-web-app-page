@@ -175,3 +175,31 @@ ALLOW_E2E_DB_RESET=true npm run test:e2e:authz
 - Client yalnızca kendi Social Media verisini görür.
 - Internal content client’a sızmaz.
 - Testler geçer.
+
+---
+
+# Faz 3 Çıktısı — 2026-05-28
+
+## Durum
+
+- Faz durumu: **Tamamlandı**
+- Sonuç: Client Panel Social Media dashboard ve sekmeleri API-driven hale getirildi.
+
+## Uygulananlar
+
+- Own-client summary güvenliği sıkılaştırıldı: client summary post/asset read modelinde yalnızca `clientVisible=true` postlar ve `CLIENT_VISIBLE` project file kayıtları döner.
+- Client Portal Social Media RTK Query feature’ı `config`, `summary`, `posts` ve `calendar` hook’larını kapsayacak şekilde genişletildi.
+- `social-media-dashboard` KPI, strateji, ajans notu, kreatif ve takvim alanlarını API verisinden render eder; static DM/trend/competitor fallback blokları kaldırıldı.
+- `ServiceTabPage` Social Media tabları generic static renderer yerine dedicated API/empty-state workspace kullanır.
+- Pending approvals tabı mevcut client task approval sistemiyle `social-media` project service tasklarını gösterir.
+- Reports/performance gibi kalıcı data source’u Faz 8’e bırakılan alanlarda mock içerik yerine açık empty/no-source state gösterilir.
+
+## Doğrulama
+
+- `clientPanel`: Social Media dashboard + service tab tests (`6/6`) ✅
+- `clientPanel`: `npm run typecheck` ✅
+- `clientPanel`: `npm run build` ✅
+- `server`: `npm run typecheck` ✅
+- `server`: `npm run typecheck:spec` ✅
+- `server`: `npm run check` ✅
+- `server`: `socialtech_server_test` e2e `social-media-authz.e2e-spec.ts` (`11/11`) ✅

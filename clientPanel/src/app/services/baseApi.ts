@@ -70,7 +70,7 @@ const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQue
 export const baseApi = createApi({
   reducerPath: "baseApi",
   baseQuery: baseQueryWithReauth,
-  tagTypes: ["TikTokAdsConfig", "AmazonAdsConfig"],
+  tagTypes: ["TikTokAdsConfig", "AmazonAdsConfig", "SocialMediaConfig", "SocialMediaSummary", "SocialMediaPosts"],
   endpoints: () => ({}),
 });
 

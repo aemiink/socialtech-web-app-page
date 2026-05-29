@@ -17,6 +17,7 @@ import type {
   AssignedClientAmazonAdsConfig,
   AdminClientAmazonAdsConnection,
   AdminClientMetaAdsConnection,
+  AdminClientSocialMediaConfig,
   AmazonAdsDateRangeQuery,
   AmazonAdsInsightsQuery,
   AmazonAdsInsightsResponse,
@@ -50,12 +51,14 @@ import type {
   UpdateAmazonAdsReportRequest,
   UpdateAdminClientAmazonAdsConfigRequest,
   UpdateAdminClientMetaAdsConfigRequest,
+  UpdateAdminClientSocialMediaConfigRequest,
   UpdateAdminClientRequest,
 } from "./clientsTypes";
 import {
   normalizeAmazonAdsCampaignsResponse,
   normalizeAssignedAmazonAdsConfigResponse,
   normalizeAdminAmazonAdsConnectionResponse,
+  normalizeAdminSocialMediaConfigResponse,
   normalizeAdminAmazonAdsClientListResponse,
   normalizeAdminAmazonAdsSyncLogsResponse,
   normalizeAmazonAdsInsightsResponse,
@@ -84,6 +87,7 @@ const CLIENTS_LIST_ID = "LIST";
 const CLIENT_SUMMARY_ID_PREFIX = "SUMMARY";
 const CLIENT_META_ADS_CONNECTION_ID_PREFIX = "META_ADS_CONNECTION";
 const CLIENT_AMAZON_ADS_CONNECTION_ID_PREFIX = "AMAZON_ADS_CONNECTION";
+const CLIENT_SOCIAL_MEDIA_CONFIG_ID_PREFIX = "SOCIAL_MEDIA_CONFIG";
 const CLIENT_META_ADS_GLOBAL_LIST_ID = "META_ADS_GLOBAL_LIST";
 const CLIENT_AMAZON_ADS_GLOBAL_LIST_ID = "AMAZON_ADS_GLOBAL_LIST";
 const CLIENT_META_ADS_SYNC_LOGS_LIST_ID = "META_ADS_SYNC_LOGS_LIST";
@@ -148,6 +152,16 @@ export const clientsApi = baseApi.injectEndpoints({
       transformResponse: (response: unknown) => normalizeAdminAmazonAdsConnectionResponse(response),
       providesTags: (_result, _error, clientId) => [
         { type: "Clients", id: getClientAmazonAdsConnectionTagId(clientId) },
+      ],
+    }),
+    getAdminClientSocialMediaConfig: builder.query<AdminClientSocialMediaConfig, string>({
+      query: (clientId) => ({
+        url: `/social-media/clients/${clientId}/config`,
+        method: "GET",
+      }),
+      transformResponse: (response: unknown) => normalizeAdminSocialMediaConfigResponse(response),
+      providesTags: (_result, _error, clientId) => [
+        { type: "Clients", id: getClientSocialMediaConfigTagId(clientId) },
       ],
     }),
     getAdminClientAmazonAdsSummary: builder.query<
@@ -335,6 +349,24 @@ export const clientsApi = baseApi.injectEndpoints({
         ...getAdminClientMutationInvalidations(clientId),
         { type: "Clients", id: getClientAmazonAdsConnectionTagId(clientId) },
         { type: "Clients", id: CLIENT_AMAZON_ADS_GLOBAL_LIST_ID },
+      ],
+    }),
+    updateAdminClientSocialMediaConfig: builder.mutation<
+      AdminClientSocialMediaConfig,
+      { clientId: string; body: UpdateAdminClientSocialMediaConfigRequest }
+    >({
+      query: ({ clientId, body }) => ({
+        url: `/social-media/clients/${clientId}/config`,
+        method: "PATCH",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeAdminSocialMediaConfigResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        ...getAdminClientMutationInvalidations(clientId),
+        { type: "Clients", id: getClientSocialMediaConfigTagId(clientId) },
+        { type: "SocialMediaConfig", id: clientId },
+        { type: "SocialMediaSummary", id: clientId },
+        { type: "SocialMediaSummary", id: "ADMIN_CLIENTS_LIST" },
       ],
     }),
     createAdminClientAmazonAdsOAuthUrl: builder.mutation<
@@ -764,6 +796,7 @@ export const {
   useGetClientSummaryQuery,
   useGetAdminClientMetaAdsConnectionQuery,
   useGetAdminClientAmazonAdsConnectionQuery,
+  useGetAdminClientSocialMediaConfigQuery,
   useGetAdminClientAmazonAdsSummaryQuery,
   useGetAssignedClientAmazonAdsConfigQuery,
   useGetAssignedClientAmazonAdsSummaryQuery,
@@ -778,6 +811,7 @@ export const {
   useGetAdminAmazonAdsSyncLogsQuery,
   useUpdateAdminClientMetaAdsConfigMutation,
   useUpdateAdminClientAmazonAdsConfigMutation,
+  useUpdateAdminClientSocialMediaConfigMutation,
   useCreateAdminClientAmazonAdsOAuthUrlMutation,
   useExchangeAdminClientAmazonAdsOAuthCodeMutation,
   useConnectAdminClientAmazonAdsManualMutation,
@@ -821,6 +855,10 @@ function getClientAmazonAdsConnectionTagId(id: string): string {
   return `${CLIENT_AMAZON_ADS_CONNECTION_ID_PREFIX}:${id}`;
 }
 
+function getClientSocialMediaConfigTagId(id: string): string {
+  return `${CLIENT_SOCIAL_MEDIA_CONFIG_ID_PREFIX}:${id}`;
+}
+
 function getAdminClientMutationInvalidations(id: string) {
   return [
     { type: "Clients" as const, id: CLIENTS_LIST_ID },
@@ -829,6 +867,7 @@ function getAdminClientMutationInvalidations(id: string) {
     { type: "Clients" as const, id },
     { type: "Clients" as const, id: getClientSummaryTagId(id) },
     { type: "Clients" as const, id: getClientAmazonAdsConnectionTagId(id) },
+    { type: "Clients" as const, id: getClientSocialMediaConfigTagId(id) },
     { type: "AdminSummary" as const, id: ADMIN_SUMMARY_ID },
     { type: "AuditLogs" as const, id: AUDIT_LOGS_LIST_ID },
   ];
@@ -844,6 +883,7 @@ function getAdminClientCreateInvalidations(result: ClientProfile | undefined) {
           { type: "Clients" as const, id: result.id },
           { type: "Clients" as const, id: getClientSummaryTagId(result.id) },
           { type: "Clients" as const, id: getClientAmazonAdsConnectionTagId(result.id) },
+          { type: "Clients" as const, id: getClientSocialMediaConfigTagId(result.id) },
         ]
       : []),
     { type: "AdminSummary" as const, id: ADMIN_SUMMARY_ID },

@@ -46,6 +46,9 @@ Location: `adminandemployeePanel/`
   - `adminandemployeePanel/src/app/features/metaAds/metaAdsTypes.ts`
   - `adminandemployeePanel/src/app/features/tiktokAds/tiktokAdsApi.ts`
   - `adminandemployeePanel/src/app/features/tiktokAds/tiktokAdsTypes.ts`
+  - `adminandemployeePanel/src/app/features/socialMedia/socialMediaApi.ts`
+  - `adminandemployeePanel/src/app/features/socialMedia/socialMediaTypes.ts`
+  - `adminandemployeePanel/src/app/features/socialMedia/socialMediaUtils.ts`
   - `adminandemployeePanel/src/app/features/projects/projectsApi.ts`
   - `adminandemployeePanel/src/app/features/projects/projectsTypes.ts`
   - `adminandemployeePanel/src/app/features/projects/projectsUtils.ts`
@@ -67,6 +70,7 @@ Location: `adminandemployeePanel/`
   - `adminandemployeePanel/src/app/pages/EmployeeAssignments.tsx`
   - `adminandemployeePanel/src/app/pages/Clients.tsx`
   - `adminandemployeePanel/src/app/pages/ClientDetail.tsx`
+  - `adminandemployeePanel/src/app/pages/SocialMediaAdmin.tsx`
   - `adminandemployeePanel/src/app/pages/Projects.tsx`
   - `adminandemployeePanel/src/app/pages/ProjectDetail.tsx`
   - `adminandemployeePanel/src/app/pages/Tasks.tsx`
@@ -232,6 +236,13 @@ Additional portal pages exist under `clientPanel/src/app/pages/` and `clientPane
   - `clientPanel/src/app/pages/service-tab-page.tsx` - API-driven TikTok Ads tab renderer for campaigns/video creatives/hook tests/audiences/pixel-events/UGC scripts/optimization notes
   - `clientPanel/src/app/pages/__tests__/tiktok-ads-dashboard.test.tsx`
   - `clientPanel/src/app/pages/__tests__/service-tab-page.tiktok-ads.test.tsx`
+- Social Media client portal Faz 3 touchpoints:
+  - `clientPanel/src/app/features/socialMedia/socialMediaApi.ts` - own-client config/summary/posts/calendar RTK Query hooks (`/clients/me/social-media/*`)
+  - `clientPanel/src/app/features/socialMedia/socialMediaTypes.ts` / `socialMediaUtils.ts` - own config/summary/post/calendar types, normalizers, labels, day grouping
+  - `clientPanel/src/app/pages/services/social-media-dashboard.tsx` - API-driven summary/config/calendar dashboard with client-visible creative assets and no static fallback blocks
+  - `clientPanel/src/app/pages/service-tab-page.tsx` - Social Media tabs use dedicated API/empty-state workspace instead of generic static service-page rendering; approvals tab reads client task approvals for `social-media`
+  - `clientPanel/src/app/pages/__tests__/social-media-dashboard.test.tsx`
+  - `clientPanel/src/app/pages/__tests__/service-tab-page.social-media.test.tsx`
 
 ## Backend API
 
@@ -251,7 +262,7 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 ### App Bootstrap
 
 - `server/src/main.ts` - Nest bootstrap, `/api/v1` global prefix, global ValidationPipe, global exception filter, CORS setup
-- `server/src/app.module.ts` - root module imports for config/database/health/auth/users/clients/admin-summary/admin-assignments/admin-clients/admin-users/admin-audit-logs/projects/tasks/crm/delivery/github integrations
+- `server/src/app.module.ts` - root module imports for config/database/health/auth/users/clients/admin-summary/admin-assignments/admin-clients/admin-users/admin-audit-logs/projects/tasks/crm/delivery/github integrations/social-media
 - `server/src/config/env.validation.ts` - Joi env validation schema, including `CLIENT_ORIGIN_PUBLIC`, CRM lead scan envs, Gemini scoring envs, `GITHUB_TOKEN_ENCRYPTION_KEY`, TikTok Ads envs, and Amazon Ads envs
 - `server/src/config/cors.config.ts` - env-based CORS whitelist, including public site origin support
 - `server/src/common/filters/global-exception.filter.ts` - centralized error response format
@@ -270,6 +281,7 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - CRM enums: `CrmLeadStatus`, `CrmLeadSource`, `CrmLeadActivityType`
   - TikTok Ads models: `ClientTikTokAdsConfig`, `ClientTikTokAdsCredential`, `TikTokAdsDailyInsight`, `TikTokAdsSyncLog`, `TikTokAdsReport`
   - Amazon Ads foundation models: `ClientAmazonAdsConfig`, `ClientAmazonAdsCredential`
+  - Social Media foundation models: `ClientSocialMediaConfig`, `SocialMediaPost`, `SocialMediaPostAsset`
   - `User.role` enum remains the primary fixed role field
   - `User.sessionInvalidatedAt` is used for access-token invalidation lifecycle
   - `ClientProfile.slug` is unique
@@ -280,6 +292,111 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
     - `@@index([employeeUserId, isActive])`
     - `@@index([clientProfileId, isActive])`
     - `@@index([scope, isActive])`
+
+### Social Media Backend Module
+
+- `server/src/social-media/social-media.module.ts`
+- `server/src/social-media/admin-social-media.controller.ts`
+  - admin global clients overview endpoint under `/api/v1/social-media/clients`
+  - admin/assigned config read, admin config update, admin/assigned summary, and client-scoped post list/create endpoints under `/api/v1/social-media/clients/:clientId/*`
+- `server/src/social-media/admin-social-media-posts.controller.ts`
+  - post detail/update/delete and asset attach/delete endpoints under `/api/v1/social-media/posts/:id*`
+- `server/src/social-media/client-social-media.controller.ts`
+  - own-client config/summary/posts/calendar endpoints under `/api/v1/clients/me/social-media/*` plus `/api/v1/client/social-media/*` compatibility aliases
+- `server/src/social-media/social-media.service.ts`
+  - service-level admin/assigned/client permission checks, admin global client list aggregation, active `SOCIAL_MEDIA` purchased-service checks, safe config/own post response shaping, post CRUD, status transition guard, and `ProjectFile` asset binding
+- `server/src/social-media/social-media-summary.service.ts`
+  - V1 summary read model from `ClientPurchasedService`, `ClientSocialMediaConfig`, `Project`, `Task`, `TaskTodo`, `ProjectFile`, and `SocialMediaPost`; own-client callers can request client-visible-only post/asset shaping
+- `server/src/social-media/dto/attach-social-media-post-asset.dto.ts`
+- `server/src/social-media/dto/create-social-media-post.dto.ts`
+- `server/src/social-media/dto/social-media-post-query.dto.ts`
+- `server/src/social-media/dto/update-social-media-post.dto.ts`
+- `server/src/social-media/dto/update-social-media-config.dto.ts`
+- `server/prisma/migrations/20260528183000_add_social_media_config/migration.sql`
+- `server/prisma/migrations/20260528193000_add_social_media_posts/migration.sql`
+- `server/test/social-media-authz.e2e-spec.ts`
+  - admin global clients list, non-admin global endpoint denial, admin config update, assigned employee read/summary, own-client summary, admin-route denial for client accounts, unauthenticated request, post CRUD, status transition, out-of-scope read denial, client-visible filtering, and designer asset attach/delete coverage
+
+## 2026-05-28 Update Map (Social Media Faz 4 Admin Panel)
+
+### Backend
+- `server/src/social-media/admin-social-media.controller.ts`
+  - `GET /api/v1/social-media/clients`
+- `server/src/social-media/social-media.service.ts`
+  - admin-only global overview aggregation with state, metrics, overdue scheduled posts, assignments, creative assets and risk status
+- `server/test/social-media-authz.e2e-spec.ts`
+  - admin global list, non-admin block, post count/overdue summary and leak guard coverage
+
+### Admin + Employee Panel Frontend
+- `adminandemployeePanel/src/app/features/socialMedia/socialMediaApi.ts`
+  - `useGetAdminSocialMediaClientsQuery`, `useGetClientSocialMediaSummaryQuery`
+- `adminandemployeePanel/src/app/features/socialMedia/socialMediaTypes.ts`
+- `adminandemployeePanel/src/app/features/socialMedia/socialMediaUtils.ts`
+  - admin overview/summary types, normalizers and status labels
+- `adminandemployeePanel/src/app/pages/SocialMediaAdmin.tsx`
+  - global Social Media operations page with KPI/list/detail/config modal + embedded content calendar
+- `adminandemployeePanel/src/app/pages/ClientDetail.tsx`
+  - Social Media section with config, post counts, pending approvals, assets, assignments and report no-source state
+- `adminandemployeePanel/src/app/pages/__tests__/SocialMediaAdmin.test.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/ClientDetail.test.tsx`
+
+## 2026-05-28 Update Map (Social Media Faz 5 Employee Workspace)
+
+### Backend
+- `server/prisma/seed.ts`
+  - Social Media assigned creatives/approvals/reports/notes permission slugs and role grants
+- `server/src/social-media/social-media.service.ts`
+  - `socialMedia.creatives.manage.assigned` accepted for assigned Social Media post asset management
+- `server/src/tasks/tasks.service.ts`
+  - shared approval task permission bridge maps `SOCIAL_MEDIA` projects to `socialMedia.approvals.create.assigned`
+- `server/test/social-media-authz.e2e-spec.ts`
+  - assigned Social Media specialist approval task creation coverage
+
+### Admin + Employee Panel Frontend
+- `adminandemployeePanel/src/app/employee/components/SocialMediaWorkspace.tsx`
+  - assigned Social Media workspace with role-aware overview/calendar/posts/creatives/approvals/reports/messages tabs
+- `adminandemployeePanel/src/app/employee/pages/SocialMediaCalismaAlani.tsx`
+  - `/employee/social-media` page wrapper
+- `adminandemployeePanel/src/app/employee/EmployeeLayout.tsx`
+  - Social Media workspace sidebar entry for Project Manager, Social Media Specialist and Designer
+- `adminandemployeePanel/src/app/routes.tsx`
+  - employee `/social-media` route registration
+- `adminandemployeePanel/src/app/employee/pages/__tests__/SocialMediaWorkspace.test.tsx`
+  - assigned client filter, designer creative action, PM workspace, calendar embed, approval action and permission-disabled coverage
+
+## 2026-05-29 Update Map (Social Media Faz 6 Approval + Creative Flow)
+
+### Backend
+- `server/prisma/schema.prisma`
+  - shared `MetaAdsApprovalType` enum extended with `SOCIAL_MEDIA_*` approval values
+- `server/prisma/migrations/20260528203000_add_social_media_approval_types/migration.sql`
+  - PostgreSQL enum migration for Social Media approval values
+- `server/src/tasks/tasks.service.ts`
+  - client approval response accepts `SOCIAL_MEDIA` project serviceKey
+  - linked Social Media post status updates after approve/reject/change-request responses
+  - revision task creation remains on the shared approval response path
+- `server/prisma/seed.ts`
+  - Acme Social Media service/project fixture and Designer Acme design assignment for repeatable manual role checks
+- `server/test/social-media-authz.e2e-spec.ts`
+  - Social Media approval type creation, client approve/revision response, post status update and follow-up revision task coverage
+
+### Admin + Employee Panel Frontend
+- `adminandemployeePanel/src/app/features/tasks/tasksTypes.ts`
+  - Social Media approval type union values
+- `adminandemployeePanel/src/app/employee/components/SocialMediaWorkspace.tsx`
+  - calendar approval creates `SOCIAL_MEDIA_CALENDAR_APPROVAL`
+  - post approval action creates `SOCIAL_MEDIA_POST_APPROVAL`, links `approvalTaskId`, marks post client-visible, and renders type/note status
+- `adminandemployeePanel/src/app/employee/pages/__tests__/SocialMediaWorkspace.test.tsx`
+  - calendar approval type and linked post approval mutation coverage
+
+### Client Panel Frontend
+- `clientPanel/src/app/features/tasks/tasksTypes.ts`
+- `clientPanel/src/app/features/tasks/tasksUtils.ts`
+  - Social Media approval type union + normalizer allow-list
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+  - Social Media approval type label rendering through the shared approvals panel
+- `clientPanel/src/app/pages/__tests__/service-tab-page.social-media.test.tsx`
+  - pending Social Media approval render + approve mutation coverage
 
 ### TikTok Ads Backend Module
 
@@ -389,10 +506,13 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 
 - `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
   - admin/assigned Amazon Ads queries + admin/assigned scoped report export mutations (`GET .../amazon-ads/reports/:reportId/export`) under existing Clients API slice
+  - Social Media admin config read/update RTK Query hooks (`GET/PATCH /social-media/clients/:clientId/config`)
 - `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`
   - Amazon Ads global client list + connection/config/OAuth/manual-connect/test/reporting/report-export request/response types and `AmazonAdsRegion`
+  - Social Media config request/response types, `SocialMediaGoal`, and `SocialMediaConnectionStatus`
 - `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
   - Amazon Ads global client list + connection/test/OAuth/reporting response normalizers and status badge helpers
+  - Social Media config response normalizer
 - `adminandemployeePanel/src/app/pages/AmazonAdsAdmin.tsx`
   - admin `/amazon-ads` merkezi yönetim ekranı: KPI, global müşteri listesi, config edit, test connection, manual sync, disconnect, onay talebi, hata odaklı sync tekrar aksiyonları ve CSV/JSON report export
 - `adminandemployeePanel/src/app/routes.tsx`
@@ -403,8 +523,28 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - admin Amazon Ads global panel render/state/action/report-export permission regression coverage
 - `adminandemployeePanel/src/app/pages/Clients.tsx`
   - `AMAZON_ADS` service selection reveals Amazon profile/account/marketplace config fields in create/edit forms
+  - `SOCIAL_MEDIA` service selection reveals organic channel/strategy config fields in create/edit forms and saves them through the Social Media config endpoint
 - `adminandemployeePanel/src/app/pages/ClientDetail.tsx`
   - Amazon Ads config/status card with OAuth URL/code, manual refresh token, test connection, reporting summary, manual sync, disconnect, and config edit actions
+
+### Social Media Admin/Employee Frontend Foundation
+
+- `adminandemployeePanel/src/app/features/socialMedia/socialMediaApi.ts`
+  - admin/assigned content calendar RTK Query hooks for client-scoped post list/create and post detail/update/delete/asset binding endpoints
+- `adminandemployeePanel/src/app/features/socialMedia/socialMediaTypes.ts`
+  - Social Media post platform/type/status enums, post/asset response types, list query, create/update request types
+- `adminandemployeePanel/src/app/features/socialMedia/socialMediaUtils.ts`
+  - response normalizers, label helpers, status badge classes, and datetime conversion helpers for content calendar forms
+- `adminandemployeePanel/src/app/employee/components/SocialMediaContentCalendar.tsx`
+  - shared admin/employee content calendar with assigned social clients, project filter, post list, create/update/delete form, visibility toggle, and permission-aware disabled states
+- `adminandemployeePanel/src/app/pages/SocialMediaAdmin.tsx`
+  - admin `/social-media` route wrapper for the shared content calendar
+- `adminandemployeePanel/src/app/employee/pages/IcerikTakvimi.tsx`
+  - employee `/employee/icerik-takvimi` now renders the shared API-driven Social Media content calendar
+- `adminandemployeePanel/src/app/routes.tsx`
+  - `/social-media` admin route and existing `/employee/icerik-takvimi` employee route registration
+- `adminandemployeePanel/src/app/components/RootLayout.tsx`
+  - Social Media admin sidebar entry
 
 ### TikTok Ads Employee Frontend
 

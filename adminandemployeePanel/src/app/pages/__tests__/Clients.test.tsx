@@ -12,12 +12,15 @@ import type {
 } from "../../features/adminUsers/adminUsersTypes";
 import type { AuthUserProfile } from "../../features/auth/authTypes";
 import type {
+  AdminClientSocialMediaConfig,
   ClientProfile,
   ClientsListQuery,
   ClientsListResponse,
   CreateAdminClientRequest,
   CreateOrLinkClientOwnerRequest,
+  UpdateAdminClientAmazonAdsConfigRequest,
   UpdateAdminClientRequest,
+  UpdateAdminClientSocialMediaConfigRequest,
 } from "../../features/clients/clientsTypes";
 import type {
   AdminAssignment,
@@ -48,6 +51,15 @@ type AdminUsersQueryResult = {
   refetch: () => void;
 };
 
+type SocialMediaConfigQueryResult = {
+  data?: AdminClientSocialMediaConfig;
+  error?: unknown;
+  isError: boolean;
+  isLoading: boolean;
+  isFetching: boolean;
+  refetch: () => void;
+};
+
 type CreateAdminClientTrigger = (
   payload: CreateAdminClientRequest,
 ) => MutationResponse<ClientProfile>;
@@ -58,6 +70,16 @@ type UpdateAdminClientTrigger = (payload: {
 }) => MutationResponse<ClientProfile>;
 
 type StatusClientTrigger = (id: string) => MutationResponse<ClientProfile>;
+
+type UpdateAdminClientAmazonAdsConfigTrigger = (payload: {
+  clientId: string;
+  body: UpdateAdminClientAmazonAdsConfigRequest;
+}) => MutationResponse<unknown>;
+
+type UpdateAdminClientSocialMediaConfigTrigger = (payload: {
+  clientId: string;
+  body: UpdateAdminClientSocialMediaConfigRequest;
+}) => MutationResponse<AdminClientSocialMediaConfig>;
 
 type CreateOrLinkClientOwnerTrigger = (payload: {
   clientId: string;
@@ -72,11 +94,20 @@ const mockUseGetClientsQuery = vi.fn<(query: ClientsListQuery) => ClientsQueryRe
 const mockUseGetAdminUsersQuery = vi.fn<
   (query: AdminUsersListQuery) => AdminUsersQueryResult
 >();
+const mockUseGetAdminClientSocialMediaConfigQuery = vi.fn<
+  (clientId: string, options?: { skip?: boolean }) => SocialMediaConfigQueryResult
+>();
 const mockUseCreateAdminClientMutation = vi.fn<
   () => [CreateAdminClientTrigger, { isLoading: boolean }]
 >();
 const mockUseUpdateAdminClientMutation = vi.fn<
   () => [UpdateAdminClientTrigger, { isLoading: boolean }]
+>();
+const mockUseUpdateAdminClientAmazonAdsConfigMutation = vi.fn<
+  () => [UpdateAdminClientAmazonAdsConfigTrigger, { isLoading: boolean }]
+>();
+const mockUseUpdateAdminClientSocialMediaConfigMutation = vi.fn<
+  () => [UpdateAdminClientSocialMediaConfigTrigger, { isLoading: boolean }]
 >();
 const mockUseDeactivateAdminClientMutation = vi.fn<
   () => [StatusClientTrigger, { isLoading: boolean }]
@@ -99,8 +130,16 @@ vi.mock("../../store/hooks", () => ({
 
 vi.mock("../../features/clients/clientsApi", () => ({
   useGetClientsQuery: (query: ClientsListQuery) => mockUseGetClientsQuery(query),
+  useGetAdminClientSocialMediaConfigQuery: (
+    clientId: string,
+    options?: { skip?: boolean },
+  ) => mockUseGetAdminClientSocialMediaConfigQuery(clientId, options),
   useCreateAdminClientMutation: () => mockUseCreateAdminClientMutation(),
   useUpdateAdminClientMutation: () => mockUseUpdateAdminClientMutation(),
+  useUpdateAdminClientAmazonAdsConfigMutation: () =>
+    mockUseUpdateAdminClientAmazonAdsConfigMutation(),
+  useUpdateAdminClientSocialMediaConfigMutation: () =>
+    mockUseUpdateAdminClientSocialMediaConfigMutation(),
   useDeactivateAdminClientMutation: () => mockUseDeactivateAdminClientMutation(),
   useActivateAdminClientMutation: () => mockUseActivateAdminClientMutation(),
   useCreateOrLinkClientOwnerMutation: () => mockUseCreateOrLinkClientOwnerMutation(),
@@ -193,6 +232,26 @@ const defaultAdminUsersResponse: AdminUsersListResponse = {
   },
 };
 
+const defaultSocialMediaConfig: AdminClientSocialMediaConfig = {
+  clientProfileId: client.id,
+  hasActiveService: true,
+  instagramUsername: "@acme",
+  instagramAccountId: "ig-123",
+  facebookPageId: "fb-123",
+  tiktokUsername: "@acmetiktok",
+  linkedinPageUrl: "https://www.linkedin.com/company/acme",
+  contentFrequency: "Haftada 3 post",
+  primaryGoal: "ENGAGEMENT",
+  toneOfVoice: "Samimi",
+  hashtags: ["#acme", "#growth"],
+  connectionStatus: "CONNECTED",
+  lastSyncAt: "2026-04-30T10:00:00.000Z",
+  syncError: null,
+  notes: "Mayıs içerik ritmi.",
+  createdAt: "2026-04-30T10:00:00.000Z",
+  updatedAt: "2026-04-30T10:00:00.000Z",
+};
+
 function setupListState(overrides: Partial<ClientsQueryResult> = {}) {
   mockUseGetClientsQuery.mockReturnValue({
     data: defaultClientsResponse,
@@ -209,6 +268,18 @@ function setupListState(overrides: Partial<ClientsQueryResult> = {}) {
 function setupOwnerPickerState(overrides: Partial<AdminUsersQueryResult> = {}) {
   mockUseGetAdminUsersQuery.mockReturnValue({
     data: defaultAdminUsersResponse,
+    error: undefined,
+    isError: false,
+    isLoading: false,
+    isFetching: false,
+    refetch: vi.fn(),
+    ...overrides,
+  });
+}
+
+function setupSocialMediaConfigState(overrides: Partial<SocialMediaConfigQueryResult> = {}) {
+  mockUseGetAdminClientSocialMediaConfigQuery.mockReturnValue({
+    data: undefined,
     error: undefined,
     isError: false,
     isLoading: false,
@@ -253,6 +324,28 @@ function setupMutationState() {
 
     return { unwrap: async () => updatedClient };
   });
+
+  const updateAdminClientAmazonAdsConfig = vi.fn<UpdateAdminClientAmazonAdsConfigTrigger>(() => ({
+    unwrap: async () => ({}),
+  }));
+
+  const updateAdminClientSocialMediaConfig =
+    vi.fn<UpdateAdminClientSocialMediaConfigTrigger>(({ clientId, body }) => ({
+      unwrap: async () => ({
+        ...defaultSocialMediaConfig,
+        clientProfileId: clientId,
+        instagramUsername: body.instagramUsername ?? null,
+        instagramAccountId: body.instagramAccountId ?? null,
+        facebookPageId: body.facebookPageId ?? null,
+        tiktokUsername: body.tiktokUsername ?? null,
+        linkedinPageUrl: body.linkedinPageUrl ?? null,
+        contentFrequency: body.contentFrequency ?? null,
+        primaryGoal: body.primaryGoal ?? null,
+        toneOfVoice: body.toneOfVoice ?? null,
+        hashtags: body.hashtags ?? [],
+        notes: body.notes ?? null,
+      }),
+    }));
 
   const deactivateAdminClient = vi.fn<StatusClientTrigger>((id) => ({
     unwrap: async () => ({
@@ -306,6 +399,14 @@ function setupMutationState() {
 
   mockUseCreateAdminClientMutation.mockReturnValue([createAdminClient, { isLoading: false }]);
   mockUseUpdateAdminClientMutation.mockReturnValue([updateAdminClient, { isLoading: false }]);
+  mockUseUpdateAdminClientAmazonAdsConfigMutation.mockReturnValue([
+    updateAdminClientAmazonAdsConfig,
+    { isLoading: false },
+  ]);
+  mockUseUpdateAdminClientSocialMediaConfigMutation.mockReturnValue([
+    updateAdminClientSocialMediaConfig,
+    { isLoading: false },
+  ]);
   mockUseDeactivateAdminClientMutation.mockReturnValue([
     deactivateAdminClient,
     { isLoading: false },
@@ -323,6 +424,8 @@ function setupMutationState() {
   return {
     createAdminClient,
     updateAdminClient,
+    updateAdminClientAmazonAdsConfig,
+    updateAdminClientSocialMediaConfig,
     deactivateAdminClient,
     activateAdminClient,
     createOrLinkClientOwner,
@@ -474,6 +577,7 @@ describe("Clients", () => {
     currentUser = adminUser;
     setupListState();
     setupOwnerPickerState();
+    setupSocialMediaConfigState();
     setupMutationState();
   });
 
@@ -914,8 +1018,61 @@ describe("Clients", () => {
         password: "Owner123",
       },
     });
-    expect(await screen.findByText("Müşteri ve portal sahibi başarıyla kaydedildi.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Müşteri bağlantı bilgileriyle birlikte başarıyla kaydedildi."),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Yeni Müşteri Oluştur" })).not.toBeInTheDocument();
+  });
+
+  it("submits social media config when Social Media service is selected", async () => {
+    const { createAdminClient, updateAdminClientSocialMediaConfig } = setupMutationState();
+
+    renderClients();
+    const dialog = openCreateDialog();
+
+    fireEvent.change(within(dialog).getByLabelText("Müşteri Adı"), {
+      target: { value: "Sosyal Marka" },
+    });
+    fireEvent.click(within(dialog).getByLabelText("Social Media"));
+    fireEvent.change(within(dialog).getByLabelText("Instagram Username"), {
+      target: { value: " @sosyalmarka " },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Content Frequency"), {
+      target: { value: "Haftada 4 post" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Primary Goal"), {
+      target: { value: "COMMUNITY_GROWTH" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Hashtags"), {
+      target: { value: "#marka, #growth, #marka" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Notes"), {
+      target: { value: "Topluluk odaklı ilerle." },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Müşteri Oluştur" }));
+
+    await waitFor(() => {
+      expect(createAdminClient).toHaveBeenCalledTimes(1);
+    });
+    expect(createAdminClient.mock.calls[0][0]).toMatchObject({
+      name: "Sosyal Marka",
+      purchasedServices: ["social-media"],
+    });
+    expect(updateAdminClientSocialMediaConfig).toHaveBeenCalledWith({
+      clientId: "33333333-3333-4333-8333-333333333333",
+      body: {
+        instagramUsername: "@sosyalmarka",
+        instagramAccountId: null,
+        facebookPageId: null,
+        tiktokUsername: null,
+        linkedinPageUrl: null,
+        contentFrequency: "Haftada 4 post",
+        primaryGoal: "COMMUNITY_GROWTH",
+        toneOfVoice: null,
+        hashtags: ["#marka", "#growth"],
+        notes: "Topluluk odaklı ilerle.",
+      },
+    });
   });
 
   it("keeps create modal open and shows API errors", async () => {

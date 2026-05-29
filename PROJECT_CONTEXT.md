@@ -543,6 +543,103 @@ Additional active Amazon Ads reporting endpoints:
 - `GET /api/v1/clients/me/amazon-ads/reports`
 - `GET /api/v1/clients/me/amazon-ads/reports/:reportId/export?format=json|csv`
 
+## Social Media Faz 1 — Backend Foundation (2026-05-28)
+
+Social Media Faz 0 discovery contract sonrası organic content operations için ilk backend foundation uygulandı. Özet:
+- Prisma foundation: `SocialMediaGoal`, `SocialMediaConnectionStatus`, `ClientSocialMediaConfig`.
+- Config alanları müşteri bazlı organik kanal/strateji bilgilerini tutar: Instagram username/account ID, Facebook page ID, TikTok username, LinkedIn page URL, content frequency, primary goal, tone of voice, hashtags, notes.
+- Backend module: `server/src/social-media/` admin/assigned config read, admin config update, admin/assigned summary ve own-client safe config/summary endpointlerini sağlar.
+- Summary V1 mock veri dönmez; `ClientPurchasedService`, `ClientSocialMediaConfig`, `Project.serviceKey`, `Task`, `TaskTodo` ve `ProjectFile` kaynaklarından read model üretir. Faz 2 itibarıyla `SocialMediaPost` da summary metrics/contentPlan kaynaklarına dahil edildi; insight/report domainleri sonraki fazlara bırakıldı.
+- Permission seed: `socialMedia.config.*` ve `socialMedia.summary.*` slug’ları eklendi; Project Manager, Social Media Specialist ve Designer assigned read/summary scope alır; client owner/member own read/summary scope alır.
+- Admin Clients create/edit formu `SOCIAL_MEDIA` seçilince Social Media config alanlarını gösterir ve config endpointine kaydeder.
+
+Active Social Media endpoints:
+- `GET /api/v1/social-media/clients/:clientId/config`
+- `PATCH /api/v1/social-media/clients/:clientId/config`
+- `GET /api/v1/social-media/clients/:clientId/summary`
+- `GET /api/v1/clients/me/social-media/config`
+- `GET /api/v1/clients/me/social-media/summary`
+- Backward-compatible aliases: `GET /api/v1/client/social-media/config`, `GET /api/v1/client/social-media/summary`
+
+## Social Media Faz 2 — Content Calendar Backend + UI Consumption (2026-05-28)
+
+Faz 2 organik içerik takvimini gerçek domain modeliyle başlattı ve UI tüketim katmanına bağladı:
+- Prisma foundation: `SocialMediaPost`, `SocialMediaPostAsset`, `SocialMediaPlatform`, `SocialMediaPostType`, `SocialMediaPostStatus`.
+- Assets yeni dosya modeli açmadan mevcut `ProjectFile` üzerinden `SocialMediaPostAsset` join modeliyle bağlanır.
+- Backend Social Media modülü post CRUD, client-visible own read ve calendar read endpointlerini sağlar.
+- Permission seed: `socialMedia.posts.read/manage.*`, `socialMedia.posts.assets.manage.assigned`, `socialMedia.posts.read.own`; PM/Social assigned manage, Designer assigned asset manage, client own visible read.
+- Summary read model artık `SocialMediaPost` metrics/upcoming/recent content plan kaynaklarını da içerir.
+- Status transition guard V1: `IDEA -> DRAFT -> DESIGN/WAITING_APPROVAL -> APPROVED/REJECTED/REVISION_REQUIRED -> SCHEDULED/PUBLISHED/CANCELLED` akışı servis katmanında doğrulanır.
+- Admin/employee frontend `features/socialMedia/*` RTK Query slice ile post list/create/update/delete endpointlerini tüketir; `/social-media` admin rotası ve `/employee/icerik-takvimi` shared content calendar liste/form bileşenini kullanır.
+- Client Portal `features/socialMedia/*` own posts/calendar hook’larıyla `social-media-dashboard` ve Social Media `content-calendar` / `pending-approvals` / `published-content` tablarını yalnızca `clientVisible=true` kayıtlarla API-driven gösterir.
+
+Active Social Media post endpoints:
+- `GET /api/v1/social-media/clients/:clientId/posts`
+- `POST /api/v1/social-media/clients/:clientId/posts`
+- `GET /api/v1/social-media/posts/:id`
+- `PATCH /api/v1/social-media/posts/:id`
+- `DELETE /api/v1/social-media/posts/:id`
+- `POST /api/v1/social-media/posts/:id/assets`
+- `DELETE /api/v1/social-media/posts/:id/assets/:assetId`
+- `GET /api/v1/clients/me/social-media/posts`
+- `GET /api/v1/clients/me/social-media/posts/:id`
+- `GET /api/v1/clients/me/social-media/calendar`
+- Backward-compatible aliases: `/api/v1/client/social-media/posts*`, `/api/v1/client/social-media/calendar`
+
+## Social Media Faz 3 — Client Panel API-Driven Dashboard (2026-05-28)
+
+Faz 3 client portal Social Media yüzeyini config/summary/calendar kaynaklarına genişletti. Özet:
+
+- Own-client summary artık post/asset read modelinde yalnızca `clientVisible=true` postlar ve `CLIENT_VISIBLE` project files döndürür; admin/assigned summary operasyonel tam görünürlüğünü korur.
+- Client Portal `features/socialMedia/*` own config + summary RTK Query hookları ve normalizer contract’ı içerir.
+- `social-media-dashboard` KPI, strateji, ajans notu, kreatif ve içerik takvimi alanlarını API’den render eder; static DM/trend/competitor fallback blokları kaldırıldı.
+- `ServiceTabPage` Social Media sekmeleri artık generic static service-page renderer’a düşmez; content calendar, pending approvals, published content, creatives ve agency notes dedicated Social Media workspace ile API/empty-state driven çalışır.
+- Pending approvals tabı mevcut client task approval sistemiyle `projectServiceId="social-media"` tasklarını gösterir ve approve/revision aksiyonlarını kullanır.
+
+## Social Media Faz 4 — Admin Social Media Paneli (2026-05-28)
+
+Faz 4 admin/employee panel tarafında global Social Media operasyon görünümünü API-driven hale getirdi. Özet:
+
+- Backend `GET /api/v1/social-media/clients` endpointi eklendi; yalnızca admin `socialMedia.summary.read.any` ile erişebilir.
+- Global list response aktif `SOCIAL_MEDIA` hizmetli müşteriler için config/state, planned/published/pending/rejected/overdue post metrikleri, recent/upcoming postlar, creative assets, Social Media/Designer atamaları ve risk status döndürür.
+- Admin `/social-media` sayfası global KPI, müşteri risk listesi, selected-client detay paneli, config edit modalı ve mevcut content calendar create/list akışını tek ekranda sunar.
+- `ClientDetail` içine Social Media section eklendi; config, post counts, upcoming/recent posts, creative assets, pending approvals, assignment visibility ve report no-source state API verisiyle render edilir.
+- Admin frontend `features/socialMedia/*` slice’ı global clients + client summary hooklarıyla genişledi; config update cache invalidation Social Media summary/list tag’lerini de invalid eder.
+- Backend authz e2e artık admin global list, post count/overdue summary, non-admin global endpoint block ve response leak guard senaryolarını kapsar.
+
+Active Social Media admin overview endpoint:
+- `GET /api/v1/social-media/clients`
+
+## Social Media Faz 5 — Employee Social Media Workspace (2026-05-28)
+
+Faz 5 employee panelde assigned Social Media operasyon çalışma alanını açtı. Özet:
+
+- Employee `/employee/social-media` rotası eklendi; sidebar entry Project Manager, Social Media Specialist ve Designer rollerinde görünür.
+- `SocialMediaWorkspace` assigned client listesi, summary KPI’ları, content calendar, posts, creatives, approvals, reports ve messages tablarını rol bazlı gösterir.
+- Workspace existing Social Media summary/posts endpointlerini ve projects/tasks RTK Query hooklarını kullanır; aktif `social-media` purchased service olmayan assigned client’lar listelenmez.
+- Social Media approval task create bridge’i shared `POST /api/v1/tasks` endpointine bağlandı; assigned employee için `socialMedia.approvals.create.assigned` permission’ı reklam approval pattern’iyle aynı guard hattına alındı.
+- Designer creative asset action `socialMedia.creatives.manage.assigned` permission’ını Social Media post asset manage guard’ında kabul eder.
+
+Active Social Media employee workspace route:
+- `/employee/social-media`
+
+## Social Media Faz 6 — Approval + Creative Flow (2026-05-29)
+
+Faz 6 Social Media approval lifecycle’ı shared task approval altyapısına bağladı. Özet:
+
+- `MetaAdsApprovalType` enumu Social Media approval değerleriyle genişledi: post, creative, caption, calendar ve report acknowledgement.
+- Client approval response artık `SOCIAL_MEDIA` project serviceKey’li pending approval tasklarını kabul eder.
+- Linked Social Media post approval response sonucunda post status güncellenir: approved -> `APPROVED`, rejected/changes requested -> `REVISION_REQUIRED`.
+- Rejection/revision note mevcut shared task flow ile follow-up revision task üretir.
+- Employee workspace calendar approval tasklarını `SOCIAL_MEDIA_CALENDAR_APPROVAL`, post approval tasklarını `SOCIAL_MEDIA_POST_APPROVAL` olarak oluşturur ve post `approvalTaskId` linkini kurar.
+- Client Social Media approvals tabı yeni Social Media approval type değerlerini normalize eder ve approve/revision mutation akışını kullanır.
+- Faz 6 öncesi manual role matrix turu Acme seed fixture’ı üzerinde Social Media Specialist, Designer, Project Manager ve out-of-scope görünmezliğiyle doğrulandı.
+
+Active Social Media approval bridge:
+- `POST /api/v1/tasks` with `approvalRequired=true` and `approvalType=SOCIAL_MEDIA_*`
+- `PATCH /api/v1/tasks/:taskId` client approval response
+- `PATCH /api/v1/social-media/posts/:postId` post approval task link/status update
+
 Planned next backend phases:
 - Broader domain endpoint authorization rollout (beyond users/clients/admin-assignments/projects/tasks)
 - Forced password change on first login flow

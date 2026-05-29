@@ -197,6 +197,22 @@ export type AmazonAdsConnectionStatus =
   | "ERROR"
   | "DISCONNECTED";
 
+export type SocialMediaConnectionStatus =
+  | "NOT_CONNECTED"
+  | "PENDING"
+  | "CONNECTED"
+  | "ERROR"
+  | "DISCONNECTED";
+
+export type SocialMediaGoal =
+  | "BRAND_AWARENESS"
+  | "COMMUNITY_GROWTH"
+  | "ENGAGEMENT"
+  | "LEAD_GENERATION"
+  | "SALES_SUPPORT"
+  | "REPUTATION"
+  | "MIXED";
+
 export type AmazonAdsRegion = "NA" | "EU" | "FE";
 export type AmazonAdsProductType =
   | "SPONSORED_PRODUCTS"
@@ -309,6 +325,42 @@ export type UpdateAdminClientAmazonAdsConfigRequest = {
   accountName?: string | null;
   validPaymentMethod?: boolean | null;
   connectionStatus?: AmazonAdsConnectionStatus;
+};
+
+export type AdminClientSocialMediaConfig = {
+  clientProfileId: string;
+  hasActiveService: boolean;
+  instagramUsername: string | null;
+  instagramAccountId: string | null;
+  facebookPageId: string | null;
+  tiktokUsername: string | null;
+  linkedinPageUrl: string | null;
+  contentFrequency: string | null;
+  primaryGoal: SocialMediaGoal | null;
+  toneOfVoice: string | null;
+  hashtags: string[];
+  connectionStatus: SocialMediaConnectionStatus;
+  lastSyncAt: string | null;
+  syncError: string | null;
+  notes: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+export type UpdateAdminClientSocialMediaConfigRequest = {
+  instagramUsername?: string | null;
+  instagramAccountId?: string | null;
+  facebookPageId?: string | null;
+  tiktokUsername?: string | null;
+  linkedinPageUrl?: string | null;
+  contentFrequency?: string | null;
+  primaryGoal?: SocialMediaGoal | null;
+  toneOfVoice?: string | null;
+  hashtags?: string[];
+  connectionStatus?: SocialMediaConnectionStatus;
+  lastSyncAt?: string | null;
+  syncError?: string | null;
+  notes?: string | null;
 };
 
 export type ConnectManualAmazonAdsRequest = {

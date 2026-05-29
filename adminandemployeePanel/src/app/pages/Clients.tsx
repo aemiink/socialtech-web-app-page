@@ -33,6 +33,7 @@ import {
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../components/ui/sheet";
+import { Textarea } from "../components/ui/textarea";
 import {
   hasAdminPermission,
   selectCurrentUser,
@@ -60,11 +61,14 @@ import {
   useCreateOrLinkClientOwnerMutation,
   useDeactivateAdminClientMutation,
   useGetClientsQuery,
+  useGetAdminClientSocialMediaConfigQuery,
   useUpdateAdminClientAmazonAdsConfigMutation,
+  useUpdateAdminClientSocialMediaConfigMutation,
   useUpdateAdminClientMutation,
 } from "../features/clients/clientsApi";
 import type {
   AmazonAdsRegion,
+  AdminClientSocialMediaConfig,
   ClientProfile,
   ClientStatus,
   ClientsListQuery,
@@ -73,7 +77,9 @@ import type {
   CreateAdminClientRequest,
   CreateOrLinkClientOwnerRequest,
   ServiceKey,
+  SocialMediaGoal,
   UpdateAdminClientAmazonAdsConfigRequest,
+  UpdateAdminClientSocialMediaConfigRequest,
   UpdateAdminClientRequest,
 } from "../features/clients/clientsTypes";
 import {
@@ -114,6 +120,7 @@ type ClientStatusFilter = ClientStatus | "ALL";
 type ClientOwnerMode = "NONE" | "CREATE" | "LINK_EXISTING";
 type PendingClientStatusAction = "activate" | "deactivate";
 type AmazonAdsPaymentMethodState = "" | "true" | "false";
+type SocialMediaGoalState = "" | SocialMediaGoal;
 type AssignmentFormState = {
   employee: AdminUser | null;
   scope: AdminAssignmentScope;
@@ -139,6 +146,16 @@ type ClientFormState = {
   amazonAccountType: string;
   amazonAccountName: string;
   amazonValidPaymentMethod: AmazonAdsPaymentMethodState;
+  socialInstagramUsername: string;
+  socialInstagramAccountId: string;
+  socialFacebookPageId: string;
+  socialTiktokUsername: string;
+  socialLinkedinPageUrl: string;
+  socialContentFrequency: string;
+  socialPrimaryGoal: SocialMediaGoalState;
+  socialToneOfVoice: string;
+  socialHashtags: string;
+  socialNotes: string;
 };
 
 type ClientFormField = keyof ClientFormState;
@@ -164,12 +181,32 @@ const initialClientForm: ClientFormState = {
   amazonAccountType: "",
   amazonAccountName: "",
   amazonValidPaymentMethod: "",
+  socialInstagramUsername: "",
+  socialInstagramAccountId: "",
+  socialFacebookPageId: "",
+  socialTiktokUsername: "",
+  socialLinkedinPageUrl: "",
+  socialContentFrequency: "",
+  socialPrimaryGoal: "",
+  socialToneOfVoice: "",
+  socialHashtags: "",
+  socialNotes: "",
 };
 
 const initialAssignmentForm: AssignmentFormState = {
   employee: null,
   scope: "PROJECT",
 };
+
+const SOCIAL_MEDIA_GOAL_OPTIONS: Array<{ value: SocialMediaGoal; label: string }> = [
+  { value: "BRAND_AWARENESS", label: "Brand Awareness" },
+  { value: "COMMUNITY_GROWTH", label: "Community Growth" },
+  { value: "ENGAGEMENT", label: "Engagement" },
+  { value: "LEAD_GENERATION", label: "Lead Generation" },
+  { value: "SALES_SUPPORT", label: "Sales Support" },
+  { value: "REPUTATION", label: "Reputation" },
+  { value: "MIXED", label: "Mixed" },
+];
 
 export function Clients() {
   const currentUser = useAppSelector(selectCurrentUser);
@@ -253,6 +290,8 @@ export function Clients() {
   const [updateAdminClient, { isLoading: isUpdating }] = useUpdateAdminClientMutation();
   const [updateAdminClientAmazonAdsConfig, { isLoading: isUpdatingAmazonAdsConfig }] =
     useUpdateAdminClientAmazonAdsConfigMutation();
+  const [updateAdminClientSocialMediaConfig, { isLoading: isUpdatingSocialMediaConfig }] =
+    useUpdateAdminClientSocialMediaConfigMutation();
   const [deactivateAdminClient, { isLoading: isDeactivating }] =
     useDeactivateAdminClientMutation();
   const [activateAdminClient, { isLoading: isActivating }] = useActivateAdminClientMutation();
@@ -260,6 +299,15 @@ export function Clients() {
     useCreateOrLinkClientOwnerMutation();
   const [createAdminAssignment, { isLoading: isCreatingAssignment }] =
     useCreateAdminAssignmentMutation();
+  const shouldLoadEditSocialMediaConfig = Boolean(
+    editTarget && editForm && isSocialMediaSelected(editForm.purchasedServices),
+  );
+  const {
+    data: editSocialMediaConfig,
+    isFetching: isFetchingEditSocialMediaConfig,
+  } = useGetAdminClientSocialMediaConfigQuery(editTarget?.id ?? "", {
+    skip: !shouldLoadEditSocialMediaConfig,
+  });
 
   const clients = clientsResponse?.data ?? [];
   const responsePage = currentClientsResponse?.meta.page;
@@ -290,6 +338,7 @@ export function Clients() {
     isActivating ||
     isLinkingOwner ||
     isUpdatingAmazonAdsConfig ||
+    isUpdatingSocialMediaConfig ||
     isCreatingAssignment;
 
   const kpiCards = [
@@ -375,9 +424,26 @@ export function Clients() {
     setEditForm((prev) => (prev ? { ...prev, [field]: value } : prev));
   }
 
+  useEffect(() => {
+    if (!editTarget || !editSocialMediaConfig) {
+      return;
+    }
+
+    setEditForm((prev) => {
+      if (!prev || editTarget.id !== editSocialMediaConfig.clientProfileId) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        ...socialMediaConfigToFormFields(editSocialMediaConfig),
+      };
+    });
+  }, [editTarget, editSocialMediaConfig]);
+
   async function handleCreateSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isCreating || isLinkingOwner || isUpdatingAmazonAdsConfig) {
+    if (isCreating || isLinkingOwner || isUpdatingAmazonAdsConfig || isUpdatingSocialMediaConfig) {
       return;
     }
 
@@ -395,6 +461,7 @@ export function Clients() {
       const createdClient = await createAdminClient(buildCreateClientPayload(createForm)).unwrap();
       const ownerPayload = buildOwnerPayload(createForm);
       const amazonAdsPayload = buildAmazonAdsConfigPayload(createForm);
+      const socialMediaPayload = buildSocialMediaConfigPayload(createForm);
 
       if (ownerPayload) {
         try {
@@ -432,9 +499,27 @@ export function Clients() {
         }
       }
 
+      if (socialMediaPayload) {
+        try {
+          await updateAdminClientSocialMediaConfig({
+            clientId: createdClient.id,
+            body: socialMediaPayload,
+          }).unwrap();
+        } catch (error) {
+          closeCreateDialog();
+          setPageError(
+            `Müşteri oluşturuldu ancak Social Media yapılandırması kaydedilemedi: ${extractApiErrorMessage(
+              error,
+              "Social Media yapılandırması tamamlanamadı.",
+            )}`,
+          );
+          return;
+        }
+      }
+
       closeCreateDialog();
       setPageSuccess(
-        ownerPayload || amazonAdsPayload
+        ownerPayload || amazonAdsPayload || socialMediaPayload
           ? "Müşteri bağlantı bilgileriyle birlikte başarıyla kaydedildi."
           : "Müşteri başarıyla oluşturuldu.",
       );
@@ -447,7 +532,14 @@ export function Clients() {
 
   async function handleUpdateSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!editTarget || !editForm || isUpdating || isUpdatingAmazonAdsConfig) {
+    if (
+      !editTarget ||
+      !editForm ||
+      isUpdating ||
+      isUpdatingAmazonAdsConfig ||
+      isUpdatingSocialMediaConfig ||
+      isFetchingEditSocialMediaConfig
+    ) {
       return;
     }
 
@@ -479,6 +571,23 @@ export function Clients() {
             `Müşteri güncellendi ancak Amazon Ads yapılandırması kaydedilemedi: ${extractApiErrorMessage(
               error,
               "Amazon Ads yapılandırması tamamlanamadı.",
+            )}`,
+          );
+          return;
+        }
+      }
+      const socialMediaPayload = buildSocialMediaConfigPayload(editForm);
+      if (socialMediaPayload) {
+        try {
+          await updateAdminClientSocialMediaConfig({
+            clientId: editTarget.id,
+            body: socialMediaPayload,
+          }).unwrap();
+        } catch (error) {
+          setEditSubmitError(
+            `Müşteri güncellendi ancak Social Media yapılandırması kaydedilemedi: ${extractApiErrorMessage(
+              error,
+              "Social Media yapılandırması tamamlanamadı.",
             )}`,
           );
           return;
@@ -1018,7 +1127,7 @@ export function Clients() {
               idPrefix="create-client"
               form={createForm}
               onChange={updateCreateForm}
-              disabled={isCreating || isLinkingOwner || isUpdatingAmazonAdsConfig}
+              disabled={isCreating || isLinkingOwner || isUpdatingAmazonAdsConfig || isUpdatingSocialMediaConfig}
               includeOwnerFields
               canLinkExistingOwner={canReadAdminUsers}
               selectedExistingOwner={createSelectedExistingOwner}
@@ -1033,16 +1142,16 @@ export function Clients() {
                 type="button"
                 variant="outline"
                 onClick={closeCreateDialog}
-                disabled={isCreating || isLinkingOwner || isUpdatingAmazonAdsConfig}
+                disabled={isCreating || isLinkingOwner || isUpdatingAmazonAdsConfig || isUpdatingSocialMediaConfig}
               >
                 Vazgeç
               </Button>
               <Button
                 type="submit"
                 className="bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
-                disabled={isCreating || isLinkingOwner || isUpdatingAmazonAdsConfig}
+                disabled={isCreating || isLinkingOwner || isUpdatingAmazonAdsConfig || isUpdatingSocialMediaConfig}
               >
-                {isCreating || isLinkingOwner || isUpdatingAmazonAdsConfig
+                {isCreating || isLinkingOwner || isUpdatingAmazonAdsConfig || isUpdatingSocialMediaConfig
                   ? "Kaydediliyor..."
                   : "Müşteri Oluştur"}
               </Button>
@@ -1077,23 +1186,23 @@ export function Clients() {
                 idPrefix="edit-client"
                 form={editForm}
                 onChange={updateEditForm}
-                disabled={isUpdating || isUpdatingAmazonAdsConfig}
+                disabled={isUpdating || isUpdatingAmazonAdsConfig || isUpdatingSocialMediaConfig || isFetchingEditSocialMediaConfig}
               />
               <DialogFooter>
                 <Button
                   type="button"
                   variant="outline"
                   onClick={closeEditDialog}
-                  disabled={isUpdating || isUpdatingAmazonAdsConfig}
+                  disabled={isUpdating || isUpdatingAmazonAdsConfig || isUpdatingSocialMediaConfig || isFetchingEditSocialMediaConfig}
                 >
                   Vazgeç
                 </Button>
                 <Button
                   type="submit"
                   className="bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
-                  disabled={isUpdating || isUpdatingAmazonAdsConfig}
+                  disabled={isUpdating || isUpdatingAmazonAdsConfig || isUpdatingSocialMediaConfig || isFetchingEditSocialMediaConfig}
                 >
-                  {isUpdating || isUpdatingAmazonAdsConfig
+                  {isUpdating || isUpdatingAmazonAdsConfig || isUpdatingSocialMediaConfig
                     ? "Kaydediliyor..."
                     : "Değişiklikleri Kaydet"}
                 </Button>
@@ -1334,6 +1443,15 @@ function ClientFormFields({
 
       {isAmazonAdsSelected(form.purchasedServices) && (
         <AmazonAdsConfigFields
+          idPrefix={idPrefix}
+          form={form}
+          disabled={disabled}
+          onChange={onChange}
+        />
+      )}
+
+      {isSocialMediaSelected(form.purchasedServices) && (
+        <SocialMediaConfigFields
           idPrefix={idPrefix}
           form={form}
           disabled={disabled}
@@ -1605,6 +1723,152 @@ function AmazonAdsConfigFields({
             <option value="true">Geçerli</option>
             <option value="false">Geçerli Değil</option>
           </SelectControl>
+        </div>
+      </div>
+    </fieldset>
+  );
+}
+
+function SocialMediaConfigFields({
+  idPrefix,
+  form,
+  disabled,
+  onChange,
+}: {
+  idPrefix: string;
+  form: ClientFormState;
+  disabled: boolean;
+  onChange: (field: ClientFormField, value: ClientFormValue) => void;
+}) {
+  return (
+    <fieldset className="space-y-3 rounded-lg border border-[#AAFF01]/20 bg-[#202020]/60 p-3">
+      <legend className="px-1 text-sm font-medium text-white">Social Media Yapılandırması</legend>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor={`${idPrefix}-social-instagram-username`}>Instagram Username</Label>
+          <Input
+            id={`${idPrefix}-social-instagram-username`}
+            value={form.socialInstagramUsername}
+            onChange={(event) => onChange("socialInstagramUsername", event.target.value)}
+            className="border-white/[0.08] bg-[#1A1A1A]"
+            placeholder="@socialtech"
+            maxLength={120}
+            disabled={disabled}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${idPrefix}-social-instagram-account-id`}>
+            Instagram Account ID
+          </Label>
+          <Input
+            id={`${idPrefix}-social-instagram-account-id`}
+            value={form.socialInstagramAccountId}
+            onChange={(event) => onChange("socialInstagramAccountId", event.target.value)}
+            className="border-white/[0.08] bg-[#1A1A1A]"
+            placeholder="Instagram account ID"
+            maxLength={120}
+            disabled={disabled}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${idPrefix}-social-facebook-page-id`}>Facebook Page ID</Label>
+          <Input
+            id={`${idPrefix}-social-facebook-page-id`}
+            value={form.socialFacebookPageId}
+            onChange={(event) => onChange("socialFacebookPageId", event.target.value)}
+            className="border-white/[0.08] bg-[#1A1A1A]"
+            placeholder="Facebook page ID"
+            maxLength={120}
+            disabled={disabled}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${idPrefix}-social-tiktok-username`}>TikTok Username</Label>
+          <Input
+            id={`${idPrefix}-social-tiktok-username`}
+            value={form.socialTiktokUsername}
+            onChange={(event) => onChange("socialTiktokUsername", event.target.value)}
+            className="border-white/[0.08] bg-[#1A1A1A]"
+            placeholder="@socialtech"
+            maxLength={120}
+            disabled={disabled}
+          />
+        </div>
+        <div className="space-y-2 sm:col-span-2">
+          <Label htmlFor={`${idPrefix}-social-linkedin-page-url`}>LinkedIn Page URL</Label>
+          <Input
+            id={`${idPrefix}-social-linkedin-page-url`}
+            value={form.socialLinkedinPageUrl}
+            onChange={(event) => onChange("socialLinkedinPageUrl", event.target.value)}
+            className="border-white/[0.08] bg-[#1A1A1A]"
+            placeholder="https://www.linkedin.com/company/socialtech"
+            maxLength={240}
+            disabled={disabled}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${idPrefix}-social-content-frequency`}>Content Frequency</Label>
+          <Input
+            id={`${idPrefix}-social-content-frequency`}
+            value={form.socialContentFrequency}
+            onChange={(event) => onChange("socialContentFrequency", event.target.value)}
+            className="border-white/[0.08] bg-[#1A1A1A]"
+            placeholder="Haftada 3 post"
+            maxLength={120}
+            disabled={disabled}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${idPrefix}-social-primary-goal`}>Primary Goal</Label>
+          <SelectControl
+            id={`${idPrefix}-social-primary-goal`}
+            ariaLabel="Primary Goal"
+            value={form.socialPrimaryGoal}
+            onChange={(value) => onChange("socialPrimaryGoal", value as SocialMediaGoalState)}
+            disabled={disabled}
+          >
+            <option value="">Seçilmedi</option>
+            {SOCIAL_MEDIA_GOAL_OPTIONS.map((goal) => (
+              <option key={goal.value} value={goal.value}>
+                {goal.label}
+              </option>
+            ))}
+          </SelectControl>
+        </div>
+        <div className="space-y-2 sm:col-span-2">
+          <Label htmlFor={`${idPrefix}-social-tone-of-voice`}>Tone of Voice</Label>
+          <Input
+            id={`${idPrefix}-social-tone-of-voice`}
+            value={form.socialToneOfVoice}
+            onChange={(event) => onChange("socialToneOfVoice", event.target.value)}
+            className="border-white/[0.08] bg-[#1A1A1A]"
+            placeholder="Samimi, uzman, dinamik"
+            maxLength={160}
+            disabled={disabled}
+          />
+        </div>
+        <div className="space-y-2 sm:col-span-2">
+          <Label htmlFor={`${idPrefix}-social-hashtags`}>Hashtags</Label>
+          <Input
+            id={`${idPrefix}-social-hashtags`}
+            value={form.socialHashtags}
+            onChange={(event) => onChange("socialHashtags", event.target.value)}
+            className="border-white/[0.08] bg-[#1A1A1A]"
+            placeholder="#growth, #brand, #social"
+            maxLength={500}
+            disabled={disabled}
+          />
+        </div>
+        <div className="space-y-2 sm:col-span-2">
+          <Label htmlFor={`${idPrefix}-social-notes`}>Notes</Label>
+          <Textarea
+            id={`${idPrefix}-social-notes`}
+            value={form.socialNotes}
+            onChange={(event) => onChange("socialNotes", event.target.value)}
+            className="min-h-24 border-white/[0.08] bg-[#1A1A1A]"
+            maxLength={1000}
+            disabled={disabled}
+          />
         </div>
       </div>
     </fieldset>
@@ -2177,6 +2441,27 @@ function buildAmazonAdsConfigPayload(
   return Object.keys(payload).length > 0 ? payload : null;
 }
 
+function buildSocialMediaConfigPayload(
+  form: ClientFormState,
+): UpdateAdminClientSocialMediaConfigRequest | null {
+  if (!isSocialMediaSelected(form.purchasedServices)) {
+    return null;
+  }
+
+  return {
+    instagramUsername: normalizeNullableText(form.socialInstagramUsername),
+    instagramAccountId: normalizeNullableText(form.socialInstagramAccountId),
+    facebookPageId: normalizeNullableText(form.socialFacebookPageId),
+    tiktokUsername: normalizeNullableText(form.socialTiktokUsername),
+    linkedinPageUrl: normalizeNullableText(form.socialLinkedinPageUrl),
+    contentFrequency: normalizeNullableText(form.socialContentFrequency),
+    primaryGoal: form.socialPrimaryGoal || null,
+    toneOfVoice: normalizeNullableText(form.socialToneOfVoice),
+    hashtags: normalizeSocialMediaHashtags(form.socialHashtags),
+    notes: normalizeNullableText(form.socialNotes),
+  };
+}
+
 function buildOwnerPayload(form: ClientFormState): CreateOrLinkClientOwnerRequest | null {
   if (form.ownerMode === "CREATE") {
     return {
@@ -2219,6 +2504,10 @@ function isAmazonAdsSelected(selectedServices: ServiceKey[]): boolean {
   return selectedServices.includes("amazon-ads");
 }
 
+function isSocialMediaSelected(selectedServices: ServiceKey[]): boolean {
+  return selectedServices.includes("social-media");
+}
+
 function addOptionalAmazonAdsText<K extends keyof UpdateAdminClientAmazonAdsConfigRequest>(
   payload: UpdateAdminClientAmazonAdsConfigRequest,
   key: K,
@@ -2233,6 +2522,36 @@ function addOptionalAmazonAdsText<K extends keyof UpdateAdminClientAmazonAdsConf
 function normalizeOptionalText(value: string): string | undefined {
   const normalizedValue = value.trim();
   return normalizedValue.length > 0 ? normalizedValue : undefined;
+}
+
+function normalizeNullableText(value: string): string | null {
+  const normalizedValue = value.trim();
+  return normalizedValue.length > 0 ? normalizedValue : null;
+}
+
+function normalizeSocialMediaHashtags(value: string): string[] {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item, index, items) => item.length > 0 && items.indexOf(item) === index)
+    .slice(0, 30);
+}
+
+function socialMediaConfigToFormFields(
+  config: AdminClientSocialMediaConfig,
+): Partial<ClientFormState> {
+  return {
+    socialInstagramUsername: config.instagramUsername ?? "",
+    socialInstagramAccountId: config.instagramAccountId ?? "",
+    socialFacebookPageId: config.facebookPageId ?? "",
+    socialTiktokUsername: config.tiktokUsername ?? "",
+    socialLinkedinPageUrl: config.linkedinPageUrl ?? "",
+    socialContentFrequency: config.contentFrequency ?? "",
+    socialPrimaryGoal: config.primaryGoal ?? "",
+    socialToneOfVoice: config.toneOfVoice ?? "",
+    socialHashtags: config.hashtags.join(", "),
+    socialNotes: config.notes ?? "",
+  };
 }
 
 function getMetricValue(value: number, isLoading: boolean, isError: boolean): string {

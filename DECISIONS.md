@@ -1,5 +1,30 @@
 # Architecture Decisions
 
+## 2026-05-28 - Social Media Faz 0 Discovery Contract (Organic Content Operations)
+
+Context:
+Google, TikTok, Amazon ve Meta aşamaları tamamlandıktan sonra Social Media modülünün reklam kanalı gibi değil; organik içerik planlama, kreatif üretim, müşteri onayı, yayın takibi ve performans görünürlüğü merkezi olarak konumlandırılması gerekiyordu. Repo’da `SOCIAL_MEDIA` service key ve assignment scope zaten vardı ancak backend domain modülü, Social Media-specific post/config/report modelleri ve API-driven client/employee yüzeyleri henüz yoktu.
+
+Decision:
+
+- `SOCIAL_MEDIA` mevcut purchased service key olarak korunacak; yeni service key açılmayacak.
+- `MEDIA_HUB`, Social Media source of truth olmayacak; yalnızca kanal/agregasyon görünümü olarak Social Media summary verisini tüketebilecek.
+- Faz 1 scope’u config + gerçek kaynaklardan hesaplanan summary olacak; `SocialMediaPost` post/calendar domaini Faz 2’ye bırakılacak.
+- Faz 1 summary mock dönmeyecek; `ClientPurchasedService`, `Project.serviceKey=SOCIAL_MEDIA`, `Task/TaskTodo`, `ProjectFile` ve mevcut approval alanlarından empty/summary state üretilecek.
+- Social Media kreatiflerinde yeni dosya modeli açılmayacak; `ProjectFile.serviceKey=SOCIAL_MEDIA` ana dosya/asset filtresi olacak.
+- Standalone `ClientApprovalRequest` modeli olmadığı için Social Media approval akışı mevcut task/file approval alanlarıyla başlayacak; Social Media-specific approval enum değerleri Faz 2/Faz 6’da geriye uyumlu şekilde eklenecek.
+- Own-client endpoint pattern’i mevcut ads pattern’iyle uyumlu olarak `/clients/me/social-media/*` olacak.
+- Platform publishing API’leri Faz 7’ye kadar zorunlu olmayacak; V1 manuel publish/status tracking ve ileride `externalPostId` / `externalPostUrl` alanlarıyla entegrasyon uyumu sağlayacak.
+
+Reason:
+Bu karar, mevcut NestJS/Prisma + Vite/React Router mimarisine en düşük riskli şekilde uyar. Social Media paneli önce ajans operasyonunun güvenilir source of truth’u olur; platform API izinleri, app review ve publishing kısıtları daha sonra ayrı fazda ele alınır.
+
+Affected files:
+- `docs/social-media-phases/00-social-media-discovery-contract.md`
+- `ROAD_MAP.md`
+
+---
+
 ## 2026-05-28 - Amazon Ads Faz 10 Production Hardening (Report Export + Client-Safe Authz/Error Surface)
 
 Context:
@@ -554,6 +579,154 @@ Reason:
 Enables Claude Code and Codex to work from shared memory rather than re-scanning the repository on each task. Reduces token usage and prevents divergent assumptions.
 
 Affected files:
+- `PROJECT_CONTEXT.md`
+- `REPO_MAP.md`
+- `ROAD_MAP.md`
+
+## 2026-05-28 - Social Media Faz 1 Backend Foundation
+
+Context:
+Social Media Faz 0 discovery contract organik içerik operasyonu kapsamını, mevcut `SOCIAL_MEDIA` purchased service/assignment foundation'ını ve Faz 1 config + summary sınırını sabitledi. Sıradaki ihtiyaç, müşteri bazlı config modelini, permission-gated endpointleri ve Admin Clients create/edit entegrasyonunu gerçek API contract'ına taşımaktı.
+
+Decision:
+Social Media Faz 1 şu şekilde uygulanacak:
+- Prisma'ya `ClientSocialMediaConfig`, `SocialMediaGoal` ve `SocialMediaConnectionStatus` eklendi; config `ClientProfile` ile one-to-one tutulur.
+- Backend `server/src/social-media/` modülü eklendi. Admin/assigned read endpointleri `/social-media/clients/:clientId/*`, own-client endpointleri mevcut pattern'e uygun `/clients/me/social-media/*` üzerinden çalışır; `/client/social-media/*` alias'ları geçiş uyumluluğu için korunur.
+- Config update yalnızca `socialMedia.config.manage.any` ile admin kapsamındadır; assigned Project Manager/Social Media Specialist/Designer rolleri config ve summary read-only görür.
+- Summary V1 mock veri üretmez; `ClientPurchasedService`, `ClientSocialMediaConfig`, `Project`, `Task`, `TaskTodo` ve `ProjectFile` kaynaklarından state/metrics/asset read model'i döner. `SocialMediaPost` ve insight/report domainleri Faz 2+ kapsamına bırakıldı.
+- Admin Clients create/edit formunda `SOCIAL_MEDIA` seçilince organik kanal/strateji config alanları açılır ve create/update sonrası Social Media config endpointine kaydedilir.
+
+Reason:
+Bu karar Social Media'yı ads/reporting pattern'lerini kopyalamadan organik içerik operasyonu olarak konumlandırır. Faz 1'de config + summary read model'iyle gerçek API temeli kurulur; içerik takvimi/post domaini daha sonra ayrı entity olarak eklenebilecek şekilde schema ve endpoint yüzeyi temiz tutulur.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260528183000_add_social_media_config/migration.sql`
+- `server/prisma/seed.ts`
+- `server/src/app.module.ts`
+- `server/src/social-media/*`
+- `server/test/social-media-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
+- `adminandemployeePanel/src/app/pages/Clients.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/Clients.test.tsx`
+- `PROJECT_CONTEXT.md`
+- `REPO_MAP.md`
+- `ROAD_MAP.md`
+
+## 2026-05-28 - Social Media Faz 2 Content Calendar Backend Foundation
+
+Context:
+Faz 1 ile Social Media config ve gerçek kaynaklardan summary zemini kuruldu. Faz 2 öncesinde e2e’nin güvenli test DB’de doğrulanması ve organik içerik takviminin kalıcı post modeliyle başlatılması gerekiyordu.
+
+Decision:
+Social Media Faz 2 backend foundation şu şekilde uygulanacak:
+- Prisma’ya `SocialMediaPost`, `SocialMediaPostAsset`, `SocialMediaPlatform`, `SocialMediaPostType` ve `SocialMediaPostStatus` eklendi.
+- Kreatif/asset ilişkisi yeni bir dosya modeli açmadan mevcut `ProjectFile` üzerinden `SocialMediaPostAsset` join modeliyle tutulur.
+- Backend Social Media API yüzeyi post CRUD, status transition validation, client-visible own read ve own calendar endpointleriyle genişletildi.
+- Assigned operasyon modeli permission-gated tutuldu: PM/Social Media Specialist assigned post manage, Designer assigned asset manage, client owner/member sadece `clientVisible=true` own post read.
+- Summary read model Faz 2 itibarıyla `SocialMediaPost` kaynaklı planned/published/design/pending/rejected metrics ile upcoming/recent content plan listelerini de üretir.
+- E2E suite `socialtech_server_test` güvenli test DB akışında migration reset + seed ile çalıştırıldı; post CRUD, invalid transition, client visibility ve designer asset bağlama senaryoları kapsandı.
+
+Reason:
+Bu karar organik içerik operasyonunu mock/task placeholder seviyesinden kalıcı content calendar domainine taşır. Asset tarafında `ProjectFile` reuse edilerek model çoğalması engellenir; client-visible flag ve servis katmanı authz kontrolleriyle admin/assigned/client yüzeyleri birbirinden güvenli şekilde ayrılır.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260528193000_add_social_media_posts/migration.sql`
+- `server/prisma/seed.ts`
+- `server/src/social-media/*`
+- `server/test/social-media-authz.e2e-spec.ts`
+- `PROJECT_CONTEXT.md`
+- `REPO_MAP.md`
+- `ROAD_MAP.md`
+
+## 2026-05-28 - Social Media Faz 2 UI/API Consumption Layer
+
+Context:
+Faz 2 backend post/calendar modeli ve güvenli test DB e2e doğrulaması tamamlandıktan sonra admin/employee operasyon ekranlarının ve client portal görünürlüğünün mock/static içerikten çıkarılıp aynı API contract'ına bağlanması gerekiyordu.
+
+Decision:
+- Admin/employee tarafında yeni `features/socialMedia/*` RTK Query slice’ı eklendi; post list/create/update/delete ve asset binding endpointleri `SocialMediaPosts` cache tag’iyle ayrıştırıldı.
+- Admin `/social-media` ve employee `/employee/icerik-takvimi` aynı `SocialMediaContentCalendar` bileşenini kullanacak. Bileşen aktif `SOCIAL_MEDIA` hizmetli müşterileri listeler, social-media projelerini form seçeneği yapar, post liste/form akışını permission-aware çalıştırır.
+- Client Portal tarafında ayrı `features/socialMedia/*` own-client slice’ı eklendi; `social-media-dashboard` ve Social Media `content-calendar`, `pending-approvals`, `published-content` tabları yalnızca `clientVisible=true` own posts/calendar endpointlerinden beslenir.
+- Client tarafında approval/publish aksiyonları Faz 2’de sahte buton olarak gösterilmez; görünür takvim/read model tamamlandıktan sonra action endpointleri sonraki approval fazına bırakılır.
+
+Reason:
+Bu yaklaşım backend Faz 2 sözleşmesini bozmadan UI tüketimini iki panelde de tek kaynağa bağlar. Admin/employee operasyonu manage endpointlerini kullanırken client portal sadece own-visible read yüzeyiyle sınırlı kalır; böylece Faz 2 güvenlik modeli frontend davranışında da korunur.
+
+Affected files:
+- `adminandemployeePanel/src/app/features/socialMedia/*`
+- `adminandemployeePanel/src/app/employee/components/SocialMediaContentCalendar.tsx`
+- `adminandemployeePanel/src/app/pages/SocialMediaAdmin.tsx`
+- `adminandemployeePanel/src/app/employee/pages/IcerikTakvimi.tsx`
+- `adminandemployeePanel/src/app/routes.tsx`
+- `adminandemployeePanel/src/app/components/RootLayout.tsx`
+- `clientPanel/src/app/features/socialMedia/*`
+- `clientPanel/src/app/pages/services/social-media-dashboard.tsx`
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+- `PROJECT_CONTEXT.md`
+- `REPO_MAP.md`
+- `ROAD_MAP.md`
+
+## 2026-05-28 - Social Media Faz 3 Client Panel API-Driven Dashboard
+
+Context:
+Faz 2 ile client portal görünür takvim/post yüzeyi API’ye bağlanmıştı; Faz 3 için dashboard’un summary/config kaynaklarını da tüketmesi, generic Social Media tablarının static/mock renderer’a düşmemesi ve own-client summary’nin internal post/asset bilgisi sızdırmaması gerekiyordu.
+
+Decision:
+- Own-client Social Media summary, `clientVisible=true` postlar ve `ProjectFile.visibility=CLIENT_VISIBLE` assetler ile sınırlandı; admin/assigned summary tam operasyon görünürlüğünü korur.
+- Client Portal `features/socialMedia/*` slice’ı own config + summary hooklarıyla genişletildi ve `SocialMediaConfig` / `SocialMediaSummary` normalizer contract’ı eklendi.
+- `social-media-dashboard`, KPI/strateji/ajans notu/kreatif/takvim alanlarını `summary`, `config` ve `calendar` endpointlerinden render eder; DM/trend/competitor static fallback blokları kaldırıldı.
+- `ServiceTabPage`, Social Media tablarında generic static service-page renderer yerine Social Media API workspace’i kullanır. `content-calendar`, `pending-approvals`, `published-content`, `creatives`, `agency-notes` ve mevcut legacy social tabs mock veri göstermeden API/empty-state yüzeyine taşındı.
+- Pending approvals tabı mevcut client task approval sistemine bağlandı; Social Media project-service task onayları approve/revision aksiyonlarıyla çalışır.
+- Reports/performance gibi kalıcı domaini Faz 8’e bırakılan sekmeler mock göstermeden explicit API-source-pending state döner.
+
+Reason:
+Bu yaklaşım Faz 3’ü client güvenliği ve API-first davranış üzerinden tamamlar. Yeni report/insight modeli açmadan mevcut Faz 1-2 kaynaklarını kullanır, client-visible sözleşmesini backend ve frontend’de aynı hizaya getirir ve ileride Faz 6/Faz 8 approval/report katmanlarına temiz bir yüzey bırakır.
+
+Affected files:
+- `server/src/social-media/social-media-summary.service.ts`
+- `server/src/social-media/social-media.service.ts`
+- `server/test/social-media-authz.e2e-spec.ts`
+- `clientPanel/src/app/features/socialMedia/*`
+- `clientPanel/src/app/services/baseApi.ts`
+- `clientPanel/src/app/pages/services/social-media-dashboard.tsx`
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+- `clientPanel/src/app/pages/__tests__/social-media-dashboard.test.tsx`
+- `clientPanel/src/app/pages/__tests__/service-tab-page.social-media.test.tsx`
+- `PROJECT_CONTEXT.md`
+- `REPO_MAP.md`
+- `ROAD_MAP.md`
+
+## 2026-05-28 - Social Media Faz 4 Admin Panel
+
+Context:
+Faz 2 ile admin/employee content calendar, Faz 3 ile client portal dashboard API-driven hale geldi. Admin tarafında ise tüm Social Media müşterilerini tek global operasyon ekranında risk, onay, kreatif, takvim ve atama durumlarıyla görebilecek bir overview eksikti.
+
+Decision:
+- Yeni backend global endpoint `GET /api/v1/social-media/clients` eklendi; yalnızca admin hesap + `socialMedia.summary.read.any` ile erişilebilir.
+- Global overview yeni model açmadan mevcut `SocialMediaSummaryService`, `SocialMediaPost`, `ProjectFile`, `EmployeeClientAssignment` ve `ClientPurchasedService` kaynaklarından üretilir.
+- Response planned/published/pending/rejected counts, overdue scheduled posts, creative assets, Social Media specialist/Designer assignment visibility, last activity ve risk status içerir.
+- Admin `/social-media` sayfası global KPI + müşteri risk listesi + selected-client detay paneli + config edit modal + mevcut content calendar create/list bileşimini kullanır.
+- `ClientDetail` içinde Social Media section eklendi; config, post counts, pending approvals, creative assets, assignments, recent/upcoming posts ve report no-source state render edilir.
+- Social Media report domaini Faz 8’e bırakıldığı için Faz 4’te `lastReport`/report publish mocklanmaz; açık “rapor modeli sonraki faz” state’i gösterilir.
+
+Reason:
+Bu karar Faz 4’ü mevcut organik içerik source-of-truth’ı üstünde tamamlar; Ads panellerindeki global overview ergonomisini Social Media’ya taşırken yeni rapor/approval entity’lerini erken açmaz. Backend admin guard’ı, frontend permission-disabled states ve e2e leak guard birlikte global admin görünümünün client/assigned yüzeylerinden ayrılmasını sağlar.
+
+Affected files:
+- `server/src/social-media/admin-social-media.controller.ts`
+- `server/src/social-media/social-media.service.ts`
+- `server/test/social-media-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/services/baseApi.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
+- `adminandemployeePanel/src/app/features/socialMedia/*`
+- `adminandemployeePanel/src/app/pages/SocialMediaAdmin.tsx`
+- `adminandemployeePanel/src/app/pages/ClientDetail.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/SocialMediaAdmin.test.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/ClientDetail.test.tsx`
 - `PROJECT_CONTEXT.md`
 - `REPO_MAP.md`
 - `ROAD_MAP.md`
@@ -3042,6 +3215,75 @@ Affected files:
 - `clientPanel/src/app/features/tiktokAds/tiktokAdsTypes.ts`
 - `clientPanel/src/app/pages/service-tab-page.tsx`
 - `clientPanel/src/app/pages/__tests__/service-tab-page.tiktok-ads.test.tsx`
+- `PROJECT_CONTEXT.md`
+- `REPO_MAP.md`
+- `ROAD_MAP.md`
+
+## 2026-05-28 - Social Media Faz 5 Employee Workspace
+
+Context:
+Social Media Faz 4 ile admin global panel ve ClientDetail Social Media section tamamlandı. Sıradaki ihtiyaç, Social Media Specialist, Designer ve Project Manager rollerinin assigned Social Media müşteriler üzerinde aynı content calendar, creative, approval ve rapor/not operasyonlarını employee panelden yönetebilmesiydi.
+
+Decision:
+Social Media Faz 5, yeni bir ayrı backend workspace modeli açmadan mevcut assigned Social Media summary/posts endpointleri, shared projects/tasks endpointleri ve content calendar componenti üzerine kurulacak:
+- Employee `/employee/social-media` rotası ve rol bazlı sidebar entry eklendi.
+- `SocialMediaWorkspace` componenti assigned active Social Media clients listesi, summary KPI, content calendar, posts, creatives, approvals, reports ve messages tablarını tek yerde sunar.
+- Social Media approval task creation shared `POST /api/v1/tasks` endpointiyle yapılır; Faz 5 kapsamında ayrı approval enum eklenmeden `approvalType=null` tutuldu. Bu karar Faz 6 ile `SOCIAL_MEDIA_*` approval type değerleri eklenerek superseded oldu.
+- Shared task approval guard’ına `PurchasedServiceKey.SOCIAL_MEDIA -> socialMedia.approvals.create.assigned` mapping’i eklendi.
+- Designer asset yönetimi için `socialMedia.creatives.manage.assigned` permission’ı Social Media post asset guard’ında kabul edilir.
+- `socialMedia.reports.manage.assigned` ve `socialMedia.notes.manage.assigned` seed permissionları Faz 5 UI action gating zemini olarak eklendi.
+
+Reason:
+Bu karar Social Media employee workspace’i mevcut güvenli assignment scope ve task/file altyapısını yeniden kullanarak açar. Ayrı approval enum veya yeni message/report entity migration’ı Faz 5 kapsamına alınmadı; böylece Phase 6 için daha geniş collaboration/reporting domain tasarımı açık kalır.
+
+Affected files:
+- `server/prisma/seed.ts`
+- `server/src/social-media/social-media.service.ts`
+- `server/src/tasks/tasks.service.ts`
+- `server/test/social-media-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/employee/components/SocialMediaWorkspace.tsx`
+- `adminandemployeePanel/src/app/employee/pages/SocialMediaCalismaAlani.tsx`
+- `adminandemployeePanel/src/app/employee/EmployeeLayout.tsx`
+- `adminandemployeePanel/src/app/routes.tsx`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/SocialMediaWorkspace.test.tsx`
+- `docs/social-media-phases/05-social-media-employee-workspace.md`
+- `PROJECT_CONTEXT.md`
+- `REPO_MAP.md`
+- `ROAD_MAP.md`
+
+## 2026-05-29 - Social Media Faz 6 Approval + Creative Flow
+
+Context:
+Social Media Faz 5 ile employee workspace açıldı ve approval task bridge’i generic task sistemi üzerinden çalışıyordu. Faz 6 ihtiyacı, Social Media approval tiplerini açık enum değerleriyle modellemek, client approval response sonucunu linked post status’una yansıtmak ve client/employee UI katmanında bu approval’ları görünür hale getirmekti.
+
+Decision:
+Social Media Faz 6, yeni ayrı approval entity’si açmadan mevcut shared task approval altyapısını genişletecek:
+- Shared `MetaAdsApprovalType` enumuna `SOCIAL_MEDIA_POST_APPROVAL`, `SOCIAL_MEDIA_CREATIVE_APPROVAL`, `SOCIAL_MEDIA_CAPTION_APPROVAL`, `SOCIAL_MEDIA_CALENDAR_APPROVAL` ve `SOCIAL_MEDIA_REPORT_ACKNOWLEDGEMENT` eklendi.
+- Client approval response guard’ı `PurchasedServiceKey.SOCIAL_MEDIA` projelerini kabul eder hale getirildi.
+- Linked `SocialMediaPost.approvalTaskId` bulunan post/caption/creative approval task response’larında post status güncellenir: `APPROVED -> APPROVED`, `CHANGES_REQUESTED/REJECTED -> REVISION_REQUIRED`.
+- Revision/rejection note mevcut shared task response path’iyle follow-up revision task üretmeye devam eder.
+- Employee workspace’te genel calendar approval `SOCIAL_MEDIA_CALENDAR_APPROVAL`, post approval aksiyonu `SOCIAL_MEDIA_POST_APPROVAL` üretir; post `approvalTaskId` linki ve `clientVisible=true` update’i aynı aksiyonla yapılır.
+- Client portal Social Media approvals tabı yeni Social Media approval type değerlerini normalize eder ve shared approve/revision mutation panelini kullanır.
+- Creative asset approval için ayrı ProjectFile-level modal V1’e alınmadı; mevcut creative preview + task/reference altyapısı follow-up genişletmeye açık bırakıldı.
+
+Reason:
+Bu karar Meta/TikTok/Amazon approval pattern’iyle simetriyi korur ve yeni approval domain’i açmadan Social Media post lifecycle’ını production-safe şekilde bağlar. Approval type değerleri explicit olduğu için client panel, employee workspace, e2e ve ileride creative/report akışları aynı contract üzerinden ilerleyebilir.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260528203000_add_social_media_approval_types/migration.sql`
+- `server/prisma/seed.ts`
+- `server/src/tasks/tasks.service.ts`
+- `server/test/social-media-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/tasks/tasksTypes.ts`
+- `adminandemployeePanel/src/app/employee/components/SocialMediaWorkspace.tsx`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/SocialMediaWorkspace.test.tsx`
+- `clientPanel/src/app/features/tasks/tasksTypes.ts`
+- `clientPanel/src/app/features/tasks/tasksUtils.ts`
+- `clientPanel/src/app/pages/service-tab-page.tsx`
+- `clientPanel/src/app/pages/__tests__/service-tab-page.social-media.test.tsx`
+- `docs/social-media-phases/05-social-media-employee-workspace.md`
+- `docs/social-media-phases/06-social-media-approval-creative-flow.md`
 - `PROJECT_CONTEXT.md`
 - `REPO_MAP.md`
 - `ROAD_MAP.md`

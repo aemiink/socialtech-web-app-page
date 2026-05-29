@@ -7,8 +7,10 @@ import {
 import {
   AccountType,
   MetaAdsApprovalStatus,
+  MetaAdsApprovalType,
   PurchasedServiceKey,
   Prisma,
+  SocialMediaPostStatus,
   TaskStatus,
   TaskType,
   TaskTodoVisibility,
@@ -208,6 +210,13 @@ const APPROVAL_RESPOND_OWN_PERMISSION = "approvals.respond.own";
 const META_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION = "metaAds.approvals.create.assigned";
 const TIKTOK_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION = "tiktokAds.approvals.create.assigned";
 const AMAZON_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION = "amazonAds.approvals.create.assigned";
+const SOCIAL_MEDIA_APPROVALS_CREATE_ASSIGNED_PERMISSION = "socialMedia.approvals.create.assigned";
+
+const SOCIAL_MEDIA_POST_LINKED_APPROVAL_TYPES = new Set<MetaAdsApprovalType>([
+  MetaAdsApprovalType.SOCIAL_MEDIA_POST_APPROVAL,
+  MetaAdsApprovalType.SOCIAL_MEDIA_CREATIVE_APPROVAL,
+  MetaAdsApprovalType.SOCIAL_MEDIA_CAPTION_APPROVAL,
+]);
 
 @Injectable()
 export class TasksService {
@@ -793,6 +802,7 @@ export class TasksService {
               PurchasedServiceKey.META_ADS,
               PurchasedServiceKey.TIKTOK_ADS,
               PurchasedServiceKey.AMAZON_ADS,
+              PurchasedServiceKey.SOCIAL_MEDIA,
             ],
           },
         },
@@ -804,6 +814,7 @@ export class TasksService {
         priority: true,
         workstream: true,
         assigneeUserId: true,
+        approvalType: true,
         campaignRef: true,
         adSetRef: true,
         adRef: true,
@@ -849,6 +860,18 @@ export class TasksService {
             adSetRef: task.adSetRef,
             adRef: task.adRef,
           },
+        });
+      }
+
+      const nextPostStatus = this.resolveSocialMediaPostStatusFromClientApproval(
+        task.approvalType,
+        approvalStatus,
+      );
+
+      if (nextPostStatus) {
+        await tx.socialMediaPost.updateMany({
+          where: { approvalTaskId: task.id },
+          data: { status: nextPostStatus },
         });
       }
 
@@ -1335,6 +1358,28 @@ export class TasksService {
     return TaskStatus.IN_PROGRESS;
   }
 
+  private resolveSocialMediaPostStatusFromClientApproval(
+    approvalType: MetaAdsApprovalType | null,
+    approvalStatus: MetaAdsApprovalStatus,
+  ): SocialMediaPostStatus | null {
+    if (!approvalType || !SOCIAL_MEDIA_POST_LINKED_APPROVAL_TYPES.has(approvalType)) {
+      return null;
+    }
+
+    if (approvalStatus === MetaAdsApprovalStatus.APPROVED) {
+      return SocialMediaPostStatus.APPROVED;
+    }
+
+    if (
+      approvalStatus === MetaAdsApprovalStatus.REJECTED ||
+      approvalStatus === MetaAdsApprovalStatus.CHANGES_REQUESTED
+    ) {
+      return SocialMediaPostStatus.REVISION_REQUIRED;
+    }
+
+    return null;
+  }
+
   private isTerminalApprovalStatus(approvalStatus: MetaAdsApprovalStatus): boolean {
     return approvalStatus !== MetaAdsApprovalStatus.PENDING;
   }
@@ -1480,6 +1525,10 @@ export class TasksService {
 
     if (projectServiceKey === PurchasedServiceKey.AMAZON_ADS) {
       return AMAZON_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION;
+    }
+
+    if (projectServiceKey === PurchasedServiceKey.SOCIAL_MEDIA) {
+      return SOCIAL_MEDIA_APPROVALS_CREATE_ASSIGNED_PERMISSION;
     }
 
     return null;

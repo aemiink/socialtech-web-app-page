@@ -171,3 +171,38 @@ npm run test:run
 - Approval sonucu post status’a yansır.
 - Rejection note task/revision akışına dönüşebilir veya follow-up olarak açıkça işaretlenir.
 - Testler geçer.
+
+## 2026-05-29 Implementation Checkpoint
+
+Faz 6 uygulama kapsamı:
+
+- Shared `MetaAdsApprovalType` enumu Social Media approval değerleriyle genişletildi:
+  - `SOCIAL_MEDIA_POST_APPROVAL`
+  - `SOCIAL_MEDIA_CREATIVE_APPROVAL`
+  - `SOCIAL_MEDIA_CAPTION_APPROVAL`
+  - `SOCIAL_MEDIA_CALENDAR_APPROVAL`
+  - `SOCIAL_MEDIA_REPORT_ACKNOWLEDGEMENT`
+- Client approval response guard’ı `SOCIAL_MEDIA` project serviceKey’ini kabul eder hale getirildi.
+- Linked Social Media post approval response sonucu post status’a bağlandı:
+  - `APPROVED` -> `APPROVED`
+  - `CHANGES_REQUESTED` / `REJECTED` -> `REVISION_REQUIRED`
+- Rejection/revision response note mevcut shared task akışıyla follow-up revision task üretir.
+- Employee Social Media workspace’te calendar approval create artık `SOCIAL_MEDIA_CALENDAR_APPROVAL` üretir.
+- Onay bekleyen post satırlarına `SOCIAL_MEDIA_POST_APPROVAL` task create + `approvalTaskId` link + `clientVisible=true` aksiyonu eklendi.
+- Employee approval task listesi approval type ve rejection note bilgisini gösterir.
+- Client portal Social Media approvals tabı yeni Social Media approval type değerlerini normalize eder, pending task’ı gösterir ve approve/revision mutation akışını kullanır.
+
+Kapsam dışı / follow-up:
+
+- Creative asset approval ayrı ProjectFile-level approval UI olarak genişletilmedi; mevcut creative preview + task reference altyapısı kullanılabilir durumda bırakıldı.
+- Calendar approval modalı V1’de shared pending approvals paneli üzerinden ilerler; dedicated modal ayrı UX follow-up olabilir.
+
+Doğrulama:
+
+- `server`: `npm run prisma:generate`
+- `server`: `npm run check`
+- `server`: `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true npm run test:e2e -- social-media-authz.e2e-spec.ts` (`15/15`)
+- `adminandemployeePanel`: `npm run test:run -- src/app/employee/pages/__tests__/SocialMediaWorkspace.test.tsx` (`7/7`)
+- `adminandemployeePanel`: `npm run check`
+- `clientPanel`: `npm test -- src/app/pages/__tests__/service-tab-page.social-media.test.tsx` (`3/3`)
+- `clientPanel`: `npm run check`

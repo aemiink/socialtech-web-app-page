@@ -151,6 +151,31 @@ npm run check
 npm run test:run
 ```
 
+## Uygulama Notları (2026-05-28)
+
+Tamamlananlar:
+
+- `GET /api/v1/social-media/clients` admin global overview endpointi eklendi.
+- Endpoint aktif `SOCIAL_MEDIA` hizmetli müşteriler için summary/config, planned/published/pending/rejected counts, overdue scheduled posts, creative assets, Social Media specialist/Designer atamaları ve risk status döner.
+- Non-admin global endpoint erişimi backend servis guard’ında bloklanır.
+- Admin `/social-media` ekranı global KPI, müşteri risk listesi, selected-client detay paneli, config edit modal ve mevcut content calendar create/list akışını içerir.
+- `ClientDetail` içine Social Media section eklendi; config, post counts, pending approvals, creative assets, assigned employees, recent/upcoming posts ve report no-source state API-driven render edilir.
+- Report publish ve last report gerçek domaini Faz 8’e bırakıldığı için mocklanmadı.
+
+Doğrulama:
+
+```bash
+cd server
+npm run check
+DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true npm run test:e2e -- social-media-authz.e2e-spec.ts
+```
+
+```bash
+cd adminandemployeePanel
+npm run test:run -- src/app/pages/__tests__/SocialMediaAdmin.test.tsx src/app/pages/__tests__/ClientDetail.test.tsx
+npm run check
+```
+
 ## Kabul Kriterleri
 
 - Admin tüm Social Media müşterilerini görebilir.

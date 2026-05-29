@@ -68,6 +68,56 @@ enum MetaAdsConnectionStatus {
   DISCONNECTED
 }
 
+enum SocialMediaConnectionStatus {
+  NOT_CONNECTED
+  PENDING
+  CONNECTED
+  ERROR
+  DISCONNECTED
+}
+
+enum SocialMediaGoal {
+  BRAND_AWARENESS
+  COMMUNITY_GROWTH
+  ENGAGEMENT
+  LEAD_GENERATION
+  SALES_SUPPORT
+  REPUTATION
+  MIXED
+}
+
+enum SocialMediaPlatform {
+  INSTAGRAM
+  FACEBOOK
+  TIKTOK
+  LINKEDIN
+  X
+  PINTEREST
+}
+
+enum SocialMediaPostType {
+  FEED
+  STORY
+  REEL
+  CAROUSEL
+  SHORT_VIDEO
+  STATIC_IMAGE
+  TEXT
+}
+
+enum SocialMediaPostStatus {
+  IDEA
+  DRAFT
+  DESIGN
+  WAITING_APPROVAL
+  APPROVED
+  SCHEDULED
+  PUBLISHED
+  REJECTED
+  REVISION_REQUIRED
+  CANCELLED
+}
+
 enum MetaAdsInsightLevel {
   ACCOUNT
   CAMPAIGN
@@ -280,6 +330,11 @@ enum MetaAdsApprovalType {
   AMAZON_ADS_CREATIVE_APPROVAL
   AMAZON_ADS_PRODUCT_PROMOTION_APPROVAL
   AMAZON_ADS_SEARCH_TERM_ACTION_APPROVAL
+  SOCIAL_MEDIA_POST_APPROVAL
+  SOCIAL_MEDIA_CREATIVE_APPROVAL
+  SOCIAL_MEDIA_CAPTION_APPROVAL
+  SOCIAL_MEDIA_CALENDAR_APPROVAL
+  SOCIAL_MEDIA_REPORT_ACKNOWLEDGEMENT
 }
 
 enum MetaAdsApprovalStatus {
@@ -450,41 +505,43 @@ model User {
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
 
-  refreshTokens             RefreshToken[]
-  clientProfile             ClientProfile?             @relation(fields: [clientProfileId], references: [id], onDelete: SetNull)
-  employeeClientAssignments EmployeeClientAssignment[] @relation("EmployeeClientAssignments")
-  assignedTasks             Task[]                     @relation("TaskAssignee")
-  codePreparedTasks         Task[]                     @relation("TaskCodePreparedBy")
-  taskApprovalActions       Task[]                     @relation("TaskApprovalResponder")
-  completedTaskTodos        TaskTodo[]                 @relation("TaskTodoCompletedBy")
-  taskWorkNotes             TaskWorkNote[]             @relation("TaskWorkNoteAuthor")
-  uploadedProjectFiles      ProjectFile[]              @relation("ProjectFileUploadedBy")
-  projectFileApprovalActions ProjectFile[]             @relation("ProjectFileApprovalResponder")
-  createdProjectFileFolders ProjectFileFolder[]        @relation("ProjectFileFolderCreatedBy")
-  assignedProjectFileFolders ProjectFileFolderAssignment[] @relation("ProjectFileFolderAssignedUser")
-  projectFileShareLinks     ProjectFileShareLink[]     @relation("ProjectFileShareLinkCreatedBy")
-  createdWorkspaceSections  WebAppWorkspaceSection[]   @relation("WorkspaceSectionCreatedBy")
-  workspaceMessages         WebAppWorkspaceMessage[]   @relation("WorkspaceMessageAuthor")
-  requestedWorkspaceRevisions WebAppWorkspaceRevision[] @relation("WorkspaceRevisionRequestedBy")
-  assignedWorkspaceRevisions WebAppWorkspaceRevision[] @relation("WorkspaceRevisionAssignedTo")
+  refreshTokens                RefreshToken[]
+  clientProfile                ClientProfile?                      @relation(fields: [clientProfileId], references: [id], onDelete: SetNull)
+  employeeClientAssignments    EmployeeClientAssignment[]          @relation("EmployeeClientAssignments")
+  assignedTasks                Task[]                              @relation("TaskAssignee")
+  codePreparedTasks            Task[]                              @relation("TaskCodePreparedBy")
+  taskApprovalActions          Task[]                              @relation("TaskApprovalResponder")
+  completedTaskTodos           TaskTodo[]                          @relation("TaskTodoCompletedBy")
+  taskWorkNotes                TaskWorkNote[]                      @relation("TaskWorkNoteAuthor")
+  uploadedProjectFiles         ProjectFile[]                       @relation("ProjectFileUploadedBy")
+  projectFileApprovalActions   ProjectFile[]                       @relation("ProjectFileApprovalResponder")
+  createdProjectFileFolders    ProjectFileFolder[]                 @relation("ProjectFileFolderCreatedBy")
+  assignedProjectFileFolders   ProjectFileFolderAssignment[]       @relation("ProjectFileFolderAssignedUser")
+  projectFileShareLinks        ProjectFileShareLink[]              @relation("ProjectFileShareLinkCreatedBy")
+  createdWorkspaceSections     WebAppWorkspaceSection[]            @relation("WorkspaceSectionCreatedBy")
+  workspaceMessages            WebAppWorkspaceMessage[]            @relation("WorkspaceMessageAuthor")
+  requestedWorkspaceRevisions  WebAppWorkspaceRevision[]           @relation("WorkspaceRevisionRequestedBy")
+  assignedWorkspaceRevisions   WebAppWorkspaceRevision[]           @relation("WorkspaceRevisionAssignedTo")
   workspaceRevisionTransitions WebAppWorkspaceRevisionTransition[] @relation("WorkspaceRevisionTransitionActor")
-  createdWeeklyReports      WebAppWorkspaceWeeklyReport[] @relation("WorkspaceWeeklyReportAuthor")
-  requestedMeetingRequests  WebAppWorkspaceMeetingRequest[] @relation("WorkspaceMeetingRequestedBy")
-  respondedMeetingRequests  WebAppWorkspaceMeetingRequest[] @relation("WorkspaceMeetingRespondedBy")
-  ownedCrmLeads             CrmLead[]                  @relation("CrmLeadOwner")
-  crmLeadActivities         CrmLeadActivity[]          @relation("CrmLeadActivityActor")
-  releaseApprovalActions    DeliveryRelease[]          @relation("DeliveryReleaseApprovalActor")
-  triggeredCrmLeadScans     CrmLeadScanLog[]           @relation("CrmLeadScanTriggeredBy")
-  auditLogs                 AuditLog[]                 @relation("AuditActor")
-  createdMetaAdsReports     MetaAdsReport[]            @relation("MetaAdsReportCreatedBy")
-  publishedMetaAdsReports   MetaAdsReport[]            @relation("MetaAdsReportPublishedBy")
-  acknowledgedMetaAdsReports MetaAdsReport[]           @relation("MetaAdsReportAcknowledgedBy")
-  createdAmazonAdsReports     AmazonAdsReport[]        @relation("AmazonAdsReportCreatedBy")
-  publishedAmazonAdsReports   AmazonAdsReport[]        @relation("AmazonAdsReportPublishedBy")
-  acknowledgedAmazonAdsReports AmazonAdsReport[]       @relation("AmazonAdsReportAcknowledgedBy")
-  createdTikTokAdsReports     TikTokAdsReport[]        @relation("TikTokAdsReportCreatedBy")
-  publishedTikTokAdsReports   TikTokAdsReport[]        @relation("TikTokAdsReportPublishedBy")
-  acknowledgedTikTokAdsReports TikTokAdsReport[]       @relation("TikTokAdsReportAcknowledgedBy")
+  createdWeeklyReports         WebAppWorkspaceWeeklyReport[]       @relation("WorkspaceWeeklyReportAuthor")
+  requestedMeetingRequests     WebAppWorkspaceMeetingRequest[]     @relation("WorkspaceMeetingRequestedBy")
+  respondedMeetingRequests     WebAppWorkspaceMeetingRequest[]     @relation("WorkspaceMeetingRespondedBy")
+  ownedCrmLeads                CrmLead[]                           @relation("CrmLeadOwner")
+  crmLeadActivities            CrmLeadActivity[]                   @relation("CrmLeadActivityActor")
+  releaseApprovalActions       DeliveryRelease[]                   @relation("DeliveryReleaseApprovalActor")
+  triggeredCrmLeadScans        CrmLeadScanLog[]                    @relation("CrmLeadScanTriggeredBy")
+  auditLogs                    AuditLog[]                          @relation("AuditActor")
+  createdMetaAdsReports        MetaAdsReport[]                     @relation("MetaAdsReportCreatedBy")
+  publishedMetaAdsReports      MetaAdsReport[]                     @relation("MetaAdsReportPublishedBy")
+  acknowledgedMetaAdsReports   MetaAdsReport[]                     @relation("MetaAdsReportAcknowledgedBy")
+  createdAmazonAdsReports      AmazonAdsReport[]                   @relation("AmazonAdsReportCreatedBy")
+  publishedAmazonAdsReports    AmazonAdsReport[]                   @relation("AmazonAdsReportPublishedBy")
+  acknowledgedAmazonAdsReports AmazonAdsReport[]                   @relation("AmazonAdsReportAcknowledgedBy")
+  createdTikTokAdsReports      TikTokAdsReport[]                   @relation("TikTokAdsReportCreatedBy")
+  publishedTikTokAdsReports    TikTokAdsReport[]                   @relation("TikTokAdsReportPublishedBy")
+  acknowledgedTikTokAdsReports TikTokAdsReport[]                   @relation("TikTokAdsReportAcknowledgedBy")
+  createdSocialMediaPosts      SocialMediaPost[]                   @relation("SocialMediaPostCreatedBy")
+  assignedSocialMediaPosts     SocialMediaPost[]                   @relation("SocialMediaPostAssignedTo")
 
   @@index([accountType, role])
   @@index([accountType, status])
@@ -524,6 +581,7 @@ model ClientProfile {
   metaAdsInsights     MetaAdsDailyInsight[]
   metaAdsSyncLogs     MetaAdsSyncLog[]
   metaAdsReports      MetaAdsReport[]
+  socialMediaConfig   ClientSocialMediaConfig?
   tikTokAdsConfig     ClientTikTokAdsConfig?
   tikTokAdsCredential ClientTikTokAdsCredential?
   tikTokAdsInsights   TikTokAdsDailyInsight[]
@@ -534,6 +592,7 @@ model ClientProfile {
   amazonAdsInsights   AmazonAdsDailyInsight[]
   amazonAdsSyncLogs   AmazonAdsSyncLog[]
   amazonAdsReports    AmazonAdsReport[]
+  socialMediaPosts    SocialMediaPost[]
   projects            Project[]
   files               ProjectFile[]
   convertedCrmLeads   CrmLead[]                  @relation("CrmLeadConvertedClient")
@@ -577,6 +636,85 @@ model ClientMetaAdsCredential {
 
   @@index([tokenHash])
   @@index([tokenExpiresAt])
+}
+
+model ClientSocialMediaConfig {
+  id                 String                      @id @default(uuid()) @db.Uuid
+  clientProfileId    String                      @unique @db.Uuid
+  instagramUsername  String?
+  instagramAccountId String?
+  facebookPageId     String?
+  tiktokUsername     String?
+  linkedinPageUrl    String?
+  contentFrequency   String?
+  primaryGoal        SocialMediaGoal?
+  toneOfVoice        String?
+  hashtags           String[]                    @default([])
+  connectionStatus   SocialMediaConnectionStatus @default(NOT_CONNECTED)
+  lastSyncAt         DateTime?
+  syncError          String?
+  notes              String?
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@index([connectionStatus])
+  @@index([primaryGoal])
+  @@index([updatedAt])
+}
+
+model SocialMediaPost {
+  id               String                @id @default(uuid()) @db.Uuid
+  clientProfileId  String                @db.Uuid
+  projectId        String?               @db.Uuid
+  platform         SocialMediaPlatform
+  type             SocialMediaPostType
+  status           SocialMediaPostStatus @default(IDEA)
+  title            String
+  caption          String?
+  scheduledAt      DateTime?
+  publishedAt      DateTime?
+  clientVisible    Boolean               @default(false)
+  approvalTaskId   String?               @db.Uuid
+  createdByUserId  String?               @db.Uuid
+  assignedToUserId String?               @db.Uuid
+  externalPostId   String?
+  externalPostUrl  String?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  clientProfile ClientProfile          @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  project       Project?               @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  approvalTask  Task?                  @relation("SocialMediaPostApprovalTask", fields: [approvalTaskId], references: [id], onDelete: SetNull)
+  createdBy     User?                  @relation("SocialMediaPostCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  assignedTo    User?                  @relation("SocialMediaPostAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  assets        SocialMediaPostAsset[]
+
+  @@index([clientProfileId, scheduledAt])
+  @@index([clientProfileId, status, scheduledAt])
+  @@index([projectId])
+  @@index([platform])
+  @@index([status])
+  @@index([clientVisible, scheduledAt])
+  @@index([createdByUserId])
+  @@index([assignedToUserId])
+  @@index([approvalTaskId])
+}
+
+model SocialMediaPostAsset {
+  id        String   @id @default(uuid()) @db.Uuid
+  postId    String   @db.Uuid
+  fileId    String   @db.Uuid
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  post SocialMediaPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  file ProjectFile     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, fileId])
+  @@index([postId, sortOrder])
+  @@index([fileId])
 }
 
 model ClientAmazonAdsConfig {
@@ -626,29 +764,29 @@ model ClientAmazonAdsCredential {
 }
 
 model AmazonAdsDailyInsight {
-  id                  String                @id @default(uuid()) @db.Uuid
-  clientProfileId     String                @db.Uuid
-  profileId           String
-  marketplaceId       String?
-  date                DateTime
-  level               AmazonAdsInsightLevel
-  entityId            String
-  entityName          String?
-  adProduct           AmazonAdsProductType?
-  spend               Decimal?              @db.Decimal(18, 6)
-  impressions         Int?
-  clicks              Int?
-  sales               Decimal?              @db.Decimal(18, 6)
-  orders              Int?
-  unitsSold           Int?
-  ctr                 Decimal?              @db.Decimal(18, 6)
-  cpc                 Decimal?              @db.Decimal(18, 6)
-  acos                Decimal?              @db.Decimal(18, 6)
-  roas                Decimal?              @db.Decimal(18, 6)
-  conversionRate      Decimal?              @db.Decimal(18, 6)
-  raw                 Json?
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
+  id              String                @id @default(uuid()) @db.Uuid
+  clientProfileId String                @db.Uuid
+  profileId       String
+  marketplaceId   String?
+  date            DateTime
+  level           AmazonAdsInsightLevel
+  entityId        String
+  entityName      String?
+  adProduct       AmazonAdsProductType?
+  spend           Decimal?              @db.Decimal(18, 6)
+  impressions     Int?
+  clicks          Int?
+  sales           Decimal?              @db.Decimal(18, 6)
+  orders          Int?
+  unitsSold       Int?
+  ctr             Decimal?              @db.Decimal(18, 6)
+  cpc             Decimal?              @db.Decimal(18, 6)
+  acos            Decimal?              @db.Decimal(18, 6)
+  roas            Decimal?              @db.Decimal(18, 6)
+  conversionRate  Decimal?              @db.Decimal(18, 6)
+  raw             Json?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
 
   clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
 
@@ -683,32 +821,32 @@ model AmazonAdsSyncLog {
 }
 
 model AmazonAdsReport {
-  id                        String                 @id @default(uuid()) @db.Uuid
-  clientProfileId           String                 @db.Uuid
-  projectId                 String?                @db.Uuid
-  periodStart               DateTime
-  periodEnd                 DateTime
-  type                      AmazonAdsReportType
-  status                    AmazonAdsReportStatus  @default(DRAFT)
-  summary                   String?
-  metricsSnapshot           Json?
-  createdByUserId           String?                @db.Uuid
-  publishedByUserId         String?                @db.Uuid
-  clientVisible             Boolean                @default(false)
-  publishedAt               DateTime?
+  id                         String                @id @default(uuid()) @db.Uuid
+  clientProfileId            String                @db.Uuid
+  projectId                  String?               @db.Uuid
+  periodStart                DateTime
+  periodEnd                  DateTime
+  type                       AmazonAdsReportType
+  status                     AmazonAdsReportStatus @default(DRAFT)
+  summary                    String?
+  metricsSnapshot            Json?
+  createdByUserId            String?               @db.Uuid
+  publishedByUserId          String?               @db.Uuid
+  clientVisible              Boolean               @default(false)
+  publishedAt                DateTime?
   acknowledgementRequestedAt DateTime?
-  acknowledgedAt            DateTime?
-  acknowledgedByUserId      String?                @db.Uuid
-  acknowledgementTaskId     String?                @db.Uuid
-  createdAt                 DateTime               @default(now())
-  updatedAt                 DateTime               @updatedAt
+  acknowledgedAt             DateTime?
+  acknowledgedByUserId       String?               @db.Uuid
+  acknowledgementTaskId      String?               @db.Uuid
+  createdAt                  DateTime              @default(now())
+  updatedAt                  DateTime              @updatedAt
 
-  clientProfile   ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
-  project         Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  createdBy       User?         @relation("AmazonAdsReportCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  publishedBy     User?         @relation("AmazonAdsReportPublishedBy", fields: [publishedByUserId], references: [id], onDelete: SetNull)
-  acknowledgedBy  User?         @relation("AmazonAdsReportAcknowledgedBy", fields: [acknowledgedByUserId], references: [id], onDelete: SetNull)
-  acknowledgementTask Task?     @relation("AmazonAdsReportAcknowledgementTask", fields: [acknowledgementTaskId], references: [id], onDelete: SetNull)
+  clientProfile       ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  project             Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdBy           User?         @relation("AmazonAdsReportCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  publishedBy         User?         @relation("AmazonAdsReportPublishedBy", fields: [publishedByUserId], references: [id], onDelete: SetNull)
+  acknowledgedBy      User?         @relation("AmazonAdsReportAcknowledgedBy", fields: [acknowledgedByUserId], references: [id], onDelete: SetNull)
+  acknowledgementTask Task?         @relation("AmazonAdsReportAcknowledgementTask", fields: [acknowledgementTaskId], references: [id], onDelete: SetNull)
 
   @@index([clientProfileId, createdAt])
   @@index([clientProfileId, status, createdAt])
@@ -722,28 +860,28 @@ model AmazonAdsReport {
 }
 
 model MetaAdsDailyInsight {
-  id             String               @id @default(uuid()) @db.Uuid
+  id              String              @id @default(uuid()) @db.Uuid
   clientProfileId String              @db.Uuid
-  adAccountId    String
-  date           DateTime
-  level          MetaAdsInsightLevel
-  entityId       String?
-  entityName     String?
-  spend          Decimal?
-  impressions    Int?
-  reach          Int?
-  clicks         Int?
-  ctr            Decimal?
-  cpc            Decimal?
-  cpm            Decimal?
-  frequency      Decimal?
-  results        Int?
-  costPerResult  Decimal?
-  purchaseValue  Decimal?
-  roas           Decimal?
-  raw            Json?
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
+  adAccountId     String
+  date            DateTime
+  level           MetaAdsInsightLevel
+  entityId        String?
+  entityName      String?
+  spend           Decimal?
+  impressions     Int?
+  reach           Int?
+  clicks          Int?
+  ctr             Decimal?
+  cpc             Decimal?
+  cpm             Decimal?
+  frequency       Decimal?
+  results         Int?
+  costPerResult   Decimal?
+  purchaseValue   Decimal?
+  roas            Decimal?
+  raw             Json?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
 
   clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
 
@@ -774,32 +912,32 @@ model MetaAdsSyncLog {
 }
 
 model MetaAdsReport {
-  id                        String               @id @default(uuid()) @db.Uuid
-  clientProfileId           String               @db.Uuid
-  projectId                 String?              @db.Uuid
-  periodStart               DateTime
-  periodEnd                 DateTime
-  type                      MetaAdsReportType
-  status                    MetaAdsReportStatus  @default(DRAFT)
-  summary                   String?
-  metricsSnapshot           Json?
-  createdByUserId           String?              @db.Uuid
-  publishedByUserId         String?              @db.Uuid
-  clientVisible             Boolean              @default(false)
-  publishedAt               DateTime?
+  id                         String              @id @default(uuid()) @db.Uuid
+  clientProfileId            String              @db.Uuid
+  projectId                  String?             @db.Uuid
+  periodStart                DateTime
+  periodEnd                  DateTime
+  type                       MetaAdsReportType
+  status                     MetaAdsReportStatus @default(DRAFT)
+  summary                    String?
+  metricsSnapshot            Json?
+  createdByUserId            String?             @db.Uuid
+  publishedByUserId          String?             @db.Uuid
+  clientVisible              Boolean             @default(false)
+  publishedAt                DateTime?
   acknowledgementRequestedAt DateTime?
-  acknowledgedAt            DateTime?
-  acknowledgedByUserId      String?              @db.Uuid
-  acknowledgementTaskId     String?              @db.Uuid
-  createdAt                 DateTime             @default(now())
-  updatedAt                 DateTime             @updatedAt
+  acknowledgedAt             DateTime?
+  acknowledgedByUserId       String?             @db.Uuid
+  acknowledgementTaskId      String?             @db.Uuid
+  createdAt                  DateTime            @default(now())
+  updatedAt                  DateTime            @updatedAt
 
-  clientProfile   ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
-  project         Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  createdBy       User?         @relation("MetaAdsReportCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  publishedBy     User?         @relation("MetaAdsReportPublishedBy", fields: [publishedByUserId], references: [id], onDelete: SetNull)
-  acknowledgedBy  User?         @relation("MetaAdsReportAcknowledgedBy", fields: [acknowledgedByUserId], references: [id], onDelete: SetNull)
-  acknowledgementTask Task?     @relation("MetaAdsReportAcknowledgementTask", fields: [acknowledgementTaskId], references: [id], onDelete: SetNull)
+  clientProfile       ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  project             Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdBy           User?         @relation("MetaAdsReportCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  publishedBy         User?         @relation("MetaAdsReportPublishedBy", fields: [publishedByUserId], references: [id], onDelete: SetNull)
+  acknowledgedBy      User?         @relation("MetaAdsReportAcknowledgedBy", fields: [acknowledgedByUserId], references: [id], onDelete: SetNull)
+  acknowledgementTask Task?         @relation("MetaAdsReportAcknowledgementTask", fields: [acknowledgementTaskId], references: [id], onDelete: SetNull)
 
   @@index([clientProfileId, createdAt])
   @@index([clientProfileId, status, createdAt])
@@ -907,32 +1045,32 @@ model TikTokAdsSyncLog {
 }
 
 model TikTokAdsReport {
-  id                        String                 @id @default(uuid()) @db.Uuid
-  clientProfileId           String                 @db.Uuid
-  projectId                 String?                @db.Uuid
-  periodStart               DateTime
-  periodEnd                 DateTime
-  type                      TikTokAdsReportType
-  status                    TikTokAdsReportStatus  @default(DRAFT)
-  summary                   String?
-  metricsSnapshot           Json?
-  createdByUserId           String?                @db.Uuid
-  publishedByUserId         String?                @db.Uuid
-  clientVisible             Boolean                @default(false)
-  publishedAt               DateTime?
+  id                         String                @id @default(uuid()) @db.Uuid
+  clientProfileId            String                @db.Uuid
+  projectId                  String?               @db.Uuid
+  periodStart                DateTime
+  periodEnd                  DateTime
+  type                       TikTokAdsReportType
+  status                     TikTokAdsReportStatus @default(DRAFT)
+  summary                    String?
+  metricsSnapshot            Json?
+  createdByUserId            String?               @db.Uuid
+  publishedByUserId          String?               @db.Uuid
+  clientVisible              Boolean               @default(false)
+  publishedAt                DateTime?
   acknowledgementRequestedAt DateTime?
-  acknowledgedAt            DateTime?
-  acknowledgedByUserId      String?                @db.Uuid
-  acknowledgementTaskId     String?                @db.Uuid
-  createdAt                 DateTime               @default(now())
-  updatedAt                 DateTime               @updatedAt
+  acknowledgedAt             DateTime?
+  acknowledgedByUserId       String?               @db.Uuid
+  acknowledgementTaskId      String?               @db.Uuid
+  createdAt                  DateTime              @default(now())
+  updatedAt                  DateTime              @updatedAt
 
-  clientProfile   ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
-  project         Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  createdBy       User?         @relation("TikTokAdsReportCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  publishedBy     User?         @relation("TikTokAdsReportPublishedBy", fields: [publishedByUserId], references: [id], onDelete: SetNull)
-  acknowledgedBy  User?         @relation("TikTokAdsReportAcknowledgedBy", fields: [acknowledgedByUserId], references: [id], onDelete: SetNull)
-  acknowledgementTask Task?     @relation("TikTokAdsReportAcknowledgementTask", fields: [acknowledgementTaskId], references: [id], onDelete: SetNull)
+  clientProfile       ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  project             Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdBy           User?         @relation("TikTokAdsReportCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  publishedBy         User?         @relation("TikTokAdsReportPublishedBy", fields: [publishedByUserId], references: [id], onDelete: SetNull)
+  acknowledgedBy      User?         @relation("TikTokAdsReportAcknowledgedBy", fields: [acknowledgedByUserId], references: [id], onDelete: SetNull)
+  acknowledgementTask Task?         @relation("TikTokAdsReportAcknowledgementTask", fields: [acknowledgementTaskId], references: [id], onDelete: SetNull)
 
   @@index([clientProfileId, createdAt])
   @@index([clientProfileId, status, createdAt])
@@ -978,20 +1116,21 @@ model Project {
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
 
-  clientProfile    ClientProfile      @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
-  tasks            Task[]
-  deliverySprints  DeliverySprint[]
-  deliveryReleases DeliveryRelease[]
-  repository       ProjectRepository?
-  files            ProjectFile[]
-  fileFolders      ProjectFileFolder[]
-  amazonAdsReports AmazonAdsReport[]
-  metaAdsReports   MetaAdsReport[]
-  tikTokAdsReports TikTokAdsReport[]
-  workspaceSections WebAppWorkspaceSection[]
-  workspaceMessages WebAppWorkspaceMessage[]
-  workspaceRevisions WebAppWorkspaceRevision[]
-  workspaceWeeklyReports WebAppWorkspaceWeeklyReport[]
+  clientProfile            ClientProfile                   @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  tasks                    Task[]
+  deliverySprints          DeliverySprint[]
+  deliveryReleases         DeliveryRelease[]
+  repository               ProjectRepository?
+  files                    ProjectFile[]
+  fileFolders              ProjectFileFolder[]
+  amazonAdsReports         AmazonAdsReport[]
+  metaAdsReports           MetaAdsReport[]
+  tikTokAdsReports         TikTokAdsReport[]
+  socialMediaPosts         SocialMediaPost[]
+  workspaceSections        WebAppWorkspaceSection[]
+  workspaceMessages        WebAppWorkspaceMessage[]
+  workspaceRevisions       WebAppWorkspaceRevision[]
+  workspaceWeeklyReports   WebAppWorkspaceWeeklyReport[]
   workspaceMeetingRequests WebAppWorkspaceMeetingRequest[]
 
   @@unique([clientProfileId, slug])
@@ -1002,54 +1141,55 @@ model Project {
 }
 
 model Task {
-  id                   String           @id @default(uuid()) @db.Uuid
-  projectId            String           @db.Uuid
-  sprintId             String?          @db.Uuid
-  title                String
-  description          String?
-  status               TaskStatus       @default(TODO)
-  priority             Priority         @default(MEDIUM)
-  type                 TaskType         @default(FEATURE)
-  workstream           TaskWorkstream   @default(FULLSTACK)
-  severity             TaskSeverity?
-  environment          TaskEnvironment?
-  affectedUrl          String?
-  reproductionSteps    String?
-  reportedBy           String?
-  code                 String?
-  branchName           String?
-  codePreparationNotes String?
-  codePreparedAt       DateTime?
-  codePreparedByUserId String?          @db.Uuid
-  assigneeUserId       String?          @db.Uuid
-  dueDate              DateTime?
-  approvalRequired     Boolean          @default(false)
-  approvalType         MetaAdsApprovalType?
-  approvalStatus       MetaAdsApprovalStatus?
-  approvalResponseNote String?
-  approvalRequestedAt  DateTime?
-  approvalRespondedAt  DateTime?
-  approvalRespondedByUserId String?     @db.Uuid
-  approvalContext      Json?
-  referenceProjectFileId String?        @db.Uuid
-  campaignRef          String?
-  adSetRef             String?
-  adRef                String?
-  createdAt            DateTime         @default(now())
-  updatedAt            DateTime         @updatedAt
+  id                        String                 @id @default(uuid()) @db.Uuid
+  projectId                 String                 @db.Uuid
+  sprintId                  String?                @db.Uuid
+  title                     String
+  description               String?
+  status                    TaskStatus             @default(TODO)
+  priority                  Priority               @default(MEDIUM)
+  type                      TaskType               @default(FEATURE)
+  workstream                TaskWorkstream         @default(FULLSTACK)
+  severity                  TaskSeverity?
+  environment               TaskEnvironment?
+  affectedUrl               String?
+  reproductionSteps         String?
+  reportedBy                String?
+  code                      String?
+  branchName                String?
+  codePreparationNotes      String?
+  codePreparedAt            DateTime?
+  codePreparedByUserId      String?                @db.Uuid
+  assigneeUserId            String?                @db.Uuid
+  dueDate                   DateTime?
+  approvalRequired          Boolean                @default(false)
+  approvalType              MetaAdsApprovalType?
+  approvalStatus            MetaAdsApprovalStatus?
+  approvalResponseNote      String?
+  approvalRequestedAt       DateTime?
+  approvalRespondedAt       DateTime?
+  approvalRespondedByUserId String?                @db.Uuid
+  approvalContext           Json?
+  referenceProjectFileId    String?                @db.Uuid
+  campaignRef               String?
+  adSetRef                  String?
+  adRef                     String?
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
 
-  project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  sprint         DeliverySprint? @relation(fields: [sprintId], references: [id], onDelete: SetNull)
-  assignee       User?           @relation("TaskAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
-  codePreparedBy User?           @relation("TaskCodePreparedBy", fields: [codePreparedByUserId], references: [id], onDelete: SetNull)
-  approvalRespondedBy User?      @relation("TaskApprovalResponder", fields: [approvalRespondedByUserId], references: [id], onDelete: SetNull)
-  referenceProjectFile ProjectFile? @relation("TaskReferenceProjectFile", fields: [referenceProjectFileId], references: [id], onDelete: SetNull)
-  amazonAdsReportAcknowledgements AmazonAdsReport[] @relation("AmazonAdsReportAcknowledgementTask")
-  metaAdsReportAcknowledgements MetaAdsReport[] @relation("MetaAdsReportAcknowledgementTask")
-  tikTokAdsReportAcknowledgements TikTokAdsReport[] @relation("TikTokAdsReportAcknowledgementTask")
-  todos          TaskTodo[]
-  workNotes      TaskWorkNote[]
-  workspaceRevisions WebAppWorkspaceRevision[]
+  project                         Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sprint                          DeliverySprint?           @relation(fields: [sprintId], references: [id], onDelete: SetNull)
+  assignee                        User?                     @relation("TaskAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
+  codePreparedBy                  User?                     @relation("TaskCodePreparedBy", fields: [codePreparedByUserId], references: [id], onDelete: SetNull)
+  approvalRespondedBy             User?                     @relation("TaskApprovalResponder", fields: [approvalRespondedByUserId], references: [id], onDelete: SetNull)
+  referenceProjectFile            ProjectFile?              @relation("TaskReferenceProjectFile", fields: [referenceProjectFileId], references: [id], onDelete: SetNull)
+  amazonAdsReportAcknowledgements AmazonAdsReport[]         @relation("AmazonAdsReportAcknowledgementTask")
+  metaAdsReportAcknowledgements   MetaAdsReport[]           @relation("MetaAdsReportAcknowledgementTask")
+  tikTokAdsReportAcknowledgements TikTokAdsReport[]         @relation("TikTokAdsReportAcknowledgementTask")
+  socialMediaPostApprovals        SocialMediaPost[]         @relation("SocialMediaPostApprovalTask")
+  todos                           TaskTodo[]
+  workNotes                       TaskWorkNote[]
+  workspaceRevisions              WebAppWorkspaceRevision[]
 
   @@index([projectId])
   @@index([sprintId])
@@ -1108,8 +1248,8 @@ model DeliveryRelease {
   createdAt           DateTime                      @default(now())
   updatedAt           DateTime                      @updatedAt
 
-  project       Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  approvalActor User?   @relation("DeliveryReleaseApprovalActor", fields: [approvalActorUserId], references: [id], onDelete: SetNull)
+  project            Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  approvalActor      User?                     @relation("DeliveryReleaseApprovalActor", fields: [approvalActorUserId], references: [id], onDelete: SetNull)
   workspaceRevisions WebAppWorkspaceRevision[]
 
   @@index([projectId])
@@ -1144,46 +1284,48 @@ model ProjectRepository {
 }
 
 model ProjectFile {
-  id               String                @id @default(uuid()) @db.Uuid
-  projectId        String                @db.Uuid
-  folderId         String?               @db.Uuid
-  clientProfileId  String                @db.Uuid
-  serviceKey       PurchasedServiceKey?
-  category         ProjectFileCategory
-  visibility       ProjectFileVisibility @default(INTERNAL)
-  title            String
-  description      String?
-  publicId         String
-  secureUrl        String
-  resourceType     String                @default("raw")
-  format           String?
-  bytes            Int
-  mimeType         String
-  originalFileName String
-  approvalRequired Boolean               @default(false)
-  approvalType     MetaAdsApprovalType?
-  approvalStatus   MetaAdsApprovalStatus?
-  approvalResponseNote String?
-  approvalRequestedAt DateTime?
-  approvalRespondedAt DateTime?
-  approvalRespondedByUserId String?      @db.Uuid
-  campaignRef      String?
-  adSetRef         String?
-  adRef            String?
-  performanceSummary Json?
-  uploadedByUserId String                @db.Uuid
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
+  id                        String                 @id @default(uuid()) @db.Uuid
+  projectId                 String                 @db.Uuid
+  folderId                  String?                @db.Uuid
+  clientProfileId           String                 @db.Uuid
+  serviceKey                PurchasedServiceKey?
+  category                  ProjectFileCategory
+  visibility                ProjectFileVisibility  @default(INTERNAL)
+  title                     String
+  description               String?
+  publicId                  String
+  secureUrl                 String
+  resourceType              String                 @default("raw")
+  format                    String?
+  bytes                     Int
+  mimeType                  String
+  originalFileName          String
+  approvalRequired          Boolean                @default(false)
+  approvalType              MetaAdsApprovalType?
+  approvalStatus            MetaAdsApprovalStatus?
+  approvalResponseNote      String?
+  approvalRequestedAt       DateTime?
+  approvalRespondedAt       DateTime?
+  approvalRespondedByUserId String?                @db.Uuid
+  campaignRef               String?
+  adSetRef                  String?
+  adRef                     String?
+  performanceSummary        Json?
+  uploadedByUserId          String                 @db.Uuid
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
 
-  project    Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  folder     ProjectFileFolder?     @relation(fields: [folderId], references: [id], onDelete: SetNull)
-  clientProfile ClientProfile       @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
-  uploader   User                   @relation("ProjectFileUploadedBy", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
-  approvalRespondedBy User?         @relation("ProjectFileApprovalResponder", fields: [approvalRespondedByUserId], references: [id], onDelete: SetNull)
-  approvalTasks Task[]              @relation("TaskReferenceProjectFile")
-  shareLinks ProjectFileShareLink[]
-  workspaceRevisions WebAppWorkspaceRevision[]
+  project               Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  folder                ProjectFileFolder?        @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  clientProfile         ClientProfile             @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  uploader              User                      @relation("ProjectFileUploadedBy", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+  approvalRespondedBy   User?                     @relation("ProjectFileApprovalResponder", fields: [approvalRespondedByUserId], references: [id], onDelete: SetNull)
+  approvalTasks         Task[]                    @relation("TaskReferenceProjectFile")
+  shareLinks            ProjectFileShareLink[]
+  socialMediaPostAssets SocialMediaPostAsset[]
+  workspaceRevisions    WebAppWorkspaceRevision[]
 
+  @@unique([projectId, publicId])
   @@index([projectId, createdAt])
   @@index([projectId, folderId, createdAt])
   @@index([folderId])
@@ -1196,7 +1338,6 @@ model ProjectFile {
   @@index([approvalStatus])
   @@index([approvalRespondedByUserId])
   @@index([uploadedByUserId])
-  @@unique([projectId, publicId])
 }
 
 model ProjectFileFolder {
@@ -1207,8 +1348,8 @@ model ProjectFileFolder {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdBy User          @relation("ProjectFileFolderCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  project   Project                       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User                          @relation("ProjectFileFolderCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
   files     ProjectFile[]
   assignees ProjectFileFolderAssignment[]
 
@@ -1251,16 +1392,16 @@ model ProjectFileShareLink {
 }
 
 model WebAppWorkspaceSection {
-  id              String                   @id @default(uuid()) @db.Uuid
-  projectId       String                   @db.Uuid
+  id              String                @id @default(uuid()) @db.Uuid
+  projectId       String                @db.Uuid
   tabKey          WebAppWorkspaceTabKey
   key             String
   title           String
   description     String?
-  sortOrder       Int                      @default(0)
-  createdByUserId String                   @db.Uuid
-  createdAt       DateTime                 @default(now())
-  updatedAt       DateTime                 @updatedAt
+  sortOrder       Int                   @default(0)
+  createdByUserId String                @db.Uuid
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
 
   project   Project                      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   createdBy User                         @relation("WorkspaceSectionCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
@@ -1272,15 +1413,15 @@ model WebAppWorkspaceSection {
 }
 
 model WebAppWorkspaceContentItem {
-  id          String                         @id @default(uuid()) @db.Uuid
-  sectionId   String                         @db.Uuid
-  itemType    WebAppWorkspaceContentItemType
-  title       String
-  body        String?
-  href        String?
-  sortOrder   Int                            @default(0)
-  createdAt   DateTime                       @default(now())
-  updatedAt   DateTime                       @updatedAt
+  id        String                         @id @default(uuid()) @db.Uuid
+  sectionId String                         @db.Uuid
+  itemType  WebAppWorkspaceContentItemType
+  title     String
+  body      String?
+  href      String?
+  sortOrder Int                            @default(0)
+  createdAt DateTime                       @default(now())
+  updatedAt DateTime                       @updatedAt
 
   section WebAppWorkspaceSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
 
@@ -1289,19 +1430,19 @@ model WebAppWorkspaceContentItem {
 }
 
 model WebAppWorkspaceMessage {
-  id           String                  @id @default(uuid()) @db.Uuid
-  projectId    String                  @db.Uuid
-  parentMessageId String?              @db.Uuid
-  tabKey       WebAppWorkspaceTabKey
-  authorUserId String                  @db.Uuid
-  body         String
-  isInternal   Boolean                 @default(false)
-  createdAt    DateTime                @default(now())
-  updatedAt    DateTime                @updatedAt
+  id              String                @id @default(uuid()) @db.Uuid
+  projectId       String                @db.Uuid
+  parentMessageId String?               @db.Uuid
+  tabKey          WebAppWorkspaceTabKey
+  authorUserId    String                @db.Uuid
+  body            String
+  isInternal      Boolean               @default(false)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  author  User    @relation("WorkspaceMessageAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
-  parentMessage WebAppWorkspaceMessage? @relation("WorkspaceMessageReplies", fields: [parentMessageId], references: [id], onDelete: SetNull)
+  project       Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author        User                     @relation("WorkspaceMessageAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
+  parentMessage WebAppWorkspaceMessage?  @relation("WorkspaceMessageReplies", fields: [parentMessageId], references: [id], onDelete: SetNull)
   replies       WebAppWorkspaceMessage[] @relation("WorkspaceMessageReplies")
 
   @@index([projectId, tabKey, createdAt])
@@ -1310,27 +1451,27 @@ model WebAppWorkspaceMessage {
 }
 
 model WebAppWorkspaceRevision {
-  id               String                        @id @default(uuid()) @db.Uuid
-  projectId        String                        @db.Uuid
-  taskId           String?                       @db.Uuid
-  releaseId        String?                       @db.Uuid
-  projectFileId    String?                       @db.Uuid
-  title            String
-  description      String
-  requestedByUserId String                       @db.Uuid
-  assignedToUserId String?                       @db.Uuid
-  status           WebAppWorkspaceRevisionStatus @default(REQUESTED)
-  requestedAt      DateTime                      @default(now())
-  resolvedAt       DateTime?
-  createdAt        DateTime                      @default(now())
-  updatedAt        DateTime                      @updatedAt
+  id                String                        @id @default(uuid()) @db.Uuid
+  projectId         String                        @db.Uuid
+  taskId            String?                       @db.Uuid
+  releaseId         String?                       @db.Uuid
+  projectFileId     String?                       @db.Uuid
+  title             String
+  description       String
+  requestedByUserId String                        @db.Uuid
+  assignedToUserId  String?                       @db.Uuid
+  status            WebAppWorkspaceRevisionStatus @default(REQUESTED)
+  requestedAt       DateTime                      @default(now())
+  resolvedAt        DateTime?
+  createdAt         DateTime                      @default(now())
+  updatedAt         DateTime                      @updatedAt
 
-  project     Project                       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  task        Task?                         @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  release     DeliveryRelease?              @relation(fields: [releaseId], references: [id], onDelete: SetNull)
-  projectFile ProjectFile?                  @relation(fields: [projectFileId], references: [id], onDelete: SetNull)
-  requestedBy User                          @relation("WorkspaceRevisionRequestedBy", fields: [requestedByUserId], references: [id], onDelete: Restrict)
-  assignedTo  User?                         @relation("WorkspaceRevisionAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  project     Project                             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task        Task?                               @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  release     DeliveryRelease?                    @relation(fields: [releaseId], references: [id], onDelete: SetNull)
+  projectFile ProjectFile?                        @relation(fields: [projectFileId], references: [id], onDelete: SetNull)
+  requestedBy User                                @relation("WorkspaceRevisionRequestedBy", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  assignedTo  User?                               @relation("WorkspaceRevisionAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
   transitions WebAppWorkspaceRevisionTransition[]
 
   @@index([projectId, status, requestedAt])
@@ -1342,13 +1483,13 @@ model WebAppWorkspaceRevision {
 }
 
 model WebAppWorkspaceRevisionTransition {
-  id          String                        @id @default(uuid()) @db.Uuid
-  revisionId  String                        @db.Uuid
+  id          String                         @id @default(uuid()) @db.Uuid
+  revisionId  String                         @db.Uuid
   fromStatus  WebAppWorkspaceRevisionStatus?
   toStatus    WebAppWorkspaceRevisionStatus
-  actorUserId String                        @db.Uuid
+  actorUserId String                         @db.Uuid
   note        String?
-  createdAt   DateTime                      @default(now())
+  createdAt   DateTime                       @default(now())
 
   revision WebAppWorkspaceRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
   actor    User                    @relation("WorkspaceRevisionTransitionActor", fields: [actorUserId], references: [id], onDelete: Restrict)
@@ -1358,18 +1499,18 @@ model WebAppWorkspaceRevisionTransition {
 }
 
 model WebAppWorkspaceWeeklyReport {
-  id             String   @id @default(uuid()) @db.Uuid
-  projectId      String   @db.Uuid
-  weekStartDate  DateTime
-  weekEndDate    DateTime
-  summary        String
+  id              String    @id @default(uuid()) @db.Uuid
+  projectId       String    @db.Uuid
+  weekStartDate   DateTime
+  weekEndDate     DateTime
+  summary         String
   accomplishments String?
-  plannedNext    String?
-  blockers       String?
-  authorUserId   String   @db.Uuid
-  publishedAt    DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  plannedNext     String?
+  blockers        String?
+  authorUserId    String    @db.Uuid
+  publishedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   author  User    @relation("WorkspaceWeeklyReportAuthor", fields: [authorUserId], references: [id], onDelete: Restrict)
@@ -1380,21 +1521,21 @@ model WebAppWorkspaceWeeklyReport {
 }
 
 model WebAppWorkspaceMeetingRequest {
-  id                String                             @id @default(uuid()) @db.Uuid
-  projectId         String                             @db.Uuid
+  id                String                              @id @default(uuid()) @db.Uuid
+  projectId         String                              @db.Uuid
   title             String
   agenda            String?
-  requestedByUserId String                             @db.Uuid
+  requestedByUserId String                              @db.Uuid
   preferredStartAt  DateTime
   preferredEndAt    DateTime
   timezone          String
   status            WebAppWorkspaceMeetingRequestStatus @default(REQUESTED)
   responseNote      String?
-  responderUserId   String?                            @db.Uuid
+  responderUserId   String?                             @db.Uuid
   scheduledStartAt  DateTime?
   scheduledEndAt    DateTime?
-  createdAt         DateTime                           @default(now())
-  updatedAt         DateTime                           @updatedAt
+  createdAt         DateTime                            @default(now())
+  updatedAt         DateTime                            @updatedAt
 
   project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   requestedBy User    @relation("WorkspaceMeetingRequestedBy", fields: [requestedByUserId], references: [id], onDelete: Restrict)

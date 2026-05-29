@@ -198,3 +198,42 @@ npm run test:run
 - Project Manager assigned Social Media workspace yönetebilir.
 - Employee out-of-scope client data göremez.
 - Testler geçer.
+
+## 2026-05-28 Implementation Checkpoint
+
+Faz 5 uygulama kapsamı:
+
+- Employee `/employee/social-media` rotası eklendi.
+- `SocialMediaWorkspace` componenti Social Media Specialist, Designer ve Project Manager için rol bazlı tab setiyle çalışır.
+- Assigned client listesi `clients.read.assigned` + aktif `social-media` purchased service filtresiyle oluşturulur.
+- Summary/posts/projects/tasks RTK Query hookları assigned scope üzerinden tüketilir.
+- Content calendar sekmesi mevcut shared `SocialMediaContentCalendar` bileşenini embedded kullanır.
+- Designer creative action `socialMedia.creatives.manage.assigned` / asset manage permission ile görünür.
+- Social Media approval task create akışı `socialMedia.approvals.create.assigned` permission bridge’i ile shared task endpointine bağlandı; Faz 5 checkpointinde `approvalType=null` bırakıldı, Faz 6 ile bu karar `SOCIAL_MEDIA_*` approval type değerleriyle superseded oldu.
+- `socialMedia.reports.manage.assigned` ve `socialMedia.notes.manage.assigned` seed permissionları workspace aksiyon zemini için eklendi.
+
+Doğrulama:
+
+- `server`: `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true npm run test:e2e -- social-media-authz.e2e-spec.ts` (`14/14`)
+- `server`: `npm run check`
+- `adminandemployeePanel`: `npm run test:run -- src/app/employee/pages/__tests__/SocialMediaWorkspace.test.tsx` (`6/6`)
+- `adminandemployeePanel`: `npm run check`
+- Browser smoke: `/employee/social-media` unauthenticated durumda `/login` redirect eder.
+
+## 2026-05-29 Manual Role Matrix Checkpoint
+
+Faz 6 öncesi `socialtech_server_test` seed DB üstünde manuel UI turu tamamlandı:
+
+- Social Media Specialist (`social@socialtech.com`): `/employee/social-media` sadece assigned Acme Social Media workspace’i gösterdi; `Onaylar` tabında approval create aksiyonu çalıştı.
+- Designer (`designer@socialtech.com`): assigned Acme Social Media workspace’i gördü; `Kreatifler` tabı, `Kreatif İşler`, `Asset Havuzu` ve `Creative Asset Yükle` aksiyonu görünür oldu.
+- Project Manager (`project@socialtech.com`): workspace overview’da Acme Social Media özetini, aktif proje/content calendar/report aksiyonlarını gördü.
+- Out-of-scope kontrolü: Nova Performance ve Mavi Sosyal bu seed kullanıcı turunda görünmedi.
+
+Seed hizalaması:
+
+- Acme için kalıcı `SOCIAL_MEDIA` purchased service ve `acme-social-media-calendar` projesi eklendi.
+- Designer için Acme `DESIGN` assignment fixture’ı eklendi.
+
+Not:
+
+- Faz 6 ile Social Media approval task’ları artık `approvalType=null` yerine `SOCIAL_MEDIA_*` approval type değerleriyle oluşturulur.

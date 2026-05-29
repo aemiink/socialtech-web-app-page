@@ -19,6 +19,7 @@ import { MetaAdsModule } from "./meta-ads/meta-ads.module";
 import { TikTokAdsModule } from "./tiktok-ads/tiktok-ads.module";
 import { ProjectFilesModule } from "./project-files/project-files.module";
 import { ProjectsModule } from "./projects/projects.module";
+import { SocialMediaModule } from "./social-media/social-media.module";
 import { TasksModule } from "./tasks/tasks.module";
 import { UsersModule } from "./users/users.module";
 import { WebAppWorkspaceModule } from "./web-app-workspace/web-app-workspace.module";
@@ -45,6 +46,7 @@ import { WebAppWorkspaceModule } from "./web-app-workspace/web-app-workspace.mod
     MetaAdsModule,
     TikTokAdsModule,
     AmazonAdsModule,
+    SocialMediaModule,
     ProjectFilesModule,
     DeliveryModule,
     AdminSummaryModule,

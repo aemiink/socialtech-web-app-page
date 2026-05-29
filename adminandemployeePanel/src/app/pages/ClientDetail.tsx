@@ -7,8 +7,10 @@ import {
   CheckCircle2,
   Link2Off,
   ExternalLink,
+  FileImage,
   FolderKanban,
   ListChecks,
+  Megaphone,
   PlugZap,
   RefreshCw,
   ShoppingCart,
@@ -18,6 +20,7 @@ import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { useGetAdminAssignmentsQuery } from "../features/adminAssignments/adminAssignmentsApi";
+import type { AdminAssignment } from "../features/adminAssignments/adminAssignmentsTypes";
 import {
   useConnectAdminClientTikTokAdsManualMutation,
   useDisconnectAdminClientTikTokAdsMutation,
@@ -30,6 +33,15 @@ import {
   getTikTokAdsConnectionStatusBadgeClass,
   getTikTokAdsConnectionStatusLabel,
 } from "../features/tiktokAds/tiktokAdsTypes";
+import { useGetClientSocialMediaSummaryQuery } from "../features/socialMedia/socialMediaApi";
+import type { SocialMediaSummary } from "../features/socialMedia/socialMediaTypes";
+import {
+  formatSocialMediaDateTime,
+  getSocialMediaGoalLabel,
+  getSocialMediaPostStatusBadgeClass,
+  getSocialMediaPostStatusLabel,
+  getSocialMediaSummaryStateLabel,
+} from "../features/socialMedia/socialMediaUtils";
 import {
   useConnectAdminClientAmazonAdsManualMutation,
   useConnectAdminClientMetaAdsManualMutation,
@@ -210,6 +222,15 @@ export function ClientDetail() {
     { clientId: clientProfileId ?? "" },
     { skip: !isValidId },
   );
+  const {
+    data: socialMediaSummary,
+    error: socialMediaSummaryError,
+    isFetching: isSocialMediaSummaryFetching,
+    isLoading: isSocialMediaSummaryLoading,
+    refetch: refetchSocialMediaSummary,
+  } = useGetClientSocialMediaSummaryQuery(clientProfileId ?? "", {
+    skip: !isValidId,
+  });
 
   useEffect(() => {
     if (!metaAdsConnection?.ids.adAccountId) {
@@ -318,6 +339,7 @@ export function ClientDetail() {
   const hasTikTokSummaryError = Boolean(tikTokAdsSummaryError);
   const hasAmazonConnectionError = Boolean(amazonAdsConnectionError);
   const hasAmazonSummaryError = Boolean(amazonAdsSummaryError);
+  const hasSocialMediaSummaryError = Boolean(socialMediaSummaryError);
   const tikTokAdsCurrency = tikTokAdsConnection?.settings.currency ?? "TRY";
   const amazonAdsCurrency = amazonAdsConnection?.settings.currencyCode ?? "TRY";
   const isAmazonConnectionActionRunning =
@@ -1439,6 +1461,16 @@ export function ClientDetail() {
         ) : null}
       </Card>
 
+      <SocialMediaDetailSection
+        assignments={assignments}
+        error={socialMediaSummaryError}
+        hasError={hasSocialMediaSummaryError}
+        isFetching={isSocialMediaSummaryFetching}
+        isLoading={isSocialMediaSummaryLoading}
+        summary={socialMediaSummary}
+        onRefresh={() => refetchSocialMediaSummary()}
+      />
+
       <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
         <h2 className="mb-2 text-lg font-semibold text-white">Müşteri Portal Şifre Sıfırlama</h2>
         <p className="mb-4 text-sm text-[#A0A0A0]">
@@ -1537,6 +1569,169 @@ export function ClientDetail() {
           ))}
         </div>
       </Card>
+    </div>
+  );
+}
+
+function SocialMediaDetailSection({
+  assignments,
+  error,
+  hasError,
+  isFetching,
+  isLoading,
+  summary,
+  onRefresh,
+}: {
+  assignments: AdminAssignment[];
+  error: unknown;
+  hasError: boolean;
+  isFetching: boolean;
+  isLoading: boolean;
+  summary: SocialMediaSummary | null | undefined;
+  onRefresh: () => void;
+}) {
+  const socialAssignments = assignments.filter(
+    (assignment) => assignment.scope === "SOCIAL_MEDIA" || assignment.scope === "DESIGN",
+  );
+
+  return (
+    <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <SectionHeader
+          icon={<Megaphone className="h-5 w-5 text-[#AAFF01]" />}
+          title="Social Media Yönetimi"
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          {isFetching ? <span className="text-xs text-[#d2ff8a]">Social Media güncelleniyor...</span> : null}
+          {summary ? (
+            <Badge variant="outline">{getSocialMediaSummaryStateLabel(summary.state)}</Badge>
+          ) : null}
+          <Button type="button" variant="outline" size="sm" className="gap-2" onClick={onRefresh}>
+            <RefreshCw className="h-4 w-4" />
+            Yenile
+          </Button>
+          <Link to="/social-media">
+            <Button type="button" size="sm" className="gap-2">
+              <Calendar className="h-4 w-4" />
+              Takvimi Aç
+            </Button>
+          </Link>
+        </div>
+      </div>
+
+      {isLoading ? <p className="text-sm text-[#A0A0A0]">Social Media özeti yükleniyor...</p> : null}
+      {hasError ? (
+        <p className="text-sm text-red-300">
+          {extractApiErrorMessage(error, "Social Media özeti alınamadı.")}
+        </p>
+      ) : null}
+      {!isLoading && !hasError && !summary ? (
+        <p className="text-sm text-[#A0A0A0]">Social Media özeti bulunamadı.</p>
+      ) : null}
+
+      {summary ? (
+        <div className="space-y-5">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+            <DetailRow label="Planlanan Post" value={String(summary.metrics.plannedPosts)} />
+            <DetailRow label="Yayınlanan" value={String(summary.metrics.publishedPosts)} />
+            <DetailRow label="Onay Bekleyen" value={String(summary.metrics.pendingApprovals)} />
+            <DetailRow label="Revizyon/Reddedilen" value={String(summary.metrics.rejectedPosts)} />
+            <DetailRow label="Kreatif Asset" value={String(summary.metrics.creativeAssets)} />
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <DetailRow label="Instagram" value={summary.config?.instagramUsername ?? "—"} />
+            <DetailRow label="Ana Hedef" value={getSocialMediaGoalLabel(summary.config?.primaryGoal ?? null)} />
+            <DetailRow label="Frekans" value={summary.config?.contentFrequency ?? "—"} />
+            <DetailRow label="Ton" value={summary.config?.toneOfVoice ?? "—"} />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <SocialMediaPostPreview title="Yaklaşan İçerikler" posts={summary.contentPlan.upcomingPosts} />
+            <SocialMediaPostPreview title="Son Yayınlar" posts={summary.contentPlan.recentPosts} />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+            <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] p-4">
+              <h3 className="mb-3 flex items-center gap-2 text-sm font-medium text-white">
+                <FileImage className="h-4 w-4 text-[#AAFF01]" />
+                Kreatif Assets
+              </h3>
+              {summary.creativeAssets.length === 0 ? (
+                <p className="text-sm text-[#A0A0A0]">Social Media kreatifi bulunmuyor.</p>
+              ) : (
+                <div className="space-y-2">
+                  {summary.creativeAssets.slice(0, 4).map((asset) => (
+                    <div key={asset.id} className="text-sm">
+                      <p className="break-words text-white">{asset.title}</p>
+                      <p className="text-xs text-[#A0A0A0]">{asset.project.name}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] p-4">
+              <h3 className="mb-3 text-sm font-medium text-white">Atanan Çalışanlar</h3>
+              {socialAssignments.length === 0 ? (
+                <p className="text-sm text-[#A0A0A0]">Social Media/Design ataması yok.</p>
+              ) : (
+                <div className="space-y-2">
+                  {socialAssignments.map((assignment) => (
+                    <div key={assignment.id} className="text-sm">
+                      <p className="text-white">
+                        {assignment.employee.displayName?.trim() || assignment.employee.email}
+                      </p>
+                      <p className="text-xs text-[#A0A0A0]">{assignment.scope}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] p-4">
+              <h3 className="mb-3 text-sm font-medium text-white">Raporlar ve Aktivite</h3>
+              <p className="text-sm text-[#A0A0A0]">
+                Son aktivite: {formatClientDateTime(summary.meta.lastUpdatedAt)}
+              </p>
+              <p className="mt-2 text-sm text-[#A0A0A0]">Social Media rapor publish akışı Faz 8 kapsamında açılacak.</p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </Card>
+  );
+}
+
+function SocialMediaPostPreview({
+  title,
+  posts,
+}: {
+  title: string;
+  posts: SocialMediaSummary["contentPlan"]["upcomingPosts"];
+}) {
+  return (
+    <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] p-4">
+      <h3 className="mb-3 text-sm font-medium text-white">{title}</h3>
+      {posts.length === 0 ? (
+        <p className="text-sm text-[#A0A0A0]">İçerik bulunmuyor.</p>
+      ) : (
+        <div className="space-y-3">
+          {posts.slice(0, 4).map((post) => (
+            <div key={post.id}>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="break-words text-sm text-white">{post.title}</p>
+                <Badge className={getSocialMediaPostStatusBadgeClass(post.status)} variant="outline">
+                  {getSocialMediaPostStatusLabel(post.status)}
+                </Badge>
+              </div>
+              <p className="mt-1 text-xs text-[#A0A0A0]">
+                {formatSocialMediaDateTime(post.scheduledAt ?? post.publishedAt)}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

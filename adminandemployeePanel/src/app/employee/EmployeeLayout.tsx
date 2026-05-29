@@ -34,6 +34,7 @@ const roleMenus: Record<EmployeePanelRole, SidebarItem[]> = {
   "project-manager": [
     { path: "/employee/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { path: "/employee/musterilerim", label: "Müşterilerim", icon: Users },
+    { path: "/employee/social-media", label: "Social Media Workspace", icon: MessageSquare },
     { path: "/employee/projeler", label: "Projeler", icon: FolderKanban },
     { path: "/employee/gorevlerim", label: "Görevler", icon: CheckSquare },
     { path: "/employee/musterilerim", label: "Mesajlar / Soru-Cevap", icon: MessageSquare },
@@ -65,6 +66,7 @@ const roleMenus: Record<EmployeePanelRole, SidebarItem[]> = {
     { path: "/employee/meta-ads", label: "Meta Ads Workspace", icon: Megaphone },
     { path: "/employee/tiktok-ads", label: "TikTok Ads Workspace", icon: Video },
     { path: "/employee/amazon-ads", label: "Amazon Ads Workspace", icon: BarChart },
+    { path: "/employee/social-media", label: "Social Media Workspace", icon: MessageSquare },
     { path: "/employee/gorevlerim", label: "Görevlerim", icon: CheckSquare },
     { path: "/employee/icerik-takvimi", label: "İçerik Takvimi", icon: Calendar },
     { path: "/employee/captionlar", label: "Captionlar", icon: FileText },
@@ -83,6 +85,7 @@ const roleMenus: Record<EmployeePanelRole, SidebarItem[]> = {
     { path: "/employee/meta-ads", label: "Meta Ads Workspace", icon: Megaphone },
     { path: "/employee/tiktok-ads", label: "TikTok Ads Workspace", icon: Video },
     { path: "/employee/amazon-ads", label: "Amazon Ads Workspace", icon: BarChart },
+    { path: "/employee/social-media", label: "Social Media Workspace", icon: MessageSquare },
     { path: "/employee/gorevlerim", label: "Görevlerim", icon: CheckSquare },
     { path: "/employee/kreatifler", label: "Kreatifler", icon: Image },
     { path: "/employee/ui-tasarimlar", label: "UI Tasarımlar", icon: LayoutDashboard },

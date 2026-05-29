@@ -16,6 +16,7 @@ import type {
   AmazonAdsProductsResponse,
   AssignedClientAmazonAdsConfig,
   AdminClientAmazonAdsConnection,
+  AdminClientSocialMediaConfig,
   AdminClientMetaAdsConnection,
   AmazonAdsSummaryResponse,
   AmazonAdsOAuthStartResponse,
@@ -50,6 +51,8 @@ import type {
   MetaAdsSummaryResponse,
   PurchasedServiceStatus,
   ServiceKey,
+  SocialMediaConnectionStatus,
+  SocialMediaGoal,
   TestAmazonAdsConnectionResponse,
   TestMetaAdsConnectionResponse,
 } from "./clientsTypes";
@@ -562,6 +565,44 @@ export function normalizeAdminAmazonAdsConnectionResponse(
         ? credential.grantedScopes.filter((item): item is string => typeof item === "string")
         : [],
     },
+  };
+}
+
+export function normalizeAdminSocialMediaConfigResponse(
+  response: unknown,
+): AdminClientSocialMediaConfig {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  if (!isRecord(candidate)) {
+    throw new Error("Social Media config response could not be parsed.");
+  }
+
+  return {
+    clientProfileId: typeof candidate.clientProfileId === "string" ? candidate.clientProfileId : "",
+    hasActiveService:
+      typeof candidate.hasActiveService === "boolean" ? candidate.hasActiveService : false,
+    instagramUsername: isStringOrNull(candidate.instagramUsername)
+      ? candidate.instagramUsername
+      : null,
+    instagramAccountId: isStringOrNull(candidate.instagramAccountId)
+      ? candidate.instagramAccountId
+      : null,
+    facebookPageId: isStringOrNull(candidate.facebookPageId) ? candidate.facebookPageId : null,
+    tiktokUsername: isStringOrNull(candidate.tiktokUsername) ? candidate.tiktokUsername : null,
+    linkedinPageUrl: isStringOrNull(candidate.linkedinPageUrl) ? candidate.linkedinPageUrl : null,
+    contentFrequency: isStringOrNull(candidate.contentFrequency)
+      ? candidate.contentFrequency
+      : null,
+    primaryGoal: normalizeSocialMediaGoal(candidate.primaryGoal),
+    toneOfVoice: isStringOrNull(candidate.toneOfVoice) ? candidate.toneOfVoice : null,
+    hashtags: Array.isArray(candidate.hashtags)
+      ? candidate.hashtags.filter((item): item is string => typeof item === "string")
+      : [],
+    connectionStatus: normalizeSocialMediaConnectionStatus(candidate.connectionStatus),
+    lastSyncAt: isStringOrNull(candidate.lastSyncAt) ? candidate.lastSyncAt : null,
+    syncError: isStringOrNull(candidate.syncError) ? candidate.syncError : null,
+    notes: isStringOrNull(candidate.notes) ? candidate.notes : null,
+    createdAt: isStringOrNull(candidate.createdAt) ? candidate.createdAt : null,
+    updatedAt: isStringOrNull(candidate.updatedAt) ? candidate.updatedAt : null,
   };
 }
 
@@ -1977,6 +2018,42 @@ function normalizeAmazonAdsConnectionStatus(value: unknown): AmazonAdsConnection
   }
 
   return "NOT_CONNECTED";
+}
+
+function normalizeSocialMediaConnectionStatus(value: unknown): SocialMediaConnectionStatus {
+  if (value === "CONNECTED") {
+    return "CONNECTED";
+  }
+
+  if (value === "PENDING") {
+    return "PENDING";
+  }
+
+  if (value === "ERROR") {
+    return "ERROR";
+  }
+
+  if (value === "DISCONNECTED") {
+    return "DISCONNECTED";
+  }
+
+  return "NOT_CONNECTED";
+}
+
+function normalizeSocialMediaGoal(value: unknown): SocialMediaGoal | null {
+  if (
+    value === "BRAND_AWARENESS" ||
+    value === "COMMUNITY_GROWTH" ||
+    value === "ENGAGEMENT" ||
+    value === "LEAD_GENERATION" ||
+    value === "SALES_SUPPORT" ||
+    value === "REPUTATION" ||
+    value === "MIXED"
+  ) {
+    return value;
+  }
+
+  return null;
 }
 
 function normalizeAmazonAdsProfile(value: unknown): AmazonAdsProfileSummary | null {

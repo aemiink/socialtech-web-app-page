@@ -170,6 +170,13 @@
 - Amazon Ads Faz 8: Sync automation hardening (admin sync logs + retry endpoint + assigned TTL/cooldown skip normalizasyonu + error catalog standardizasyonu + admin/client observability UX)
 - Amazon Ads Faz 9: Reporting/export foundation (`AmazonAdsReport` entity, admin/assigned draft-publish endpoints, client own report visibility, publish->ack task bridge)
 - Amazon Ads Faz 10: Production hardening (admin/assigned/own CSV+JSON report export, client-safe report visibility/404 surface, assigned `reports.read/manage` authz alignment, expanded report edge-case coverage)
+- Social Media Faz 0: Discovery contract (organic content operations scope, existing service/profile discovery, V1 summary/config/post/creative/approval contract, role-scope matrix, Faz 1 implementation contract)
+- Social Media Faz 1: Backend foundation (`ClientSocialMediaConfig`, Social Media module config/summary endpoints, permission seed, Admin Clients create/edit config fields)
+- Social Media Faz 2: Content calendar backend + UI consumption (`SocialMediaPost`, `SocialMediaPostAsset`, post CRUD, admin/employee list+form, client-visible own calendar, designer asset binding, authz e2e coverage)
+- Social Media Faz 3: Client Panel API-driven dashboard (own summary/config/calendar hooks, client-visible summary hardening, no-mock Social Media service tabs, task-based approval bridge)
+- Social Media Faz 4: Admin global panel + ClientDetail Social Media section (`GET /social-media/clients`, risk/overdue/pending summary, config edit modal, assignment/creative visibility)
+- Social Media Faz 5: Employee role workspace (`/employee/social-media`, assigned client filter, role-aware calendar/posts/creatives/approvals/reports/messages tabs, Social Media approval task bridge)
+- Social Media Faz 6: Approval + creative flow (Social Media approval enum values, client approval response bridge, post status update, revision task follow-up, client/employee approval UI)
 
 ## Blocked
 
@@ -334,7 +341,75 @@ None identified.
   - `clientPanel`: `npm run check` ✅
   - `clientPanel`: `npm test -- --run src/app/pages/__tests__/service-tab-page.amazon-ads.test.tsx` ✅ (`7/7`)
   - Bundle audit: Vite build çıktılarında Amazon odaklı chunklar için hard warning yok; safe code-splitting değişikliği gerekmedi ✅
-- Latest admin/employee frontend validation checkpoint: `25` test files, `153/153` tests.
+- Latest Social Media Faz 0 checkpoint:
+  - `docs/social-media-phases/00-social-media-discovery-contract.md` updated with repository discovery, V1 data contract, role-scope matrix, endpoint/permission contract, and Faz 1 go/no-go decision ✅
+- Latest Social Media Faz 1 checkpoint:
+  - `server`: `npm run prisma:generate` ✅
+  - `server`: `npm run typecheck` ✅
+  - `server`: `npm run typecheck:seed` ✅
+  - `server`: `npm run typecheck:spec` ✅
+  - `server`: `npm run build` ✅
+  - `server`: `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true npm run test:e2e -- social-media-authz.e2e-spec.ts` ✅ (`5/5` Faz 1 coverage before Faz 2 expansion)
+  - `adminandemployeePanel`: `npm run typecheck` ✅
+  - `adminandemployeePanel`: `npm run test:run -- src/app/pages/__tests__/Clients.test.tsx` ✅ (`23/23`)
+  - `adminandemployeePanel`: `npm run build` ✅
+- Latest Social Media Faz 2 checkpoint:
+  - `server`: `npm run prisma:generate` ✅
+  - `server`: `npm run typecheck` ✅
+  - `server`: `npm run typecheck:seed` ✅
+  - `server`: `npm run typecheck:spec` ✅
+  - `server`: `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true npm run test:e2e -- social-media-authz.e2e-spec.ts` ✅ (`11/11`)
+  - `server`: `npm run check` ✅
+  - `adminandemployeePanel`: `npm run typecheck` ✅
+  - `adminandemployeePanel`: `npm run build` ✅
+  - `clientPanel`: `npm run typecheck` ✅
+  - `clientPanel`: `npm run build` ✅
+  - Manual role matrix on `socialtech_server_test` seed/test setup ✅
+    - Admin: Social Media post create/update/delete + deleted read `404`
+    - Social Media Specialist: assigned post create/update/delete
+    - Designer: assigned post read, post create/update denied, asset attach allowed
+    - Client: own visible calendar includes `clientVisible=true` post and excludes hidden post
+  - Seed fixture alignment: Acme (`client@socialtech.com`) now has active `SOCIAL_MEDIA` purchased service for repeatable client portal Social Media checks ✅
+- Latest Social Media Faz 3 checkpoint:
+  - `server`: own-client summary now filters `SocialMediaPost.clientVisible=true` and `ProjectFile.visibility=CLIENT_VISIBLE` before returning post/asset read models ✅
+  - `clientPanel`: Social Media summary/config RTK Query hooks and normalizers added ✅
+  - `clientPanel`: `social-media-dashboard` now renders summary/config/calendar/creative API data and removes static DM/trend fallback blocks ✅
+  - `clientPanel`: Social Media service tabs bypass generic static renderer; calendar, approvals, published, creatives, agency-notes and no-source states are API/empty-state driven ✅
+  - `clientPanel`: Social Media dashboard/service-tab tests added (`6/6`) ✅
+  - `server`: `npm run check` ✅
+  - `server`: `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true npm run test:e2e -- social-media-authz.e2e-spec.ts` ✅ (`11/11`)
+  - `clientPanel`: `npm run typecheck`, targeted Social Media tests (`6/6`), and `npm run build` ✅
+- Latest Social Media Faz 4 checkpoint:
+  - `server`: admin global Social Media clients endpoint added with admin-only guard, summary/risk/overdue counts, assignment visibility and leak guard ✅
+  - `adminandemployeePanel`: `/social-media` global admin operation page renders loading/error/empty/success, config edit modal, selected-client summary and embedded content calendar ✅
+  - `adminandemployeePanel`: `ClientDetail` Social Media section renders config, post counts, pending approvals, creative assets, assignments and report no-source state ✅
+  - `server`: `npm run check` ✅
+  - `server`: `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true npm run test:e2e -- social-media-authz.e2e-spec.ts` ✅ (`13/13`)
+  - `adminandemployeePanel`: `npm run test:run -- src/app/pages/__tests__/SocialMediaAdmin.test.tsx src/app/pages/__tests__/ClientDetail.test.tsx` ✅ (`16/16`)
+  - `adminandemployeePanel`: `npm run check` ✅
+- Latest Social Media Faz 5 checkpoint:
+  - `server`: Social Media assigned creatives/approvals/reports/notes seed permission alignment + Social Media approval task bridge ✅
+  - `adminandemployeePanel`: `/employee/social-media` workspace route/sidebar added for Project Manager, Social Media Specialist and Designer ✅
+  - `adminandemployeePanel`: workspace tests cover assigned active Social Media client filter, designer creative action, PM view, embedded calendar, approval create and disabled permission state ✅ (`6/6`)
+  - `server`: `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true npm run test:e2e -- social-media-authz.e2e-spec.ts` ✅ (`14/14`)
+  - `server`: `npm run check` ✅
+  - `adminandemployeePanel`: `npm run check` ✅
+  - Browser smoke: `/employee/social-media` loads Vite app and unauthenticated access redirects to `/login` ✅
+- Latest Social Media Faz 6 checkpoint:
+  - Manual role matrix on `socialtech_server_test` seed/test setup ✅
+    - Social Media Specialist: assigned Acme workspace visible, approval create works
+    - Designer: assigned Acme creative tab/action visible
+    - Project Manager: assigned Acme overview/content/report workspace visible
+    - Out-of-scope Nova Performance and Mavi Sosyal hidden for checked users
+  - Seed fixture alignment: Acme has active Social Media service/project and Designer design assignment ✅
+  - `server`: `npm run prisma:generate` ✅
+  - `server`: `npm run check` ✅
+  - `server`: `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true npm run test:e2e -- social-media-authz.e2e-spec.ts` ✅ (`15/15`)
+  - `adminandemployeePanel`: `npm run test:run -- src/app/employee/pages/__tests__/SocialMediaWorkspace.test.tsx` ✅ (`7/7`)
+  - `adminandemployeePanel`: `npm run check` ✅
+  - `clientPanel`: `npm test -- src/app/pages/__tests__/service-tab-page.social-media.test.tsx` ✅ (`3/3`)
+  - `clientPanel`: `npm run check` ✅
+- Latest admin/employee frontend validation checkpoint: last recorded broad suite `25` test files, `153/153` tests; latest targeted Social Media Faz 6 workspace suite adds `1` file, `7/7` tests.
 - Latest client portal frontend validation checkpoint: `4` test files, `17/17` tests.
 - Latest FAZ-05 validation checkpoint:
   - `server`: `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true node ./test/run-e2e.cjs meta-ads-authz.e2e-spec.ts` ✅ (`38/38`)

@@ -15,6 +15,7 @@ import type {
   AdminTikTokAdsConnection,
   TikTokAdsSummaryResponse,
 } from "../../features/tiktokAds/tiktokAdsTypes";
+import type { SocialMediaSummary } from "../../features/socialMedia/socialMediaTypes";
 import { ClientDetail } from "../ClientDetail";
 
 type QueryOptions = {
@@ -62,6 +63,14 @@ type TikTokAdsSummaryQueryResult = {
   refetch: () => void;
 };
 
+type SocialMediaSummaryQueryResult = {
+  data?: SocialMediaSummary | null;
+  error?: unknown;
+  isLoading: boolean;
+  isFetching: boolean;
+  refetch: () => void;
+};
+
 type ClientSummaryWithSensitiveFields = ClientSummaryResponse & {
   passwordHash: string;
   resetToken: string;
@@ -101,6 +110,9 @@ const mockUseConnectAdminClientTikTokAdsManualMutation = vi.fn();
 const mockUseTestAdminClientTikTokAdsConnectionMutation = vi.fn();
 const mockUseSyncAdminClientTikTokAdsMutation = vi.fn();
 const mockUseDisconnectAdminClientTikTokAdsMutation = vi.fn();
+const mockUseGetClientSocialMediaSummaryQuery = vi.fn<
+  (id: string, options: QueryOptions) => SocialMediaSummaryQueryResult
+>();
 
 vi.mock("../../features/clients/clientsApi", () => ({
   useGetClientSummaryQuery: (id: string, options: QueryOptions) =>
@@ -150,6 +162,10 @@ vi.mock("../../features/tiktokAds/tiktokAdsApi", () => ({
   useSyncAdminClientTikTokAdsMutation: () => mockUseSyncAdminClientTikTokAdsMutation(),
   useDisconnectAdminClientTikTokAdsMutation: () =>
     mockUseDisconnectAdminClientTikTokAdsMutation(),
+}));
+vi.mock("../../features/socialMedia/socialMediaApi", () => ({
+  useGetClientSocialMediaSummaryQuery: (id: string, options: QueryOptions) =>
+    mockUseGetClientSocialMediaSummaryQuery(id, options),
 }));
 
 const clientProfileId = "11111111-1111-4111-8111-111111111111";
@@ -352,6 +368,101 @@ const tikTokAdsSummary: TikTokAdsSummaryResponse = {
   lastSyncAt: "2026-05-09T10:00:00.000Z",
 };
 
+const socialMediaSummary: SocialMediaSummary = {
+  client: {
+    id: clientProfileId,
+    name: "Acme E-ticaret",
+    slug: "acme-e-ticaret",
+    status: "ACTIVE",
+  },
+  service: {
+    hasActiveService: true,
+    status: "ACTIVE",
+    startedAt: "2026-05-28T00:00:00.000Z",
+    updatedAt: "2026-05-28T10:00:00.000Z",
+  },
+  config: {
+    instagramUsername: "@acme",
+    instagramAccountId: "ig-1",
+    facebookPageId: "fb-1",
+    tiktokUsername: "@acmetiktok",
+    linkedinPageUrl: "https://linkedin.com/company/acme",
+    contentFrequency: "Haftada 3 post",
+    primaryGoal: "ENGAGEMENT",
+    toneOfVoice: "Samimi",
+    hashtags: ["#acme"],
+    connectionStatus: "CONNECTED",
+    lastSyncAt: "2026-05-28T10:00:00.000Z",
+    notes: "Mayıs planı.",
+  },
+  state: "READY",
+  metrics: {
+    projects: 1,
+    tasks: 3,
+    plannedPosts: 4,
+    publishedPosts: 2,
+    inDesignPosts: 1,
+    pendingApprovals: 1,
+    rejectedPosts: 1,
+    creativeAssets: 2,
+    openTodos: 2,
+    completedTodos: 4,
+  },
+  contentPlan: {
+    projects: [],
+    upcomingPosts: [
+      {
+        id: "social-post-1",
+        platform: "INSTAGRAM",
+        type: "REEL",
+        status: "WAITING_APPROVAL",
+        title: "Haziran lansman reels",
+        scheduledAt: "2026-06-12T09:00:00.000Z",
+        publishedAt: null,
+        clientVisible: true,
+        project: null,
+        updatedAt: "2026-05-28T10:00:00.000Z",
+      },
+    ],
+    recentPosts: [
+      {
+        id: "social-post-2",
+        platform: "LINKEDIN",
+        type: "TEXT",
+        status: "PUBLISHED",
+        title: "Mayıs marka postu",
+        scheduledAt: null,
+        publishedAt: "2026-05-20T09:00:00.000Z",
+        clientVisible: true,
+        project: null,
+        updatedAt: "2026-05-20T10:00:00.000Z",
+      },
+    ],
+    topPosts: [],
+  },
+  creativeAssets: [
+    {
+      id: "creative-1",
+      title: "Reels kapak görseli",
+      category: "CREATIVE",
+      visibility: "CLIENT_VISIBLE",
+      secureUrl: "https://example.com/reels.png",
+      mimeType: "image/png",
+      approvalStatus: "PENDING",
+      project: {
+        id: projectId,
+        name: "Growth Hub Launch",
+      },
+      updatedAt: "2026-05-28T10:00:00.000Z",
+    },
+  ],
+  meta: {
+    generatedAt: "2026-05-28T10:00:00.000Z",
+    lastUpdatedAt: "2026-05-28T10:00:00.000Z",
+    sources: ["SocialMediaPost"],
+  },
+};
+
 function setupSummaryState(overrides: Partial<ClientSummaryQueryResult> = {}) {
   mockUseGetClientSummaryQuery.mockReturnValue({
     data: clientSummary,
@@ -432,6 +543,19 @@ function setupTikTokAdsSummaryState(
   });
 }
 
+function setupSocialMediaSummaryState(
+  overrides: Partial<SocialMediaSummaryQueryResult> = {},
+) {
+  mockUseGetClientSocialMediaSummaryQuery.mockReturnValue({
+    data: socialMediaSummary,
+    error: undefined,
+    isLoading: false,
+    isFetching: false,
+    refetch: vi.fn(),
+    ...overrides,
+  });
+}
+
 function setupMetaAdsSummaryState(
   overrides: Partial<{
     data: MetaAdsSummaryResponse | undefined;
@@ -470,6 +594,7 @@ describe("ClientDetail", () => {
     setupMetaAdsSummaryState();
     setupTikTokAdsConnectionState();
     setupTikTokAdsSummaryState();
+    setupSocialMediaSummaryState();
     mockUseConnectAdminClientMetaAdsManualMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseTestAdminClientMetaAdsConnectionMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseSyncAdminClientMetaAdsMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
@@ -546,6 +671,9 @@ describe("ClientDetail", () => {
     expect(screen.getByText("Meta Ads Bağlantı Yönetimi")).toBeInTheDocument();
     expect(screen.getByText("TikTok Ads Yapılandırması")).toBeInTheDocument();
     expect(screen.getByText("Amazon Ads Yapılandırması")).toBeInTheDocument();
+    expect(screen.getByText("Social Media Yönetimi")).toBeInTheDocument();
+    expect(screen.getByText("Haziran lansman reels")).toBeInTheDocument();
+    expect(screen.getByText("Reels kapak görseli")).toBeInTheDocument();
     expect(screen.getByText("Refresh Token ile Bağla")).toBeInTheDocument();
     expect(screen.getByText("OAuth URL Oluştur")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Refresh Token")).toBeInTheDocument();
