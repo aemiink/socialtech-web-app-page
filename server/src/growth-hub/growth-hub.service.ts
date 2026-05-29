@@ -112,6 +112,8 @@ export type AdminGrowthHubClientsResponse = {
   };
 };
 
+export type AssignedGrowthHubClientsResponse = AdminGrowthHubClientsResponse;
+
 @Injectable()
 export class GrowthHubService {
   constructor(
@@ -141,19 +143,48 @@ export class GrowthHubService {
 
     return {
       data: items,
-      meta: {
-        total: items.length,
-        ready: items.filter((item) => item.state === "READY").length,
-        risk: items.filter((item) => item.state === "RISK").length,
-        optimize: items.filter((item) => item.state === "OPTIMIZE").length,
-        scale: items.filter((item) => item.state === "SCALE").length,
-        waitingConfig: items.filter((item) => item.state === "WAITING_CONFIG").length,
-        pendingApprovals: items.reduce(
-          (sum, item) => sum + item.metrics.pendingApprovals,
-          0,
-        ),
-        generatedAt: new Date(),
+      meta: this.buildClientsOverviewMeta(items),
+    };
+  }
+
+  async getAssignedClients(
+    actor: AuthenticatedUser,
+  ): Promise<AssignedGrowthHubClientsResponse> {
+    if (
+      actor.accountType !== AccountType.EMPLOYEE ||
+      actor.role === UserRole.ADMIN ||
+      !this.hasPermission(actor, GROWTH_HUB_SUMMARY_READ_ASSIGNED_PERMISSION)
+    ) {
+      throw new ForbiddenException("Missing required Growth Hub summary permission.");
+    }
+
+    const clients = await this.prisma.clientProfile.findMany({
+      where: {
+        employeeAssignments: {
+          some: {
+            employeeUserId: actor.id,
+            isActive: true,
+            scope: EmployeeClientAssignmentScope.PROJECT,
+          },
+        },
+        purchasedServices: {
+          some: {
+            serviceKey: PurchasedServiceKey.GROWTH_HUB,
+            status: PurchasedServiceStatus.ACTIVE,
+          },
+        },
       },
+      select: { id: true },
+      orderBy: { companyName: "asc" },
+    });
+    const summaries = await Promise.all(
+      clients.map((client) => this.summaryService.getSummary(client.id)),
+    );
+    const items = summaries.map((summary) => this.toAdminClientListItem(summary));
+
+    return {
+      data: items,
+      meta: this.buildClientsOverviewMeta(items),
     };
   }
 
@@ -358,6 +389,19 @@ export class GrowthHubService {
       channels: summary.channels,
       actions: summary.actions,
       meta: summary.meta,
+    };
+  }
+
+  private buildClientsOverviewMeta(items: AdminGrowthHubClientListItem[]) {
+    return {
+      total: items.length,
+      ready: items.filter((item) => item.state === "READY").length,
+      risk: items.filter((item) => item.state === "RISK").length,
+      optimize: items.filter((item) => item.state === "OPTIMIZE").length,
+      scale: items.filter((item) => item.state === "SCALE").length,
+      waitingConfig: items.filter((item) => item.state === "WAITING_CONFIG").length,
+      pendingApprovals: items.reduce((sum, item) => sum + item.metrics.pendingApprovals, 0),
+      generatedAt: new Date(),
     };
   }
 

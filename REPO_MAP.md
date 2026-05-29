@@ -237,6 +237,17 @@ Additional portal pages exist under `clientPanel/src/app/pages/` and `clientPane
   - `clientPanel/src/app/features/growthHub/growthHubApi.ts` - own-client Growth Hub hooks for `/clients/me/growth-hub/*`
   - `clientPanel/src/app/pages/services/growth-hub-dashboard.tsx` - API-driven Growth Hub dashboard with loading/error/empty/config states
   - `clientPanel/src/app/pages/__tests__/growth-hub-dashboard.test.tsx` - summary/channel/action/activity/error/empty/no-mock regression coverage
+- Growth Hub admin/employee Faz 3-4 touchpoints:
+  - `adminandemployeePanel/src/app/features/growthHub/growthHubApi.ts` - admin + assigned Growth Hub list/detail hooks for `/admin/growth-hub/*` ve `/growth-hub/clients/*`
+  - `adminandemployeePanel/src/app/features/growthHub/growthHubTypes.ts` / `growthHubUtils.ts` - admin/employee Growth Hub response types, normalizers, labels ve format helpers
+  - `adminandemployeePanel/src/app/features/growthHub/components/GrowthHubConfigDialog.tsx` - shared Growth Hub config edit modal
+  - `adminandemployeePanel/src/app/features/growthHub/components/GrowthHubClientDetailSection.tsx` - ClientDetail içi Growth Hub summary/config/activity section
+  - `adminandemployeePanel/src/app/pages/GrowthHubAdmin.tsx` - admin `/growth-hub` global operasyon ekranı
+  - `adminandemployeePanel/src/app/employee/components/GrowthHubWorkspace.tsx` - assigned Growth Hub workspace
+  - `adminandemployeePanel/src/app/employee/pages/GrowthHubCalismaAlani.tsx` - employee `/employee/growth-hub` route wrapper
+  - `adminandemployeePanel/src/app/pages/__tests__/GrowthHubAdmin.test.tsx`
+  - `adminandemployeePanel/src/app/employee/pages/__tests__/GrowthHubCalismaAlani.test.tsx`
+  - `adminandemployeePanel/src/app/features/growthHub/components/__tests__/GrowthHubClientDetailSection.test.tsx`
 - TikTok Ads client portal Faz 4 touchpoints:
   - `clientPanel/src/app/features/tiktokAds/tiktokAdsApi.ts` - own-client TikTok config/summary/campaigns/insights/sync RTK Query hooks
   - `clientPanel/src/app/features/tiktokAds/tiktokAdsTypes.ts` - own-client TikTok reporting and sync response types
@@ -625,6 +636,31 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - `GROWTH_HUB` service selection reveals Growth Hub target/config fields in create/edit forms and saves them through the Growth Hub config endpoint
 - `adminandemployeePanel/src/app/pages/ClientDetail.tsx`
   - Amazon Ads config/status card with OAuth URL/code, manual refresh token, test connection, reporting summary, manual sync, disconnect, and config edit actions
+
+### Growth Hub Admin/Employee Frontend Foundation
+
+- `adminandemployeePanel/src/app/features/growthHub/growthHubApi.ts`
+  - admin global list + admin detail + assigned list/detail Growth Hub RTK Query hooks
+- `adminandemployeePanel/src/app/features/growthHub/growthHubTypes.ts`
+  - Growth Hub admin/employee read model response types, enum unions ve client list meta contract'ı
+- `adminandemployeePanel/src/app/features/growthHub/growthHubUtils.ts`
+  - response normalizers, label helpers, metric/date/currency formatters ve status tone helpers
+- `adminandemployeePanel/src/app/features/growthHub/components/GrowthHubConfigDialog.tsx`
+  - admin global page ve ClientDetail tarafından paylaşılan Growth Hub config modalı
+- `adminandemployeePanel/src/app/features/growthHub/components/GrowthHubClientDetailSection.tsx`
+  - ClientDetail içinde Growth Hub config, KPI, channels, actions, activity ve assignment görünürlüğü
+- `adminandemployeePanel/src/app/pages/GrowthHubAdmin.tsx`
+  - admin `/growth-hub` route'u: KPI, müşteri listesi, selected detail, channel/action snapshot ve config edit
+- `adminandemployeePanel/src/app/employee/components/GrowthHubWorkspace.tsx`
+  - assigned müşteri listesi, selected summary/channels/actions, report ack, messages ve recent activity bölümleri
+- `adminandemployeePanel/src/app/employee/pages/GrowthHubCalismaAlani.tsx`
+  - employee workspace route wrapper
+- `adminandemployeePanel/src/app/routes.tsx`
+  - `/growth-hub` ve `/employee/growth-hub` route kayıtları
+- `adminandemployeePanel/src/app/components/RootLayout.tsx`
+  - admin sidebar Growth Hub entry
+- `adminandemployeePanel/src/app/employee/EmployeeLayout.tsx`
+  - Project Manager sidebar Growth Hub workspace entry
 
 ### Social Media Admin/Employee Frontend Foundation
 

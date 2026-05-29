@@ -398,6 +398,10 @@ export const clientsApi = baseApi.injectEndpoints({
         ...getAdminClientMutationInvalidations(clientId),
         { type: "Clients", id: getClientGrowthHubConfigTagId(clientId) },
         { type: "Clients", id: CLIENT_GROWTH_HUB_GLOBAL_LIST_ID },
+        { type: "GrowthHubConfig", id: clientId },
+        { type: "GrowthHubSummary", id: clientId },
+        { type: "GrowthHubSummary", id: "ADMIN_LIST" },
+        { type: "GrowthHubSummary", id: "ASSIGNED_LIST" },
       ],
     }),
     createAdminClientAmazonAdsOAuthUrl: builder.mutation<

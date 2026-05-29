@@ -167,6 +167,9 @@ vi.mock("../../features/socialMedia/socialMediaApi", () => ({
   useGetClientSocialMediaSummaryQuery: (id: string, options: QueryOptions) =>
     mockUseGetClientSocialMediaSummaryQuery(id, options),
 }));
+vi.mock("../../features/growthHub/components/GrowthHubClientDetailSection", () => ({
+  GrowthHubClientDetailSection: () => <div data-testid="growth-hub-client-detail-section" />,
+}));
 
 const clientProfileId = "11111111-1111-4111-8111-111111111111";
 const projectId = "22222222-2222-4222-8222-222222222222";

@@ -11,6 +11,12 @@ import { GrowthHubService } from "./growth-hub.service";
 export class AssignedGrowthHubController {
   constructor(private readonly growthHubService: GrowthHubService) {}
 
+  @Get()
+  @RequirePermissions("growthHub.summary.read.assigned")
+  getAssignedClients(@CurrentUser() actor: AuthenticatedUser) {
+    return this.growthHubService.getAssignedClients(actor);
+  }
+
   @Get(":clientId/config")
   @RequirePermissions("growthHub.config.read.assigned")
   getAssignedClientConfig(

@@ -42,6 +42,7 @@ import {
   getSocialMediaPostStatusLabel,
   getSocialMediaSummaryStateLabel,
 } from "../features/socialMedia/socialMediaUtils";
+import { GrowthHubClientDetailSection } from "../features/growthHub/components/GrowthHubClientDetailSection";
 import {
   useConnectAdminClientAmazonAdsManualMutation,
   useConnectAdminClientMetaAdsManualMutation,
@@ -828,6 +829,8 @@ export function ClientDetail() {
           <DetailRow label="Son güncelleme" value={formatClientDateTime(client.updatedAt)} />
         </div>
       </Card>
+
+      <GrowthHubClientDetailSection clientProfileId={clientProfileId} />
 
       <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

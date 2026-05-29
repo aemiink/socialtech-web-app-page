@@ -70,6 +70,35 @@ Affected files:
 - `REPO_MAP.md`
 - `ROAD_MAP.md`
 
+## 2026-05-29 - Growth Hub Faz 3-4 Admin + Employee Workspace Surface
+
+Growth Hub Faz 2 sonrası backend read model hazırdı ancak admin tarafında global operasyon görünürlüğü, ClientDetail içinde Growth Hub section'ı ve employee panelde assigned workspace eksikti. Faz 5/Faz 7 persistence domain'leri henüz açılmadığı için Faz 3/Faz 4 yüzeyleri mevcut read model üzerinde kurulmalı ve fake write endpoint üretmemeliydi.
+
+Karar:
+- Admin ve employee için ayrı fakat ortak normalizer kullanan `adminandemployeePanel/src/app/features/growthHub/` feature slice'ı eklendi; admin global list (`/admin/growth-hub/clients`), admin detail ve assigned list/detail endpointleri aynı response family üzerinden okunur.
+- Assigned employee workspace için backend'e `GET /api/v1/growth-hub/clients` endpointi eklendi; endpoint active `PROJECT` assignment + active `GROWTH_HUB` purchased service ile filtrelenir ve mevcut Faz 1 summary read modelini tekrar kullanır.
+- Admin global ekran ve ClientDetail içi Growth Hub section aynı config edit modalını paylaşır; config write path olarak mevcut `PATCH /api/v1/admin/clients/:clientId/growth-hub/config` korunur.
+- Weekly note, approval create ve report publish butonları görünür bırakılır ancak Faz 5/Faz 7 modelleri gelene kadar disabled follow-up durumunda tutulur; temporary mutation/endpoint açılmaz.
+- Employee sidebar entry şimdilik Project Manager rolüne açılır; growth lead için ayrı role enum olmadığı için Faz 0/Faz 1 kararı korunarak `PROJECT_MANAGER` + assigned permission kombinasyonu kullanılır.
+
+Reason:
+Bu karar Growth Hub Faz 3 ve Faz 4'ü minimum invaziv şekilde tamamlar; mevcut backend contract'ı yeniden kullanır, admin/client/employee yüzeylerini aynı status/metric diline getirir ve ileride persisted action/note/report domain'leri geldiğinde geçici API borcu bırakmaz.
+
+Affected files:
+- `server/src/growth-hub/assigned-growth-hub.controller.ts`
+- `server/src/growth-hub/growth-hub.service.ts`
+- `server/test/growth-hub-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/growthHub/*`
+- `adminandemployeePanel/src/app/pages/GrowthHubAdmin.tsx`
+- `adminandemployeePanel/src/app/features/growthHub/components/GrowthHubClientDetailSection.tsx`
+- `adminandemployeePanel/src/app/employee/components/GrowthHubWorkspace.tsx`
+- `adminandemployeePanel/src/app/routes.tsx`
+- `adminandemployeePanel/src/app/components/RootLayout.tsx`
+- `adminandemployeePanel/src/app/employee/EmployeeLayout.tsx`
+- `PROJECT_CONTEXT.md`
+- `REPO_MAP.md`
+- `ROAD_MAP.md`
+
 ---
 
 ## 2026-05-28 - Social Media Faz 0 Discovery Contract (Organic Content Operations)

@@ -225,6 +225,28 @@ describe("Growth Hub Config and Summary Authz (e2e)", () => {
     expect(res.body.meta.pendingApprovals).toBeGreaterThanOrEqual(1);
   });
 
+  it("non-admin cannot access the admin Growth Hub global list", async () => {
+    const res = await request(app.getHttpServer())
+      .get("/api/v1/admin/growth-hub/clients")
+      .set("Authorization", `Bearer ${performanceToken}`);
+
+    expect(res.status).toBe(403);
+  });
+
+  it("assigned project manager can list only assigned Growth Hub clients", async () => {
+    const res = await request(app.getHttpServer())
+      .get("/api/v1/growth-hub/clients")
+      .set("Authorization", `Bearer ${projectToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.meta.total).toBeGreaterThanOrEqual(1);
+    expect(
+      res.body.data.every(
+        (item: { client: { id: string } }) => item.client.id === clientProfileId,
+      ),
+    ).toBe(true);
+  });
+
   it("assigned project manager can read assigned Growth Hub summary", async () => {
     const res = await request(app.getHttpServer())
       .get(`/api/v1/growth-hub/clients/${clientProfileId}/summary`)

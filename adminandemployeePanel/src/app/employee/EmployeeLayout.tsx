@@ -34,6 +34,7 @@ const roleMenus: Record<EmployeePanelRole, SidebarItem[]> = {
   "project-manager": [
     { path: "/employee/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { path: "/employee/musterilerim", label: "Müşterilerim", icon: Users },
+    { path: "/employee/growth-hub", label: "Growth Hub Workspace", icon: TrendingUp },
     { path: "/employee/social-media", label: "Social Media Workspace", icon: MessageSquare },
     { path: "/employee/projeler", label: "Projeler", icon: FolderKanban },
     { path: "/employee/gorevlerim", label: "Görevler", icon: CheckSquare },

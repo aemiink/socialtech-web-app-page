@@ -445,6 +445,33 @@ Growth Hub client portal dashboard artık static/mock veri yerine own-client Gro
 - Own-client endpoint convention korunur: `/api/v1/clients/me/growth-hub/*`; client başka müşteri id'si göndermeden yalnızca kendi verisini okur.
 - Client purchased-service restore logic mevcut `App.tsx` akışıyla korunur; `GROWTH_HUB` serviceKey normalizasyonu test kapsamına eklendi.
 
+## Growth Hub Faz 3 — Admin Global Panel ve ClientDetail Section (2026-05-29)
+
+Growth Hub admin operasyon yüzeyi eklendi. Özet:
+- Admin RTK Query feature: `adminandemployeePanel/src/app/features/growthHub/` admin/assigned Growth Hub list, summary, channel, action ve activity hook'larını sağlar.
+- Admin page: `adminandemployeePanel/src/app/pages/GrowthHubAdmin.tsx` ile `/growth-hub` route'u eklendi; Growth Hub müşterileri için KPI, risk/ready dağılımı, müşteri listesi, kanal özeti, assignment görünürlüğü ve config edit akışı sunulur.
+- ClientDetail section: `GrowthHubClientDetailSection` Growth Hub config/summary/activity görünürlüğünü `ClientDetail` içine taşır; config edit modalı burada da tekrar kullanılır.
+- Admin global ve ClientDetail aksiyonları mevcut Faz 1 read model ile sınırlı tutuldu; weekly note, approval create ve report publish butonları fake endpoint açmadan disabled follow-up durumunda bırakıldı.
+- Admin sidebar'a `Growth Hub` giriş noktası eklendi ve Growth Hub config mutation invalidation zinciri yeni Growth Hub RTK Query tag'leriyle hizalandı.
+
+Active Growth Hub admin endpoints:
+- `GET /api/v1/admin/growth-hub/clients`
+- `GET /api/v1/admin/clients/:clientId/growth-hub/config`
+- `PATCH /api/v1/admin/clients/:clientId/growth-hub/config`
+- `GET /api/v1/admin/clients/:clientId/growth-hub/summary`
+- `GET /api/v1/admin/clients/:clientId/growth-hub/channels`
+- `GET /api/v1/admin/clients/:clientId/growth-hub/actions`
+- `GET /api/v1/admin/clients/:clientId/growth-hub/activity`
+
+## Growth Hub Faz 4 — Employee Workspace (2026-05-29)
+
+Project Manager assigned Growth Hub çalışma alanı eklendi. Özet:
+- Backend assigned list endpointi `GET /api/v1/growth-hub/clients` eklendi; liste yalnızca active `PROJECT` assignment + active `GROWTH_HUB` purchased service scope'undaki müşterileri döner.
+- Employee page: `adminandemployeePanel/src/app/employee/components/GrowthHubWorkspace.tsx` ve `/employee/growth-hub` route'u ile assigned müşteri listesi, selected summary, channels, actions, reports/messages/activity görünürlüğü eklendi.
+- Employee sidebar'da Project Manager rolü için `Growth Hub Workspace` girişi açıldı.
+- Workspace mevcut assigned summary/actions/activity endpointlerini kullanır; persistence gerektiren weekly note / approval create / report publish akışları Faz 5/Faz 7 follow-up olarak disabled bırakıldı.
+- Employee görünürlüğü permission-aware çalışır; `growthHub.summary.read.assigned` olmadan query skip edilir ve read gate render edilir.
+
 ## TikTok Ads Faz 0 — Tamamlanan Contract (2026-05-27)
 
 TikTok Ads Faz 0 discovery tamamlandı. Detaylı karar DECISIONS.md'de mevcut. Özet:

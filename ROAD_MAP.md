@@ -34,8 +34,6 @@
 - Cloudinary asset malware scanning/quarantine flow
 - Advanced revision inbox/routing and reminder notifications
 - Social Media V2 API publishing integration (Instagram/Facebook Graph API publishing first per `docs/social-media-phases/10-social-media-v2-integration-backlog.md`; insight sync follows as V2.1; TikTok/LinkedIn publishing support subject to official API permissions)
-- Growth Hub Faz 3: Admin global panel + ClientDetail Growth Hub section
-- Growth Hub Faz 4: Employee Growth Hub workspace for Project Manager/Growth Lead assigned scope
 - Growth Hub Faz 5: Growth actions + weekly notes persistence and client-visible filtering
 - Growth Hub Faz 6: Channel aggregation layer (Meta/TikTok/Amazon/Social active adapters, Google contract-only until active module exists)
 - Growth Hub Faz 7: Growth reports + approval/acknowledgement integration
@@ -192,6 +190,8 @@
 - Growth Hub Faz 0: Discovery contract (orchestration layer positioning, active/future channel source map, no-mock V1 summary contract, endpoint convention, role-scope matrix, Faz 1 implementation contract)
 - Growth Hub Faz 1: Backend foundation (`ClientGrowthHubConfig`, Growth Hub config/summary/channels/actions/activity endpoints, permission seed, Admin Clients create/edit config fields)
 - Growth Hub Faz 2: Client Panel API-driven dashboard (own-client RTK Query feature, static/mock dashboard removal, loading/error/empty/config states, Growth Hub purchased-service regression coverage)
+- Growth Hub Faz 3: Admin global panel + ClientDetail Growth Hub section
+- Growth Hub Faz 4: Employee Growth Hub workspace for Project Manager/Growth Lead assigned scope
 
 ## Blocked
 
@@ -467,6 +467,14 @@ None identified.
   - `clientPanel`: `npm run typecheck` ✅
   - `clientPanel`: `npm run test -- src/app/pages/__tests__/growth-hub-dashboard.test.tsx src/app/__tests__/client-portal.test.tsx` ✅ (`10/10`)
   - `clientPanel`: `npm run build` ✅
+- Latest Growth Hub Faz 3 checkpoint:
+  - `adminandemployeePanel`: `npm run check` ✅
+  - `adminandemployeePanel`: `npm run test:run -- src/app/pages/__tests__/GrowthHubAdmin.test.tsx src/app/features/growthHub/components/__tests__/GrowthHubClientDetailSection.test.tsx src/app/pages/__tests__/ClientDetail.test.tsx` ✅ (`17/17`)
+  - `server`: `npm run typecheck` attempted but repo-wide Prisma client/export baseline is currently broken, so Growth Hub specific server validation could not be completed in isolation ⚠️
+- Latest Growth Hub Faz 4 checkpoint:
+  - `adminandemployeePanel`: `npm run check` ✅
+  - `adminandemployeePanel`: `npm run test:run -- src/app/employee/pages/__tests__/GrowthHubCalismaAlani.test.tsx` ✅ (`3/3`)
+  - `server`: `npm run typecheck` attempted but repo-wide Prisma client/export baseline is currently broken, so assigned-scope server validation could not be completed in isolation ⚠️
 - Latest admin/employee frontend validation checkpoint: last recorded broad suite `25` test files, `153/153` tests; latest targeted Social Media workspace suite `9/9`.
 - Latest client portal frontend validation checkpoint: Social Media targeted suite `8/8`; broad recorded portal checkpoint remains `4` files, `17/17` tests.
 - Latest FAZ-05 validation checkpoint:
