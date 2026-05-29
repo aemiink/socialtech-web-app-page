@@ -435,6 +435,16 @@ Active Growth Hub endpoints:
 - `GET /api/v1/clients/me/growth-hub/actions`
 - `GET /api/v1/clients/me/growth-hub/activity`
 
+## Growth Hub Faz 2 — Client Panel API Dashboard (2026-05-29)
+
+Growth Hub client portal dashboard artık static/mock veri yerine own-client Growth Hub endpointlerini tüketir. Özet:
+- Client RTK Query feature: `clientPanel/src/app/features/growthHub/` config, summary, channels, actions ve activity own-client hook'larını sağlar.
+- Dashboard source: `clientPanel/src/app/pages/services/growth-hub-dashboard.tsx` summary/config/channels/actions/activity hook'larıyla KPI, growth health, kanal performansı, müşteri aksiyonları, ajans notu ve son aktivite alanlarını render eder.
+- Mock fallback kaldırıldı: eski statik KPI'lar, ajans yorumu, kanal listesi, lead trend serisi ve `AutomationPreview` dashboard'dan çıkarıldı.
+- Veri olmayan yüzeylerde uydurma örnek data yerine explicit loading/error/empty/config-missing state gösterilir.
+- Own-client endpoint convention korunur: `/api/v1/clients/me/growth-hub/*`; client başka müşteri id'si göndermeden yalnızca kendi verisini okur.
+- Client purchased-service restore logic mevcut `App.tsx` akışıyla korunur; `GROWTH_HUB` serviceKey normalizasyonu test kapsamına eklendi.
+
 ## TikTok Ads Faz 0 — Tamamlanan Contract (2026-05-27)
 
 TikTok Ads Faz 0 discovery tamamlandı. Detaylı karar DECISIONS.md'de mevcut. Özet:

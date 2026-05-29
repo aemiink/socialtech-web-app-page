@@ -95,8 +95,8 @@ PATCH /api/v1/growth-hub/weekly-notes/:id
 Client:
 
 ```http
-GET /api/v1/client/growth-hub/actions
-GET /api/v1/client/growth-hub/weekly-notes
+GET /api/v1/clients/me/growth-hub/actions
+GET /api/v1/clients/me/growth-hub/weekly-notes
 ```
 
 ## UI

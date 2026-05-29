@@ -78,6 +78,11 @@ export const baseApi = createApi({
     "SocialMediaPosts",
     "SocialMediaInsights",
     "SocialMediaReports",
+    "GrowthHubConfig",
+    "GrowthHubSummary",
+    "GrowthHubChannels",
+    "GrowthHubActions",
+    "GrowthHubActivity",
   ],
   endpoints: () => ({}),
 });

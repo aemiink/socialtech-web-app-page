@@ -38,6 +38,38 @@ Affected files:
 - `docs/growth-hub-phases/00-growth-hub-discovery-contract.md`
 - `ROAD_MAP.md`
 
+## 2026-05-29 - Growth Hub Faz 2 Client Panel API Dashboard
+
+Growth Hub backend foundation tamamlandıktan sonra Client Portal'daki `GrowthHubDashboard` hâlâ static KPI, kanal, aksiyon, aktivite, lead trend ve ajans yorumu verileri gösteriyordu. Faz 2'de client-facing yüzeyin own-client Growth Hub contract'ına bağlanması ve mock fallback'in kaldırılması gerekiyordu.
+
+Karar:
+- Client Panel'de `clientPanel/src/app/features/growthHub/` RTK Query feature'ı açıldı; config, summary, channels, actions ve activity hook'ları `/clients/me/growth-hub/*` endpoint convention'ını kullanır.
+- Dashboard yalnızca own-client hook yanıtlarından render eder; client tarafında başka müşteri id'si parametresi yoktur.
+- Static dashboard array'leri, eski ajans yorumu, fake lead trend grafiği ve static `AutomationPreview` dashboard yüzeyinden kaldırıldı.
+- Trend/rapor gibi henüz dedicated Growth Hub endpointi olmayan alanlarda örnek veri üretilmez; explicit empty state gösterilir.
+- Loading/error/empty/config-missing durumları dashboard içine alındı.
+- Growth Hub purchased service normalizasyonu ve no-mock regression coverage client panel testlerine eklendi.
+- Future Growth Hub phase docs içindeki own-client endpoint örnekleri de `/clients/me/growth-hub/*` convention'ına hizalandı.
+
+Reason:
+Bu karar Faz 1 read-model contract'ını client portalda görünür hale getirir ve Growth Hub'ı diğer tamamlanmış kanal fazlarıyla aynı API-first/no-mock çizgisine taşır. Client Portal RBAC sınırı frontend route parametresi yerine own-client endpointlerle korunur.
+
+Affected files:
+- `clientPanel/src/app/features/growthHub/growthHubApi.ts`
+- `clientPanel/src/app/features/growthHub/growthHubTypes.ts`
+- `clientPanel/src/app/features/growthHub/growthHubUtils.ts`
+- `clientPanel/src/app/pages/services/growth-hub-dashboard.tsx`
+- `clientPanel/src/app/pages/__tests__/growth-hub-dashboard.test.tsx`
+- `clientPanel/src/app/__tests__/client-portal.test.tsx`
+- `clientPanel/src/app/services/baseApi.ts`
+- `docs/growth-hub-phases/02-growth-hub-client-panel.md`
+- `docs/growth-hub-phases/05-growth-actions-weekly-notes.md`
+- `docs/growth-hub-phases/07-growth-reports-approval-integration.md`
+- `docs/growth-hub-phases/08-growth-automation-recommendations.md`
+- `PROJECT_CONTEXT.md`
+- `REPO_MAP.md`
+- `ROAD_MAP.md`
+
 ---
 
 ## 2026-05-28 - Social Media Faz 0 Discovery Contract (Organic Content Operations)

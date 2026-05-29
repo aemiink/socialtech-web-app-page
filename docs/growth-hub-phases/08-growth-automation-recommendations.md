@@ -108,7 +108,7 @@ POST /api/v1/growth-hub/recommendations/:id/convert-to-task
 Client:
 
 ```http
-GET /api/v1/client/growth-hub/recommendations
+GET /api/v1/clients/me/growth-hub/recommendations
 ```
 
 Client sadece `clientVisible=true` önerileri görmeli.

@@ -174,6 +174,10 @@ Purpose: customer-facing visibility panel for purchased Social Tech services, re
   - `clientPanel/src/app/features/tasks/tasksApi.ts`
   - `clientPanel/src/app/features/tasks/tasksTypes.ts`
   - `clientPanel/src/app/features/tasks/tasksUtils.ts`
+- Client Growth Hub feature:
+  - `clientPanel/src/app/features/growthHub/growthHubApi.ts` - own-client Growth Hub config/summary/channels/actions/activity RTK Query hooks
+  - `clientPanel/src/app/features/growthHub/growthHubTypes.ts` - Growth Hub client dashboard contract types
+  - `clientPanel/src/app/features/growthHub/growthHubUtils.ts` - response normalizers, labels, date/metric formatters, health score helper
 
 ### Navigation
 
@@ -228,7 +232,11 @@ Additional portal pages exist under `clientPanel/src/app/pages/` and `clientPane
 - `clientPanel/src/app/lib/client-actions.ts` - browser `localStorage` action history, action type inference, action event dispatch, and local text-file download behavior.
 - `clientPanel/src/app/App.tsx` keeps service-selection/page state behavior; auth state is Redux-managed.
 - `selectedService` restore purchased-service yetkisine göre doğrulanır; yetkisiz seçim otomatik temizlenir.
-- Client Portal auth flow is backend-integrated; Web APP service pages (`service-tab-page`, `reports`, `meetings`, `web-app-dashboard`) are API-first with empty-state rendering (no mock fallback).
+- Client Portal auth flow is backend-integrated; Web APP service pages (`service-tab-page`, `reports`, `meetings`, `web-app-dashboard`) and Growth Hub dashboard are API-first with empty-state rendering (no mock fallback).
+- Growth Hub client portal Faz 2 touchpoints:
+  - `clientPanel/src/app/features/growthHub/growthHubApi.ts` - own-client Growth Hub hooks for `/clients/me/growth-hub/*`
+  - `clientPanel/src/app/pages/services/growth-hub-dashboard.tsx` - API-driven Growth Hub dashboard with loading/error/empty/config states
+  - `clientPanel/src/app/pages/__tests__/growth-hub-dashboard.test.tsx` - summary/channel/action/activity/error/empty/no-mock regression coverage
 - TikTok Ads client portal Faz 4 touchpoints:
   - `clientPanel/src/app/features/tiktokAds/tiktokAdsApi.ts` - own-client TikTok config/summary/campaigns/insights/sync RTK Query hooks
   - `clientPanel/src/app/features/tiktokAds/tiktokAdsTypes.ts` - own-client TikTok reporting and sync response types

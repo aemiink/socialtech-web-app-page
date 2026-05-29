@@ -78,7 +78,7 @@ POST /api/v1/growth-hub/reports/:id/publish
 Client:
 
 ```http
-GET /api/v1/client/growth-hub/reports
+GET /api/v1/clients/me/growth-hub/reports
 ```
 
 Approval:

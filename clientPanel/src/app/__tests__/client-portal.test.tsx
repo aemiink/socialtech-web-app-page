@@ -96,6 +96,7 @@ describe("client portal service access", () => {
         companyName: "Acme E-ticaret",
         contactEmail: "client@socialtech.com",
         purchasedServices: [
+          { serviceKey: "GROWTH_HUB", status: "ACTIVE" },
           { serviceKey: "MEDIA_HUB", status: "ACTIVE" },
           { serviceKey: "META_ADS", status: "ACTIVE" },
           { serviceKey: "GOOGLE_ADS", status: "INACTIVE" },
@@ -103,7 +104,7 @@ describe("client portal service access", () => {
       },
     });
 
-    expect(getActivePurchasedServiceIds(user)).toEqual(["media-hub", "meta-ads"]);
+    expect(getActivePurchasedServiceIds(user)).toEqual(["growth-hub", "media-hub", "meta-ads"]);
   });
 });
 

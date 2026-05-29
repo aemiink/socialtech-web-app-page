@@ -36,11 +36,11 @@ Growth Hub için önerilen sekmeler:
 Client:
 
 ```http
-GET /api/v1/client/growth-hub/summary
-GET /api/v1/client/growth-hub/channels
-GET /api/v1/client/growth-hub/actions
-GET /api/v1/client/growth-hub/activity
-GET /api/v1/client/growth-hub/config
+GET /api/v1/clients/me/growth-hub/summary
+GET /api/v1/clients/me/growth-hub/channels
+GET /api/v1/clients/me/growth-hub/actions
+GET /api/v1/clients/me/growth-hub/activity
+GET /api/v1/clients/me/growth-hub/config
 ```
 
 ## Dashboard Alanları
@@ -178,7 +178,7 @@ ClientPanel:
 cd clientPanel
 npm run build
 npm run check
-npm run test:run
+npm run test
 ```
 
 Backend touched ise:
