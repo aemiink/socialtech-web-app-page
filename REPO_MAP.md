@@ -374,7 +374,7 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 - `server/prisma/migrations/20260530110000_add_growth_hub_reports/migration.sql`
 - `server/prisma/migrations/20260530113000_add_growth_hub_recommendations/migration.sql`
 - `server/test/growth-hub-authz.e2e-spec.ts`
-  - admin config update, admin summary/global list, assigned project manager read/manage, action/note/report/recommendation client-visible filtering, report acknowledgement flow, recommendation generation/conversion, own-client summary/reports/recommendations, and sensitive-response guard coverage
+  - admin config update, admin summary/global list, assigned project manager read/manage, action/note/report/recommendation client-visible filtering, report acknowledgement flow, report date/visibility hardening, recommendation generation/conversion/terminal-state guard, own-client summary/reports/recommendations, and sensitive-response guard coverage
 
 ## 2026-05-28 Update Map (Social Media Faz 4 Admin Panel)
 

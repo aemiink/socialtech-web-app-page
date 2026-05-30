@@ -274,7 +274,7 @@ describe("GrowthHubDashboard", () => {
 
     expect(screen.getByText("Aktif Growth Hub kanalı bulunmuyor.")).toBeInTheDocument();
     expect(screen.getByText("Bekleyen müşteri aksiyonu yok.")).toBeInTheDocument();
-    expect(screen.getByText("Client-visible Growth Hub önerisi henüz yok.")).toBeInTheDocument();
+    expect(screen.getByText("Müşteri görünür Growth Hub önerisi henüz yok.")).toBeInTheDocument();
     expect(screen.getByText("Son aktivite kaydı yok.")).toBeInTheDocument();
     expect(screen.queryByText("247")).not.toBeInTheDocument();
     expect(screen.queryByText("Bu hafta büyüme metriklerinde güçlü bir performans gördük.")).not.toBeInTheDocument();

@@ -273,7 +273,7 @@ function RecommendedNextSteps({
           ))}
         </div>
       ) : (
-        <EmptyState text="Client-visible Growth Hub önerisi henüz yok." />
+        <EmptyState text="Müşteri görünür Growth Hub önerisi henüz yok." />
       )}
     </section>
   );

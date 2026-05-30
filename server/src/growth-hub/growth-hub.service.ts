@@ -1474,14 +1474,24 @@ export class GrowthHubService {
       }
     }
 
-    if (dto.status === GrowthHubReportStatus.PUBLISHED && dto.clientVisible === false) {
-      throw new BadRequestException("Published Growth Hub report cannot be hidden from client.");
-    }
-
     const shouldPublish =
       dto.requestAcknowledgement === true ||
       dto.clientVisible === true ||
       dto.status === GrowthHubReportStatus.PUBLISHED;
+
+    const finalStatus =
+      dto.status ?? (shouldPublish ? GrowthHubReportStatus.PUBLISHED : existing.status);
+    let finalClientVisible = dto.clientVisible ?? existing.clientVisible;
+
+    if (dto.status === GrowthHubReportStatus.DRAFT || dto.status === GrowthHubReportStatus.ARCHIVED) {
+      finalClientVisible = false;
+    } else if (shouldPublish && dto.clientVisible === undefined) {
+      finalClientVisible = true;
+    }
+
+    if (finalStatus === GrowthHubReportStatus.PUBLISHED && !finalClientVisible) {
+      throw new BadRequestException("Published Growth Hub report cannot be hidden from client.");
+    }
 
     if (shouldPublish) {
       if (!existing.publishedAt) {
@@ -1959,6 +1969,15 @@ export class GrowthHubService {
 
     if (existing.convertedTask) {
       return this.toGrowthHubRecommendationItem(existing);
+    }
+
+    if (
+      existing.status !== GrowthHubRecommendationStatus.OPEN &&
+      existing.status !== GrowthHubRecommendationStatus.ACCEPTED
+    ) {
+      throw new BadRequestException(
+        "Only open or accepted Growth Hub recommendations can be converted to a task.",
+      );
     }
 
     const projectId =

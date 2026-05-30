@@ -540,6 +540,16 @@ Active Growth Hub Faz 8 recommendation endpoints:
 - `POST /api/v1/growth-hub/recommendations/:recommendationId/convert-to-task`
 - `GET /api/v1/clients/me/growth-hub/recommendations`
 
+## Growth Hub Faz 9 — Production Hardening (2026-05-30)
+
+Growth Hub production hardening geçişi tamamlandı. Özet:
+- Published Growth Hub report artık `PATCH { clientVisible: false }` ile status gönderilmeden gizlenemez; publish edilmiş rapor client-visible kalır veya önce draft/archive lifecycle'a alınmalıdır.
+- Report create/update date range validation e2e kapsamı genişletildi; `periodStart > periodEnd` güvenli `400` döner.
+- Recommendation convert flow yalnızca `OPEN` veya `ACCEPTED` önerileri task'a çevirir; `DISMISSED`, `DONE` ve converted terminal öneriler operasyonel olarak kapanmış kabul edilir.
+- Admin/employee shared panel, published+visible report visibility butonunu disabled gösterir ve terminal recommendation status'larında accept/visibility/convert aksiyonlarını kapatır.
+- Client dashboard recommendation empty copy Türkçe ve müşteri yüzeyi için sadeleştirildi.
+- Faz 9 validation: server/admin/client `check`, Growth Hub authz e2e test DB suite (`20/20`) ve hedefli frontend Growth Hub testleri geçti.
+
 ## TikTok Ads Faz 0 — Tamamlanan Contract (2026-05-27)
 
 TikTok Ads Faz 0 discovery tamamlandı. Detaylı karar DECISIONS.md'de mevcut. Özet:

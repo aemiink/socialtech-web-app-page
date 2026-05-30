@@ -34,7 +34,6 @@
 - Cloudinary asset malware scanning/quarantine flow
 - Advanced revision inbox/routing and reminder notifications
 - Social Media V2 API publishing integration (Instagram/Facebook Graph API publishing first per `docs/social-media-phases/10-social-media-v2-integration-backlog.md`; insight sync follows as V2.1; TikTok/LinkedIn publishing support subject to official API permissions)
-- Growth Hub Faz 9: Production hardening and visual QA
 
 ## In Progress
 
@@ -192,6 +191,7 @@
 - Growth Hub Faz 6: Channel aggregation layer (Meta/TikTok/Amazon/Social active adapters, Google contract-only until active module exists, common health/risk channel contract)
 - Growth Hub Faz 7: Growth reports + approval/acknowledgement integration
 - Growth Hub Faz 8: Rule-based recommendation layer
+- Growth Hub Faz 9: Production hardening and visual QA
 
 ## Blocked
 
@@ -520,6 +520,16 @@ None identified.
   - `adminandemployeePanel`: `npm run typecheck` ✅
   - `adminandemployeePanel`: `npm run test:run -- GrowthHubAdmin GrowthHubCalismaAlani` ✅ (`8/8`)
   - `clientPanel`: `npm run typecheck` ✅
+  - `clientPanel`: `npm test -- growth-hub-dashboard` ✅ (`5/5`)
+- Latest Growth Hub Faz 9 checkpoint:
+  - `server`: published report hide guard, invalid report date range coverage, dismissed recommendation conversion guard ✅
+  - `adminandemployeePanel`: published report visibility action disabled in operation panel and covered in admin test ✅
+  - `clientPanel`: client-facing recommendation empty copy hardened ✅
+  - `server`: `npm run check` ✅
+  - `server`: test DB ile `DATABASE_URL=<.../socialtech_server_test> ALLOW_E2E_DB_RESET=true npm run test:e2e -- growth-hub-authz` ✅ (`20/20`)
+  - `adminandemployeePanel`: `npm run check` ✅
+  - `adminandemployeePanel`: `npm run test:run -- GrowthHubAdmin GrowthHubCalismaAlani` ✅ (`8/8`)
+  - `clientPanel`: `npm run check` ✅
   - `clientPanel`: `npm test -- growth-hub-dashboard` ✅ (`5/5`)
 - Latest admin/employee frontend validation checkpoint: last recorded broad suite `25` test files, `153/153` tests; latest targeted Social Media workspace suite `9/9`.
 - Latest client portal frontend validation checkpoint: Social Media targeted suite `8/8`; broad recorded portal checkpoint remains `4` files, `17/17` tests.

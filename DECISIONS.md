@@ -3602,3 +3602,30 @@ Affected files:
 - `PROJECT_CONTEXT.md`
 - `REPO_MAP.md`
 - `ROAD_MAP.md`
+
+## 2026-05-30 - Growth Hub Faz 9 Production Hardening
+
+Context:
+Growth Hub Faz 8 ile recommendations katmanı tamamlandıktan sonra production öncesi authz, visibility, date validation, frontend action-state ve build/check doğrulamaları yapılmalıydı.
+
+Decision:
+Faz 9 kapsamı küçük ama risk azaltan hardening düzeltmeleriyle tamamlanır:
+- Published Growth Hub report'lar `status` alanı gönderilmeden `clientVisible=false` PATCH ile client görünürlüğünden düşürülemez.
+- Growth Hub report date range validasyonu e2e kapsamına alınır; ters tarih aralığı `400` döner.
+- Recommendation -> task conversion yalnızca `OPEN` veya `ACCEPTED` öneriler için geçerlidir; `DISMISSED`, `DONE` ve converted terminal status'lar task'a çevrilmez.
+- Admin/employee shared panel published+visible report hide aksiyonunu disabled gösterir ve terminal recommendation status'larında accept/visibility/convert aksiyonlarını kapatır.
+- Client recommendation empty-state copy Türkçe müşteri yüzeyine hizalanır.
+
+Reason:
+Bu karar Faz 9'u framework veya geniş refactor riski yaratmadan tamamlar. Backend visibility guard'ları client data leak riskini kapatır; frontend disabled states aynı kuralları operatöre erken gösterir; e2e kapsamı üretim öncesi en kritik scope/date/lifecycle davranışlarını tekrar doğrular.
+
+Affected files:
+- `server/src/growth-hub/growth-hub.service.ts`
+- `server/test/growth-hub-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/growthHub/components/GrowthHubActionNotePanel.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/GrowthHubAdmin.test.tsx`
+- `clientPanel/src/app/pages/services/growth-hub-dashboard.tsx`
+- `clientPanel/src/app/pages/__tests__/growth-hub-dashboard.test.tsx`
+- `PROJECT_CONTEXT.md`
+- `REPO_MAP.md`
+- `ROAD_MAP.md`

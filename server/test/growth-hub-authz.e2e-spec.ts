@@ -2,7 +2,10 @@ import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import {
   EmployeeClientAssignmentScope,
+  GrowthHubActionPriority,
   GrowthHubGoal,
+  GrowthHubRecommendationStatus,
+  GrowthHubRecommendationType,
   GrowthHubStatus,
   MetaAdsApprovalStatus,
   MetaAdsApprovalType,
@@ -475,6 +478,40 @@ describe("Growth Hub Config and Summary Authz (e2e)", () => {
           action.title === "Client-visible Growth Hub performance report",
       ),
     ).toBe(true);
+
+    const hidePublishedRes = await request(app.getHttpServer())
+      .patch(`/api/v1/growth-hub/reports/${assignedReportRes.body.id}`)
+      .set("Authorization", `Bearer ${projectToken}`)
+      .send({ clientVisible: false });
+
+    expect(hidePublishedRes.status).toBe(400);
+
+    const visibleAfterHideAttemptRes = await request(app.getHttpServer())
+      .get("/api/v1/clients/me/growth-hub/reports")
+      .set("Authorization", `Bearer ${clientToken}`);
+
+    expect(visibleAfterHideAttemptRes.status).toBe(200);
+    expect(
+      visibleAfterHideAttemptRes.body.data.some(
+        (report: { id: string; clientVisible: boolean }) =>
+          report.id === assignedReportRes.body.id && report.clientVisible === true,
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects invalid Growth Hub report date ranges", async () => {
+    const res = await request(app.getHttpServer())
+      .post(`/api/v1/admin/clients/${clientProfileId}/growth-hub/reports`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        periodStart: "2026-06-08",
+        periodEnd: "2026-06-07",
+        type: "WEEKLY",
+        summary: "Invalid Growth Hub report period",
+        projectId: growthProjectId,
+      });
+
+    expect(res.status).toBe(400);
   });
 
   it("employee without Growth Hub manage permission cannot create assigned actions", async () => {
@@ -607,6 +644,39 @@ describe("Growth Hub Config and Summary Authz (e2e)", () => {
     });
     expect(task?.title).toBe("E2E converted Growth Hub recommendation task");
     expect(task?.projectId).toBe(growthProjectId);
+  });
+
+  it("does not convert dismissed recommendations to tasks", async () => {
+    const dismissedRecommendation = await prisma.growthHubRecommendation.create({
+      data: {
+        clientProfileId,
+        projectId: growthProjectId,
+        dedupeKey: `e2e-dismissed-${Date.now()}`,
+        type: GrowthHubRecommendationType.STRATEGY_REVIEW,
+        priority: GrowthHubActionPriority.MEDIUM,
+        title: "Dismissed Growth Hub recommendation",
+        description: "Dismissed recommendation should remain non-convertible.",
+        source: "E2E_HARDENING",
+        status: GrowthHubRecommendationStatus.DISMISSED,
+        clientVisible: false,
+      },
+      select: { id: true },
+    });
+
+    const convertRes = await request(app.getHttpServer())
+      .post(`/api/v1/growth-hub/recommendations/${dismissedRecommendation.id}/convert-to-task`)
+      .set("Authorization", `Bearer ${projectToken}`)
+      .send({ title: "Should not convert dismissed recommendation" });
+
+    expect(convertRes.status).toBe(400);
+
+    const persistedRecommendation = await prisma.growthHubRecommendation.findUnique({
+      where: { id: dismissedRecommendation.id },
+      select: { convertedTaskId: true, status: true },
+    });
+
+    expect(persistedRecommendation?.convertedTaskId).toBeNull();
+    expect(persistedRecommendation?.status).toBe(GrowthHubRecommendationStatus.DISMISSED);
   });
 
   it("recommendation endpoints enforce permission and assigned scope", async () => {

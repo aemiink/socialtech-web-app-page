@@ -343,8 +343,31 @@ describe("GrowthHubAdmin", () => {
     });
     mockUseGetAdminGrowthHubClientReportsQuery.mockReturnValue({
       data: {
-        data: [],
-        meta: { total: 0, draft: 0, published: 0, clientVisible: 0, generatedAt: null },
+        data: [
+          {
+            id: "report-1",
+            clientProfileId: "11111111-1111-4111-8111-111111111111",
+            projectId: null,
+            project: null,
+            periodStart: "2026-06-01",
+            periodEnd: "2026-06-07",
+            type: "WEEKLY",
+            status: "PUBLISHED",
+            summary: "Published Growth Hub report",
+            metricsSnapshot: null,
+            clientVisible: true,
+            publishedAt: "2026-06-07T09:00:00.000Z",
+            acknowledgementRequestedAt: null,
+            acknowledgedAt: null,
+            acknowledgementStatus: "NOT_REQUESTED",
+            acknowledgementTaskId: null,
+            acknowledgementTaskUpdatedAt: null,
+            createdBy: null,
+            createdAt: "2026-06-07T09:00:00.000Z",
+            updatedAt: "2026-06-07T09:00:00.000Z",
+          },
+        ],
+        meta: { total: 1, draft: 0, published: 1, clientVisible: 1, generatedAt: null },
       },
       isLoading: false,
     });
@@ -389,6 +412,8 @@ describe("GrowthHubAdmin", () => {
     expect(screen.getAllByText("Acme E-ticaret").length).toBeGreaterThan(0);
     expect(screen.getByText("Project Manager")).toBeInTheDocument();
     expect(screen.getAllByText("Mayıs optimizasyon onayı").length).toBeGreaterThan(0);
+    expect(screen.getByText("Published Growth Hub report")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Raporu gizle" })).toBeDisabled();
     expect(screen.getByText("Geciken işleri temizle")).toBeInTheDocument();
   });
 

@@ -587,7 +587,9 @@ export function GrowthHubActionNotePanel({
                           type="button"
                           size="sm"
                           variant="outline"
+                          aria-label={report.clientVisible ? "Raporu gizle" : "Raporu göster"}
                           onClick={() => onUpdateReport(report.id, { clientVisible: !report.clientVisible })}
+                          disabled={report.status === "PUBLISHED" && report.clientVisible}
                         >
                           {report.clientVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </Button>
@@ -608,83 +610,92 @@ export function GrowthHubActionNotePanel({
             <p className="mt-2 text-sm text-[#A0A0A0]">Recommendation yükleniyor...</p>
           ) : recommendations.length ? (
             <div className="mt-2 space-y-2">
-              {recommendations.slice(0, 5).map((recommendation) => (
-                <div key={recommendation.id} className="rounded-2xl border border-white/[0.08] bg-black/20 p-3">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm text-white">{recommendation.title}</p>
-                      <p className="mt-1 text-xs text-[#A0A0A0]">
-                        {getGrowthHubRecommendationTypeLabel(recommendation.type)} •{" "}
-                        {getGrowthHubActionPriorityLabel(recommendation.priority)}
-                      </p>
+              {recommendations.slice(0, 5).map((recommendation) => {
+                const isTerminalRecommendation =
+                  recommendation.status === "CONVERTED_TO_TASK" ||
+                  recommendation.status === "DISMISSED" ||
+                  recommendation.status === "DONE";
+                const canConvertRecommendation =
+                  recommendation.status === "OPEN" || recommendation.status === "ACCEPTED";
+
+                return (
+                  <div key={recommendation.id} className="rounded-2xl border border-white/[0.08] bg-black/20 p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm text-white">{recommendation.title}</p>
+                        <p className="mt-1 text-xs text-[#A0A0A0]">
+                          {getGrowthHubRecommendationTypeLabel(recommendation.type)} •{" "}
+                          {getGrowthHubActionPriorityLabel(recommendation.priority)}
+                        </p>
+                      </div>
+                      <Badge variant="outline">
+                        {getGrowthHubRecommendationStatusLabel(recommendation.status)}
+                      </Badge>
                     </div>
-                    <Badge variant="outline">
-                      {getGrowthHubRecommendationStatusLabel(recommendation.status)}
-                    </Badge>
-                  </div>
-                  {recommendation.description ? (
-                    <p className="mt-2 text-xs leading-relaxed text-[#D6D6D6]">
-                      {recommendation.description}
-                    </p>
-                  ) : null}
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <span className="text-xs text-[#A0A0A0]">
-                      {recommendation.clientVisible ? "Client görünür" : "Internal"}
-                    </span>
-                    {recommendation.source ? (
-                      <span className="text-xs text-[#A0A0A0]">{recommendation.source}</span>
+                    {recommendation.description ? (
+                      <p className="mt-2 text-xs leading-relaxed text-[#D6D6D6]">
+                        {recommendation.description}
+                      </p>
                     ) : null}
-                    {recommendation.convertedTask ? (
-                      <span className="text-xs text-[#AAFF01]">
-                        Task: {recommendation.convertedTask.title}
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <span className="text-xs text-[#A0A0A0]">
+                        {recommendation.clientVisible ? "Client görünür" : "Internal"}
                       </span>
-                    ) : null}
-                    {canManageRecommendations ? (
-                      <>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          disabled={recommendation.status === "CONVERTED_TO_TASK"}
-                          onClick={() =>
-                            onUpdateRecommendation(recommendation.id, { status: "ACCEPTED" })
-                          }
-                        >
-                          <Lightbulb className="h-4 w-4" />
-                          Kabul
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          disabled={recommendation.status === "CONVERTED_TO_TASK"}
-                          onClick={() =>
-                            onUpdateRecommendation(recommendation.id, {
-                              clientVisible: !recommendation.clientVisible,
-                            })
-                          }
-                        >
-                          {recommendation.clientVisible ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          disabled={recommendation.status === "CONVERTED_TO_TASK"}
-                          onClick={() => onConvertRecommendationToTask(recommendation.id)}
-                        >
-                          <ListChecks className="h-4 w-4" />
-                          Task
-                        </Button>
-                      </>
-                    ) : null}
+                      {recommendation.source ? (
+                        <span className="text-xs text-[#A0A0A0]">{recommendation.source}</span>
+                      ) : null}
+                      {recommendation.convertedTask ? (
+                        <span className="text-xs text-[#AAFF01]">
+                          Task: {recommendation.convertedTask.title}
+                        </span>
+                      ) : null}
+                      {canManageRecommendations ? (
+                        <>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={isTerminalRecommendation}
+                            onClick={() =>
+                              onUpdateRecommendation(recommendation.id, { status: "ACCEPTED" })
+                            }
+                          >
+                            <Lightbulb className="h-4 w-4" />
+                            Kabul
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={isTerminalRecommendation}
+                            onClick={() =>
+                              onUpdateRecommendation(recommendation.id, {
+                                clientVisible: !recommendation.clientVisible,
+                              })
+                            }
+                          >
+                            {recommendation.clientVisible ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={!canConvertRecommendation}
+                            onClick={() => onConvertRecommendationToTask(recommendation.id)}
+                          >
+                            <ListChecks className="h-4 w-4" />
+                            Task
+                          </Button>
+                        </>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <p className="mt-2 text-sm text-[#A0A0A0]">Recommendation bulunmuyor.</p>
