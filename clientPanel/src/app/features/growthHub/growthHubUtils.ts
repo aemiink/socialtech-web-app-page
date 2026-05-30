@@ -15,6 +15,11 @@ import type {
   GrowthHubConfig,
   GrowthHubConfigStatus,
   GrowthHubGoal,
+  GrowthHubReport,
+  GrowthHubReportAcknowledgementStatus,
+  GrowthHubReportsResponse,
+  GrowthHubReportStatus,
+  GrowthHubReportType,
   GrowthHubServiceKey,
   GrowthHubSummary,
   GrowthHubSummaryState,
@@ -98,6 +103,24 @@ const ACTION_PRIORITY_OPTIONS: GrowthHubActionPriority[] = [
 
 const ACTIVITY_TYPE_OPTIONS: GrowthHubActivityType[] = ["TASK", "FILE", "RELEASE", "MESSAGE"];
 
+const REPORT_TYPE_OPTIONS: GrowthHubReportType[] = [
+  "WEEKLY",
+  "MONTHLY",
+  "CHANNEL_PERFORMANCE",
+  "RISK_REPORT",
+  "NEXT_ACTION_PLAN",
+  "EXECUTIVE_SUMMARY",
+];
+
+const REPORT_STATUS_OPTIONS: GrowthHubReportStatus[] = ["DRAFT", "PUBLISHED", "ARCHIVED"];
+
+const REPORT_ACKNOWLEDGEMENT_STATUS_OPTIONS: GrowthHubReportAcknowledgementStatus[] = [
+  "NOT_REQUESTED",
+  "PENDING",
+  "ACKNOWLEDGED",
+  "CHANGES_REQUESTED",
+];
+
 const SERVICE_LABELS: Record<GrowthHubServiceKey, string> = {
   GROWTH_HUB: "Growth & Hub",
   SOCIAL_MEDIA: "Sosyal Medya",
@@ -175,6 +198,28 @@ const ACTIVITY_TYPE_LABELS: Record<GrowthHubActivityType, string> = {
   FILE: "Dosya",
   RELEASE: "Yayın",
   MESSAGE: "Mesaj",
+};
+
+const REPORT_TYPE_LABELS: Record<GrowthHubReportType, string> = {
+  WEEKLY: "Haftalık Growth Raporu",
+  MONTHLY: "Aylık Growth Raporu",
+  CHANNEL_PERFORMANCE: "Kanal Performans Özeti",
+  RISK_REPORT: "Growth Risk Raporu",
+  NEXT_ACTION_PLAN: "Sonraki Aksiyon Planı",
+  EXECUTIVE_SUMMARY: "Executive Summary",
+};
+
+const REPORT_STATUS_LABELS: Record<GrowthHubReportStatus, string> = {
+  DRAFT: "Taslak",
+  PUBLISHED: "Yayında",
+  ARCHIVED: "Arşiv",
+};
+
+const REPORT_ACKNOWLEDGEMENT_STATUS_LABELS: Record<GrowthHubReportAcknowledgementStatus, string> = {
+  NOT_REQUESTED: "Teyit istenmedi",
+  PENDING: "Teyit bekliyor",
+  ACKNOWLEDGED: "Teyitlendi",
+  CHANGES_REQUESTED: "Revizyon istendi",
 };
 
 const currencyFormatter = new Intl.NumberFormat("tr-TR", {
@@ -300,6 +345,24 @@ export function normalizeClientGrowthHubWeeklyNotesResponse(
   };
 }
 
+export function normalizeClientGrowthHubReportsResponse(
+  response: unknown,
+): GrowthHubReportsResponse {
+  const data = readResponseArray(response).map(normalizeReport).filter(isDefined);
+  const meta = isRecord(response) && isRecord(response.meta) ? response.meta : {};
+
+  return {
+    data,
+    meta: {
+      total: readNumber(meta.total, data.length),
+      draft: readNumber(meta.draft),
+      published: readNumber(meta.published),
+      clientVisible: readNumber(meta.clientVisible),
+      generatedAt: readNullableString(meta.generatedAt),
+    },
+  };
+}
+
 export function normalizeClientGrowthHubActivityResponse(response: unknown): GrowthHubActivityResponse {
   const data = readResponseArray(response).map(normalizeActivity).filter(isDefined);
   const meta = isRecord(response) && isRecord(response.meta) ? response.meta : {};
@@ -347,6 +410,20 @@ export function getGrowthHubActionPriorityLabel(priority: GrowthHubActionPriorit
 
 export function getGrowthHubActivityTypeLabel(type: GrowthHubActivityType): string {
   return ACTIVITY_TYPE_LABELS[type] ?? type;
+}
+
+export function getGrowthHubReportTypeLabel(type: GrowthHubReportType): string {
+  return REPORT_TYPE_LABELS[type] ?? type;
+}
+
+export function getGrowthHubReportStatusLabel(status: GrowthHubReportStatus): string {
+  return REPORT_STATUS_LABELS[status] ?? status;
+}
+
+export function getGrowthHubReportAcknowledgementStatusLabel(
+  status: GrowthHubReportAcknowledgementStatus,
+): string {
+  return REPORT_ACKNOWLEDGEMENT_STATUS_LABELS[status] ?? status;
 }
 
 export function getGrowthHubStatusTone(status: GrowthHubSummaryState | GrowthHubChannelStatus): string {
@@ -572,6 +649,37 @@ function normalizeWeeklyNote(value: unknown): GrowthHubWeeklyNote | null {
     nextFocus: readNullableString(value.nextFocus),
     risks: value.risks ?? null,
     clientVisible: value.clientVisible === true,
+    createdBy: normalizeUserReference(value.createdBy),
+    createdAt: readString(value.createdAt),
+    updatedAt: readString(value.updatedAt),
+  };
+}
+
+function normalizeReport(value: unknown): GrowthHubReport | null {
+  if (!isRecord(value) || typeof value.id !== "string") {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    clientProfileId: readString(value.clientProfileId),
+    projectId: readNullableString(value.projectId),
+    project: normalizeProjectWithService(value.project),
+    periodStart: readString(value.periodStart),
+    periodEnd: readString(value.periodEnd),
+    type: readEnumValue(value.type, REPORT_TYPE_OPTIONS) ?? "WEEKLY",
+    status: readEnumValue(value.status, REPORT_STATUS_OPTIONS) ?? "PUBLISHED",
+    summary: readNullableString(value.summary),
+    metricsSnapshot: value.metricsSnapshot ?? null,
+    clientVisible: value.clientVisible === true,
+    publishedAt: readNullableString(value.publishedAt),
+    acknowledgementRequestedAt: readNullableString(value.acknowledgementRequestedAt),
+    acknowledgedAt: readNullableString(value.acknowledgedAt),
+    acknowledgementStatus:
+      readEnumValue(value.acknowledgementStatus, REPORT_ACKNOWLEDGEMENT_STATUS_OPTIONS) ??
+      "NOT_REQUESTED",
+    acknowledgementTaskId: readNullableString(value.acknowledgementTaskId),
+    acknowledgementTaskUpdatedAt: readNullableString(value.acknowledgementTaskUpdatedAt),
     createdBy: normalizeUserReference(value.createdBy),
     createdAt: readString(value.createdAt),
     updatedAt: readString(value.updatedAt),

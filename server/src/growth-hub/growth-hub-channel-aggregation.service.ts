@@ -453,14 +453,16 @@ export class GrowthHubChannelAggregationService {
       acknowledgedAt: null,
       ...(options.clientVisibleOnly ? { clientVisible: true } : {}),
     };
-    const [meta, tikTok, amazon, social] = await Promise.all([
+    const [meta, tikTok, amazon, social, growthHub] = await Promise.all([
       this.prisma.metaAdsReport.count({ where: reportWhere }),
       this.prisma.tikTokAdsReport.count({ where: reportWhere }),
       this.prisma.amazonAdsReport.count({ where: reportWhere }),
       this.prisma.socialMediaReport.count({ where: reportWhere }),
+      this.prisma.growthHubReport.count({ where: reportWhere }),
     ]);
 
     return new Map([
+      [PurchasedServiceKey.GROWTH_HUB, growthHub],
       [PurchasedServiceKey.META_ADS, meta],
       [PurchasedServiceKey.TIKTOK_ADS, tikTok],
       [PurchasedServiceKey.AMAZON_ADS, amazon],

@@ -83,6 +83,7 @@ export const baseApi = createApi({
     "GrowthHubChannels",
     "GrowthHubActions",
     "GrowthHubWeeklyNotes",
+    "GrowthHubReports",
     "GrowthHubActivity",
     "CrmLeads",
     "CrmActivities",

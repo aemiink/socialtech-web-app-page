@@ -287,6 +287,21 @@ enum MetaAdsReportStatus {
   ARCHIVED
 }
 
+enum GrowthHubReportType {
+  WEEKLY
+  MONTHLY
+  CHANNEL_PERFORMANCE
+  RISK_REPORT
+  NEXT_ACTION_PLAN
+  EXECUTIVE_SUMMARY
+}
+
+enum GrowthHubReportStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
 enum EmployeeClientAssignmentScope {
   PROJECT
   PERFORMANCE
@@ -380,6 +395,11 @@ enum MetaAdsApprovalType {
   SOCIAL_MEDIA_CAPTION_APPROVAL
   SOCIAL_MEDIA_CALENDAR_APPROVAL
   SOCIAL_MEDIA_REPORT_ACKNOWLEDGEMENT
+  GROWTH_REPORT_ACKNOWLEDGEMENT
+  GROWTH_ACTION_APPROVAL
+  GROWTH_STRATEGY_APPROVAL
+  BUDGET_DISTRIBUTION_APPROVAL
+  CHANNEL_PRIORITY_APPROVAL
 }
 
 enum MetaAdsApprovalStatus {
@@ -593,6 +613,9 @@ model User {
   ownedGrowthHubActions          GrowthHubAction[]                   @relation("GrowthHubActionOwner")
   createdGrowthHubActions        GrowthHubAction[]                   @relation("GrowthHubActionCreatedBy")
   createdGrowthHubWeeklyNotes    GrowthHubWeeklyNote[]               @relation("GrowthHubWeeklyNoteCreatedBy")
+  createdGrowthHubReports        GrowthHubReport[]                   @relation("GrowthHubReportCreatedBy")
+  publishedGrowthHubReports      GrowthHubReport[]                   @relation("GrowthHubReportPublishedBy")
+  acknowledgedGrowthHubReports   GrowthHubReport[]                   @relation("GrowthHubReportAcknowledgedBy")
 
   @@index([accountType, role])
   @@index([accountType, status])
@@ -630,6 +653,7 @@ model ClientProfile {
   growthHubConfig         ClientGrowthHubConfig?
   growthHubActions        GrowthHubAction[]
   growthHubWeeklyNotes    GrowthHubWeeklyNote[]
+  growthHubReports        GrowthHubReport[]
   metaAdsConfig           ClientMetaAdsConfig?
   metaAdsCredential       ClientMetaAdsCredential?
   metaAdsInsights         MetaAdsDailyInsight[]
@@ -731,6 +755,45 @@ model GrowthHubWeeklyNote {
   @@index([projectId])
   @@index([createdByUserId])
   @@index([updatedAt])
+}
+
+model GrowthHubReport {
+  id                         String                @id @default(uuid()) @db.Uuid
+  clientProfileId            String                @db.Uuid
+  projectId                  String?               @db.Uuid
+  periodStart                DateTime
+  periodEnd                  DateTime
+  type                       GrowthHubReportType
+  status                     GrowthHubReportStatus @default(DRAFT)
+  summary                    String?
+  metricsSnapshot            Json?
+  createdByUserId            String?               @db.Uuid
+  publishedByUserId          String?               @db.Uuid
+  clientVisible              Boolean               @default(false)
+  publishedAt                DateTime?
+  acknowledgementRequestedAt DateTime?
+  acknowledgedAt             DateTime?
+  acknowledgedByUserId       String?               @db.Uuid
+  acknowledgementTaskId      String?               @db.Uuid
+  createdAt                  DateTime              @default(now())
+  updatedAt                  DateTime              @updatedAt
+
+  clientProfile       ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  project             Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdBy           User?         @relation("GrowthHubReportCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  publishedBy         User?         @relation("GrowthHubReportPublishedBy", fields: [publishedByUserId], references: [id], onDelete: SetNull)
+  acknowledgedBy      User?         @relation("GrowthHubReportAcknowledgedBy", fields: [acknowledgedByUserId], references: [id], onDelete: SetNull)
+  acknowledgementTask Task?         @relation("GrowthHubReportAcknowledgementTask", fields: [acknowledgementTaskId], references: [id], onDelete: SetNull)
+
+  @@index([clientProfileId, createdAt])
+  @@index([clientProfileId, status, createdAt])
+  @@index([clientProfileId, type, periodStart, periodEnd])
+  @@index([clientVisible, status, createdAt])
+  @@index([projectId])
+  @@index([createdByUserId])
+  @@index([publishedByUserId])
+  @@index([acknowledgedByUserId])
+  @@index([acknowledgementTaskId])
 }
 
 model ClientMetaAdsConfig {
@@ -1332,6 +1395,7 @@ model Project {
   socialMediaReports       SocialMediaReport[]
   growthHubActions         GrowthHubAction[]
   growthHubWeeklyNotes     GrowthHubWeeklyNote[]
+  growthHubReports         GrowthHubReport[]
   workspaceSections        WebAppWorkspaceSection[]
   workspaceMessages        WebAppWorkspaceMessage[]
   workspaceRevisions       WebAppWorkspaceRevision[]
@@ -1391,6 +1455,7 @@ model Task {
   amazonAdsReportAcknowledgements   AmazonAdsReport[]         @relation("AmazonAdsReportAcknowledgementTask")
   metaAdsReportAcknowledgements     MetaAdsReport[]           @relation("MetaAdsReportAcknowledgementTask")
   tikTokAdsReportAcknowledgements   TikTokAdsReport[]         @relation("TikTokAdsReportAcknowledgementTask")
+  growthHubReportAcknowledgements   GrowthHubReport[]         @relation("GrowthHubReportAcknowledgementTask")
   socialMediaPostApprovals          SocialMediaPost[]         @relation("SocialMediaPostApprovalTask")
   socialMediaReportAcknowledgements SocialMediaReport[]       @relation("SocialMediaReportAcknowledgementTask")
   todos                             TaskTodo[]

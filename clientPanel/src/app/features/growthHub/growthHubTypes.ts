@@ -62,6 +62,22 @@ export type GrowthHubActionPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
 export type GrowthHubActivityType = "TASK" | "FILE" | "RELEASE" | "MESSAGE";
 
+export type GrowthHubReportType =
+  | "WEEKLY"
+  | "MONTHLY"
+  | "CHANNEL_PERFORMANCE"
+  | "RISK_REPORT"
+  | "NEXT_ACTION_PLAN"
+  | "EXECUTIVE_SUMMARY";
+
+export type GrowthHubReportStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
+
+export type GrowthHubReportAcknowledgementStatus =
+  | "NOT_REQUESTED"
+  | "PENDING"
+  | "ACKNOWLEDGED"
+  | "CHANGES_REQUESTED";
+
 export type GrowthHubClientSummary = {
   id: string;
   name: string;
@@ -180,6 +196,33 @@ export type GrowthHubWeeklyNote = {
   updatedAt: string;
 };
 
+export type GrowthHubReport = {
+  id: string;
+  clientProfileId: string;
+  projectId: string | null;
+  project: (GrowthHubProjectReference & { serviceKey: GrowthHubServiceKey | null }) | null;
+  periodStart: string;
+  periodEnd: string;
+  type: GrowthHubReportType;
+  status: GrowthHubReportStatus;
+  summary: string | null;
+  metricsSnapshot: unknown | null;
+  clientVisible: boolean;
+  publishedAt: string | null;
+  acknowledgementRequestedAt: string | null;
+  acknowledgedAt: string | null;
+  acknowledgementStatus: GrowthHubReportAcknowledgementStatus;
+  acknowledgementTaskId: string | null;
+  acknowledgementTaskUpdatedAt: string | null;
+  createdBy: {
+    id: string;
+    displayName: string | null;
+    email: string;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type GrowthHubActivityItem = {
   id: string;
   type: GrowthHubActivityType;
@@ -242,6 +285,17 @@ export type GrowthHubWeeklyNotesResponse = {
   data: GrowthHubWeeklyNote[];
   meta: {
     total: number;
+    generatedAt: string | null;
+  };
+};
+
+export type GrowthHubReportsResponse = {
+  data: GrowthHubReport[];
+  meta: {
+    total: number;
+    draft: number;
+    published: number;
+    clientVisible: number;
     generatedAt: string | null;
   };
 };

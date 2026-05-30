@@ -382,12 +382,93 @@ describe("Growth Hub Config and Summary Authz (e2e)", () => {
     ).toBe(true);
   });
 
+  it("admin drafts stay internal while assigned report acknowledgement is visible to the client", async () => {
+    const draftRes = await request(app.getHttpServer())
+      .post(`/api/v1/admin/clients/${clientProfileId}/growth-hub/reports`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        periodStart: "2026-06-01",
+        periodEnd: "2026-06-07",
+        type: "WEEKLY",
+        summary: "Internal Growth Hub draft report",
+        projectId: growthProjectId,
+        clientVisible: false,
+      });
+
+    expect(draftRes.status).toBe(201);
+    expect(draftRes.body.status).toBe("DRAFT");
+    expect(draftRes.body.clientVisible).toBe(false);
+
+    const assignedReportRes = await request(app.getHttpServer())
+      .post(`/api/v1/growth-hub/clients/${clientProfileId}/reports`)
+      .set("Authorization", `Bearer ${projectToken}`)
+      .send({
+        periodStart: "2026-06-01",
+        periodEnd: "2026-06-07",
+        type: "CHANNEL_PERFORMANCE",
+        summary: "Client-visible Growth Hub performance report",
+        projectId: growthProjectId,
+        clientVisible: true,
+        requestAcknowledgement: true,
+      });
+
+    expect(assignedReportRes.status).toBe(201);
+    expect(assignedReportRes.body.status).toBe("PUBLISHED");
+    expect(assignedReportRes.body.clientVisible).toBe(true);
+    expect(assignedReportRes.body.acknowledgementStatus).toBe("PENDING");
+    expect(assignedReportRes.body.acknowledgementTaskId).toBeTruthy();
+
+    const clientReportsRes = await request(app.getHttpServer())
+      .get("/api/v1/clients/me/growth-hub/reports")
+      .set("Authorization", `Bearer ${clientToken}`);
+
+    expect(clientReportsRes.status).toBe(200);
+    expect(
+      clientReportsRes.body.data.some(
+        (report: { summary: string | null }) =>
+          report.summary === "Client-visible Growth Hub performance report",
+      ),
+    ).toBe(true);
+    expect(
+      clientReportsRes.body.data.some(
+        (report: { summary: string | null }) => report.summary === "Internal Growth Hub draft report",
+      ),
+    ).toBe(false);
+
+    const clientActionsRes = await request(app.getHttpServer())
+      .get("/api/v1/clients/me/growth-hub/actions")
+      .set("Authorization", `Bearer ${clientToken}`);
+
+    expect(clientActionsRes.status).toBe(200);
+    expect(
+      clientActionsRes.body.data.some(
+        (action: { type: string; title: string }) =>
+          action.type === "REPORT_ACKNOWLEDGEMENT" &&
+          action.title === "Client-visible Growth Hub performance report",
+      ),
+    ).toBe(true);
+  });
+
   it("employee without Growth Hub manage permission cannot create assigned actions", async () => {
     const res = await request(app.getHttpServer())
       .post(`/api/v1/growth-hub/clients/${clientProfileId}/actions`)
       .set("Authorization", `Bearer ${performanceToken}`)
       .send({
         title: "Forbidden action",
+      });
+
+    expect(res.status).toBe(403);
+  });
+
+  it("employee without Growth Hub report permission cannot create assigned reports", async () => {
+    const res = await request(app.getHttpServer())
+      .post(`/api/v1/growth-hub/clients/${clientProfileId}/reports`)
+      .set("Authorization", `Bearer ${performanceToken}`)
+      .send({
+        periodStart: "2026-06-01",
+        periodEnd: "2026-06-07",
+        type: "WEEKLY",
+        summary: "Forbidden report",
       });
 
     expect(res.status).toBe(403);

@@ -1,10 +1,14 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, UseGuards } from "@nestjs/common";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { RequirePermissions } from "../auth/decorators/permissions.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { CreateGrowthHubActionDto } from "./dto/growth-hub-action.dto";
+import {
+  CreateGrowthHubReportDto,
+  GrowthHubReportsQueryDto,
+} from "./dto/growth-hub-report.dto";
 import { CreateGrowthHubWeeklyNoteDto } from "./dto/growth-hub-weekly-note.dto";
 import { GrowthHubService } from "./growth-hub.service";
 
@@ -82,6 +86,26 @@ export class AssignedGrowthHubController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.growthHubService.createAssignedClientWeeklyNote(clientId, dto, actor);
+  }
+
+  @Get(":clientId/reports")
+  @RequirePermissions("growthHub.reports.read.assigned")
+  getAssignedClientReports(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: GrowthHubReportsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.growthHubService.getAssignedClientReports(clientId, query, actor);
+  }
+
+  @Post(":clientId/reports")
+  @RequirePermissions("growthHub.reports.manage.assigned")
+  createAssignedClientReport(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Body() dto: CreateGrowthHubReportDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.growthHubService.createAssignedClientReport(clientId, dto, actor);
   }
 
   @Get(":clientId/activity")

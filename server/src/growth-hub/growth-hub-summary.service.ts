@@ -560,7 +560,8 @@ export class GrowthHubSummaryService {
       ...(options.clientVisibleOnly ? { clientVisible: true } : {}),
     };
 
-    const [metaReports, tikTokReports, amazonReports, socialReports] = await Promise.all([
+    const [metaReports, tikTokReports, amazonReports, socialReports, growthReports] =
+      await Promise.all([
       this.prisma.metaAdsReport.findMany({
         where: reportWhere,
         select: growthHubReportSelect,
@@ -585,6 +586,12 @@ export class GrowthHubSummaryService {
         orderBy: [{ updatedAt: "desc" }],
         take: 20,
       }),
+      this.prisma.growthHubReport.findMany({
+        where: reportWhere,
+        select: growthHubReportSelect,
+        orderBy: [{ updatedAt: "desc" }],
+        take: 20,
+      }),
     ]);
 
     return [
@@ -592,6 +599,7 @@ export class GrowthHubSummaryService {
       ...this.toReportActions(tikTokReports, PurchasedServiceKey.TIKTOK_ADS),
       ...this.toReportActions(amazonReports, PurchasedServiceKey.AMAZON_ADS),
       ...this.toReportActions(socialReports, PurchasedServiceKey.SOCIAL_MEDIA),
+      ...this.toReportActions(growthReports, PurchasedServiceKey.GROWTH_HUB),
     ].sort((first, second) => second.updatedAt.getTime() - first.updatedAt.getTime());
   }
 
@@ -712,6 +720,7 @@ export class GrowthHubSummaryService {
           "TikTokAdsReport",
           "AmazonAdsReport",
           "SocialMediaReport",
+          "GrowthHubReport",
         ],
       },
     };

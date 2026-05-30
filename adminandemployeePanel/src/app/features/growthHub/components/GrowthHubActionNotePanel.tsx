@@ -1,5 +1,5 @@
 import { type FormEvent, useMemo, useState } from "react";
-import { CheckCircle2, Eye, EyeOff, Trash2 } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, FileText, Send, Trash2 } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
 import { extractApiErrorMessage } from "../../clients/clientsUtils";
@@ -7,6 +7,8 @@ import type {
   GrowthHubActionItem,
   GrowthHubActionMutationRequest,
   GrowthHubActionStatus,
+  GrowthHubReport,
+  GrowthHubReportMutationRequest,
   GrowthHubWeeklyNote,
   GrowthHubWeeklyNoteMutationRequest,
 } from "../growthHubTypes";
@@ -15,16 +17,23 @@ import {
   getGrowthHubActionPriorityLabel,
   getGrowthHubActionStatusLabel,
   getGrowthHubActionTypeLabel,
+  getGrowthHubReportAcknowledgementStatusLabel,
+  getGrowthHubReportStatusLabel,
+  getGrowthHubReportTypeLabel,
   growthHubActionPriorityOptions,
+  growthHubReportTypeOptions,
 } from "../growthHubUtils";
 
 type GrowthHubActionNotePanelProps = {
   actions: GrowthHubActionItem[];
   weeklyNotes: GrowthHubWeeklyNote[];
+  reports: GrowthHubReport[];
   canManageActions: boolean;
   canManageNotes: boolean;
+  canManageReports: boolean;
   isActionsLoading?: boolean;
   isNotesLoading?: boolean;
+  isReportsLoading?: boolean;
   onCreateAction: (
     body: GrowthHubActionMutationRequest & { title: string },
   ) => Promise<void>;
@@ -41,6 +50,15 @@ type GrowthHubActionNotePanelProps = {
     noteId: string,
     body: GrowthHubWeeklyNoteMutationRequest,
   ) => Promise<void>;
+  onCreateReport: (
+    body: GrowthHubReportMutationRequest & {
+      periodStart: string;
+      periodEnd: string;
+      type: NonNullable<GrowthHubReportMutationRequest["type"]>;
+    },
+  ) => Promise<void>;
+  onUpdateReport: (reportId: string, body: GrowthHubReportMutationRequest) => Promise<void>;
+  onPublishReport: (reportId: string, requestAcknowledgement?: boolean) => Promise<void>;
 };
 
 const fieldClass =
@@ -49,15 +67,21 @@ const fieldClass =
 export function GrowthHubActionNotePanel({
   actions,
   weeklyNotes,
+  reports,
   canManageActions,
   canManageNotes,
+  canManageReports,
   isActionsLoading = false,
   isNotesLoading = false,
+  isReportsLoading = false,
   onCreateAction,
   onUpdateAction,
   onDeleteAction,
   onCreateWeeklyNote,
   onUpdateWeeklyNote,
+  onCreateReport,
+  onUpdateReport,
+  onPublishReport,
 }: GrowthHubActionNotePanelProps) {
   const [actionTitle, setActionTitle] = useState("");
   const [actionDescription, setActionDescription] = useState("");
@@ -70,6 +94,12 @@ export function GrowthHubActionNotePanel({
   const [noteSummary, setNoteSummary] = useState("");
   const [noteNextFocus, setNoteNextFocus] = useState("");
   const [noteClientVisible, setNoteClientVisible] = useState(true);
+  const [reportPeriodStart, setReportPeriodStart] = useState(defaultWeek.weekStart);
+  const [reportPeriodEnd, setReportPeriodEnd] = useState(defaultWeek.weekEnd);
+  const [reportType, setReportType] = useState<GrowthHubReportMutationRequest["type"]>("WEEKLY");
+  const [reportSummary, setReportSummary] = useState("");
+  const [reportClientVisible, setReportClientVisible] = useState(true);
+  const [reportRequestAcknowledgement, setReportRequestAcknowledgement] = useState(false);
   const [formMessage, setFormMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -126,6 +156,32 @@ export function GrowthHubActionNotePanel({
     }
   }
 
+  async function handleReportSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canManageReports || !reportType || reportSummary.trim().length < 2) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setFormMessage(null);
+    try {
+      await onCreateReport({
+        periodStart: reportPeriodStart,
+        periodEnd: reportPeriodEnd,
+        type: reportType,
+        summary: reportSummary.trim(),
+        clientVisible: reportClientVisible,
+        requestAcknowledgement: reportRequestAcknowledgement,
+      });
+      setReportSummary("");
+      setFormMessage({ type: "success", text: "Growth Hub raporu kaydedildi." });
+    } catch (error) {
+      setFormMessage({ type: "error", text: extractApiErrorMessage(error, "Growth Hub raporu kaydedilemedi.") });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       {formMessage ? (
@@ -140,7 +196,7 @@ export function GrowthHubActionNotePanel({
         </div>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-3">
         <form onSubmit={handleActionSubmit} className="rounded-2xl border border-white/[0.08] bg-black/20 p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <p className="text-sm font-medium text-white">Growth Action</p>
@@ -251,9 +307,79 @@ export function GrowthHubActionNotePanel({
             </Button>
           </div>
         </form>
+
+        <form onSubmit={handleReportSubmit} className="rounded-2xl border border-white/[0.08] bg-black/20 p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="text-sm font-medium text-white">Growth Report</p>
+            <Badge variant="outline">{reports.length} kayıt</Badge>
+          </div>
+          <div className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <input
+                className={fieldClass}
+                type="date"
+                value={reportPeriodStart}
+                onChange={(event) => setReportPeriodStart(event.target.value)}
+                disabled={!canManageReports}
+              />
+              <input
+                className={fieldClass}
+                type="date"
+                value={reportPeriodEnd}
+                onChange={(event) => setReportPeriodEnd(event.target.value)}
+                disabled={!canManageReports}
+              />
+            </div>
+            <select
+              className={fieldClass}
+              value={reportType}
+              onChange={(event) =>
+                setReportType(event.target.value as GrowthHubReportMutationRequest["type"])
+              }
+              disabled={!canManageReports}
+            >
+              {growthHubReportTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <textarea
+              className={`${fieldClass} min-h-24 resize-none`}
+              value={reportSummary}
+              onChange={(event) => setReportSummary(event.target.value)}
+              placeholder="Rapor özeti"
+              disabled={!canManageReports}
+            />
+            <div className="grid gap-2 text-sm text-[#D6D6D6] sm:grid-cols-2">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={reportClientVisible}
+                  onChange={(event) => setReportClientVisible(event.target.checked)}
+                  disabled={!canManageReports}
+                />
+                Client görünür
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={reportRequestAcknowledgement}
+                  onChange={(event) => setReportRequestAcknowledgement(event.target.checked)}
+                  disabled={!canManageReports}
+                />
+                Teyit iste
+              </label>
+            </div>
+            <Button type="submit" size="sm" disabled={!canManageReports || isSubmitting || reportSummary.trim().length < 2}>
+              <FileText className="h-4 w-4" />
+              Kaydet
+            </Button>
+          </div>
+        </form>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-3">
         <div>
           <p className="text-xs uppercase tracking-wide text-[#7A7A7A]">Aksiyonlar</p>
           {isActionsLoading ? (
@@ -348,6 +474,61 @@ export function GrowthHubActionNotePanel({
             </div>
           ) : (
             <p className="mt-2 text-sm text-[#A0A0A0]">Weekly note bulunmuyor.</p>
+          )}
+        </div>
+
+        <div>
+          <p className="text-xs uppercase tracking-wide text-[#7A7A7A]">Growth Reports</p>
+          {isReportsLoading ? (
+            <p className="mt-2 text-sm text-[#A0A0A0]">Growth report yükleniyor...</p>
+          ) : reports.length ? (
+            <div className="mt-2 space-y-2">
+              {reports.slice(0, 4).map((report) => (
+                <div key={report.id} className="rounded-2xl border border-white/[0.08] bg-black/20 p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm text-white">{getGrowthHubReportTypeLabel(report.type)}</p>
+                      <p className="mt-1 text-xs text-[#A0A0A0]">
+                        {formatGrowthHubDateTime(report.periodEnd)} • {getGrowthHubReportAcknowledgementStatusLabel(report.acknowledgementStatus)}
+                      </p>
+                    </div>
+                    <Badge variant="outline">{getGrowthHubReportStatusLabel(report.status)}</Badge>
+                  </div>
+                  {report.summary ? (
+                    <p className="mt-2 text-xs leading-relaxed text-[#D6D6D6]">{report.summary}</p>
+                  ) : null}
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-[#A0A0A0]">
+                      {report.clientVisible ? "Client görünür" : "Internal"}
+                    </span>
+                    {canManageReports ? (
+                      <>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onPublishReport(report.id, true)}
+                          disabled={report.acknowledgementStatus === "PENDING"}
+                        >
+                          <Send className="h-4 w-4" />
+                          Yayınla + teyit
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onUpdateReport(report.id, { clientVisible: !report.clientVisible })}
+                        >
+                          {report.clientVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </Button>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-[#A0A0A0]">Growth report bulunmuyor.</p>
           )}
         </div>
       </div>

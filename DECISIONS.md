@@ -3530,3 +3530,39 @@ Affected files:
 - `PROJECT_CONTEXT.md`
 - `REPO_MAP.md`
 - `ROAD_MAP.md`
+
+## 2026-05-30 - Growth Hub Faz 7 Reports + Acknowledgements
+
+Context:
+Growth Hub Faz 6 ile kanal health/risk aggregation tek read-model kaynağına indirildi. Faz 7 ihtiyacı, Growth Hub'ın ajans raporlarını draft/published lifecycle ile yönetmesi, client-visible raporları client portalda göstermesi ve rapor okundu/onaylandı sinyalini mevcut action/approval akışına bağlamasıydı.
+
+Decision:
+Growth Hub Faz 7 yeni ayrı approval domain'i açmadan report lifecycle'ını mevcut task approval altyapısına bağlar:
+- `GrowthHubReport` modeli report type/status, period, summary, metrics snapshot, `clientVisible`, publish metadata ve acknowledgement task relation'ı ile eklendi.
+- Admin ve assigned employee endpointleri rapor list/create/update/publish akışını sağlar; own-client endpoint yalnızca `PUBLISHED + clientVisible` raporları döndürür.
+- Publish sırasında acknowledgement istenirse `Task(approvalType=GROWTH_REPORT_ACKNOWLEDGEMENT, approvalStatus=PENDING)` oluşturulur/güncellenir.
+- `MetaAdsApprovalType` ortak task approval enum'u Growth Hub acknowledgement ve ilerideki action/strategy/budget/channel priority approval tiplerini taşıyacak şekilde genişletildi.
+- Growth Hub summary/actions ve channel aggregation pending report acknowledgement sinyallerini aynı orchestration read model'e dahil eder.
+- Admin/employee shared panel rapor create/publish/görünürlük kontrollerini, client dashboard ise yayınlanmış rapor kartlarını API-driven render eder.
+
+Reason:
+Bu karar Growth Hub raporlarını platform rapor domainlerini kopyalamadan, mevcut task-based acknowledgement contract'ı üzerinden bağlar. Böylece admin, assigned employee ve own-client görünürlük sınırları tutarlı kalır; Faz 8 recommendation layer aynı report, action, channel health ve pending acknowledgement sinyallerini kullanabilir.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260530110000_add_growth_hub_reports/migration.sql`
+- `server/prisma/seed.ts`
+- `server/src/growth-hub/*`
+- `server/src/growth-hub/dto/growth-hub-report.dto.ts`
+- `server/test/growth-hub-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/growthHub/*`
+- `adminandemployeePanel/src/app/pages/GrowthHubAdmin.tsx`
+- `adminandemployeePanel/src/app/employee/components/GrowthHubWorkspace.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/GrowthHubAdmin.test.tsx`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/GrowthHubCalismaAlani.test.tsx`
+- `clientPanel/src/app/features/growthHub/*`
+- `clientPanel/src/app/pages/services/growth-hub-dashboard.tsx`
+- `clientPanel/src/app/pages/__tests__/growth-hub-dashboard.test.tsx`
+- `PROJECT_CONTEXT.md`
+- `REPO_MAP.md`
+- `ROAD_MAP.md`

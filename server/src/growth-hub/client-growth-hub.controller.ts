@@ -1,9 +1,10 @@
-import { Controller, Get, UseGuards } from "@nestjs/common";
+import { Controller, Get, Query, UseGuards } from "@nestjs/common";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { RequirePermissions } from "../auth/decorators/permissions.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
+import { GrowthHubReportsQueryDto } from "./dto/growth-hub-report.dto";
 import { GrowthHubService } from "./growth-hub.service";
 
 @Controller("clients/me/growth-hub")
@@ -39,6 +40,15 @@ export class ClientGrowthHubController {
   @RequirePermissions("growthHub.notes.read.own")
   getOwnWeeklyNotes(@CurrentUser() actor: AuthenticatedUser) {
     return this.growthHubService.getOwnWeeklyNotes(actor);
+  }
+
+  @Get("reports")
+  @RequirePermissions("growthHub.reports.read.own")
+  getOwnReports(
+    @Query() query: GrowthHubReportsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.growthHubService.getOwnReports(query, actor);
   }
 
   @Get("activity")

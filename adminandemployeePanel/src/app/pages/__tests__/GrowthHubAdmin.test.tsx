@@ -43,11 +43,15 @@ const mockUseUpdateAdminClientGrowthHubConfigMutation = vi.fn<
 >();
 const mockUseGetAdminGrowthHubClientActionsQuery = vi.fn();
 const mockUseGetAdminGrowthHubClientWeeklyNotesQuery = vi.fn();
+const mockUseGetAdminGrowthHubClientReportsQuery = vi.fn();
 const mockUseCreateAdminGrowthHubActionMutation = vi.fn();
 const mockUseUpdateAdminGrowthHubActionMutation = vi.fn();
 const mockUseDeleteAdminGrowthHubActionMutation = vi.fn();
 const mockUseCreateAdminGrowthHubWeeklyNoteMutation = vi.fn();
 const mockUseUpdateAdminGrowthHubWeeklyNoteMutation = vi.fn();
+const mockUseCreateAdminGrowthHubReportMutation = vi.fn();
+const mockUseUpdateAdminGrowthHubReportMutation = vi.fn();
+const mockUsePublishAdminGrowthHubReportMutation = vi.fn();
 const mockUpdateConfig = vi.fn();
 const mockMutation = vi.fn(() => ({ unwrap: async () => ({}) }));
 
@@ -64,11 +68,16 @@ vi.mock("../../features/growthHub/growthHubApi", () => ({
     mockUseGetAdminGrowthHubClientActionsQuery(clientId, options),
   useGetAdminGrowthHubClientWeeklyNotesQuery: (clientId: string, options?: QueryOptions) =>
     mockUseGetAdminGrowthHubClientWeeklyNotesQuery(clientId, options),
+  useGetAdminGrowthHubClientReportsQuery: (clientId: string, options?: QueryOptions) =>
+    mockUseGetAdminGrowthHubClientReportsQuery(clientId, options),
   useCreateAdminGrowthHubActionMutation: () => mockUseCreateAdminGrowthHubActionMutation(),
   useUpdateAdminGrowthHubActionMutation: () => mockUseUpdateAdminGrowthHubActionMutation(),
   useDeleteAdminGrowthHubActionMutation: () => mockUseDeleteAdminGrowthHubActionMutation(),
   useCreateAdminGrowthHubWeeklyNoteMutation: () => mockUseCreateAdminGrowthHubWeeklyNoteMutation(),
   useUpdateAdminGrowthHubWeeklyNoteMutation: () => mockUseUpdateAdminGrowthHubWeeklyNoteMutation(),
+  useCreateAdminGrowthHubReportMutation: () => mockUseCreateAdminGrowthHubReportMutation(),
+  useUpdateAdminGrowthHubReportMutation: () => mockUseUpdateAdminGrowthHubReportMutation(),
+  usePublishAdminGrowthHubReportMutation: () => mockUsePublishAdminGrowthHubReportMutation(),
 }));
 
 vi.mock("../../features/adminAssignments/adminAssignmentsApi", () => ({
@@ -96,6 +105,8 @@ const adminUser: AuthUserProfile = {
     "growthHub.actions.manage.any",
     "growthHub.notes.read.any",
     "growthHub.notes.manage.any",
+    "growthHub.reports.read.any",
+    "growthHub.reports.manage.any",
   ],
   clientProfile: null,
 };
@@ -278,11 +289,21 @@ describe("GrowthHubAdmin", () => {
       data: { data: [], meta: { total: 0, generatedAt: null } },
       isLoading: false,
     });
+    mockUseGetAdminGrowthHubClientReportsQuery.mockReturnValue({
+      data: {
+        data: [],
+        meta: { total: 0, draft: 0, published: 0, clientVisible: 0, generatedAt: null },
+      },
+      isLoading: false,
+    });
     mockUseCreateAdminGrowthHubActionMutation.mockReturnValue([mockMutation]);
     mockUseUpdateAdminGrowthHubActionMutation.mockReturnValue([mockMutation]);
     mockUseDeleteAdminGrowthHubActionMutation.mockReturnValue([mockMutation]);
     mockUseCreateAdminGrowthHubWeeklyNoteMutation.mockReturnValue([mockMutation]);
     mockUseUpdateAdminGrowthHubWeeklyNoteMutation.mockReturnValue([mockMutation]);
+    mockUseCreateAdminGrowthHubReportMutation.mockReturnValue([mockMutation]);
+    mockUseUpdateAdminGrowthHubReportMutation.mockReturnValue([mockMutation]);
+    mockUsePublishAdminGrowthHubReportMutation.mockReturnValue([mockMutation]);
   });
 
   it("skips the list query without Growth Hub admin permission", () => {

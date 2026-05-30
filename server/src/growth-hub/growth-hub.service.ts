@@ -10,10 +10,16 @@ import {
   GrowthHubActionPriority,
   GrowthHubActionStatus,
   GrowthHubGoal,
+  GrowthHubReportStatus,
+  GrowthHubReportType,
   GrowthHubStatus,
+  MetaAdsApprovalStatus,
+  MetaAdsApprovalType,
   Prisma,
   PurchasedServiceKey,
   PurchasedServiceStatus,
+  TaskStatus,
+  TaskType,
   UserRole,
 } from "@prisma/client";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
@@ -26,6 +32,12 @@ import {
   CreateGrowthHubWeeklyNoteDto,
   UpdateGrowthHubWeeklyNoteDto,
 } from "./dto/growth-hub-weekly-note.dto";
+import {
+  CreateGrowthHubReportDto,
+  GrowthHubReportsQueryDto,
+  PublishGrowthHubReportDto,
+  UpdateGrowthHubReportDto,
+} from "./dto/growth-hub-report.dto";
 import { UpdateGrowthHubConfigDto } from "./dto/update-growth-hub-config.dto";
 import {
   GrowthHubActionItem,
@@ -53,6 +65,11 @@ const GROWTH_HUB_NOTES_MANAGE_ANY_PERMISSION = "growthHub.notes.manage.any";
 const GROWTH_HUB_NOTES_READ_ASSIGNED_PERMISSION = "growthHub.notes.read.assigned";
 const GROWTH_HUB_NOTES_MANAGE_ASSIGNED_PERMISSION = "growthHub.notes.manage.assigned";
 const GROWTH_HUB_NOTES_READ_OWN_PERMISSION = "growthHub.notes.read.own";
+const GROWTH_HUB_REPORTS_READ_ANY_PERMISSION = "growthHub.reports.read.any";
+const GROWTH_HUB_REPORTS_MANAGE_ANY_PERMISSION = "growthHub.reports.manage.any";
+const GROWTH_HUB_REPORTS_READ_ASSIGNED_PERMISSION = "growthHub.reports.read.assigned";
+const GROWTH_HUB_REPORTS_MANAGE_ASSIGNED_PERMISSION = "growthHub.reports.manage.assigned";
+const GROWTH_HUB_REPORTS_READ_OWN_PERMISSION = "growthHub.reports.read.own";
 
 const growthHubConfigSelect = {
   id: true,
@@ -132,6 +149,47 @@ const growthHubWeeklyNoteSelect = {
   },
 } satisfies Prisma.GrowthHubWeeklyNoteSelect;
 
+const growthHubReportSelect = {
+  id: true,
+  clientProfileId: true,
+  projectId: true,
+  periodStart: true,
+  periodEnd: true,
+  type: true,
+  status: true,
+  summary: true,
+  metricsSnapshot: true,
+  clientVisible: true,
+  publishedAt: true,
+  acknowledgementRequestedAt: true,
+  acknowledgedAt: true,
+  createdAt: true,
+  updatedAt: true,
+  project: {
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      serviceKey: true,
+    },
+  },
+  createdBy: {
+    select: {
+      id: true,
+      displayName: true,
+      email: true,
+    },
+  },
+  acknowledgementTask: {
+    select: {
+      id: true,
+      approvalStatus: true,
+      status: true,
+      updatedAt: true,
+    },
+  },
+} satisfies Prisma.GrowthHubReportSelect;
+
 type GrowthHubConfigModel = Prisma.ClientGrowthHubConfigGetPayload<{
   select: typeof growthHubConfigSelect;
 }>;
@@ -142,6 +200,10 @@ type GrowthHubActionModel = Prisma.GrowthHubActionGetPayload<{
 
 type GrowthHubWeeklyNoteModel = Prisma.GrowthHubWeeklyNoteGetPayload<{
   select: typeof growthHubWeeklyNoteSelect;
+}>;
+
+type GrowthHubReportModel = Prisma.GrowthHubReportGetPayload<{
+  select: typeof growthHubReportSelect;
 }>;
 
 type GrowthHubConfigPatchData = {
@@ -200,6 +262,55 @@ export type GrowthHubWeeklyNoteItem = {
   } | null;
   createdAt: Date;
   updatedAt: Date;
+};
+
+type GrowthHubReportAcknowledgementStatus =
+  | "NOT_REQUESTED"
+  | "PENDING"
+  | "ACKNOWLEDGED"
+  | "CHANGES_REQUESTED";
+
+export type GrowthHubReportItem = {
+  id: string;
+  clientProfileId: string;
+  projectId: string | null;
+  project: {
+    id: string;
+    name: string;
+    slug: string;
+    serviceKey: PurchasedServiceKey | null;
+  } | null;
+  periodStart: string;
+  periodEnd: string;
+  type: GrowthHubReportType;
+  status: GrowthHubReportStatus;
+  summary: string | null;
+  metricsSnapshot: Prisma.JsonValue | null;
+  clientVisible: boolean;
+  publishedAt: string | null;
+  acknowledgementRequestedAt: string | null;
+  acknowledgedAt: string | null;
+  acknowledgementStatus: GrowthHubReportAcknowledgementStatus;
+  acknowledgementTaskId: string | null;
+  acknowledgementTaskUpdatedAt: string | null;
+  createdBy: {
+    id: string;
+    displayName: string | null;
+    email: string;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GrowthHubReportsResponse = {
+  data: GrowthHubReportItem[];
+  meta: {
+    total: number;
+    draft: number;
+    published: number;
+    clientVisible: number;
+    generatedAt: Date;
+  };
 };
 
 export type AdminGrowthHubConfigResponse = {
@@ -513,6 +624,55 @@ export class GrowthHubService {
     return this.toGrowthHubWeeklyNoteItem(note);
   }
 
+  async getAdminClientReports(
+    clientProfileId: string,
+    query: GrowthHubReportsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<GrowthHubReportsResponse> {
+    await this.assertCanReadAdminReports(clientProfileId, actor);
+    return this.getReportsByClientProfileId(clientProfileId, query, false);
+  }
+
+  async createAdminClientReport(
+    clientProfileId: string,
+    dto: CreateGrowthHubReportDto,
+    actor: AuthenticatedUser,
+  ): Promise<GrowthHubReportItem> {
+    this.assertCanManageAdminReports(actor);
+    this.assertBodyObject(dto);
+    await this.assertClientProfileExists(clientProfileId);
+    await this.assertClientHasActiveGrowthHubService(clientProfileId);
+    return this.createReportByClientProfileId(clientProfileId, dto, actor);
+  }
+
+  async updateAdminReport(
+    reportId: string,
+    dto: UpdateGrowthHubReportDto,
+    actor: AuthenticatedUser,
+  ): Promise<GrowthHubReportItem> {
+    this.assertCanManageAdminReports(actor);
+    this.assertBodyObject(dto);
+    return this.updateReportById(reportId, dto, actor, { scope: "ANY" });
+  }
+
+  async publishAdminReport(
+    reportId: string,
+    dto: PublishGrowthHubReportDto,
+    actor: AuthenticatedUser,
+  ): Promise<GrowthHubReportItem> {
+    this.assertCanManageAdminReports(actor);
+    return this.updateReportById(
+      reportId,
+      {
+        status: GrowthHubReportStatus.PUBLISHED,
+        clientVisible: true,
+        requestAcknowledgement: dto?.requestAcknowledgement,
+      },
+      actor,
+      { scope: "ANY" },
+    );
+  }
+
   async getAdminClientActivity(
     clientProfileId: string,
     actor: AuthenticatedUser,
@@ -683,6 +843,57 @@ export class GrowthHubService {
     return this.toGrowthHubWeeklyNoteItem(note);
   }
 
+  async getAssignedClientReports(
+    clientProfileId: string,
+    query: GrowthHubReportsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<GrowthHubReportsResponse> {
+    await this.assertCanReadAssignedReports(clientProfileId, actor);
+    return this.getReportsByClientProfileId(clientProfileId, query, false);
+  }
+
+  async createAssignedClientReport(
+    clientProfileId: string,
+    dto: CreateGrowthHubReportDto,
+    actor: AuthenticatedUser,
+  ): Promise<GrowthHubReportItem> {
+    await this.assertCanManageAssignedReports(clientProfileId, actor);
+    this.assertBodyObject(dto);
+    return this.createReportByClientProfileId(clientProfileId, dto, actor);
+  }
+
+  async updateAssignedReport(
+    reportId: string,
+    dto: UpdateGrowthHubReportDto,
+    actor: AuthenticatedUser,
+  ): Promise<GrowthHubReportItem> {
+    this.assertBodyObject(dto);
+    return this.updateReportById(reportId, dto, actor, {
+      scope: "ASSIGNED",
+      employeeUserId: actor.id,
+    });
+  }
+
+  async publishAssignedReport(
+    reportId: string,
+    dto: PublishGrowthHubReportDto,
+    actor: AuthenticatedUser,
+  ): Promise<GrowthHubReportItem> {
+    return this.updateReportById(
+      reportId,
+      {
+        status: GrowthHubReportStatus.PUBLISHED,
+        clientVisible: true,
+        requestAcknowledgement: dto?.requestAcknowledgement,
+      },
+      actor,
+      {
+        scope: "ASSIGNED",
+        employeeUserId: actor.id,
+      },
+    );
+  }
+
   async getAssignedClientActivity(
     clientProfileId: string,
     actor: AuthenticatedUser,
@@ -756,6 +967,16 @@ export class GrowthHubService {
     };
   }
 
+  async getOwnReports(
+    query: GrowthHubReportsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<GrowthHubReportsResponse> {
+    this.assertCanReadOwnReports(actor);
+    const clientProfileId = this.getOwnClientProfileIdOrFail(actor);
+    await this.assertClientHasActiveGrowthHubService(clientProfileId);
+    return this.getReportsByClientProfileId(clientProfileId, query, true);
+  }
+
   async getOwnActivity(
     actor: AuthenticatedUser,
   ): Promise<{ data: GrowthHubActivityItem[]; meta: { total: number; generatedAt: Date } }> {
@@ -824,6 +1045,334 @@ export class GrowthHubService {
     });
   }
 
+  private async getReportsByClientProfileId(
+    clientProfileId: string,
+    query: GrowthHubReportsQueryDto,
+    clientVisibleOnly: boolean,
+  ): Promise<GrowthHubReportsResponse> {
+    const where: Prisma.GrowthHubReportWhereInput = {
+      clientProfileId,
+      ...(query.type ? { type: query.type } : {}),
+      ...(clientVisibleOnly
+        ? { status: GrowthHubReportStatus.PUBLISHED, clientVisible: true }
+        : {
+            ...(query.status ? { status: query.status } : {}),
+            ...(query.clientVisible !== undefined ? { clientVisible: query.clientVisible } : {}),
+          }),
+    };
+    const statsWhere: Prisma.GrowthHubReportWhereInput = {
+      clientProfileId,
+      ...(clientVisibleOnly ? { status: GrowthHubReportStatus.PUBLISHED, clientVisible: true } : {}),
+    };
+    const take = query.limit ?? 40;
+
+    const [reports, total, draft, published, clientVisible] = await Promise.all([
+      this.prisma.growthHubReport.findMany({
+        where,
+        select: growthHubReportSelect,
+        orderBy: [{ periodEnd: "desc" }, { updatedAt: "desc" }],
+        take,
+      }),
+      this.prisma.growthHubReport.count({ where }),
+      this.prisma.growthHubReport.count({
+        where: { ...statsWhere, status: GrowthHubReportStatus.DRAFT },
+      }),
+      this.prisma.growthHubReport.count({
+        where: { ...statsWhere, status: GrowthHubReportStatus.PUBLISHED },
+      }),
+      this.prisma.growthHubReport.count({
+        where: { ...statsWhere, clientVisible: true },
+      }),
+    ]);
+
+    return {
+      data: reports.map((report) => this.toGrowthHubReportItem(report)),
+      meta: {
+        total,
+        draft,
+        published,
+        clientVisible,
+        generatedAt: new Date(),
+      },
+    };
+  }
+
+  private async createReportByClientProfileId(
+    clientProfileId: string,
+    dto: CreateGrowthHubReportDto,
+    actor: AuthenticatedUser,
+  ): Promise<GrowthHubReportItem> {
+    const period = this.resolveGrowthHubReportPeriod(dto.periodStart, dto.periodEnd);
+    const summary = this.normalizeGrowthHubReportSummary(dto.summary);
+    const projectId = await this.resolveGrowthHubReportProjectId(
+      clientProfileId,
+      dto.projectId ?? null,
+    );
+    const acknowledgementProjectId =
+      dto.requestAcknowledgement === true ? projectId ?? undefined : undefined;
+    const shouldPublish = dto.clientVisible === true || dto.requestAcknowledgement === true;
+    const now = new Date();
+
+    if (dto.requestAcknowledgement === true && !acknowledgementProjectId) {
+      throw new BadRequestException(
+        "A Growth Hub project is required to request report acknowledgement.",
+      );
+    }
+
+    const report = await this.prisma.$transaction(async (tx) => {
+      const createdReport = await tx.growthHubReport.create({
+        data: {
+          clientProfileId,
+          projectId,
+          periodStart: period.periodStart,
+          periodEnd: period.periodEnd,
+          type: dto.type,
+          status: shouldPublish ? GrowthHubReportStatus.PUBLISHED : GrowthHubReportStatus.DRAFT,
+          summary,
+          metricsSnapshot: dto.metricsSnapshot as Prisma.InputJsonValue | undefined,
+          createdByUserId: actor.id,
+          publishedByUserId: shouldPublish ? actor.id : null,
+          clientVisible: shouldPublish,
+          publishedAt: shouldPublish ? now : null,
+        },
+        select: growthHubReportSelect,
+      });
+
+      if (dto.requestAcknowledgement !== true || !acknowledgementProjectId) {
+        return createdReport;
+      }
+
+      const task = await tx.task.create({
+        data: {
+          projectId: acknowledgementProjectId,
+          title: this.buildGrowthHubReportAcknowledgementTaskTitle(
+            createdReport.type,
+            createdReport.periodStart,
+            createdReport.periodEnd,
+          ),
+          description: this.buildGrowthHubReportAcknowledgementTaskDescription(summary),
+          status: TaskStatus.REVIEW,
+          type: TaskType.REVISION,
+          approvalRequired: true,
+          approvalType: MetaAdsApprovalType.GROWTH_REPORT_ACKNOWLEDGEMENT,
+          approvalStatus: MetaAdsApprovalStatus.PENDING,
+          approvalRequestedAt: now,
+          approvalContext: {
+            reportId: createdReport.id,
+            reportType: createdReport.type,
+            periodStart: createdReport.periodStart.toISOString(),
+            periodEnd: createdReport.periodEnd.toISOString(),
+          },
+        },
+        select: { id: true },
+      });
+
+      return tx.growthHubReport.update({
+        where: { id: createdReport.id },
+        data: {
+          acknowledgementRequestedAt: now,
+          acknowledgementTaskId: task.id,
+        },
+        select: growthHubReportSelect,
+      });
+    });
+
+    return this.toGrowthHubReportItem(report);
+  }
+
+  private async updateReportById(
+    reportId: string,
+    dto: UpdateGrowthHubReportDto,
+    actor: AuthenticatedUser,
+    options: {
+      scope: "ANY" | "ASSIGNED";
+      employeeUserId?: string;
+    },
+  ): Promise<GrowthHubReportItem> {
+    this.assertHasReportUpdatePayload(dto);
+
+    const existing = await this.prisma.growthHubReport.findUnique({
+      where: { id: reportId },
+      select: {
+        id: true,
+        clientProfileId: true,
+        projectId: true,
+        type: true,
+        periodStart: true,
+        periodEnd: true,
+        summary: true,
+        status: true,
+        clientVisible: true,
+        publishedAt: true,
+        publishedByUserId: true,
+        acknowledgementTaskId: true,
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundException("Growth Hub report not found.");
+    }
+
+    if (options.scope === "ASSIGNED") {
+      if (!options.employeeUserId) {
+        throw new ForbiddenException("Missing employee context for assigned report update.");
+      }
+      await this.assertCanManageAssignedReports(existing.clientProfileId, actor);
+    } else {
+      this.assertCanManageAdminReports(actor);
+      await this.assertClientProfileExists(existing.clientProfileId);
+      await this.assertClientHasActiveGrowthHubService(existing.clientProfileId);
+    }
+
+    const now = new Date();
+    const updateData: Prisma.GrowthHubReportUpdateInput = {};
+    const normalizedSummary =
+      dto.summary !== undefined ? this.normalizeGrowthHubReportSummary(dto.summary) : undefined;
+
+    if (dto.summary !== undefined) {
+      updateData.summary = normalizedSummary;
+    }
+
+    if (dto.metricsSnapshot !== undefined) {
+      updateData.metricsSnapshot = dto.metricsSnapshot as Prisma.InputJsonValue;
+    }
+
+    if (dto.clientVisible !== undefined) {
+      updateData.clientVisible = dto.clientVisible;
+    }
+
+    if (dto.status !== undefined) {
+      updateData.status = dto.status;
+      if (
+        dto.status === GrowthHubReportStatus.DRAFT ||
+        dto.status === GrowthHubReportStatus.ARCHIVED
+      ) {
+        updateData.clientVisible = false;
+      }
+    }
+
+    if (dto.status === GrowthHubReportStatus.PUBLISHED && dto.clientVisible === false) {
+      throw new BadRequestException("Published Growth Hub report cannot be hidden from client.");
+    }
+
+    const shouldPublish =
+      dto.requestAcknowledgement === true ||
+      dto.clientVisible === true ||
+      dto.status === GrowthHubReportStatus.PUBLISHED;
+
+    if (shouldPublish) {
+      if (!existing.publishedAt) {
+        updateData.publishedAt = now;
+      }
+      if (!existing.publishedByUserId) {
+        updateData.publishedBy = {
+          connect: { id: actor.id },
+        };
+      }
+      if (dto.status === undefined) {
+        updateData.status = GrowthHubReportStatus.PUBLISHED;
+      }
+      if (dto.clientVisible === undefined) {
+        updateData.clientVisible = true;
+      }
+    }
+
+    if (
+      dto.requestAcknowledgement === true &&
+      (dto.status === GrowthHubReportStatus.DRAFT || dto.status === GrowthHubReportStatus.ARCHIVED)
+    ) {
+      throw new BadRequestException(
+        "Acknowledgement request cannot be created for DRAFT or ARCHIVED Growth Hub reports.",
+      );
+    }
+
+    const fallbackProjectId =
+      existing.projectId ??
+      (await this.resolveGrowthHubReportProjectId(existing.clientProfileId, null));
+
+    if (dto.requestAcknowledgement === true && !fallbackProjectId) {
+      throw new BadRequestException(
+        "A Growth Hub project is required to request report acknowledgement.",
+      );
+    }
+
+    if (dto.requestAcknowledgement === true && fallbackProjectId && !existing.projectId) {
+      updateData.project = {
+        connect: { id: fallbackProjectId },
+      };
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      let acknowledgementTaskId = existing.acknowledgementTaskId;
+
+      if (dto.requestAcknowledgement === true && fallbackProjectId) {
+        const taskPayload: Prisma.TaskUncheckedCreateInput = {
+          projectId: fallbackProjectId,
+          title: this.buildGrowthHubReportAcknowledgementTaskTitle(
+            existing.type,
+            existing.periodStart,
+            existing.periodEnd,
+          ),
+          description: this.buildGrowthHubReportAcknowledgementTaskDescription(
+            normalizedSummary ?? existing.summary ?? null,
+          ),
+          status: TaskStatus.REVIEW,
+          type: TaskType.REVISION,
+          approvalRequired: true,
+          approvalType: MetaAdsApprovalType.GROWTH_REPORT_ACKNOWLEDGEMENT,
+          approvalStatus: MetaAdsApprovalStatus.PENDING,
+          approvalRequestedAt: now,
+          approvalContext: {
+            reportId: existing.id,
+            reportType: existing.type,
+            periodStart: existing.periodStart.toISOString(),
+            periodEnd: existing.periodEnd.toISOString(),
+          },
+        };
+
+        if (acknowledgementTaskId) {
+          await tx.task.update({
+            where: { id: acknowledgementTaskId },
+            data: {
+              title: taskPayload.title,
+              description: taskPayload.description,
+              status: TaskStatus.REVIEW,
+              approvalRequired: true,
+              approvalType: MetaAdsApprovalType.GROWTH_REPORT_ACKNOWLEDGEMENT,
+              approvalStatus: MetaAdsApprovalStatus.PENDING,
+              approvalRequestedAt: now,
+              approvalRespondedAt: null,
+              approvalRespondedByUserId: null,
+              approvalResponseNote: null,
+              approvalContext: taskPayload.approvalContext,
+            },
+          });
+        } else {
+          const createdTask = await tx.task.create({
+            data: taskPayload,
+            select: { id: true },
+          });
+          acknowledgementTaskId = createdTask.id;
+        }
+
+        updateData.acknowledgementRequestedAt = now;
+        if (acknowledgementTaskId) {
+          updateData.acknowledgementTask = {
+            connect: { id: acknowledgementTaskId },
+          };
+        }
+      }
+
+      return tx.growthHubReport.update({
+        where: { id: existing.id },
+        data: updateData,
+        select: growthHubReportSelect,
+      });
+    });
+
+    return this.toGrowthHubReportItem(updated);
+  }
+
   private toGrowthHubActionItem(action: GrowthHubActionModel): GrowthHubActionItem {
     return {
       id: action.id,
@@ -871,6 +1420,49 @@ export class GrowthHubService {
       createdBy: note.createdBy,
       createdAt: note.createdAt,
       updatedAt: note.updatedAt,
+    };
+  }
+
+  private toGrowthHubReportItem(report: GrowthHubReportModel): GrowthHubReportItem {
+    const acknowledgementStatus =
+      report.acknowledgementRequestedAt === null
+        ? "NOT_REQUESTED"
+        : report.acknowledgementTask?.approvalStatus === MetaAdsApprovalStatus.ACKNOWLEDGED ||
+            report.acknowledgementTask?.approvalStatus === MetaAdsApprovalStatus.APPROVED
+          ? "ACKNOWLEDGED"
+          : report.acknowledgementTask?.approvalStatus === MetaAdsApprovalStatus.CHANGES_REQUESTED ||
+              report.acknowledgementTask?.approvalStatus === MetaAdsApprovalStatus.REJECTED
+            ? "CHANGES_REQUESTED"
+            : "PENDING";
+
+    return {
+      id: report.id,
+      clientProfileId: report.clientProfileId,
+      projectId: report.projectId ?? null,
+      project: report.project
+        ? {
+            id: report.project.id,
+            name: report.project.name,
+            slug: report.project.slug,
+            serviceKey: report.project.serviceKey,
+          }
+        : null,
+      periodStart: report.periodStart.toISOString(),
+      periodEnd: report.periodEnd.toISOString(),
+      type: report.type,
+      status: report.status,
+      summary: report.summary ?? null,
+      metricsSnapshot: (report.metricsSnapshot as Prisma.JsonValue | null) ?? null,
+      clientVisible: report.clientVisible,
+      publishedAt: report.publishedAt?.toISOString() ?? null,
+      acknowledgementRequestedAt: report.acknowledgementRequestedAt?.toISOString() ?? null,
+      acknowledgedAt: report.acknowledgedAt?.toISOString() ?? null,
+      acknowledgementStatus,
+      acknowledgementTaskId: report.acknowledgementTask?.id ?? null,
+      acknowledgementTaskUpdatedAt: report.acknowledgementTask?.updatedAt.toISOString() ?? null,
+      createdBy: report.createdBy,
+      createdAt: report.createdAt.toISOString(),
+      updatedAt: report.updatedAt.toISOString(),
     };
   }
 
@@ -1038,6 +1630,23 @@ export class GrowthHubService {
     throw new ForbiddenException("Missing required Growth Hub notes permission.");
   }
 
+  private async assertCanReadAdminReports(
+    clientProfileId: string,
+    actor: AuthenticatedUser,
+  ): Promise<void> {
+    if (
+      this.isAdminUser(actor) &&
+      (this.hasPermission(actor, GROWTH_HUB_REPORTS_READ_ANY_PERMISSION) ||
+        this.hasPermission(actor, GROWTH_HUB_SUMMARY_READ_ANY_PERMISSION))
+    ) {
+      await this.assertClientProfileExists(clientProfileId);
+      await this.assertClientHasActiveGrowthHubService(clientProfileId);
+      return;
+    }
+
+    throw new ForbiddenException("Missing required Growth Hub reports permission.");
+  }
+
   private assertCanReadAdminOverview(actor: AuthenticatedUser): void {
     if (
       !this.isAdminUser(actor) ||
@@ -1071,6 +1680,15 @@ export class GrowthHubService {
       !this.hasPermission(actor, GROWTH_HUB_NOTES_MANAGE_ANY_PERMISSION)
     ) {
       throw new ForbiddenException("Missing required Growth Hub notes permission.");
+    }
+  }
+
+  private assertCanManageAdminReports(actor: AuthenticatedUser): void {
+    if (
+      !this.isAdminUser(actor) ||
+      !this.hasPermission(actor, GROWTH_HUB_REPORTS_MANAGE_ANY_PERMISSION)
+    ) {
+      throw new ForbiddenException("Missing required Growth Hub reports permission.");
     }
   }
 
@@ -1129,12 +1747,34 @@ export class GrowthHubService {
     await this.assertAssignedGrowthHubClientOrFail(actor, clientProfileId);
   }
 
+  private async assertCanReadAssignedReports(
+    clientProfileId: string,
+    actor: AuthenticatedUser,
+  ): Promise<void> {
+    if (!this.hasPermission(actor, GROWTH_HUB_REPORTS_READ_ASSIGNED_PERMISSION)) {
+      throw new ForbiddenException("Missing required Growth Hub reports permission.");
+    }
+
+    await this.assertAssignedGrowthHubClientOrFail(actor, clientProfileId);
+  }
+
   private async assertCanManageAssignedNotes(
     clientProfileId: string,
     actor: AuthenticatedUser,
   ): Promise<void> {
     if (!this.hasPermission(actor, GROWTH_HUB_NOTES_MANAGE_ASSIGNED_PERMISSION)) {
       throw new ForbiddenException("Missing required Growth Hub notes permission.");
+    }
+
+    await this.assertAssignedGrowthHubClientOrFail(actor, clientProfileId);
+  }
+
+  private async assertCanManageAssignedReports(
+    clientProfileId: string,
+    actor: AuthenticatedUser,
+  ): Promise<void> {
+    if (!this.hasPermission(actor, GROWTH_HUB_REPORTS_MANAGE_ASSIGNED_PERMISSION)) {
+      throw new ForbiddenException("Missing required Growth Hub reports permission.");
     }
 
     await this.assertAssignedGrowthHubClientOrFail(actor, clientProfileId);
@@ -1173,6 +1813,15 @@ export class GrowthHubService {
       !this.hasPermission(actor, GROWTH_HUB_NOTES_READ_OWN_PERMISSION)
     ) {
       throw new ForbiddenException("Missing required Growth Hub notes permission.");
+    }
+  }
+
+  private assertCanReadOwnReports(actor: AuthenticatedUser): void {
+    if (
+      actor.accountType !== AccountType.CLIENT ||
+      !this.hasPermission(actor, GROWTH_HUB_REPORTS_READ_OWN_PERMISSION)
+    ) {
+      throw new ForbiddenException("Missing required Growth Hub reports permission.");
     }
   }
 
@@ -1249,6 +1898,89 @@ export class GrowthHubService {
     if (dto.projectId) {
       await this.assertProjectBelongsToClient(dto.projectId, clientProfileId);
     }
+  }
+
+  private resolveGrowthHubReportPeriod(
+    periodStartRaw: string,
+    periodEndRaw: string,
+  ): { periodStart: Date; periodEnd: Date } {
+    const periodStart = this.parseRequiredDate(periodStartRaw, "periodStart");
+    const periodEnd = this.parseRequiredDate(periodEndRaw, "periodEnd");
+
+    if (periodStart.getTime() > periodEnd.getTime()) {
+      throw new BadRequestException("periodStart cannot be greater than periodEnd.");
+    }
+
+    return { periodStart, periodEnd };
+  }
+
+  private normalizeGrowthHubReportSummary(summary: string | undefined): string | null {
+    if (summary === undefined) {
+      return null;
+    }
+
+    const normalized = summary.trim();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  private async resolveGrowthHubReportProjectId(
+    clientProfileId: string,
+    projectId: string | null,
+  ): Promise<string | null> {
+    if (projectId) {
+      const project = await this.prisma.project.findFirst({
+        where: {
+          id: projectId,
+          clientProfileId,
+        },
+        select: { id: true },
+      });
+
+      if (!project) {
+        throw new BadRequestException("Provided projectId is not a project for this client.");
+      }
+
+      return project.id;
+    }
+
+    const growthHubProject = await this.prisma.project.findFirst({
+      where: {
+        clientProfileId,
+        serviceKey: PurchasedServiceKey.GROWTH_HUB,
+      },
+      select: { id: true },
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+    });
+
+    if (growthHubProject) {
+      return growthHubProject.id;
+    }
+
+    const fallbackProject = await this.prisma.project.findFirst({
+      where: { clientProfileId },
+      select: { id: true },
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+    });
+
+    return fallbackProject?.id ?? null;
+  }
+
+  private buildGrowthHubReportAcknowledgementTaskTitle(
+    reportType: GrowthHubReportType,
+    periodStart: Date,
+    periodEnd: Date,
+  ): string {
+    const start = periodStart.toISOString().slice(0, 10);
+    const end = periodEnd.toISOString().slice(0, 10);
+    return `Growth Hub Rapor Teyidi · ${reportType} (${start} - ${end})`;
+  }
+
+  private buildGrowthHubReportAcknowledgementTaskDescription(summary: string | null): string {
+    if (summary) {
+      return `Growth Hub raporu müşteri teyidine açıldı. Özet: ${summary}`;
+    }
+
+    return "Growth Hub raporu müşteri teyidine açıldı.";
   }
 
   private async assertProjectBelongsToClient(
@@ -1381,6 +2113,18 @@ export class GrowthHubService {
   private assertHasWeeklyNoteUpdatePayload(dto: UpdateGrowthHubWeeklyNoteDto): void {
     if (Object.keys(dto).length === 0) {
       throw new BadRequestException("At least one Growth Hub weekly note field is required.");
+    }
+  }
+
+  private assertHasReportUpdatePayload(dto: UpdateGrowthHubReportDto): void {
+    if (
+      dto.status === undefined &&
+      dto.summary === undefined &&
+      dto.metricsSnapshot === undefined &&
+      dto.clientVisible === undefined &&
+      dto.requestAcknowledgement === undefined
+    ) {
+      throw new BadRequestException("At least one Growth Hub report field is required.");
     }
   }
 

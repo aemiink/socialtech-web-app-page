@@ -7,6 +7,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from "@nestjs/common";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
@@ -22,6 +23,12 @@ import {
   CreateGrowthHubWeeklyNoteDto,
   UpdateGrowthHubWeeklyNoteDto,
 } from "./dto/growth-hub-weekly-note.dto";
+import {
+  CreateGrowthHubReportDto,
+  GrowthHubReportsQueryDto,
+  PublishGrowthHubReportDto,
+  UpdateGrowthHubReportDto,
+} from "./dto/growth-hub-report.dto";
 import { UpdateGrowthHubConfigDto } from "./dto/update-growth-hub-config.dto";
 import { GrowthHubService } from "./growth-hub.service";
 
@@ -138,6 +145,46 @@ export class AdminGrowthHubController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.growthHubService.updateAdminWeeklyNote(noteId, dto, actor);
+  }
+
+  @Get("admin/clients/:clientId/growth-hub/reports")
+  @RequirePermissions("growthHub.reports.read.any")
+  getAdminClientReports(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: GrowthHubReportsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.growthHubService.getAdminClientReports(clientId, query, actor);
+  }
+
+  @Post("admin/clients/:clientId/growth-hub/reports")
+  @RequirePermissions("growthHub.reports.manage.any")
+  createAdminClientReport(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Body() dto: CreateGrowthHubReportDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.growthHubService.createAdminClientReport(clientId, dto, actor);
+  }
+
+  @Patch("admin/growth-hub/reports/:reportId")
+  @RequirePermissions("growthHub.reports.manage.any")
+  updateAdminReport(
+    @Param("reportId", ParseUUIDPipe) reportId: string,
+    @Body() dto: UpdateGrowthHubReportDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.growthHubService.updateAdminReport(reportId, dto, actor);
+  }
+
+  @Post("admin/growth-hub/reports/:reportId/publish")
+  @RequirePermissions("growthHub.reports.manage.any")
+  publishAdminReport(
+    @Param("reportId", ParseUUIDPipe) reportId: string,
+    @Body() dto: PublishGrowthHubReportDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.growthHubService.publishAdminReport(reportId, dto, actor);
   }
 
   @Get("admin/clients/:clientId/growth-hub/activity")

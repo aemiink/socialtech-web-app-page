@@ -22,12 +22,16 @@ import { GrowthHubActionNotePanel } from "../features/growthHub/components/Growt
 import { GrowthHubConfigDialog } from "../features/growthHub/components/GrowthHubConfigDialog";
 import {
   useCreateAdminGrowthHubActionMutation,
+  useCreateAdminGrowthHubReportMutation,
   useCreateAdminGrowthHubWeeklyNoteMutation,
   useDeleteAdminGrowthHubActionMutation,
   useGetAdminGrowthHubClientActionsQuery,
+  useGetAdminGrowthHubClientReportsQuery,
   useGetAdminGrowthHubClientWeeklyNotesQuery,
   useGetAdminGrowthHubClientsQuery,
+  usePublishAdminGrowthHubReportMutation,
   useUpdateAdminGrowthHubActionMutation,
+  useUpdateAdminGrowthHubReportMutation,
   useUpdateAdminGrowthHubWeeklyNoteMutation,
 } from "../features/growthHub/growthHubApi";
 import type { GrowthHubChannelSummary } from "../features/growthHub/growthHubTypes";
@@ -54,6 +58,8 @@ export function GrowthHubAdmin() {
   const canManageConfig = hasAdminPermission(currentUser, ["growthHub.config.manage.any"]);
   const canManageActions = hasAdminPermission(currentUser, ["growthHub.actions.manage.any"]);
   const canManageNotes = hasAdminPermission(currentUser, ["growthHub.notes.manage.any"]);
+  const canReadReports = hasAdminPermission(currentUser, ["growthHub.reports.read.any"]);
+  const canManageReports = hasAdminPermission(currentUser, ["growthHub.reports.manage.any"]);
   const {
     data: response,
     error,
@@ -95,13 +101,23 @@ export function GrowthHubAdmin() {
   } = useGetAdminGrowthHubClientWeeklyNotesQuery(selectedClient?.client.id ?? "", {
     skip: !selectedClient,
   });
+  const {
+    data: reportsResponse,
+    isLoading: isReportsLoading,
+  } = useGetAdminGrowthHubClientReportsQuery(selectedClient?.client.id ?? "", {
+    skip: !selectedClient || !canReadReports,
+  });
   const [createAction] = useCreateAdminGrowthHubActionMutation();
   const [updateAction] = useUpdateAdminGrowthHubActionMutation();
   const [deleteAction] = useDeleteAdminGrowthHubActionMutation();
   const [createWeeklyNote] = useCreateAdminGrowthHubWeeklyNoteMutation();
   const [updateWeeklyNote] = useUpdateAdminGrowthHubWeeklyNoteMutation();
+  const [createReport] = useCreateAdminGrowthHubReportMutation();
+  const [updateReport] = useUpdateAdminGrowthHubReportMutation();
+  const [publishReport] = usePublishAdminGrowthHubReportMutation();
   const selectedActions = actionResponse?.data ?? selectedClient?.actions ?? [];
   const selectedWeeklyNotes = weeklyNoteResponse?.data ?? [];
+  const selectedReports = reportsResponse?.data ?? [];
 
   useEffect(() => {
     if (listItems.length === 0) {
@@ -407,10 +423,13 @@ export function GrowthHubAdmin() {
                 <GrowthHubActionNotePanel
                   actions={selectedActions}
                   weeklyNotes={selectedWeeklyNotes}
+                  reports={selectedReports}
                   canManageActions={canManageActions}
                   canManageNotes={canManageNotes}
+                  canManageReports={canManageReports}
                   isActionsLoading={isActionsLoading}
                   isNotesLoading={isWeeklyNotesLoading}
+                  isReportsLoading={isReportsLoading}
                   onCreateAction={(body) =>
                     createAction({ clientId: selectedClient.client.id, body }).unwrap().then(() => undefined)
                   }
@@ -425,6 +444,17 @@ export function GrowthHubAdmin() {
                   }
                   onUpdateWeeklyNote={(noteId, body) =>
                     updateWeeklyNote({ noteId, clientId: selectedClient.client.id, body }).unwrap().then(() => undefined)
+                  }
+                  onCreateReport={(body) =>
+                    createReport({ clientId: selectedClient.client.id, body }).unwrap().then(() => undefined)
+                  }
+                  onUpdateReport={(reportId, body) =>
+                    updateReport({ reportId, clientId: selectedClient.client.id, body }).unwrap().then(() => undefined)
+                  }
+                  onPublishReport={(reportId, requestAcknowledgement) =>
+                    publishReport({ reportId, clientId: selectedClient.client.id, requestAcknowledgement })
+                      .unwrap()
+                      .then(() => undefined)
                   }
                 />
               </div>

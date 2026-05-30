@@ -8,6 +8,7 @@ const mockUseGetClientGrowthHubSummaryQuery = vi.fn();
 const mockUseGetClientGrowthHubChannelsQuery = vi.fn();
 const mockUseGetClientGrowthHubActionsQuery = vi.fn();
 const mockUseGetClientGrowthHubWeeklyNotesQuery = vi.fn();
+const mockUseGetClientGrowthHubReportsQuery = vi.fn();
 const mockUseGetClientGrowthHubActivityQuery = vi.fn();
 
 vi.mock("../../features/growthHub/growthHubApi", () => ({
@@ -21,6 +22,8 @@ vi.mock("../../features/growthHub/growthHubApi", () => ({
     mockUseGetClientGrowthHubActionsQuery(...args),
   useGetClientGrowthHubWeeklyNotesQuery: (...args: unknown[]) =>
     mockUseGetClientGrowthHubWeeklyNotesQuery(...args),
+  useGetClientGrowthHubReportsQuery: (...args: unknown[]) =>
+    mockUseGetClientGrowthHubReportsQuery(...args),
   useGetClientGrowthHubActivityQuery: (...args: unknown[]) =>
     mockUseGetClientGrowthHubActivityQuery(...args),
 }));
@@ -32,6 +35,7 @@ describe("GrowthHubDashboard", () => {
     mockUseGetClientGrowthHubChannelsQuery.mockReset();
     mockUseGetClientGrowthHubActionsQuery.mockReset();
     mockUseGetClientGrowthHubWeeklyNotesQuery.mockReset();
+    mockUseGetClientGrowthHubReportsQuery.mockReset();
     mockUseGetClientGrowthHubActivityQuery.mockReset();
 
     mockUseGetClientGrowthHubConfigQuery.mockReturnValue(successQuery(buildConfig()));
@@ -69,6 +73,41 @@ describe("GrowthHubDashboard", () => {
         meta: { total: 1, generatedAt: "2026-06-01T08:00:00.000Z" },
       }),
     );
+    mockUseGetClientGrowthHubReportsQuery.mockReturnValue(
+      successQuery({
+        data: [
+          {
+            id: "growth-report-1",
+            clientProfileId: "client-1",
+            projectId: null,
+            project: null,
+            periodStart: "2026-05-25",
+            periodEnd: "2026-06-01",
+            type: "CHANNEL_PERFORMANCE",
+            status: "PUBLISHED",
+            summary: "Growth Hub kanal performans raporu yayında.",
+            metricsSnapshot: null,
+            clientVisible: true,
+            publishedAt: "2026-06-01T08:00:00.000Z",
+            acknowledgementRequestedAt: "2026-06-01T08:00:00.000Z",
+            acknowledgedAt: null,
+            acknowledgementStatus: "PENDING",
+            acknowledgementTaskId: "task-report-1",
+            acknowledgementTaskUpdatedAt: "2026-06-01T08:00:00.000Z",
+            createdBy: null,
+            createdAt: "2026-06-01T08:00:00.000Z",
+            updatedAt: "2026-06-01T08:00:00.000Z",
+          },
+        ],
+        meta: {
+          total: 1,
+          draft: 0,
+          published: 1,
+          clientVisible: 1,
+          generatedAt: "2026-06-01T08:00:00.000Z",
+        },
+      }),
+    );
     mockUseGetClientGrowthHubActivityQuery.mockReturnValue(
       successQuery({
         data: buildSummary().activity,
@@ -86,6 +125,7 @@ describe("GrowthHubDashboard", () => {
     expect(screen.getByText("Meta Ads")).toBeInTheDocument();
     expect(screen.getByText("Google Ads")).toBeInTheDocument();
     expect(screen.getByText("Landing page kreatif onayı")).toBeInTheDocument();
+    expect(screen.getByText("Growth Hub kanal performans raporu yayında.")).toBeInTheDocument();
     expect(screen.getAllByText("Bu hafta müşteri görünür weekly note kaydı.").length).toBeGreaterThan(0);
     expect(screen.getByText("Meta kampanya görevi güncellendi")).toBeInTheDocument();
     expect(screen.queryByText("API kaynaklı Growth Hub notu.")).not.toBeInTheDocument();
@@ -163,6 +203,12 @@ describe("GrowthHubDashboard", () => {
     );
     mockUseGetClientGrowthHubWeeklyNotesQuery.mockReturnValue(
       successQuery({ data: [], meta: { total: 0, generatedAt: "2026-06-01T08:00:00.000Z" } }),
+    );
+    mockUseGetClientGrowthHubReportsQuery.mockReturnValue(
+      successQuery({
+        data: [],
+        meta: { total: 0, draft: 0, published: 0, clientVisible: 0, generatedAt: "2026-06-01T08:00:00.000Z" },
+      }),
     );
     mockUseGetClientGrowthHubActivityQuery.mockReturnValue(
       successQuery({ data: [], meta: { total: 0, generatedAt: "2026-06-01T08:00:00.000Z" } }),

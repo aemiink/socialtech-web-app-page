@@ -18,14 +18,18 @@ import {
 } from "../../features/auth/authSelectors";
 import {
   useCreateAssignedGrowthHubActionMutation,
+  useCreateAssignedGrowthHubReportMutation,
   useCreateAssignedGrowthHubWeeklyNoteMutation,
   useDeleteAssignedGrowthHubActionMutation,
   useGetAssignedGrowthHubClientActivityQuery,
   useGetAssignedGrowthHubClientActionsQuery,
+  useGetAssignedGrowthHubClientReportsQuery,
   useGetAssignedGrowthHubClientSummaryQuery,
   useGetAssignedGrowthHubClientWeeklyNotesQuery,
   useGetAssignedGrowthHubClientsQuery,
+  usePublishAssignedGrowthHubReportMutation,
   useUpdateAssignedGrowthHubActionMutation,
+  useUpdateAssignedGrowthHubReportMutation,
   useUpdateAssignedGrowthHubWeeklyNoteMutation,
 } from "../../features/growthHub/growthHubApi";
 import { GrowthHubActionNotePanel } from "../../features/growthHub/components/GrowthHubActionNotePanel";
@@ -54,6 +58,7 @@ export function GrowthHubWorkspace() {
   const canManageActions = hasUserPermission(currentUser, ["growthHub.actions.manage.assigned"]);
   const canManageNotes = hasUserPermission(currentUser, ["growthHub.notes.manage.assigned"]);
   const canCreateApprovals = hasUserPermission(currentUser, ["growthHub.approvals.create.assigned"]);
+  const canReadReports = hasUserPermission(currentUser, ["growthHub.reports.read.assigned"]);
   const canManageReports = hasUserPermission(currentUser, ["growthHub.reports.manage.assigned"]);
   const {
     data: response,
@@ -99,11 +104,20 @@ export function GrowthHubWorkspace() {
   } = useGetAssignedGrowthHubClientWeeklyNotesQuery(selectedClient?.client.id ?? "", {
     skip: !selectedClient || !canManageNotes,
   });
+  const {
+    data: reportsResponse,
+    isLoading: isReportsLoading,
+  } = useGetAssignedGrowthHubClientReportsQuery(selectedClient?.client.id ?? "", {
+    skip: !selectedClient || !canReadReports,
+  });
   const [createAction] = useCreateAssignedGrowthHubActionMutation();
   const [updateAction] = useUpdateAssignedGrowthHubActionMutation();
   const [deleteAction] = useDeleteAssignedGrowthHubActionMutation();
   const [createWeeklyNote] = useCreateAssignedGrowthHubWeeklyNoteMutation();
   const [updateWeeklyNote] = useUpdateAssignedGrowthHubWeeklyNoteMutation();
+  const [createReport] = useCreateAssignedGrowthHubReportMutation();
+  const [updateReport] = useUpdateAssignedGrowthHubReportMutation();
+  const [publishReport] = usePublishAssignedGrowthHubReportMutation();
 
   useEffect(() => {
     if (listItems.length === 0) {
@@ -123,6 +137,7 @@ export function GrowthHubWorkspace() {
   const approvalActions = actionItems.filter((item) => item.type !== "REPORT_ACKNOWLEDGEMENT");
   const reportActions = actionItems.filter((item) => item.type === "REPORT_ACKNOWLEDGEMENT");
   const weeklyNotes = weeklyNoteResponse?.data ?? [];
+  const reports = reportsResponse?.data ?? [];
   const messages = activity?.data.filter((item) => item.type === "MESSAGE") ?? [];
   const recentActivity = activity?.data.filter((item) => item.type !== "MESSAGE") ?? [];
 
@@ -399,18 +414,23 @@ export function GrowthHubWorkspace() {
               </div>
 
               <p className="mt-4 text-xs text-[#7A7A7A]">
-                Approval create ve report publish mutasyonları Growth Hub Faz 7 ile tamamlanacak.
+                {canManageReports
+                  ? "Growth report publish ve müşteri teyidi akışı aktif."
+                  : "Growth report publish için Growth Hub report yönetim yetkisi gerekiyor."}
               </p>
             </WorkspaceSection>
 
-            <WorkspaceSection title="Growth Actions ve Weekly Notes">
+            <WorkspaceSection title="Growth Actions, Weekly Notes ve Reports">
               <GrowthHubActionNotePanel
                 actions={actionItems}
                 weeklyNotes={weeklyNotes}
+                reports={reports}
                 canManageActions={canManageActions}
                 canManageNotes={canManageNotes}
+                canManageReports={canManageReports}
                 isActionsLoading={isActionsLoading}
                 isNotesLoading={isWeeklyNotesLoading}
+                isReportsLoading={isReportsLoading}
                 onCreateAction={(body) =>
                   createAction({ clientId: selectedClient.client.id, body }).unwrap().then(() => undefined)
                 }
@@ -425,6 +445,17 @@ export function GrowthHubWorkspace() {
                 }
                 onUpdateWeeklyNote={(noteId, body) =>
                   updateWeeklyNote({ noteId, clientId: selectedClient.client.id, body }).unwrap().then(() => undefined)
+                }
+                onCreateReport={(body) =>
+                  createReport({ clientId: selectedClient.client.id, body }).unwrap().then(() => undefined)
+                }
+                onUpdateReport={(reportId, body) =>
+                  updateReport({ reportId, clientId: selectedClient.client.id, body }).unwrap().then(() => undefined)
+                }
+                onPublishReport={(reportId, requestAcknowledgement) =>
+                  publishReport({ reportId, clientId: selectedClient.client.id, requestAcknowledgement })
+                    .unwrap()
+                    .then(() => undefined)
                 }
               />
             </WorkspaceSection>

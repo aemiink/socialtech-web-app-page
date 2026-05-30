@@ -7,6 +7,9 @@ import type {
   GrowthHubChannelsResponse,
   GrowthHubClientsResponse,
   GrowthHubConfig,
+  GrowthHubReport,
+  GrowthHubReportMutationRequest,
+  GrowthHubReportsResponse,
   GrowthHubSummary,
   GrowthHubWeeklyNote,
   GrowthHubWeeklyNoteMutationRequest,
@@ -18,6 +21,7 @@ import {
   normalizeGrowthHubChannelsResponse,
   normalizeGrowthHubClientsResponse,
   normalizeGrowthHubConfigResponse,
+  normalizeGrowthHubReportsResponse,
   normalizeGrowthHubSummaryResponse,
   normalizeGrowthHubWeeklyNotesResponse,
 } from "./growthHubUtils";
@@ -38,6 +42,15 @@ function normalizeGrowthHubWeeklyNoteResponse(response: unknown): GrowthHubWeekl
   const normalized = normalizeGrowthHubWeeklyNotesResponse([response]);
   if (!normalized.data[0]) {
     throw new Error("Growth Hub weekly note response could not be normalized.");
+  }
+
+  return normalized.data[0];
+}
+
+function normalizeGrowthHubReportResponse(response: unknown): GrowthHubReport {
+  const normalized = normalizeGrowthHubReportsResponse([response]);
+  if (!normalized.data[0]) {
+    throw new Error("Growth Hub report response could not be normalized.");
   }
 
   return normalized.data[0];
@@ -329,6 +342,142 @@ export const growthHubApi = baseApi.injectEndpoints({
         { type: "GrowthHubSummary", id: `assigned:${clientId}` },
       ],
     }),
+    getAdminGrowthHubClientReports: builder.query<GrowthHubReportsResponse, string>({
+      query: (clientId) => ({
+        url: `/admin/clients/${clientId}/growth-hub/reports`,
+        method: "GET",
+      }),
+      transformResponse: (response: unknown) => normalizeGrowthHubReportsResponse(response),
+      providesTags: (_result, _error, clientId) => [
+        { type: "GrowthHubReports", id: clientId },
+      ],
+    }),
+    createAdminGrowthHubReport: builder.mutation<
+      GrowthHubReport,
+      {
+        clientId: string;
+        body: GrowthHubReportMutationRequest & {
+          periodStart: string;
+          periodEnd: string;
+          type: NonNullable<GrowthHubReportMutationRequest["type"]>;
+        };
+      }
+    >({
+      query: ({ clientId, body }) => ({
+        url: `/admin/clients/${clientId}/growth-hub/reports`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeGrowthHubReportResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "GrowthHubReports", id: clientId },
+        { type: "GrowthHubActions", id: clientId },
+        { type: "GrowthHubSummary", id: clientId },
+        { type: "GrowthHubSummary", id: ADMIN_GROWTH_HUB_LIST_ID },
+      ],
+    }),
+    updateAdminGrowthHubReport: builder.mutation<
+      GrowthHubReport,
+      { reportId: string; clientId: string; body: GrowthHubReportMutationRequest }
+    >({
+      query: ({ reportId, body }) => ({
+        url: `/admin/growth-hub/reports/${reportId}`,
+        method: "PATCH",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeGrowthHubReportResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "GrowthHubReports", id: clientId },
+        { type: "GrowthHubActions", id: clientId },
+        { type: "GrowthHubSummary", id: clientId },
+        { type: "GrowthHubSummary", id: ADMIN_GROWTH_HUB_LIST_ID },
+      ],
+    }),
+    publishAdminGrowthHubReport: builder.mutation<
+      GrowthHubReport,
+      { reportId: string; clientId: string; requestAcknowledgement?: boolean }
+    >({
+      query: ({ reportId, requestAcknowledgement }) => ({
+        url: `/admin/growth-hub/reports/${reportId}/publish`,
+        method: "POST",
+        body: { requestAcknowledgement },
+      }),
+      transformResponse: (response: unknown) => normalizeGrowthHubReportResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "GrowthHubReports", id: clientId },
+        { type: "GrowthHubActions", id: clientId },
+        { type: "GrowthHubSummary", id: clientId },
+        { type: "GrowthHubSummary", id: ADMIN_GROWTH_HUB_LIST_ID },
+      ],
+    }),
+    getAssignedGrowthHubClientReports: builder.query<GrowthHubReportsResponse, string>({
+      query: (clientId) => ({
+        url: `/growth-hub/clients/${clientId}/reports`,
+        method: "GET",
+      }),
+      transformResponse: (response: unknown) => normalizeGrowthHubReportsResponse(response),
+      providesTags: (_result, _error, clientId) => [
+        { type: "GrowthHubReports", id: `assigned:${clientId}` },
+      ],
+    }),
+    createAssignedGrowthHubReport: builder.mutation<
+      GrowthHubReport,
+      {
+        clientId: string;
+        body: GrowthHubReportMutationRequest & {
+          periodStart: string;
+          periodEnd: string;
+          type: NonNullable<GrowthHubReportMutationRequest["type"]>;
+        };
+      }
+    >({
+      query: ({ clientId, body }) => ({
+        url: `/growth-hub/clients/${clientId}/reports`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeGrowthHubReportResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "GrowthHubReports", id: `assigned:${clientId}` },
+        { type: "GrowthHubActions", id: `assigned:${clientId}` },
+        { type: "GrowthHubSummary", id: `assigned:${clientId}` },
+        { type: "GrowthHubSummary", id: ASSIGNED_GROWTH_HUB_LIST_ID },
+      ],
+    }),
+    updateAssignedGrowthHubReport: builder.mutation<
+      GrowthHubReport,
+      { reportId: string; clientId: string; body: GrowthHubReportMutationRequest }
+    >({
+      query: ({ reportId, body }) => ({
+        url: `/growth-hub/reports/${reportId}`,
+        method: "PATCH",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeGrowthHubReportResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "GrowthHubReports", id: `assigned:${clientId}` },
+        { type: "GrowthHubActions", id: `assigned:${clientId}` },
+        { type: "GrowthHubSummary", id: `assigned:${clientId}` },
+        { type: "GrowthHubSummary", id: ASSIGNED_GROWTH_HUB_LIST_ID },
+      ],
+    }),
+    publishAssignedGrowthHubReport: builder.mutation<
+      GrowthHubReport,
+      { reportId: string; clientId: string; requestAcknowledgement?: boolean }
+    >({
+      query: ({ reportId, requestAcknowledgement }) => ({
+        url: `/growth-hub/reports/${reportId}/publish`,
+        method: "POST",
+        body: { requestAcknowledgement },
+      }),
+      transformResponse: (response: unknown) => normalizeGrowthHubReportResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "GrowthHubReports", id: `assigned:${clientId}` },
+        { type: "GrowthHubActions", id: `assigned:${clientId}` },
+        { type: "GrowthHubSummary", id: `assigned:${clientId}` },
+        { type: "GrowthHubSummary", id: ASSIGNED_GROWTH_HUB_LIST_ID },
+      ],
+    }),
     getAdminGrowthHubClientActivity: builder.query<GrowthHubActivityResponse, string>({
       query: (clientId) => ({
         url: `/admin/clients/${clientId}/growth-hub/activity`,
@@ -375,6 +524,14 @@ export const {
   useGetAssignedGrowthHubClientWeeklyNotesQuery,
   useCreateAssignedGrowthHubWeeklyNoteMutation,
   useUpdateAssignedGrowthHubWeeklyNoteMutation,
+  useGetAdminGrowthHubClientReportsQuery,
+  useCreateAdminGrowthHubReportMutation,
+  useUpdateAdminGrowthHubReportMutation,
+  usePublishAdminGrowthHubReportMutation,
+  useGetAssignedGrowthHubClientReportsQuery,
+  useCreateAssignedGrowthHubReportMutation,
+  useUpdateAssignedGrowthHubReportMutation,
+  usePublishAssignedGrowthHubReportMutation,
   useGetAdminGrowthHubClientActivityQuery,
   useGetAssignedGrowthHubClientActivityQuery,
 } = growthHubApi;

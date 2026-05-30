@@ -16,6 +16,7 @@ import {
   useGetClientGrowthHubActivityQuery,
   useGetClientGrowthHubChannelsQuery,
   useGetClientGrowthHubConfigQuery,
+  useGetClientGrowthHubReportsQuery,
   useGetClientGrowthHubSummaryQuery,
   useGetClientGrowthHubWeeklyNotesQuery,
 } from "../../features/growthHub/growthHubApi";
@@ -24,6 +25,7 @@ import type {
   GrowthHubActivityItem,
   GrowthHubChannelSummary,
   GrowthHubConfig,
+  GrowthHubReport,
   GrowthHubSummary,
   GrowthHubWeeklyNote,
 } from "../../features/growthHub/growthHubTypes";
@@ -40,6 +42,9 @@ import {
   getGrowthHubActivityTypeLabel,
   getGrowthHubChannelStatusLabel,
   getGrowthHubGoalLabel,
+  getGrowthHubReportAcknowledgementStatusLabel,
+  getGrowthHubReportStatusLabel,
+  getGrowthHubReportTypeLabel,
   getGrowthHubServiceLabel,
   getGrowthHubSourceStatusLabel,
   getGrowthHubStatusTone,
@@ -75,6 +80,7 @@ export function GrowthHubDashboard() {
   const channelsQuery = useGetClientGrowthHubChannelsQuery();
   const actionsQuery = useGetClientGrowthHubActionsQuery();
   const weeklyNotesQuery = useGetClientGrowthHubWeeklyNotesQuery();
+  const reportsQuery = useGetClientGrowthHubReportsQuery();
   const activityQuery = useGetClientGrowthHubActivityQuery();
 
   const summary = summaryQuery.data ?? null;
@@ -82,6 +88,7 @@ export function GrowthHubDashboard() {
   const channels = channelsQuery.data?.data ?? summary?.channels ?? [];
   const actions = actionsQuery.data?.data ?? summary?.actions ?? [];
   const weeklyNotes = weeklyNotesQuery.data?.data ?? [];
+  const reports = reportsQuery.data?.data ?? [];
   const latestWeeklyNote = weeklyNotes[0] ?? null;
   const activity = activityQuery.data?.data ?? summary?.activity ?? [];
   const isLoading =
@@ -90,6 +97,7 @@ export function GrowthHubDashboard() {
     channelsQuery.isLoading ||
     actionsQuery.isLoading ||
     weeklyNotesQuery.isLoading ||
+    reportsQuery.isLoading ||
     activityQuery.isLoading;
   const isError =
     summaryQuery.isError ||
@@ -97,6 +105,7 @@ export function GrowthHubDashboard() {
     channelsQuery.isError ||
     actionsQuery.isError ||
     weeklyNotesQuery.isError ||
+    reportsQuery.isError ||
     activityQuery.isError;
 
   if (isLoading) {
@@ -203,7 +212,7 @@ export function GrowthHubDashboard() {
         <ClientActions actions={actions} />
       </div>
 
-      <RecentActivity activity={activity} />
+      <RecentActivity activity={activity} reports={reports} />
     </PageShell>
   );
 }
@@ -516,7 +525,7 @@ function ClientActions({ actions }: { actions: GrowthHubActionItem[] }) {
   );
 }
 
-function RecentActivity({ activity }: { activity: GrowthHubActivityItem[] }) {
+function RecentActivity({ activity, reports }: { activity: GrowthHubActivityItem[]; reports: GrowthHubReport[] }) {
   return (
     <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
       <div className={`${cardClass} lg:col-span-2`}>
@@ -546,8 +555,33 @@ function RecentActivity({ activity }: { activity: GrowthHubActivityItem[] }) {
       </div>
 
       <div className={cardClass}>
-        <h2 className="mb-4 text-xl text-white">Raporlar</h2>
-        <EmptyState text="Yayımlanmış Growth Hub raporu henüz yok." />
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="text-xl text-white">Raporlar</h2>
+          <span className="text-sm text-[#A0A0A0]">{formatGrowthHubNumber(reports.length)} yayın</span>
+        </div>
+        {reports.length > 0 ? (
+          <div className="space-y-3">
+            {reports.slice(0, 4).map((report) => (
+              <div key={report.id} className={innerClass}>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <span className={`rounded px-2 py-1 text-xs ${getReportTone(report)}`}>
+                    {getGrowthHubReportStatusLabel(report.status)}
+                  </span>
+                  <span className="text-xs text-[#A0A0A0]">{formatGrowthHubDate(report.periodEnd)}</span>
+                </div>
+                <p className="text-sm text-white">{getGrowthHubReportTypeLabel(report.type)}</p>
+                {report.summary ? (
+                  <p className="mt-2 text-xs leading-relaxed text-[#D8D8D8]">{report.summary}</p>
+                ) : null}
+                <p className="mt-2 text-xs text-[#A0A0A0]">
+                  {getGrowthHubReportAcknowledgementStatusLabel(report.acknowledgementStatus)}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState text="Yayımlanmış Growth Hub raporu henüz yok." />
+        )}
       </div>
     </section>
   );
@@ -727,6 +761,22 @@ function getActionTone(action: GrowthHubActionItem): string {
   }
 
   return "bg-[#FFA726]/10 text-[#FFA726]";
+}
+
+function getReportTone(report: GrowthHubReport): string {
+  if (report.acknowledgementStatus === "ACKNOWLEDGED") {
+    return "bg-[#AAFF01]/10 text-[#AAFF01]";
+  }
+
+  if (report.acknowledgementStatus === "PENDING") {
+    return "bg-[#FFA726]/10 text-[#FFA726]";
+  }
+
+  if (report.acknowledgementStatus === "CHANGES_REQUESTED") {
+    return "bg-[#ff4444]/10 text-[#ff4444]";
+  }
+
+  return "bg-[#00D4FF]/10 text-[#00D4FF]";
 }
 
 function getActivityTone(type: GrowthHubActivityItem["type"]): string {

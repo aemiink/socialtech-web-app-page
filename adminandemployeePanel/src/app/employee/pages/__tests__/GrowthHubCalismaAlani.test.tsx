@@ -21,11 +21,15 @@ const mockUseGetAssignedGrowthHubClientSummaryQuery = vi.fn();
 const mockUseGetAssignedGrowthHubClientActivityQuery = vi.fn();
 const mockUseGetAssignedGrowthHubClientActionsQuery = vi.fn();
 const mockUseGetAssignedGrowthHubClientWeeklyNotesQuery = vi.fn();
+const mockUseGetAssignedGrowthHubClientReportsQuery = vi.fn();
 const mockUseCreateAssignedGrowthHubActionMutation = vi.fn();
 const mockUseUpdateAssignedGrowthHubActionMutation = vi.fn();
 const mockUseDeleteAssignedGrowthHubActionMutation = vi.fn();
 const mockUseCreateAssignedGrowthHubWeeklyNoteMutation = vi.fn();
 const mockUseUpdateAssignedGrowthHubWeeklyNoteMutation = vi.fn();
+const mockUseCreateAssignedGrowthHubReportMutation = vi.fn();
+const mockUseUpdateAssignedGrowthHubReportMutation = vi.fn();
+const mockUsePublishAssignedGrowthHubReportMutation = vi.fn();
 const mockMutation = vi.fn(() => ({ unwrap: async () => ({}) }));
 
 let currentUser: AuthUserProfile | null = null;
@@ -45,11 +49,16 @@ vi.mock("../../../features/growthHub/growthHubApi", () => ({
     mockUseGetAssignedGrowthHubClientActionsQuery(clientId, options),
   useGetAssignedGrowthHubClientWeeklyNotesQuery: (clientId: string, options?: QueryOptions) =>
     mockUseGetAssignedGrowthHubClientWeeklyNotesQuery(clientId, options),
+  useGetAssignedGrowthHubClientReportsQuery: (clientId: string, options?: QueryOptions) =>
+    mockUseGetAssignedGrowthHubClientReportsQuery(clientId, options),
   useCreateAssignedGrowthHubActionMutation: () => mockUseCreateAssignedGrowthHubActionMutation(),
   useUpdateAssignedGrowthHubActionMutation: () => mockUseUpdateAssignedGrowthHubActionMutation(),
   useDeleteAssignedGrowthHubActionMutation: () => mockUseDeleteAssignedGrowthHubActionMutation(),
   useCreateAssignedGrowthHubWeeklyNoteMutation: () => mockUseCreateAssignedGrowthHubWeeklyNoteMutation(),
   useUpdateAssignedGrowthHubWeeklyNoteMutation: () => mockUseUpdateAssignedGrowthHubWeeklyNoteMutation(),
+  useCreateAssignedGrowthHubReportMutation: () => mockUseCreateAssignedGrowthHubReportMutation(),
+  useUpdateAssignedGrowthHubReportMutation: () => mockUseUpdateAssignedGrowthHubReportMutation(),
+  usePublishAssignedGrowthHubReportMutation: () => mockUsePublishAssignedGrowthHubReportMutation(),
 }));
 
 const projectManagerUser: AuthUserProfile = {
@@ -65,6 +74,8 @@ const projectManagerUser: AuthUserProfile = {
     "growthHub.actions.manage.assigned",
     "growthHub.notes.read.assigned",
     "growthHub.notes.manage.assigned",
+    "growthHub.reports.read.assigned",
+    "growthHub.reports.manage.assigned",
   ],
   clientProfile: null,
 };
@@ -277,11 +288,21 @@ describe("GrowthHubCalismaAlani", () => {
       data: { data: [], meta: { total: 0, generatedAt: null } },
       isLoading: false,
     });
+    mockUseGetAssignedGrowthHubClientReportsQuery.mockReturnValue({
+      data: {
+        data: [],
+        meta: { total: 0, draft: 0, published: 0, clientVisible: 0, generatedAt: null },
+      },
+      isLoading: false,
+    });
     mockUseCreateAssignedGrowthHubActionMutation.mockReturnValue([mockMutation]);
     mockUseUpdateAssignedGrowthHubActionMutation.mockReturnValue([mockMutation]);
     mockUseDeleteAssignedGrowthHubActionMutation.mockReturnValue([mockMutation]);
     mockUseCreateAssignedGrowthHubWeeklyNoteMutation.mockReturnValue([mockMutation]);
     mockUseUpdateAssignedGrowthHubWeeklyNoteMutation.mockReturnValue([mockMutation]);
+    mockUseCreateAssignedGrowthHubReportMutation.mockReturnValue([mockMutation]);
+    mockUseUpdateAssignedGrowthHubReportMutation.mockReturnValue([mockMutation]);
+    mockUsePublishAssignedGrowthHubReportMutation.mockReturnValue([mockMutation]);
   });
 
   it("renders permission gate without assigned Growth Hub permission", () => {

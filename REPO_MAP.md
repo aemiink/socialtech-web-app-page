@@ -175,9 +175,9 @@ Purpose: customer-facing visibility panel for purchased Social Tech services, re
   - `clientPanel/src/app/features/tasks/tasksTypes.ts`
   - `clientPanel/src/app/features/tasks/tasksUtils.ts`
 - Client Growth Hub feature:
-  - `clientPanel/src/app/features/growthHub/growthHubApi.ts` - own-client Growth Hub config/summary/channels/actions/weekly-notes/activity RTK Query hooks
-  - `clientPanel/src/app/features/growthHub/growthHubTypes.ts` - Growth Hub client dashboard contract types including common channel metric/health/risk fields
-  - `clientPanel/src/app/features/growthHub/growthHubUtils.ts` - response normalizers, labels, common channel field fallbacks, date/metric formatters, health score helper
+  - `clientPanel/src/app/features/growthHub/growthHubApi.ts` - own-client Growth Hub config/summary/channels/actions/weekly-notes/reports/activity RTK Query hooks
+  - `clientPanel/src/app/features/growthHub/growthHubTypes.ts` - Growth Hub client dashboard contract types including common channel metric/health/risk and report fields
+  - `clientPanel/src/app/features/growthHub/growthHubUtils.ts` - response normalizers, report labels, common channel field fallbacks, date/metric formatters, health score helper
   - `clientPanel/src/app/lib/client-portal-navigation.ts` - app-level service navigation event helper used by Growth Hub channel detail actions
 
 ### Navigation
@@ -236,12 +236,13 @@ Additional portal pages exist under `clientPanel/src/app/pages/` and `clientPane
 - Client Portal auth flow is backend-integrated; Web APP service pages (`service-tab-page`, `reports`, `meetings`, `web-app-dashboard`) and Growth Hub dashboard are API-first with empty-state rendering (no mock fallback).
 - Growth Hub client portal Faz 2 touchpoints:
   - `clientPanel/src/app/features/growthHub/growthHubApi.ts` - own-client Growth Hub hooks for `/clients/me/growth-hub/*`
-  - `clientPanel/src/app/pages/services/growth-hub-dashboard.tsx` - API-driven Growth Hub dashboard with loading/error/empty/config states, common channel health/risk cards, service detail targeting, and latest visible weekly note rendering
-  - `clientPanel/src/app/pages/__tests__/growth-hub-dashboard.test.tsx` - summary/channel/action/weekly-note/activity/error/empty/no-mock regression coverage
+  - `clientPanel/src/app/pages/services/growth-hub-dashboard.tsx` - API-driven Growth Hub dashboard with loading/error/empty/config states, common channel health/risk cards, service detail targeting, latest visible weekly note rendering, and published report cards
+  - `clientPanel/src/app/pages/__tests__/growth-hub-dashboard.test.tsx` - summary/channel/action/weekly-note/report/activity/error/empty/no-mock regression coverage
 - Growth Hub admin/employee Faz 3-4 touchpoints:
-  - `adminandemployeePanel/src/app/features/growthHub/growthHubApi.ts` - admin + assigned Growth Hub list/detail hooks for `/admin/growth-hub/*` ve `/growth-hub/clients/*`
-  - `adminandemployeePanel/src/app/features/growthHub/growthHubTypes.ts` / `growthHubUtils.ts` - admin/employee Growth Hub response types, normalizers, labels ve format helpers
+  - `adminandemployeePanel/src/app/features/growthHub/growthHubApi.ts` - admin + assigned Growth Hub list/detail/report hooks for `/admin/growth-hub/*` ve `/growth-hub/clients/*`
+  - `adminandemployeePanel/src/app/features/growthHub/growthHubTypes.ts` / `growthHubUtils.ts` - admin/employee Growth Hub response/report types, normalizers, labels ve format helpers
   - `adminandemployeePanel/src/app/features/growthHub/components/GrowthHubConfigDialog.tsx` - shared Growth Hub config edit modal
+  - `adminandemployeePanel/src/app/features/growthHub/components/GrowthHubActionNotePanel.tsx` - shared action, weekly note and report management panel
   - `adminandemployeePanel/src/app/features/growthHub/components/GrowthHubClientDetailSection.tsx` - ClientDetail içi Growth Hub summary/config/activity section
   - `adminandemployeePanel/src/app/pages/GrowthHubAdmin.tsx` - admin `/growth-hub` global operasyon ekranı
   - `adminandemployeePanel/src/app/employee/components/GrowthHubWorkspace.tsx` - assigned Growth Hub workspace
@@ -350,26 +351,28 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 
 - `server/src/growth-hub/growth-hub.module.ts`
 - `server/src/growth-hub/admin-growth-hub.controller.ts`
-  - admin global clients list and admin client-scoped config/summary/channels/actions/activity endpoints under `/api/v1/admin/*growth-hub*`
+  - admin global clients list and admin client-scoped config/summary/channels/actions/reports/activity endpoints under `/api/v1/admin/*growth-hub*`
 - `server/src/growth-hub/assigned-growth-hub.controller.ts`
-  - assigned Project Manager/Growth Lead read endpoints under `/api/v1/growth-hub/clients/:clientId/*`
+  - assigned Project Manager/Growth Lead read/manage endpoints under `/api/v1/growth-hub/clients/:clientId/*`
 - `server/src/growth-hub/growth-hub-management.controller.ts`
-  - assigned action/note patch/delete endpoints under `/api/v1/growth-hub/actions/:actionId` and `/api/v1/growth-hub/weekly-notes/:noteId`
+  - assigned action/note/report patch/delete/publish endpoints under `/api/v1/growth-hub/actions/:actionId`, `/api/v1/growth-hub/weekly-notes/:noteId`, and `/api/v1/growth-hub/reports/:reportId`
 - `server/src/growth-hub/client-growth-hub.controller.ts`
-  - own-client read endpoints under `/api/v1/clients/me/growth-hub/*`, including visible weekly notes
+  - own-client read endpoints under `/api/v1/clients/me/growth-hub/*`, including visible weekly notes and published reports
 - `server/src/growth-hub/growth-hub.service.ts`
-  - service-level admin/assigned/client permission checks, active `GROWTH_HUB` purchased-service checks, config/action/note response shaping, and endpoint orchestration
+  - service-level admin/assigned/client permission checks, active `GROWTH_HUB` purchased-service checks, config/action/note/report response shaping, report publish -> acknowledgement task bridge, and endpoint orchestration
 - `server/src/growth-hub/growth-hub-channel-aggregation.service.ts`
   - purchased-service scoped channel aggregation for Meta/TikTok/Amazon/Social active module metrics, Google contract-only state, project/task/file/release progress, report acknowledgements, health score, risk level, and common channel metric contract
 - `server/src/growth-hub/growth-hub-summary.service.ts`
   - V1 no-mock summary read model from purchased services, config, projects, tasks/todos, files, releases, workspace messages, aggregated channel summaries, and report acknowledgement fields
 - `server/src/growth-hub/dto/growth-hub-action.dto.ts`
+- `server/src/growth-hub/dto/growth-hub-report.dto.ts`
 - `server/src/growth-hub/dto/growth-hub-weekly-note.dto.ts`
 - `server/src/growth-hub/dto/update-growth-hub-config.dto.ts`
 - `server/prisma/migrations/20260529090000_add_growth_hub_foundation/migration.sql`
 - `server/prisma/migrations/20260530100000_add_growth_hub_actions_notes/migration.sql`
+- `server/prisma/migrations/20260530110000_add_growth_hub_reports/migration.sql`
 - `server/test/growth-hub-authz.e2e-spec.ts`
-  - admin config update, admin summary/global list, assigned project manager read/manage, action/note client-visible filtering, own-client summary, and sensitive-response guard coverage
+  - admin config update, admin summary/global list, assigned project manager read/manage, action/note/report client-visible filtering, report acknowledgement flow, own-client summary/reports, and sensitive-response guard coverage
 
 ## 2026-05-28 Update Map (Social Media Faz 4 Admin Panel)
 
@@ -648,21 +651,21 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
 ### Growth Hub Admin/Employee Frontend Foundation
 
 - `adminandemployeePanel/src/app/features/growthHub/growthHubApi.ts`
-  - admin global list + admin detail + assigned list/detail Growth Hub RTK Query hooks
+  - admin global list + admin detail + assigned list/detail/report Growth Hub RTK Query hooks
 - `adminandemployeePanel/src/app/features/growthHub/growthHubTypes.ts`
-  - Growth Hub admin/employee read model response types, common channel metric/health/risk fields, enum unions ve client list meta contract'ı
+  - Growth Hub admin/employee read model response types, common channel metric/health/risk fields, report contracts, enum unions ve client list meta contract'ı
 - `adminandemployeePanel/src/app/features/growthHub/growthHubUtils.ts`
-  - response normalizers, label helpers, common channel field fallbacks, metric/date/currency formatters ve status tone helpers
+  - response/report normalizers, label helpers, common channel field fallbacks, metric/date/currency formatters ve status tone helpers
 - `adminandemployeePanel/src/app/features/growthHub/components/GrowthHubConfigDialog.tsx`
   - admin global page ve ClientDetail tarafından paylaşılan Growth Hub config modalı
 - `adminandemployeePanel/src/app/features/growthHub/components/GrowthHubActionNotePanel.tsx`
-  - admin/employee tarafından paylaşılan Growth action + weekly note form/list/visibility controls
+  - admin/employee tarafından paylaşılan Growth action + weekly note + report form/list/visibility/publish controls
 - `adminandemployeePanel/src/app/features/growthHub/components/GrowthHubClientDetailSection.tsx`
   - ClientDetail içinde Growth Hub config, KPI, channels, actions, activity ve assignment görünürlüğü
 - `adminandemployeePanel/src/app/pages/GrowthHubAdmin.tsx`
-  - admin `/growth-hub` route'u: KPI, müşteri listesi, selected detail, health/risk aware channel cards, channel detail links, config edit, persisted action/note management
+  - admin `/growth-hub` route'u: KPI, müşteri listesi, selected detail, health/risk aware channel cards, channel detail links, config edit, persisted action/note/report management
 - `adminandemployeePanel/src/app/employee/components/GrowthHubWorkspace.tsx`
-  - assigned müşteri listesi, selected summary/channels/actions, health/risk aware channel cards, channel detail links, persisted action/note management, report ack, messages ve recent activity bölümleri
+  - assigned müşteri listesi, selected summary/channels/actions, health/risk aware channel cards, channel detail links, persisted action/note/report management, report acknowledgement, messages ve recent activity bölümleri
 - `adminandemployeePanel/src/app/employee/pages/GrowthHubCalismaAlani.tsx`
   - employee workspace route wrapper
 - `adminandemployeePanel/src/app/routes.tsx`
