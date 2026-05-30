@@ -1,9 +1,11 @@
-import { Controller, Get, Param, ParseUUIDPipe, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, UseGuards } from "@nestjs/common";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { RequirePermissions } from "../auth/decorators/permissions.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
+import { CreateGrowthHubActionDto } from "./dto/growth-hub-action.dto";
+import { CreateGrowthHubWeeklyNoteDto } from "./dto/growth-hub-weekly-note.dto";
 import { GrowthHubService } from "./growth-hub.service";
 
 @Controller("growth-hub/clients")
@@ -51,6 +53,35 @@ export class AssignedGrowthHubController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.growthHubService.getAssignedClientActions(clientId, actor);
+  }
+
+  @Post(":clientId/actions")
+  @RequirePermissions("growthHub.actions.manage.assigned")
+  createAssignedClientAction(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Body() dto: CreateGrowthHubActionDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.growthHubService.createAssignedClientAction(clientId, dto, actor);
+  }
+
+  @Get(":clientId/weekly-notes")
+  @RequirePermissions("growthHub.notes.read.assigned")
+  getAssignedClientWeeklyNotes(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.growthHubService.getAssignedClientWeeklyNotes(clientId, actor);
+  }
+
+  @Post(":clientId/weekly-notes")
+  @RequirePermissions("growthHub.notes.manage.assigned")
+  createAssignedClientWeeklyNote(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Body() dto: CreateGrowthHubWeeklyNoteDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.growthHubService.createAssignedClientWeeklyNote(clientId, dto, actor);
   }
 
   @Get(":clientId/activity")

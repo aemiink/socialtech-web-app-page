@@ -18,8 +18,18 @@ import { getBackendRoleLabel } from "../features/auth/roleMapping";
 import { useUpdateAdminClientGrowthHubConfigMutation } from "../features/clients/clientsApi";
 import type { UpdateAdminClientGrowthHubConfigRequest } from "../features/clients/clientsTypes";
 import { extractApiErrorMessage } from "../features/clients/clientsUtils";
+import { GrowthHubActionNotePanel } from "../features/growthHub/components/GrowthHubActionNotePanel";
 import { GrowthHubConfigDialog } from "../features/growthHub/components/GrowthHubConfigDialog";
-import { useGetAdminGrowthHubClientsQuery } from "../features/growthHub/growthHubApi";
+import {
+  useCreateAdminGrowthHubActionMutation,
+  useCreateAdminGrowthHubWeeklyNoteMutation,
+  useDeleteAdminGrowthHubActionMutation,
+  useGetAdminGrowthHubClientActionsQuery,
+  useGetAdminGrowthHubClientWeeklyNotesQuery,
+  useGetAdminGrowthHubClientsQuery,
+  useUpdateAdminGrowthHubActionMutation,
+  useUpdateAdminGrowthHubWeeklyNoteMutation,
+} from "../features/growthHub/growthHubApi";
 import {
   formatGrowthHubCompactNumber,
   formatGrowthHubCurrency,
@@ -41,6 +51,8 @@ export function GrowthHubAdmin() {
     "growthHub.config.read.any",
   ]);
   const canManageConfig = hasAdminPermission(currentUser, ["growthHub.config.manage.any"]);
+  const canManageActions = hasAdminPermission(currentUser, ["growthHub.actions.manage.any"]);
+  const canManageNotes = hasAdminPermission(currentUser, ["growthHub.notes.manage.any"]);
   const {
     data: response,
     error,
@@ -70,6 +82,25 @@ export function GrowthHubAdmin() {
     { clientProfileId: selectedClient?.client.id ?? "", isActive: true },
     { skip: !selectedClient },
   );
+  const {
+    data: actionResponse,
+    isLoading: isActionsLoading,
+  } = useGetAdminGrowthHubClientActionsQuery(selectedClient?.client.id ?? "", {
+    skip: !selectedClient,
+  });
+  const {
+    data: weeklyNoteResponse,
+    isLoading: isWeeklyNotesLoading,
+  } = useGetAdminGrowthHubClientWeeklyNotesQuery(selectedClient?.client.id ?? "", {
+    skip: !selectedClient,
+  });
+  const [createAction] = useCreateAdminGrowthHubActionMutation();
+  const [updateAction] = useUpdateAdminGrowthHubActionMutation();
+  const [deleteAction] = useDeleteAdminGrowthHubActionMutation();
+  const [createWeeklyNote] = useCreateAdminGrowthHubWeeklyNoteMutation();
+  const [updateWeeklyNote] = useUpdateAdminGrowthHubWeeklyNoteMutation();
+  const selectedActions = actionResponse?.data ?? selectedClient?.actions ?? [];
+  const selectedWeeklyNotes = weeklyNoteResponse?.data ?? [];
 
   useEffect(() => {
     if (listItems.length === 0) {
@@ -274,10 +305,10 @@ export function GrowthHubAdmin() {
               </div>
 
               <div className="mt-4 flex flex-wrap gap-2">
-                <Button type="button" disabled>
+                <Button type="button" disabled={!canManageNotes}>
                   Weekly Note
                 </Button>
-                <Button type="button" variant="outline" disabled>
+                <Button type="button" variant="outline" disabled={!canManageActions}>
                   Approval Request
                 </Button>
                 <Button type="button" variant="outline" disabled>
@@ -285,7 +316,7 @@ export function GrowthHubAdmin() {
                 </Button>
               </div>
               <p className="mt-2 text-xs text-[#7A7A7A]">
-                Weekly note, approval create ve report publish akışları Faz 5 / Faz 7 ile tamamlanacak.
+                Approval create ve report publish akışları Faz 7 ile tamamlanacak.
               </p>
             </Card>
 
@@ -341,9 +372,9 @@ export function GrowthHubAdmin() {
 
                 <div>
                   <p className="text-xs uppercase tracking-wide text-[#7A7A7A]">Öncelikli aksiyonlar</p>
-                  {selectedClient.actions.length > 0 ? (
+                  {selectedActions.length > 0 ? (
                     <div className="mt-2 space-y-2">
-                      {selectedClient.actions.slice(0, 4).map((action) => (
+                      {selectedActions.slice(0, 4).map((action) => (
                         <div key={action.id} className="rounded-2xl border border-white/[0.08] bg-black/20 p-3">
                           <p className="text-sm text-white">{action.title}</p>
                           <p className="text-xs text-[#A0A0A0]">
@@ -356,6 +387,35 @@ export function GrowthHubAdmin() {
                     <p className="mt-2 text-sm text-[#A0A0A0]">Bekleyen Growth Hub aksiyonu bulunmuyor.</p>
                   )}
                 </div>
+              </div>
+            </Card>
+
+            <Card className="border-white/[0.08] bg-[#171717] p-5">
+              <h3 className="text-lg font-semibold text-white">Growth Actions ve Weekly Notes</h3>
+              <div className="mt-4">
+                <GrowthHubActionNotePanel
+                  actions={selectedActions}
+                  weeklyNotes={selectedWeeklyNotes}
+                  canManageActions={canManageActions}
+                  canManageNotes={canManageNotes}
+                  isActionsLoading={isActionsLoading}
+                  isNotesLoading={isWeeklyNotesLoading}
+                  onCreateAction={(body) =>
+                    createAction({ clientId: selectedClient.client.id, body }).unwrap().then(() => undefined)
+                  }
+                  onUpdateAction={(actionId, body) =>
+                    updateAction({ actionId, clientId: selectedClient.client.id, body }).unwrap().then(() => undefined)
+                  }
+                  onDeleteAction={(actionId) =>
+                    deleteAction({ actionId, clientId: selectedClient.client.id }).unwrap().then(() => undefined)
+                  }
+                  onCreateWeeklyNote={(body) =>
+                    createWeeklyNote({ clientId: selectedClient.client.id, body }).unwrap().then(() => undefined)
+                  }
+                  onUpdateWeeklyNote={(noteId, body) =>
+                    updateWeeklyNote({ noteId, clientId: selectedClient.client.id, body }).unwrap().then(() => undefined)
+                  }
+                />
               </div>
             </Card>
           </div>

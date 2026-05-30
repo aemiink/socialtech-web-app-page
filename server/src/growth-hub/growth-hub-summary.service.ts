@@ -2,6 +2,8 @@ import { Injectable } from "@nestjs/common";
 import {
   ClientStatus,
   DeliveryReleaseApprovalStatus,
+  GrowthHubActionPriority,
+  GrowthHubActionStatus,
   GrowthHubGoal,
   GrowthHubStatus,
   MetaAdsApprovalStatus,
@@ -37,6 +39,7 @@ export type GrowthHubChannelStatus =
   | "SCALE";
 
 export type GrowthHubActionType =
+  | "GROWTH_ACTION"
   | "TASK_APPROVAL"
   | "FILE_APPROVAL"
   | "RELEASE_APPROVAL"
@@ -277,12 +280,23 @@ export type GrowthHubActionItem = {
   id: string;
   type: GrowthHubActionType;
   title: string;
+  description?: string | null;
   serviceKey: PurchasedServiceKey | null;
   project: {
     id: string;
     name: string;
     slug: string;
   } | null;
+  owner?: {
+    id: string;
+    displayName: string | null;
+    email: string;
+  } | null;
+  status?: GrowthHubActionStatus | null;
+  priority?: GrowthHubActionPriority | null;
+  clientVisible?: boolean;
+  relatedEntityType?: string | null;
+  relatedEntityId?: string | null;
   dueAt: Date | null;
   createdAt: Date | null;
   updatedAt: Date;

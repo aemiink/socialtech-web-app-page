@@ -1,5 +1,7 @@
 import type {
   GrowthHubActionItem,
+  GrowthHubActionPriority,
+  GrowthHubActionStatus,
   GrowthHubActionType,
   GrowthHubActionsResponse,
   GrowthHubActivityItem,
@@ -19,6 +21,8 @@ import type {
   GrowthHubServiceKey,
   GrowthHubSummary,
   GrowthHubSummaryState,
+  GrowthHubWeeklyNote,
+  GrowthHubWeeklyNotesResponse,
 } from "./growthHubTypes";
 
 const SERVICE_KEY_OPTIONS: GrowthHubServiceKey[] = [
@@ -73,10 +77,26 @@ const CHANNEL_STATUS_OPTIONS: GrowthHubChannelStatus[] = [
 ];
 
 const ACTION_TYPE_OPTIONS: GrowthHubActionType[] = [
+  "GROWTH_ACTION",
   "TASK_APPROVAL",
   "FILE_APPROVAL",
   "RELEASE_APPROVAL",
   "REPORT_ACKNOWLEDGEMENT",
+];
+
+const ACTION_STATUS_OPTIONS: GrowthHubActionStatus[] = [
+  "TODO",
+  "IN_PROGRESS",
+  "DONE",
+  "BLOCKED",
+  "CANCELLED",
+];
+
+const ACTION_PRIORITY_OPTIONS: GrowthHubActionPriority[] = [
+  "LOW",
+  "MEDIUM",
+  "HIGH",
+  "CRITICAL",
 ];
 
 const ACTIVITY_TYPE_OPTIONS: GrowthHubActivityType[] = ["TASK", "FILE", "RELEASE", "MESSAGE"];
@@ -131,10 +151,26 @@ const SOURCE_STATUS_LABELS: Record<GrowthHubChannelSourceStatus, string> = {
 };
 
 const ACTION_TYPE_LABELS: Record<GrowthHubActionType, string> = {
+  GROWTH_ACTION: "Growth action",
   TASK_APPROVAL: "Görev onayı",
   FILE_APPROVAL: "Dosya onayı",
   RELEASE_APPROVAL: "Yayın onayı",
   REPORT_ACKNOWLEDGEMENT: "Rapor teyidi",
+};
+
+const ACTION_STATUS_LABELS: Record<GrowthHubActionStatus, string> = {
+  TODO: "Yapılacak",
+  IN_PROGRESS: "Devam ediyor",
+  DONE: "Tamamlandı",
+  BLOCKED: "Blokeli",
+  CANCELLED: "İptal",
+};
+
+const ACTION_PRIORITY_LABELS: Record<GrowthHubActionPriority, string> = {
+  LOW: "Düşük",
+  MEDIUM: "Orta",
+  HIGH: "Yüksek",
+  CRITICAL: "Kritik",
 };
 
 const ACTIVITY_TYPE_LABELS: Record<GrowthHubActivityType, string> = {
@@ -167,6 +203,16 @@ export const growthHubGoalOptions = GOAL_OPTIONS.map((value) => ({
 export const growthHubStatusOptions = CONFIG_STATUS_OPTIONS.map((value) => ({
   value,
   label: value === "ACTIVE" ? "Aktif" : value === "PAUSED" ? "Duraklatıldı" : "Beklemede",
+}));
+
+export const growthHubActionStatusOptions = ACTION_STATUS_OPTIONS.map((value) => ({
+  value,
+  label: ACTION_STATUS_LABELS[value],
+}));
+
+export const growthHubActionPriorityOptions = ACTION_PRIORITY_OPTIONS.map((value) => ({
+  value,
+  label: ACTION_PRIORITY_LABELS[value],
 }));
 
 export function normalizeGrowthHubClientsResponse(response: unknown): GrowthHubClientsResponse {
@@ -281,6 +327,21 @@ export function normalizeGrowthHubActionsResponse(response: unknown): GrowthHubA
   };
 }
 
+export function normalizeGrowthHubWeeklyNotesResponse(
+  response: unknown,
+): GrowthHubWeeklyNotesResponse {
+  const data = readResponseArray(response).map(normalizeWeeklyNote).filter(isDefined);
+  const meta = isRecord(response) && isRecord(response.meta) ? response.meta : {};
+
+  return {
+    data,
+    meta: {
+      total: readNumber(meta.total, data.length),
+      generatedAt: readNullableString(meta.generatedAt),
+    },
+  };
+}
+
 export function normalizeGrowthHubActivityResponse(response: unknown): GrowthHubActivityResponse {
   const data = readResponseArray(response).map(normalizeActivity).filter(isDefined);
   const meta = isRecord(response) && isRecord(response.meta) ? response.meta : {};
@@ -316,6 +377,14 @@ export function getGrowthHubSourceStatusLabel(status: GrowthHubChannelSourceStat
 
 export function getGrowthHubActionTypeLabel(type: GrowthHubActionType): string {
   return ACTION_TYPE_LABELS[type] ?? type;
+}
+
+export function getGrowthHubActionStatusLabel(status: GrowthHubActionStatus | null | undefined): string {
+  return status ? ACTION_STATUS_LABELS[status] ?? status : "Durum yok";
+}
+
+export function getGrowthHubActionPriorityLabel(priority: GrowthHubActionPriority | null | undefined): string {
+  return priority ? ACTION_PRIORITY_LABELS[priority] ?? priority : "Öncelik yok";
 }
 
 export function getGrowthHubActivityTypeLabel(type: GrowthHubActivityType): string {
@@ -499,10 +568,38 @@ function normalizeAction(value: unknown): GrowthHubActionItem | null {
     id: readString(value.id),
     type: readEnumValue(value.type, ACTION_TYPE_OPTIONS) ?? "TASK_APPROVAL",
     title: readString(value.title),
+    description: readNullableString(value.description),
     serviceKey: readEnumValue(value.serviceKey, SERVICE_KEY_OPTIONS),
     project: normalizeProject(value.project),
+    owner: normalizeUserReference(value.owner),
+    status: readEnumValue(value.status, ACTION_STATUS_OPTIONS),
+    priority: readEnumValue(value.priority, ACTION_PRIORITY_OPTIONS),
+    clientVisible: value.clientVisible === true,
+    relatedEntityType: readNullableString(value.relatedEntityType),
+    relatedEntityId: readNullableString(value.relatedEntityId),
     dueAt: readNullableString(value.dueAt),
     createdAt: readNullableString(value.createdAt),
+    updatedAt: readString(value.updatedAt),
+  };
+}
+
+function normalizeWeeklyNote(value: unknown): GrowthHubWeeklyNote | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    id: readString(value.id),
+    clientProfileId: readString(value.clientProfileId),
+    project: normalizeProjectWithService(value.project),
+    weekStart: readString(value.weekStart),
+    weekEnd: readString(value.weekEnd),
+    summary: readString(value.summary),
+    nextFocus: readNullableString(value.nextFocus),
+    risks: value.risks ?? null,
+    clientVisible: value.clientVisible === true,
+    createdBy: normalizeUserReference(value.createdBy),
+    createdAt: readString(value.createdAt),
     updatedAt: readString(value.updatedAt),
   };
 }
@@ -531,6 +628,34 @@ function normalizeProject(value: unknown): GrowthHubProjectReference | null {
     id: readString(value.id),
     name: readString(value.name),
     slug: readString(value.slug),
+  };
+}
+
+function normalizeProjectWithService(
+  value: unknown,
+): (GrowthHubProjectReference & { serviceKey: GrowthHubServiceKey | null }) | null {
+  const project = normalizeProject(value);
+  if (!project || !isRecord(value)) {
+    return null;
+  }
+
+  return {
+    ...project,
+    serviceKey: readEnumValue(value.serviceKey, SERVICE_KEY_OPTIONS),
+  };
+}
+
+function normalizeUserReference(
+  value: unknown,
+): { id: string; displayName: string | null; email: string } | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    id: readString(value.id),
+    displayName: readNullableString(value.displayName),
+    email: readString(value.email),
   };
 }
 

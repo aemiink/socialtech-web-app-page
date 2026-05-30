@@ -75,6 +75,21 @@ enum GrowthHubStatus {
   ON_HOLD
 }
 
+enum GrowthHubActionStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  BLOCKED
+  CANCELLED
+}
+
+enum GrowthHubActionPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
 enum MetaAdsConnectionStatus {
   NOT_CONNECTED
   PENDING
@@ -575,6 +590,9 @@ model User {
   createdSocialMediaReports      SocialMediaReport[]                 @relation("SocialMediaReportCreatedBy")
   publishedSocialMediaReports    SocialMediaReport[]                 @relation("SocialMediaReportPublishedBy")
   acknowledgedSocialMediaReports SocialMediaReport[]                 @relation("SocialMediaReportAcknowledgedBy")
+  ownedGrowthHubActions          GrowthHubAction[]                   @relation("GrowthHubActionOwner")
+  createdGrowthHubActions        GrowthHubAction[]                   @relation("GrowthHubActionCreatedBy")
+  createdGrowthHubWeeklyNotes    GrowthHubWeeklyNote[]               @relation("GrowthHubWeeklyNoteCreatedBy")
 
   @@index([accountType, role])
   @@index([accountType, status])
@@ -610,6 +628,8 @@ model ClientProfile {
   employeeAssignments     EmployeeClientAssignment[]
   purchasedServices       ClientPurchasedService[]
   growthHubConfig         ClientGrowthHubConfig?
+  growthHubActions        GrowthHubAction[]
+  growthHubWeeklyNotes    GrowthHubWeeklyNote[]
   metaAdsConfig           ClientMetaAdsConfig?
   metaAdsCredential       ClientMetaAdsCredential?
   metaAdsInsights         MetaAdsDailyInsight[]
@@ -654,6 +674,62 @@ model ClientGrowthHubConfig {
 
   @@index([status])
   @@index([primaryGoal])
+  @@index([updatedAt])
+}
+
+model GrowthHubAction {
+  id                String                  @id @default(uuid()) @db.Uuid
+  clientProfileId   String                  @db.Uuid
+  projectId         String?                 @db.Uuid
+  title             String
+  description       String?
+  ownerUserId       String?                 @db.Uuid
+  status            GrowthHubActionStatus   @default(TODO)
+  priority          GrowthHubActionPriority @default(MEDIUM)
+  dueAt             DateTime?
+  clientVisible     Boolean                 @default(false)
+  relatedEntityType String?
+  relatedEntityId   String?
+  createdByUserId   String?                 @db.Uuid
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  project       Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  owner         User?         @relation("GrowthHubActionOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  createdBy     User?         @relation("GrowthHubActionCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([clientProfileId, status, priority])
+  @@index([clientProfileId, clientVisible])
+  @@index([projectId])
+  @@index([ownerUserId])
+  @@index([createdByUserId])
+  @@index([dueAt])
+  @@index([updatedAt])
+}
+
+model GrowthHubWeeklyNote {
+  id              String   @id @default(uuid()) @db.Uuid
+  clientProfileId String   @db.Uuid
+  projectId       String?  @db.Uuid
+  weekStart       DateTime
+  weekEnd         DateTime
+  summary         String
+  nextFocus       String?
+  risks           Json?
+  clientVisible   Boolean  @default(false)
+  createdByUserId String?  @db.Uuid
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  project       Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdBy     User?         @relation("GrowthHubWeeklyNoteCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([clientProfileId, weekStart])
+  @@index([clientProfileId, clientVisible])
+  @@index([projectId])
+  @@index([createdByUserId])
   @@index([updatedAt])
 }
 
@@ -1254,6 +1330,8 @@ model Project {
   tikTokAdsReports         TikTokAdsReport[]
   socialMediaPosts         SocialMediaPost[]
   socialMediaReports       SocialMediaReport[]
+  growthHubActions         GrowthHubAction[]
+  growthHubWeeklyNotes     GrowthHubWeeklyNote[]
   workspaceSections        WebAppWorkspaceSection[]
   workspaceMessages        WebAppWorkspaceMessage[]
   workspaceRevisions       WebAppWorkspaceRevision[]

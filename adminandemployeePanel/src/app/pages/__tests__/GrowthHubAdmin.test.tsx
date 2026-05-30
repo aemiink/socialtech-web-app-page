@@ -41,7 +41,15 @@ const mockUseGetAdminAssignmentsQuery = vi.fn<
 const mockUseUpdateAdminClientGrowthHubConfigMutation = vi.fn<
   () => [UpdateConfigTrigger, { isLoading: boolean }]
 >();
+const mockUseGetAdminGrowthHubClientActionsQuery = vi.fn();
+const mockUseGetAdminGrowthHubClientWeeklyNotesQuery = vi.fn();
+const mockUseCreateAdminGrowthHubActionMutation = vi.fn();
+const mockUseUpdateAdminGrowthHubActionMutation = vi.fn();
+const mockUseDeleteAdminGrowthHubActionMutation = vi.fn();
+const mockUseCreateAdminGrowthHubWeeklyNoteMutation = vi.fn();
+const mockUseUpdateAdminGrowthHubWeeklyNoteMutation = vi.fn();
 const mockUpdateConfig = vi.fn();
+const mockMutation = vi.fn(() => ({ unwrap: async () => ({}) }));
 
 let currentUser: AuthUserProfile | null = null;
 
@@ -52,6 +60,15 @@ vi.mock("../../store/hooks", () => ({
 vi.mock("../../features/growthHub/growthHubApi", () => ({
   useGetAdminGrowthHubClientsQuery: (arg?: void, options?: QueryOptions) =>
     mockUseGetAdminGrowthHubClientsQuery(arg, options),
+  useGetAdminGrowthHubClientActionsQuery: (clientId: string, options?: QueryOptions) =>
+    mockUseGetAdminGrowthHubClientActionsQuery(clientId, options),
+  useGetAdminGrowthHubClientWeeklyNotesQuery: (clientId: string, options?: QueryOptions) =>
+    mockUseGetAdminGrowthHubClientWeeklyNotesQuery(clientId, options),
+  useCreateAdminGrowthHubActionMutation: () => mockUseCreateAdminGrowthHubActionMutation(),
+  useUpdateAdminGrowthHubActionMutation: () => mockUseUpdateAdminGrowthHubActionMutation(),
+  useDeleteAdminGrowthHubActionMutation: () => mockUseDeleteAdminGrowthHubActionMutation(),
+  useCreateAdminGrowthHubWeeklyNoteMutation: () => mockUseCreateAdminGrowthHubWeeklyNoteMutation(),
+  useUpdateAdminGrowthHubWeeklyNoteMutation: () => mockUseUpdateAdminGrowthHubWeeklyNoteMutation(),
 }));
 
 vi.mock("../../features/adminAssignments/adminAssignmentsApi", () => ({
@@ -75,6 +92,10 @@ const adminUser: AuthUserProfile = {
     "growthHub.summary.read.any",
     "growthHub.config.read.any",
     "growthHub.config.manage.any",
+    "growthHub.actions.read.any",
+    "growthHub.actions.manage.any",
+    "growthHub.notes.read.any",
+    "growthHub.notes.manage.any",
   ],
   clientProfile: null,
 };
@@ -234,6 +255,19 @@ describe("GrowthHubAdmin", () => {
       mockUpdateConfig,
       { isLoading: false },
     ]);
+    mockUseGetAdminGrowthHubClientActionsQuery.mockReturnValue({
+      data: { data: growthHubClientsResponse.data[0].actions, meta: { total: 1, generatedAt: null } },
+      isLoading: false,
+    });
+    mockUseGetAdminGrowthHubClientWeeklyNotesQuery.mockReturnValue({
+      data: { data: [], meta: { total: 0, generatedAt: null } },
+      isLoading: false,
+    });
+    mockUseCreateAdminGrowthHubActionMutation.mockReturnValue([mockMutation]);
+    mockUseUpdateAdminGrowthHubActionMutation.mockReturnValue([mockMutation]);
+    mockUseDeleteAdminGrowthHubActionMutation.mockReturnValue([mockMutation]);
+    mockUseCreateAdminGrowthHubWeeklyNoteMutation.mockReturnValue([mockMutation]);
+    mockUseUpdateAdminGrowthHubWeeklyNoteMutation.mockReturnValue([mockMutation]);
   });
 
   it("skips the list query without Growth Hub admin permission", () => {
@@ -259,7 +293,7 @@ describe("GrowthHubAdmin", () => {
     expect(screen.getByText("Growth Hub Operasyonları")).toBeInTheDocument();
     expect(screen.getAllByText("Acme E-ticaret").length).toBeGreaterThan(0);
     expect(screen.getByText("Project Manager")).toBeInTheDocument();
-    expect(screen.getByText("Mayıs optimizasyon onayı")).toBeInTheDocument();
+    expect(screen.getAllByText("Mayıs optimizasyon onayı").length).toBeGreaterThan(0);
   });
 
   it("submits Growth Hub config changes", async () => {

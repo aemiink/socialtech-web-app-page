@@ -35,6 +35,12 @@ export class ClientGrowthHubController {
     return this.growthHubService.getOwnActions(actor);
   }
 
+  @Get("weekly-notes")
+  @RequirePermissions("growthHub.notes.read.own")
+  getOwnWeeklyNotes(@CurrentUser() actor: AuthenticatedUser) {
+    return this.growthHubService.getOwnWeeklyNotes(actor);
+  }
+
   @Get("activity")
   @RequirePermissions("growthHub.summary.read.own")
   getOwnActivity(@CurrentUser() actor: AuthenticatedUser) {

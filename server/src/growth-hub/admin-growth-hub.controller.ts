@@ -1,9 +1,27 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  UseGuards,
+} from "@nestjs/common";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { RequirePermissions } from "../auth/decorators/permissions.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
+import {
+  CreateGrowthHubActionDto,
+  UpdateGrowthHubActionDto,
+} from "./dto/growth-hub-action.dto";
+import {
+  CreateGrowthHubWeeklyNoteDto,
+  UpdateGrowthHubWeeklyNoteDto,
+} from "./dto/growth-hub-weekly-note.dto";
 import { UpdateGrowthHubConfigDto } from "./dto/update-growth-hub-config.dto";
 import { GrowthHubService } from "./growth-hub.service";
 
@@ -56,12 +74,70 @@ export class AdminGrowthHubController {
   }
 
   @Get("admin/clients/:clientId/growth-hub/actions")
-  @RequirePermissions("growthHub.summary.read.any")
+  @RequirePermissions("growthHub.actions.read.any")
   getAdminClientActions(
     @Param("clientId", ParseUUIDPipe) clientId: string,
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.growthHubService.getAdminClientActions(clientId, actor);
+  }
+
+  @Post("admin/clients/:clientId/growth-hub/actions")
+  @RequirePermissions("growthHub.actions.manage.any")
+  createAdminClientAction(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Body() dto: CreateGrowthHubActionDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.growthHubService.createAdminClientAction(clientId, dto, actor);
+  }
+
+  @Patch("admin/growth-hub/actions/:actionId")
+  @RequirePermissions("growthHub.actions.manage.any")
+  updateAdminAction(
+    @Param("actionId", ParseUUIDPipe) actionId: string,
+    @Body() dto: UpdateGrowthHubActionDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.growthHubService.updateAdminAction(actionId, dto, actor);
+  }
+
+  @Delete("admin/growth-hub/actions/:actionId")
+  @RequirePermissions("growthHub.actions.manage.any")
+  deleteAdminAction(
+    @Param("actionId", ParseUUIDPipe) actionId: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.growthHubService.deleteAdminAction(actionId, actor);
+  }
+
+  @Get("admin/clients/:clientId/growth-hub/weekly-notes")
+  @RequirePermissions("growthHub.notes.read.any")
+  getAdminClientWeeklyNotes(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.growthHubService.getAdminClientWeeklyNotes(clientId, actor);
+  }
+
+  @Post("admin/clients/:clientId/growth-hub/weekly-notes")
+  @RequirePermissions("growthHub.notes.manage.any")
+  createAdminClientWeeklyNote(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Body() dto: CreateGrowthHubWeeklyNoteDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.growthHubService.createAdminClientWeeklyNote(clientId, dto, actor);
+  }
+
+  @Patch("admin/growth-hub/weekly-notes/:noteId")
+  @RequirePermissions("growthHub.notes.manage.any")
+  updateAdminWeeklyNote(
+    @Param("noteId", ParseUUIDPipe) noteId: string,
+    @Body() dto: UpdateGrowthHubWeeklyNoteDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.growthHubService.updateAdminWeeklyNote(noteId, dto, actor);
   }
 
   @Get("admin/clients/:clientId/growth-hub/activity")

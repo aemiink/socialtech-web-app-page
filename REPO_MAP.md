@@ -175,7 +175,7 @@ Purpose: customer-facing visibility panel for purchased Social Tech services, re
   - `clientPanel/src/app/features/tasks/tasksTypes.ts`
   - `clientPanel/src/app/features/tasks/tasksUtils.ts`
 - Client Growth Hub feature:
-  - `clientPanel/src/app/features/growthHub/growthHubApi.ts` - own-client Growth Hub config/summary/channels/actions/activity RTK Query hooks
+  - `clientPanel/src/app/features/growthHub/growthHubApi.ts` - own-client Growth Hub config/summary/channels/actions/weekly-notes/activity RTK Query hooks
   - `clientPanel/src/app/features/growthHub/growthHubTypes.ts` - Growth Hub client dashboard contract types
   - `clientPanel/src/app/features/growthHub/growthHubUtils.ts` - response normalizers, labels, date/metric formatters, health score helper
 
@@ -235,8 +235,8 @@ Additional portal pages exist under `clientPanel/src/app/pages/` and `clientPane
 - Client Portal auth flow is backend-integrated; Web APP service pages (`service-tab-page`, `reports`, `meetings`, `web-app-dashboard`) and Growth Hub dashboard are API-first with empty-state rendering (no mock fallback).
 - Growth Hub client portal Faz 2 touchpoints:
   - `clientPanel/src/app/features/growthHub/growthHubApi.ts` - own-client Growth Hub hooks for `/clients/me/growth-hub/*`
-  - `clientPanel/src/app/pages/services/growth-hub-dashboard.tsx` - API-driven Growth Hub dashboard with loading/error/empty/config states
-  - `clientPanel/src/app/pages/__tests__/growth-hub-dashboard.test.tsx` - summary/channel/action/activity/error/empty/no-mock regression coverage
+  - `clientPanel/src/app/pages/services/growth-hub-dashboard.tsx` - API-driven Growth Hub dashboard with loading/error/empty/config states and latest visible weekly note rendering
+  - `clientPanel/src/app/pages/__tests__/growth-hub-dashboard.test.tsx` - summary/channel/action/weekly-note/activity/error/empty/no-mock regression coverage
 - Growth Hub admin/employee Faz 3-4 touchpoints:
   - `adminandemployeePanel/src/app/features/growthHub/growthHubApi.ts` - admin + assigned Growth Hub list/detail hooks for `/admin/growth-hub/*` ve `/growth-hub/clients/*`
   - `adminandemployeePanel/src/app/features/growthHub/growthHubTypes.ts` / `growthHubUtils.ts` - admin/employee Growth Hub response types, normalizers, labels ve format helpers
@@ -352,16 +352,21 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - admin global clients list and admin client-scoped config/summary/channels/actions/activity endpoints under `/api/v1/admin/*growth-hub*`
 - `server/src/growth-hub/assigned-growth-hub.controller.ts`
   - assigned Project Manager/Growth Lead read endpoints under `/api/v1/growth-hub/clients/:clientId/*`
+- `server/src/growth-hub/growth-hub-management.controller.ts`
+  - assigned action/note patch/delete endpoints under `/api/v1/growth-hub/actions/:actionId` and `/api/v1/growth-hub/weekly-notes/:noteId`
 - `server/src/growth-hub/client-growth-hub.controller.ts`
-  - own-client read endpoints under `/api/v1/clients/me/growth-hub/*`
+  - own-client read endpoints under `/api/v1/clients/me/growth-hub/*`, including visible weekly notes
 - `server/src/growth-hub/growth-hub.service.ts`
-  - service-level admin/assigned/client permission checks, active `GROWTH_HUB` purchased-service checks, config response shaping, and endpoint orchestration
+  - service-level admin/assigned/client permission checks, active `GROWTH_HUB` purchased-service checks, config/action/note response shaping, and endpoint orchestration
 - `server/src/growth-hub/growth-hub-summary.service.ts`
   - V1 no-mock read model from purchased services, config, projects, tasks/todos, files, releases, workspace messages, Meta/TikTok/Amazon insight tables, Social Media posts/insights, and report acknowledgement fields
+- `server/src/growth-hub/dto/growth-hub-action.dto.ts`
+- `server/src/growth-hub/dto/growth-hub-weekly-note.dto.ts`
 - `server/src/growth-hub/dto/update-growth-hub-config.dto.ts`
 - `server/prisma/migrations/20260529090000_add_growth_hub_foundation/migration.sql`
+- `server/prisma/migrations/20260530100000_add_growth_hub_actions_notes/migration.sql`
 - `server/test/growth-hub-authz.e2e-spec.ts`
-  - admin config update, admin summary/global list, assigned project manager read, non-growth employee denial, own-client summary, and sensitive-response guard coverage
+  - admin config update, admin summary/global list, assigned project manager read/manage, action/note client-visible filtering, own-client summary, and sensitive-response guard coverage
 
 ## 2026-05-28 Update Map (Social Media Faz 4 Admin Panel)
 
@@ -647,12 +652,14 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - response normalizers, label helpers, metric/date/currency formatters ve status tone helpers
 - `adminandemployeePanel/src/app/features/growthHub/components/GrowthHubConfigDialog.tsx`
   - admin global page ve ClientDetail tarafından paylaşılan Growth Hub config modalı
+- `adminandemployeePanel/src/app/features/growthHub/components/GrowthHubActionNotePanel.tsx`
+  - admin/employee tarafından paylaşılan Growth action + weekly note form/list/visibility controls
 - `adminandemployeePanel/src/app/features/growthHub/components/GrowthHubClientDetailSection.tsx`
   - ClientDetail içinde Growth Hub config, KPI, channels, actions, activity ve assignment görünürlüğü
 - `adminandemployeePanel/src/app/pages/GrowthHubAdmin.tsx`
-  - admin `/growth-hub` route'u: KPI, müşteri listesi, selected detail, channel/action snapshot ve config edit
+  - admin `/growth-hub` route'u: KPI, müşteri listesi, selected detail, channel/action snapshot, config edit, persisted action/note management
 - `adminandemployeePanel/src/app/employee/components/GrowthHubWorkspace.tsx`
-  - assigned müşteri listesi, selected summary/channels/actions, report ack, messages ve recent activity bölümleri
+  - assigned müşteri listesi, selected summary/channels/actions, persisted action/note management, report ack, messages ve recent activity bölümleri
 - `adminandemployeePanel/src/app/employee/pages/GrowthHubCalismaAlani.tsx`
   - employee workspace route wrapper
 - `adminandemployeePanel/src/app/routes.tsx`
@@ -792,7 +799,7 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - seeds task taxonomy coverage (bug/frontend/backend/revision/qa/deployment)
   - seeds developer/project-manager delivery/github permissions
   - seeds delivery sprints, releases, and demo repository linkage
-  - seeds Growth Hub config for `acme-e-ticaret` and Growth Hub read/manage permission mappings
+  - seeds Growth Hub config for `acme-e-ticaret` and Growth Hub read/manage/action/note permission mappings
   - uses `bcryptjs` hashes for demo passwords
 - `server/tsconfig.seed.json` - TypeScript check config for seed files
 

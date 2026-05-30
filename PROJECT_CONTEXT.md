@@ -472,6 +472,26 @@ Project Manager assigned Growth Hub çalışma alanı eklendi. Özet:
 - Workspace mevcut assigned summary/actions/activity endpointlerini kullanır; persistence gerektiren weekly note / approval create / report publish akışları Faz 5/Faz 7 follow-up olarak disabled bırakıldı.
 - Employee görünürlüğü permission-aware çalışır; `growthHub.summary.read.assigned` olmadan query skip edilir ve read gate render edilir.
 
+## Growth Hub Faz 5 — Growth Actions + Weekly Notes (2026-05-30)
+
+Growth Hub kalıcı operasyon katmanı eklendi. Özet:
+- Prisma persistence: `GrowthHubAction`, `GrowthHubWeeklyNote`, `GrowthHubActionStatus`, `GrowthHubActionPriority`.
+- Backend endpointleri admin, assigned employee ve own-client scope için action/note read/write ayrımı sağlar; own-client yalnızca `clientVisible=true` action ve weekly note kayıtlarını görür.
+- Existing approval action read-model bozulmadı; action endpointleri persisted `GROWTH_ACTION` kayıtlarını mevcut approval/report acknowledgement aksiyonlarıyla birlikte döner.
+- Admin ve employee Growth Hub yüzeyleri shared `GrowthHubActionNotePanel` ile action create/status/visibility/delete ve weekly note create/visibility update akışlarını kullanır.
+- Client Growth Hub dashboard latest visible weekly note'u haftalık özet/ajans yorumu kaynağı olarak tüketir.
+
+Active Growth Hub Faz 5 endpoints:
+- `POST /api/v1/admin/clients/:clientId/growth-hub/actions`
+- `PATCH/DELETE /api/v1/admin/growth-hub/actions/:actionId`
+- `GET/POST /api/v1/admin/clients/:clientId/growth-hub/weekly-notes`
+- `PATCH /api/v1/admin/growth-hub/weekly-notes/:noteId`
+- `POST /api/v1/growth-hub/clients/:clientId/actions`
+- `PATCH/DELETE /api/v1/growth-hub/actions/:actionId`
+- `GET/POST /api/v1/growth-hub/clients/:clientId/weekly-notes`
+- `PATCH /api/v1/growth-hub/weekly-notes/:noteId`
+- `GET /api/v1/clients/me/growth-hub/weekly-notes`
+
 ## TikTok Ads Faz 0 — Tamamlanan Contract (2026-05-27)
 
 TikTok Ads Faz 0 discovery tamamlandı. Detaylı karar DECISIONS.md'de mevcut. Özet:

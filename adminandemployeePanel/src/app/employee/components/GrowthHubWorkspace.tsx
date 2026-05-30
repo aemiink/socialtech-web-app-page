@@ -17,10 +17,18 @@ import {
   selectCurrentUser,
 } from "../../features/auth/authSelectors";
 import {
+  useCreateAssignedGrowthHubActionMutation,
+  useCreateAssignedGrowthHubWeeklyNoteMutation,
+  useDeleteAssignedGrowthHubActionMutation,
   useGetAssignedGrowthHubClientActivityQuery,
+  useGetAssignedGrowthHubClientActionsQuery,
   useGetAssignedGrowthHubClientSummaryQuery,
+  useGetAssignedGrowthHubClientWeeklyNotesQuery,
   useGetAssignedGrowthHubClientsQuery,
+  useUpdateAssignedGrowthHubActionMutation,
+  useUpdateAssignedGrowthHubWeeklyNoteMutation,
 } from "../../features/growthHub/growthHubApi";
+import { GrowthHubActionNotePanel } from "../../features/growthHub/components/GrowthHubActionNotePanel";
 import {
   formatGrowthHubCompactNumber,
   formatGrowthHubCurrency,
@@ -42,6 +50,7 @@ export function GrowthHubWorkspace() {
   const role = useAppSelector(selectCurrentEmployeeRole);
   const canReadWorkspace = hasUserPermission(currentUser, ["growthHub.summary.read.assigned"]);
   const canReadActions = hasUserPermission(currentUser, ["growthHub.actions.read.assigned"]);
+  const canManageActions = hasUserPermission(currentUser, ["growthHub.actions.manage.assigned"]);
   const canManageNotes = hasUserPermission(currentUser, ["growthHub.notes.manage.assigned"]);
   const canCreateApprovals = hasUserPermission(currentUser, ["growthHub.approvals.create.assigned"]);
   const canManageReports = hasUserPermission(currentUser, ["growthHub.reports.manage.assigned"]);
@@ -77,6 +86,23 @@ export function GrowthHubWorkspace() {
   } = useGetAssignedGrowthHubClientActivityQuery(selectedClient?.client.id ?? "", {
     skip: !selectedClient || !canReadWorkspace,
   });
+  const {
+    data: actionsResponse,
+    isLoading: isActionsLoading,
+  } = useGetAssignedGrowthHubClientActionsQuery(selectedClient?.client.id ?? "", {
+    skip: !selectedClient || !canReadActions,
+  });
+  const {
+    data: weeklyNoteResponse,
+    isLoading: isWeeklyNotesLoading,
+  } = useGetAssignedGrowthHubClientWeeklyNotesQuery(selectedClient?.client.id ?? "", {
+    skip: !selectedClient || !canManageNotes,
+  });
+  const [createAction] = useCreateAssignedGrowthHubActionMutation();
+  const [updateAction] = useUpdateAssignedGrowthHubActionMutation();
+  const [deleteAction] = useDeleteAssignedGrowthHubActionMutation();
+  const [createWeeklyNote] = useCreateAssignedGrowthHubWeeklyNoteMutation();
+  const [updateWeeklyNote] = useUpdateAssignedGrowthHubWeeklyNoteMutation();
 
   useEffect(() => {
     if (listItems.length === 0) {
@@ -92,8 +118,10 @@ export function GrowthHubWorkspace() {
   }, [listItems, selectedClientId]);
 
   const selectedSummary = summary ?? null;
-  const approvalActions = selectedSummary?.actions.filter((item) => item.type !== "REPORT_ACKNOWLEDGEMENT") ?? [];
-  const reportActions = selectedSummary?.actions.filter((item) => item.type === "REPORT_ACKNOWLEDGEMENT") ?? [];
+  const actionItems = actionsResponse?.data ?? selectedSummary?.actions ?? [];
+  const approvalActions = actionItems.filter((item) => item.type !== "REPORT_ACKNOWLEDGEMENT");
+  const reportActions = actionItems.filter((item) => item.type === "REPORT_ACKNOWLEDGEMENT");
+  const weeklyNotes = weeklyNoteResponse?.data ?? [];
   const messages = activity?.data.filter((item) => item.type === "MESSAGE") ?? [];
   const recentActivity = activity?.data.filter((item) => item.type !== "MESSAGE") ?? [];
 
@@ -252,9 +280,9 @@ export function GrowthHubWorkspace() {
               <div className="grid gap-4 lg:grid-cols-2">
                 <div>
                   <p className="text-xs uppercase tracking-wide text-[#7A7A7A]">Weekly Actions</p>
-                  {canReadActions && selectedSummary?.actions.length ? (
+                  {canReadActions && actionItems.length ? (
                     <div className="mt-2 space-y-2">
-                      {selectedSummary.actions.slice(0, 4).map((action) => (
+                      {actionItems.slice(0, 4).map((action) => (
                         <div key={action.id} className="rounded-2xl border border-white/[0.08] bg-black/20 p-3">
                           <p className="text-sm text-white">{action.title}</p>
                           <p className="text-xs text-[#A0A0A0]">
@@ -358,8 +386,34 @@ export function GrowthHubWorkspace() {
               </div>
 
               <p className="mt-4 text-xs text-[#7A7A7A]">
-                Weekly note persistence, approval create ve report publish mutasyonları Growth Hub Faz 5 / Faz 7 ile tamamlanacak.
+                Approval create ve report publish mutasyonları Growth Hub Faz 7 ile tamamlanacak.
               </p>
+            </WorkspaceSection>
+
+            <WorkspaceSection title="Growth Actions ve Weekly Notes">
+              <GrowthHubActionNotePanel
+                actions={actionItems}
+                weeklyNotes={weeklyNotes}
+                canManageActions={canManageActions}
+                canManageNotes={canManageNotes}
+                isActionsLoading={isActionsLoading}
+                isNotesLoading={isWeeklyNotesLoading}
+                onCreateAction={(body) =>
+                  createAction({ clientId: selectedClient.client.id, body }).unwrap().then(() => undefined)
+                }
+                onUpdateAction={(actionId, body) =>
+                  updateAction({ actionId, clientId: selectedClient.client.id, body }).unwrap().then(() => undefined)
+                }
+                onDeleteAction={(actionId) =>
+                  deleteAction({ actionId, clientId: selectedClient.client.id }).unwrap().then(() => undefined)
+                }
+                onCreateWeeklyNote={(body) =>
+                  createWeeklyNote({ clientId: selectedClient.client.id, body }).unwrap().then(() => undefined)
+                }
+                onUpdateWeeklyNote={(noteId, body) =>
+                  updateWeeklyNote({ noteId, clientId: selectedClient.client.id, body }).unwrap().then(() => undefined)
+                }
+              />
             </WorkspaceSection>
           </div>
         </div>

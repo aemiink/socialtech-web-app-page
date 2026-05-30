@@ -3463,3 +3463,34 @@ Affected files:
 - `docs/social-media-phases/10-social-media-v2-integration-backlog.md`
 - `DECISIONS.md`
 - `ROAD_MAP.md`
+
+## 2026-05-30 - Growth Hub Faz 5 Persisted Actions + Weekly Notes
+
+Context:
+Growth Hub Faz 3-4 admin/employee surfaces mevcut summary read model üzerine kurulmuştu; weekly note ve action butonları fake write endpoint açmadan follow-up olarak bekliyordu. Faz 5'te kalıcı operasyon aksiyonlarının ve client-visible haftalık notların backend contract'a alınması gerekiyordu.
+
+Decision:
+Growth Hub Faz 5 iki kalıcı modelle ilerler:
+- `GrowthHubAction`, `GROWTH_ACTION` type'ı olarak mevcut approval/report acknowledgement action read modeline eklenir; action endpointleri persisted action ve mevcut approval action'ları birlikte döner.
+- `GrowthHubWeeklyNote`, ayrı weekly note endpointleriyle okunur/yazılır; own-client endpoint sadece `clientVisible=true` notları döner.
+- Admin `any`, employee `assigned`, client `own` permission family'leri action ve note için ayrılır.
+- Admin ve employee panelleri aynı `GrowthHubActionNotePanel` bileşeniyle action create/status/visibility/delete ve weekly note create/visibility update yapar.
+- Client dashboard latest visible weekly note'u haftalık özet ve ajans yorumu için config notes üstünde öncelikli kaynak olarak kullanır.
+
+Reason:
+Bu karar Faz 5 persistence ihtiyacını mevcut Growth Hub orchestration read modelini kırmadan karşılar. Approval/reports gibi mevcut kaynaklardan üretilen aksiyonlar kaybolmaz; yeni growth action kayıtları aynı endpointte görünür olur. Weekly note'un ayrı endpointte tutulması raporlama/öneri fazlarına ileride temiz bir tarihsel kaynak sağlar.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260530100000_add_growth_hub_actions_notes/migration.sql`
+- `server/prisma/seed.ts`
+- `server/src/growth-hub/*`
+- `server/test/growth-hub-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/growthHub/*`
+- `adminandemployeePanel/src/app/pages/GrowthHubAdmin.tsx`
+- `adminandemployeePanel/src/app/employee/components/GrowthHubWorkspace.tsx`
+- `clientPanel/src/app/features/growthHub/*`
+- `clientPanel/src/app/pages/services/growth-hub-dashboard.tsx`
+- `PROJECT_CONTEXT.md`
+- `REPO_MAP.md`
+- `ROAD_MAP.md`

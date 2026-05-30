@@ -273,6 +273,114 @@ describe("Growth Hub Config and Summary Authz (e2e)", () => {
     expect(res.body.client.id).toBe(clientProfileId);
     expect(res.body.service.hasActiveService).toBe(true);
   });
+
+  it("admin can create and update persistent Growth Hub actions", async () => {
+    const createRes = await request(app.getHttpServer())
+      .post(`/api/v1/admin/clients/${clientProfileId}/growth-hub/actions`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        title: "E2E persistent growth action",
+        description: "Client-visible growth action from Faz 5.",
+        projectId: growthProjectId,
+        priority: "HIGH",
+        dueAt: "2026-06-02",
+        clientVisible: true,
+      });
+
+    expect(createRes.status).toBe(201);
+    expect(createRes.body.type).toBe("GROWTH_ACTION");
+    expect(createRes.body.title).toBe("E2E persistent growth action");
+    expect(createRes.body.priority).toBe("HIGH");
+    expect(createRes.body.clientVisible).toBe(true);
+
+    const updateRes = await request(app.getHttpServer())
+      .patch(`/api/v1/admin/growth-hub/actions/${createRes.body.id}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ status: "DONE" });
+
+    expect(updateRes.status).toBe(200);
+    expect(updateRes.body.status).toBe("DONE");
+  });
+
+  it("assigned project manager can manage actions and clients see only visible actions", async () => {
+    const internalRes = await request(app.getHttpServer())
+      .post(`/api/v1/growth-hub/clients/${clientProfileId}/actions`)
+      .set("Authorization", `Bearer ${projectToken}`)
+      .send({
+        title: "Internal Growth Hub action",
+        projectId: growthProjectId,
+        clientVisible: false,
+      });
+
+    expect(internalRes.status).toBe(201);
+
+    const visibleRes = await request(app.getHttpServer())
+      .post(`/api/v1/growth-hub/clients/${clientProfileId}/actions`)
+      .set("Authorization", `Bearer ${projectToken}`)
+      .send({
+        title: "Visible Growth Hub action",
+        projectId: growthProjectId,
+        clientVisible: true,
+      });
+
+    expect(visibleRes.status).toBe(201);
+
+    const clientActionsRes = await request(app.getHttpServer())
+      .get("/api/v1/clients/me/growth-hub/actions")
+      .set("Authorization", `Bearer ${clientToken}`);
+
+    expect(clientActionsRes.status).toBe(200);
+    expect(
+      clientActionsRes.body.data.some(
+        (action: { title: string }) => action.title === "Visible Growth Hub action",
+      ),
+    ).toBe(true);
+    expect(
+      clientActionsRes.body.data.some(
+        (action: { title: string }) => action.title === "Internal Growth Hub action",
+      ),
+    ).toBe(false);
+  });
+
+  it("assigned project manager can publish weekly notes to the client dashboard", async () => {
+    const createRes = await request(app.getHttpServer())
+      .post(`/api/v1/growth-hub/clients/${clientProfileId}/weekly-notes`)
+      .set("Authorization", `Bearer ${projectToken}`)
+      .send({
+        weekStart: "2026-06-01",
+        weekEnd: "2026-06-07",
+        summary: "E2E weekly note summary",
+        nextFocus: "E2E next focus",
+        risks: { items: ["inventory"] },
+        clientVisible: true,
+      });
+
+    expect(createRes.status).toBe(201);
+    expect(createRes.body.summary).toBe("E2E weekly note summary");
+    expect(createRes.body.clientVisible).toBe(true);
+
+    const clientNotesRes = await request(app.getHttpServer())
+      .get("/api/v1/clients/me/growth-hub/weekly-notes")
+      .set("Authorization", `Bearer ${clientToken}`);
+
+    expect(clientNotesRes.status).toBe(200);
+    expect(
+      clientNotesRes.body.data.some(
+        (note: { summary: string }) => note.summary === "E2E weekly note summary",
+      ),
+    ).toBe(true);
+  });
+
+  it("employee without Growth Hub manage permission cannot create assigned actions", async () => {
+    const res = await request(app.getHttpServer())
+      .post(`/api/v1/growth-hub/clients/${clientProfileId}/actions`)
+      .set("Authorization", `Bearer ${performanceToken}`)
+      .send({
+        title: "Forbidden action",
+      });
+
+    expect(res.status).toBe(403);
+  });
 });
 
 async function loginAndGetAccessToken(

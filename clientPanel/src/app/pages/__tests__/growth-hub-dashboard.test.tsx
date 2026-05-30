@@ -6,6 +6,7 @@ const mockUseGetClientGrowthHubConfigQuery = vi.fn();
 const mockUseGetClientGrowthHubSummaryQuery = vi.fn();
 const mockUseGetClientGrowthHubChannelsQuery = vi.fn();
 const mockUseGetClientGrowthHubActionsQuery = vi.fn();
+const mockUseGetClientGrowthHubWeeklyNotesQuery = vi.fn();
 const mockUseGetClientGrowthHubActivityQuery = vi.fn();
 
 vi.mock("../../features/growthHub/growthHubApi", () => ({
@@ -17,6 +18,8 @@ vi.mock("../../features/growthHub/growthHubApi", () => ({
     mockUseGetClientGrowthHubChannelsQuery(...args),
   useGetClientGrowthHubActionsQuery: (...args: unknown[]) =>
     mockUseGetClientGrowthHubActionsQuery(...args),
+  useGetClientGrowthHubWeeklyNotesQuery: (...args: unknown[]) =>
+    mockUseGetClientGrowthHubWeeklyNotesQuery(...args),
   useGetClientGrowthHubActivityQuery: (...args: unknown[]) =>
     mockUseGetClientGrowthHubActivityQuery(...args),
 }));
@@ -27,6 +30,7 @@ describe("GrowthHubDashboard", () => {
     mockUseGetClientGrowthHubSummaryQuery.mockReset();
     mockUseGetClientGrowthHubChannelsQuery.mockReset();
     mockUseGetClientGrowthHubActionsQuery.mockReset();
+    mockUseGetClientGrowthHubWeeklyNotesQuery.mockReset();
     mockUseGetClientGrowthHubActivityQuery.mockReset();
 
     mockUseGetClientGrowthHubConfigQuery.mockReturnValue(successQuery(buildConfig()));
@@ -41,6 +45,27 @@ describe("GrowthHubDashboard", () => {
       successQuery({
         data: buildSummary().actions,
         meta: { total: 2, generatedAt: "2026-06-01T08:00:00.000Z" },
+      }),
+    );
+    mockUseGetClientGrowthHubWeeklyNotesQuery.mockReturnValue(
+      successQuery({
+        data: [
+          {
+            id: "weekly-note-1",
+            clientProfileId: "client-1",
+            project: null,
+            weekStart: "2026-05-25",
+            weekEnd: "2026-06-01",
+            summary: "Bu hafta müşteri görünür weekly note kaydı.",
+            nextFocus: "Landing page tekliflerini güçlendirmek.",
+            risks: null,
+            clientVisible: true,
+            createdBy: null,
+            createdAt: "2026-06-01T08:00:00.000Z",
+            updatedAt: "2026-06-01T08:00:00.000Z",
+          },
+        ],
+        meta: { total: 1, generatedAt: "2026-06-01T08:00:00.000Z" },
       }),
     );
     mockUseGetClientGrowthHubActivityQuery.mockReturnValue(
@@ -60,8 +85,9 @@ describe("GrowthHubDashboard", () => {
     expect(screen.getByText("Meta Ads")).toBeInTheDocument();
     expect(screen.getByText("Google Ads")).toBeInTheDocument();
     expect(screen.getByText("Landing page kreatif onayı")).toBeInTheDocument();
+    expect(screen.getAllByText("Bu hafta müşteri görünür weekly note kaydı.").length).toBeGreaterThan(0);
     expect(screen.getByText("Meta kampanya görevi güncellendi")).toBeInTheDocument();
-    expect(screen.getAllByText("API kaynaklı Growth Hub notu.").length).toBeGreaterThan(0);
+    expect(screen.queryByText("API kaynaklı Growth Hub notu.")).not.toBeInTheDocument();
     expect(screen.queryByText("247")).not.toBeInTheDocument();
     expect(screen.queryByText("₺42K")).not.toBeInTheDocument();
     expect(screen.queryByText("16 içerik planlandı")).not.toBeInTheDocument();
@@ -120,6 +146,9 @@ describe("GrowthHubDashboard", () => {
       successQuery({ data: [], meta: { generatedAt: "2026-06-01T08:00:00.000Z" } }),
     );
     mockUseGetClientGrowthHubActionsQuery.mockReturnValue(
+      successQuery({ data: [], meta: { total: 0, generatedAt: "2026-06-01T08:00:00.000Z" } }),
+    );
+    mockUseGetClientGrowthHubWeeklyNotesQuery.mockReturnValue(
       successQuery({ data: [], meta: { total: 0, generatedAt: "2026-06-01T08:00:00.000Z" } }),
     );
     mockUseGetClientGrowthHubActivityQuery.mockReturnValue(

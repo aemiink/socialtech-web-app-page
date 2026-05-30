@@ -2,10 +2,15 @@ import { baseApi } from "../../services/baseApi";
 import type {
   GrowthHubActionsResponse,
   GrowthHubActivityResponse,
+  GrowthHubActionItem,
+  GrowthHubActionMutationRequest,
   GrowthHubChannelsResponse,
   GrowthHubClientsResponse,
   GrowthHubConfig,
   GrowthHubSummary,
+  GrowthHubWeeklyNote,
+  GrowthHubWeeklyNoteMutationRequest,
+  GrowthHubWeeklyNotesResponse,
 } from "./growthHubTypes";
 import {
   normalizeGrowthHubActionsResponse,
@@ -14,10 +19,29 @@ import {
   normalizeGrowthHubClientsResponse,
   normalizeGrowthHubConfigResponse,
   normalizeGrowthHubSummaryResponse,
+  normalizeGrowthHubWeeklyNotesResponse,
 } from "./growthHubUtils";
 
 const ADMIN_GROWTH_HUB_LIST_ID = "ADMIN_LIST";
 const ASSIGNED_GROWTH_HUB_LIST_ID = "ASSIGNED_LIST";
+
+function normalizeGrowthHubActionItemResponse(response: unknown): GrowthHubActionItem {
+  const normalized = normalizeGrowthHubActionsResponse([response]);
+  if (!normalized.data[0]) {
+    throw new Error("Growth Hub action response could not be normalized.");
+  }
+
+  return normalized.data[0];
+}
+
+function normalizeGrowthHubWeeklyNoteResponse(response: unknown): GrowthHubWeeklyNote {
+  const normalized = normalizeGrowthHubWeeklyNotesResponse([response]);
+  if (!normalized.data[0]) {
+    throw new Error("Growth Hub weekly note response could not be normalized.");
+  }
+
+  return normalized.data[0];
+}
 
 export const growthHubApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -123,6 +147,52 @@ export const growthHubApi = baseApi.injectEndpoints({
         { type: "GrowthHubActions", id: clientId },
       ],
     }),
+    createAdminGrowthHubAction: builder.mutation<
+      GrowthHubActionItem,
+      { clientId: string; body: GrowthHubActionMutationRequest & { title: string } }
+    >({
+      query: ({ clientId, body }) => ({
+        url: `/admin/clients/${clientId}/growth-hub/actions`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeGrowthHubActionItemResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "GrowthHubActions", id: clientId },
+        { type: "GrowthHubSummary", id: clientId },
+        { type: "GrowthHubSummary", id: ADMIN_GROWTH_HUB_LIST_ID },
+      ],
+    }),
+    updateAdminGrowthHubAction: builder.mutation<
+      GrowthHubActionItem,
+      { actionId: string; clientId: string; body: GrowthHubActionMutationRequest }
+    >({
+      query: ({ actionId, body }) => ({
+        url: `/admin/growth-hub/actions/${actionId}`,
+        method: "PATCH",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeGrowthHubActionItemResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "GrowthHubActions", id: clientId },
+        { type: "GrowthHubSummary", id: clientId },
+        { type: "GrowthHubSummary", id: ADMIN_GROWTH_HUB_LIST_ID },
+      ],
+    }),
+    deleteAdminGrowthHubAction: builder.mutation<
+      { id: string; deleted: true },
+      { actionId: string; clientId: string }
+    >({
+      query: ({ actionId }) => ({
+        url: `/admin/growth-hub/actions/${actionId}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "GrowthHubActions", id: clientId },
+        { type: "GrowthHubSummary", id: clientId },
+        { type: "GrowthHubSummary", id: ADMIN_GROWTH_HUB_LIST_ID },
+      ],
+    }),
     getAssignedGrowthHubClientActions: builder.query<GrowthHubActionsResponse, string>({
       query: (clientId) => ({
         url: `/growth-hub/clients/${clientId}/actions`,
@@ -131,6 +201,132 @@ export const growthHubApi = baseApi.injectEndpoints({
       transformResponse: (response: unknown) => normalizeGrowthHubActionsResponse(response),
       providesTags: (_result, _error, clientId) => [
         { type: "GrowthHubActions", id: `assigned:${clientId}` },
+      ],
+    }),
+    createAssignedGrowthHubAction: builder.mutation<
+      GrowthHubActionItem,
+      { clientId: string; body: GrowthHubActionMutationRequest & { title: string } }
+    >({
+      query: ({ clientId, body }) => ({
+        url: `/growth-hub/clients/${clientId}/actions`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeGrowthHubActionItemResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "GrowthHubActions", id: `assigned:${clientId}` },
+        { type: "GrowthHubSummary", id: `assigned:${clientId}` },
+        { type: "GrowthHubSummary", id: ASSIGNED_GROWTH_HUB_LIST_ID },
+      ],
+    }),
+    updateAssignedGrowthHubAction: builder.mutation<
+      GrowthHubActionItem,
+      { actionId: string; clientId: string; body: GrowthHubActionMutationRequest }
+    >({
+      query: ({ actionId, body }) => ({
+        url: `/growth-hub/actions/${actionId}`,
+        method: "PATCH",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeGrowthHubActionItemResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "GrowthHubActions", id: `assigned:${clientId}` },
+        { type: "GrowthHubSummary", id: `assigned:${clientId}` },
+        { type: "GrowthHubSummary", id: ASSIGNED_GROWTH_HUB_LIST_ID },
+      ],
+    }),
+    deleteAssignedGrowthHubAction: builder.mutation<
+      { id: string; deleted: true },
+      { actionId: string; clientId: string }
+    >({
+      query: ({ actionId }) => ({
+        url: `/growth-hub/actions/${actionId}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "GrowthHubActions", id: `assigned:${clientId}` },
+        { type: "GrowthHubSummary", id: `assigned:${clientId}` },
+        { type: "GrowthHubSummary", id: ASSIGNED_GROWTH_HUB_LIST_ID },
+      ],
+    }),
+    getAdminGrowthHubClientWeeklyNotes: builder.query<GrowthHubWeeklyNotesResponse, string>({
+      query: (clientId) => ({
+        url: `/admin/clients/${clientId}/growth-hub/weekly-notes`,
+        method: "GET",
+      }),
+      transformResponse: (response: unknown) => normalizeGrowthHubWeeklyNotesResponse(response),
+      providesTags: (_result, _error, clientId) => [
+        { type: "GrowthHubWeeklyNotes", id: clientId },
+      ],
+    }),
+    createAdminGrowthHubWeeklyNote: builder.mutation<
+      GrowthHubWeeklyNote,
+      { clientId: string; body: GrowthHubWeeklyNoteMutationRequest & { weekStart: string; weekEnd: string; summary: string } }
+    >({
+      query: ({ clientId, body }) => ({
+        url: `/admin/clients/${clientId}/growth-hub/weekly-notes`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeGrowthHubWeeklyNoteResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "GrowthHubWeeklyNotes", id: clientId },
+        { type: "GrowthHubSummary", id: clientId },
+      ],
+    }),
+    updateAdminGrowthHubWeeklyNote: builder.mutation<
+      GrowthHubWeeklyNote,
+      { noteId: string; clientId: string; body: GrowthHubWeeklyNoteMutationRequest }
+    >({
+      query: ({ noteId, body }) => ({
+        url: `/admin/growth-hub/weekly-notes/${noteId}`,
+        method: "PATCH",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeGrowthHubWeeklyNoteResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "GrowthHubWeeklyNotes", id: clientId },
+        { type: "GrowthHubSummary", id: clientId },
+      ],
+    }),
+    getAssignedGrowthHubClientWeeklyNotes: builder.query<GrowthHubWeeklyNotesResponse, string>({
+      query: (clientId) => ({
+        url: `/growth-hub/clients/${clientId}/weekly-notes`,
+        method: "GET",
+      }),
+      transformResponse: (response: unknown) => normalizeGrowthHubWeeklyNotesResponse(response),
+      providesTags: (_result, _error, clientId) => [
+        { type: "GrowthHubWeeklyNotes", id: `assigned:${clientId}` },
+      ],
+    }),
+    createAssignedGrowthHubWeeklyNote: builder.mutation<
+      GrowthHubWeeklyNote,
+      { clientId: string; body: GrowthHubWeeklyNoteMutationRequest & { weekStart: string; weekEnd: string; summary: string } }
+    >({
+      query: ({ clientId, body }) => ({
+        url: `/growth-hub/clients/${clientId}/weekly-notes`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeGrowthHubWeeklyNoteResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "GrowthHubWeeklyNotes", id: `assigned:${clientId}` },
+        { type: "GrowthHubSummary", id: `assigned:${clientId}` },
+      ],
+    }),
+    updateAssignedGrowthHubWeeklyNote: builder.mutation<
+      GrowthHubWeeklyNote,
+      { noteId: string; clientId: string; body: GrowthHubWeeklyNoteMutationRequest }
+    >({
+      query: ({ noteId, body }) => ({
+        url: `/growth-hub/weekly-notes/${noteId}`,
+        method: "PATCH",
+        body,
+      }),
+      transformResponse: (response: unknown) => normalizeGrowthHubWeeklyNoteResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "GrowthHubWeeklyNotes", id: `assigned:${clientId}` },
+        { type: "GrowthHubSummary", id: `assigned:${clientId}` },
       ],
     }),
     getAdminGrowthHubClientActivity: builder.query<GrowthHubActivityResponse, string>({
@@ -167,6 +363,18 @@ export const {
   useGetAssignedGrowthHubClientChannelsQuery,
   useGetAdminGrowthHubClientActionsQuery,
   useGetAssignedGrowthHubClientActionsQuery,
+  useCreateAdminGrowthHubActionMutation,
+  useUpdateAdminGrowthHubActionMutation,
+  useDeleteAdminGrowthHubActionMutation,
+  useCreateAssignedGrowthHubActionMutation,
+  useUpdateAssignedGrowthHubActionMutation,
+  useDeleteAssignedGrowthHubActionMutation,
+  useGetAdminGrowthHubClientWeeklyNotesQuery,
+  useCreateAdminGrowthHubWeeklyNoteMutation,
+  useUpdateAdminGrowthHubWeeklyNoteMutation,
+  useGetAssignedGrowthHubClientWeeklyNotesQuery,
+  useCreateAssignedGrowthHubWeeklyNoteMutation,
+  useUpdateAssignedGrowthHubWeeklyNoteMutation,
   useGetAdminGrowthHubClientActivityQuery,
   useGetAssignedGrowthHubClientActivityQuery,
 } = growthHubApi;

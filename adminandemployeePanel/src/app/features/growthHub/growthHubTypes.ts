@@ -45,10 +45,20 @@ export type GrowthHubChannelStatus =
   | "SCALE";
 
 export type GrowthHubActionType =
+  | "GROWTH_ACTION"
   | "TASK_APPROVAL"
   | "FILE_APPROVAL"
   | "RELEASE_APPROVAL"
   | "REPORT_ACKNOWLEDGEMENT";
+
+export type GrowthHubActionStatus =
+  | "TODO"
+  | "IN_PROGRESS"
+  | "DONE"
+  | "BLOCKED"
+  | "CANCELLED";
+
+export type GrowthHubActionPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
 export type GrowthHubActivityType = "TASK" | "FILE" | "RELEASE" | "MESSAGE";
 
@@ -112,11 +122,64 @@ export type GrowthHubActionItem = {
   id: string;
   type: GrowthHubActionType;
   title: string;
+  description?: string | null;
   serviceKey: GrowthHubServiceKey | null;
   project: GrowthHubProjectReference | null;
+  owner?: {
+    id: string;
+    displayName: string | null;
+    email: string;
+  } | null;
+  status?: GrowthHubActionStatus | null;
+  priority?: GrowthHubActionPriority | null;
+  clientVisible?: boolean;
+  relatedEntityType?: string | null;
+  relatedEntityId?: string | null;
   dueAt: string | null;
   createdAt: string | null;
   updatedAt: string;
+};
+
+export type GrowthHubWeeklyNote = {
+  id: string;
+  clientProfileId: string;
+  project: (GrowthHubProjectReference & { serviceKey: GrowthHubServiceKey | null }) | null;
+  weekStart: string;
+  weekEnd: string;
+  summary: string;
+  nextFocus: string | null;
+  risks: unknown | null;
+  clientVisible: boolean;
+  createdBy: {
+    id: string;
+    displayName: string | null;
+    email: string;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GrowthHubActionMutationRequest = {
+  title?: string;
+  description?: string | null;
+  projectId?: string | null;
+  ownerUserId?: string | null;
+  status?: GrowthHubActionStatus;
+  priority?: GrowthHubActionPriority;
+  dueAt?: string | null;
+  clientVisible?: boolean;
+  relatedEntityType?: string | null;
+  relatedEntityId?: string | null;
+};
+
+export type GrowthHubWeeklyNoteMutationRequest = {
+  projectId?: string | null;
+  weekStart?: string;
+  weekEnd?: string;
+  summary?: string;
+  nextFocus?: string | null;
+  risks?: unknown | null;
+  clientVisible?: boolean;
 };
 
 export type GrowthHubActivityItem = {
@@ -201,6 +264,14 @@ export type GrowthHubChannelsResponse = {
 
 export type GrowthHubActionsResponse = {
   data: GrowthHubActionItem[];
+  meta: {
+    total: number;
+    generatedAt: string | null;
+  };
+};
+
+export type GrowthHubWeeklyNotesResponse = {
+  data: GrowthHubWeeklyNote[];
   meta: {
     total: number;
     generatedAt: string | null;

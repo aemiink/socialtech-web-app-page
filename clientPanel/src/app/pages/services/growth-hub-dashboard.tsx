@@ -17,6 +17,7 @@ import {
   useGetClientGrowthHubChannelsQuery,
   useGetClientGrowthHubConfigQuery,
   useGetClientGrowthHubSummaryQuery,
+  useGetClientGrowthHubWeeklyNotesQuery,
 } from "../../features/growthHub/growthHubApi";
 import type {
   GrowthHubActionItem,
@@ -24,6 +25,7 @@ import type {
   GrowthHubChannelSummary,
   GrowthHubConfig,
   GrowthHubSummary,
+  GrowthHubWeeklyNote,
 } from "../../features/growthHub/growthHubTypes";
 import {
   calculateGrowthHealthScore,
@@ -34,6 +36,7 @@ import {
   formatGrowthHubNumber,
   formatGrowthHubRatio,
   getGrowthHubActionTypeLabel,
+  getGrowthHubActionStatusLabel,
   getGrowthHubActivityTypeLabel,
   getGrowthHubChannelStatusLabel,
   getGrowthHubGoalLabel,
@@ -69,24 +72,29 @@ export function GrowthHubDashboard() {
   const configQuery = useGetClientGrowthHubConfigQuery();
   const channelsQuery = useGetClientGrowthHubChannelsQuery();
   const actionsQuery = useGetClientGrowthHubActionsQuery();
+  const weeklyNotesQuery = useGetClientGrowthHubWeeklyNotesQuery();
   const activityQuery = useGetClientGrowthHubActivityQuery();
 
   const summary = summaryQuery.data ?? null;
   const config = configQuery.data ?? summary?.config ?? null;
   const channels = channelsQuery.data?.data ?? summary?.channels ?? [];
   const actions = actionsQuery.data?.data ?? summary?.actions ?? [];
+  const weeklyNotes = weeklyNotesQuery.data?.data ?? [];
+  const latestWeeklyNote = weeklyNotes[0] ?? null;
   const activity = activityQuery.data?.data ?? summary?.activity ?? [];
   const isLoading =
     summaryQuery.isLoading ||
     configQuery.isLoading ||
     channelsQuery.isLoading ||
     actionsQuery.isLoading ||
+    weeklyNotesQuery.isLoading ||
     activityQuery.isLoading;
   const isError =
     summaryQuery.isError ||
     configQuery.isError ||
     channelsQuery.isError ||
     actionsQuery.isError ||
+    weeklyNotesQuery.isError ||
     activityQuery.isError;
 
   if (isLoading) {
@@ -182,14 +190,14 @@ export function GrowthHubDashboard() {
       </section>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <WeeklySummary summary={summary} config={config} activity={activity} />
+        <WeeklySummary summary={summary} config={config} activity={activity} weeklyNote={latestWeeklyNote} />
         <LeadTrendState summary={summary} />
       </div>
 
       <ChannelPerformance channels={channels} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <AgencyComment summary={summary} config={config} generatedAt={generatedAt} />
+        <AgencyComment summary={summary} config={config} weeklyNote={latestWeeklyNote} generatedAt={generatedAt} />
         <ClientActions actions={actions} />
       </div>
 
@@ -277,13 +285,15 @@ function WeeklySummary({
   summary,
   config,
   activity,
+  weeklyNote,
 }: {
   summary: GrowthHubSummary;
   config: GrowthHubConfig | null;
   activity: GrowthHubActivityItem[];
+  weeklyNote: GrowthHubWeeklyNote | null;
 }) {
-  const focus = getNextFocus(summary);
-  const note = config?.notes ?? summary.config?.notes ?? null;
+  const focus = weeklyNote?.nextFocus ?? getNextFocus(summary);
+  const note = weeklyNote?.summary ?? config?.notes ?? summary.config?.notes ?? null;
 
   return (
     <section className={cardClass}>
@@ -294,8 +304,15 @@ function WeeklySummary({
         <SummaryLine icon={TrendingUp} text={focus} />
         {note ? (
           <div className={innerClass}>
-            <p className="mb-2 text-sm text-[#A0A0A0]">Ajans notu</p>
+            <p className="mb-2 text-sm text-[#A0A0A0]">
+              {weeklyNote ? `${formatGrowthHubDate(weeklyNote.weekStart)} haftası` : "Ajans notu"}
+            </p>
             <p className="text-sm leading-relaxed text-white">{note}</p>
+            {weeklyNote?.nextFocus ? (
+              <p className="mt-3 text-sm leading-relaxed text-[#D8D8D8]">
+                Sonraki odak: {weeklyNote.nextFocus}
+              </p>
+            ) : null}
           </div>
         ) : (
           <EmptyState text="Haftalık ajans notu henüz bağlanmadı." />
@@ -402,13 +419,16 @@ function MetricRow({ label, value, accent = false }: { label: string; value: str
 function AgencyComment({
   summary,
   config,
+  weeklyNote,
   generatedAt,
 }: {
   summary: GrowthHubSummary;
   config: GrowthHubConfig | null;
+  weeklyNote: GrowthHubWeeklyNote | null;
   generatedAt: string | null;
 }) {
   const activeConfig = config ?? summary.config;
+  const comment = weeklyNote?.summary ?? activeConfig?.notes ?? null;
 
   return (
     <section className="lg:col-span-2 rounded-2xl border border-[#AAFF01]/20 bg-gradient-to-br from-[#AAFF01]/5 to-[#7B61FF]/5 p-6">
@@ -418,8 +438,8 @@ function AgencyComment({
         </div>
         <div className="min-w-0 flex-1">
           <h2 className="mb-2 text-xl text-white">Ajans Yorumu</h2>
-          {activeConfig?.notes ? (
-            <p className="mb-4 text-sm leading-relaxed text-[#D8D8D8]">{activeConfig.notes}</p>
+          {comment ? (
+            <p className="mb-4 text-sm leading-relaxed text-[#D8D8D8]">{comment}</p>
           ) : (
             <EmptyState text="Ajans yorumu henüz Growth Hub config kaydına eklenmedi." />
           )}
@@ -461,8 +481,12 @@ function ClientActions({ actions }: { actions: GrowthHubActionItem[] }) {
                 <span className="text-xs text-[#A0A0A0]">{formatGrowthHubDate(item.dueAt ?? item.updatedAt)}</span>
               </div>
               <p className="text-sm text-white">{item.title}</p>
+              {item.description ? (
+                <p className="mt-2 text-xs leading-relaxed text-[#D8D8D8]">{item.description}</p>
+              ) : null}
               <p className="mt-2 text-xs text-[#A0A0A0]">
                 {item.project?.name ?? getGrowthHubServiceLabel(item.serviceKey)}
+                {item.type === "GROWTH_ACTION" ? ` / ${getGrowthHubActionStatusLabel(item.status)}` : ""}
               </p>
             </div>
           ))}
@@ -604,6 +628,14 @@ function getPrimaryMetricValue(channel: GrowthHubChannelSummary): string {
 }
 
 function getActionTone(action: GrowthHubActionItem): string {
+  if (action.status === "DONE") {
+    return "bg-[#AAFF01]/10 text-[#AAFF01]";
+  }
+
+  if (action.status === "BLOCKED" || action.status === "CANCELLED") {
+    return "bg-[#ff4444]/10 text-[#ff4444]";
+  }
+
   if (action.dueAt && new Date(action.dueAt).getTime() < Date.now()) {
     return "bg-[#ff4444]/10 text-[#ff4444]";
   }
