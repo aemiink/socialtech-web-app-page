@@ -3566,3 +3566,39 @@ Affected files:
 - `PROJECT_CONTEXT.md`
 - `REPO_MAP.md`
 - `ROAD_MAP.md`
+
+## 2026-05-30 - Growth Hub Faz 8 Rule-Based Recommendations
+
+Context:
+Growth Hub Faz 7 rapor/acknowledgement akışını tamamladıktan sonra orchestration layer'ın aynı summary, action, weekly note, report ve kanal health sinyallerinden operasyon önerisi üretebilmesi gerekiyordu. Faz 8 kapsamı AI zorunluluğu olmadan idempotent, kural tabanlı recommendation layer idi.
+
+Decision:
+Growth Hub Faz 8 ayrı recommendation persistence modeli ve rule engine ile ilerler:
+- `GrowthHubRecommendation` modeli recommendation type/status, priority, source, related entity metadata, `clientVisible`, `dedupeKey` ve converted task relation'ı ile eklendi.
+- Admin ve assigned employee endpointleri önerileri listeleyebilir, rule-based generate çalıştırabilir, status/priority/visibility güncelleyebilir ve öneriyi `Task` kaydına çevirebilir.
+- Own-client endpoint yalnızca `clientVisible=true` önerileri döndürür; client update/generate/convert yüzeyi açılmaz.
+- Generate işlemi idempotent tutulur: açık/kabul edilmiş öneriler aynı dedupe key ile güncellenir, dismissed/converted/done kayıtlar tekrar açılmaz.
+- Rule source'ları mevcut Growth Hub summary/channel/report/note sinyalleriyle sınırlıdır: pending approvals, overdue tasks, visible weekly note/report eksikliği, düşük ROAS, riskli kanal ve contract-only kanal durumları.
+- Admin/employee shared panel recommendation generate/update/convert kontrollerini, client dashboard ise client-visible öneri kartlarını render eder.
+
+Reason:
+Bu karar Growth Hub önerilerini kanal modüllerinden veya AI provider bağımlılığından ayırır. Dedupe key yaklaşımı tekrar generate kullanımını güvenli hale getirir; öneri -> task dönüşümü mevcut görev ve assignment görünürlük modelini tekrar kullanarak Faz 9 production hardening öncesi küçük ama izlenebilir bir operasyon yüzeyi sağlar.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260530113000_add_growth_hub_recommendations/migration.sql`
+- `server/prisma/seed.ts`
+- `server/src/growth-hub/*`
+- `server/src/growth-hub/dto/growth-hub-recommendation.dto.ts`
+- `server/test/growth-hub-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/growthHub/*`
+- `adminandemployeePanel/src/app/pages/GrowthHubAdmin.tsx`
+- `adminandemployeePanel/src/app/employee/components/GrowthHubWorkspace.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/GrowthHubAdmin.test.tsx`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/GrowthHubCalismaAlani.test.tsx`
+- `clientPanel/src/app/features/growthHub/*`
+- `clientPanel/src/app/pages/services/growth-hub-dashboard.tsx`
+- `clientPanel/src/app/pages/__tests__/growth-hub-dashboard.test.tsx`
+- `PROJECT_CONTEXT.md`
+- `REPO_MAP.md`
+- `ROAD_MAP.md`

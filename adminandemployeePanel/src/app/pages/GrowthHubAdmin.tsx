@@ -24,13 +24,17 @@ import {
   useCreateAdminGrowthHubActionMutation,
   useCreateAdminGrowthHubReportMutation,
   useCreateAdminGrowthHubWeeklyNoteMutation,
+  useConvertAdminGrowthHubRecommendationToTaskMutation,
   useDeleteAdminGrowthHubActionMutation,
+  useGenerateAdminGrowthHubRecommendationsMutation,
   useGetAdminGrowthHubClientActionsQuery,
+  useGetAdminGrowthHubClientRecommendationsQuery,
   useGetAdminGrowthHubClientReportsQuery,
   useGetAdminGrowthHubClientWeeklyNotesQuery,
   useGetAdminGrowthHubClientsQuery,
   usePublishAdminGrowthHubReportMutation,
   useUpdateAdminGrowthHubActionMutation,
+  useUpdateAdminGrowthHubRecommendationMutation,
   useUpdateAdminGrowthHubReportMutation,
   useUpdateAdminGrowthHubWeeklyNoteMutation,
 } from "../features/growthHub/growthHubApi";
@@ -60,6 +64,12 @@ export function GrowthHubAdmin() {
   const canManageNotes = hasAdminPermission(currentUser, ["growthHub.notes.manage.any"]);
   const canReadReports = hasAdminPermission(currentUser, ["growthHub.reports.read.any"]);
   const canManageReports = hasAdminPermission(currentUser, ["growthHub.reports.manage.any"]);
+  const canReadRecommendations = hasAdminPermission(currentUser, [
+    "growthHub.recommendations.read.any",
+  ]);
+  const canManageRecommendations = hasAdminPermission(currentUser, [
+    "growthHub.recommendations.manage.any",
+  ]);
   const {
     data: response,
     error,
@@ -107,6 +117,12 @@ export function GrowthHubAdmin() {
   } = useGetAdminGrowthHubClientReportsQuery(selectedClient?.client.id ?? "", {
     skip: !selectedClient || !canReadReports,
   });
+  const {
+    data: recommendationsResponse,
+    isLoading: isRecommendationsLoading,
+  } = useGetAdminGrowthHubClientRecommendationsQuery(selectedClient?.client.id ?? "", {
+    skip: !selectedClient || !canReadRecommendations,
+  });
   const [createAction] = useCreateAdminGrowthHubActionMutation();
   const [updateAction] = useUpdateAdminGrowthHubActionMutation();
   const [deleteAction] = useDeleteAdminGrowthHubActionMutation();
@@ -115,9 +131,13 @@ export function GrowthHubAdmin() {
   const [createReport] = useCreateAdminGrowthHubReportMutation();
   const [updateReport] = useUpdateAdminGrowthHubReportMutation();
   const [publishReport] = usePublishAdminGrowthHubReportMutation();
+  const [generateRecommendations] = useGenerateAdminGrowthHubRecommendationsMutation();
+  const [updateRecommendation] = useUpdateAdminGrowthHubRecommendationMutation();
+  const [convertRecommendationToTask] = useConvertAdminGrowthHubRecommendationToTaskMutation();
   const selectedActions = actionResponse?.data ?? selectedClient?.actions ?? [];
   const selectedWeeklyNotes = weeklyNoteResponse?.data ?? [];
   const selectedReports = reportsResponse?.data ?? [];
+  const selectedRecommendations = recommendationsResponse?.data ?? [];
 
   useEffect(() => {
     if (listItems.length === 0) {
@@ -424,12 +444,15 @@ export function GrowthHubAdmin() {
                   actions={selectedActions}
                   weeklyNotes={selectedWeeklyNotes}
                   reports={selectedReports}
+                  recommendations={selectedRecommendations}
                   canManageActions={canManageActions}
                   canManageNotes={canManageNotes}
                   canManageReports={canManageReports}
+                  canManageRecommendations={canManageRecommendations}
                   isActionsLoading={isActionsLoading}
                   isNotesLoading={isWeeklyNotesLoading}
                   isReportsLoading={isReportsLoading}
+                  isRecommendationsLoading={isRecommendationsLoading}
                   onCreateAction={(body) =>
                     createAction({ clientId: selectedClient.client.id, body }).unwrap().then(() => undefined)
                   }
@@ -453,6 +476,28 @@ export function GrowthHubAdmin() {
                   }
                   onPublishReport={(reportId, requestAcknowledgement) =>
                     publishReport({ reportId, clientId: selectedClient.client.id, requestAcknowledgement })
+                      .unwrap()
+                      .then(() => undefined)
+                  }
+                  onGenerateRecommendations={() =>
+                    generateRecommendations({ clientId: selectedClient.client.id })
+                      .unwrap()
+                      .then(() => undefined)
+                  }
+                  onUpdateRecommendation={(recommendationId, body) =>
+                    updateRecommendation({
+                      recommendationId,
+                      clientId: selectedClient.client.id,
+                      body,
+                    })
+                      .unwrap()
+                      .then(() => undefined)
+                  }
+                  onConvertRecommendationToTask={(recommendationId) =>
+                    convertRecommendationToTask({
+                      recommendationId,
+                      clientId: selectedClient.client.id,
+                    })
                       .unwrap()
                       .then(() => undefined)
                   }

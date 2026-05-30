@@ -519,6 +519,27 @@ Active Growth Hub Faz 7 report endpoints:
 - `POST /api/v1/growth-hub/reports/:reportId/publish`
 - `GET /api/v1/clients/me/growth-hub/reports`
 
+## Growth Hub Faz 8 — Rule-Based Recommendations (2026-05-30)
+
+Growth Hub öneri katmanı eklendi. Özet:
+- Prisma persistence: `GrowthHubRecommendation`, recommendation type/status enum'ları, `dedupeKey`, `clientVisible`, source/related entity metadata ve converted task relation'ı.
+- Backend rule engine mevcut summary/channel/action/weekly note/report sinyallerinden onay hatırlatma, rapor eksikliği, geciken iş, düşük ROAS, riskli kanal ve contract-only kanal önerileri üretir.
+- Generate endpointleri idempotent çalışır; açık/kabul edilmiş öneriler güncellenir, dismissed/converted/done kayıtlar tekrar açılmaz.
+- Admin ve assigned employee endpointleri öneri listeleme/generate/update/convert-to-task akışını sağlar; own-client endpoint yalnızca `clientVisible=true` önerileri döndürür.
+- Admin/employee shared panel recommendation kartlarını, generate action'ını, accept/visibility update'ini ve task'a çevirme akışını render eder.
+- Client Growth Hub dashboard client-visible önerileri ayrı "recommended next steps" bölümü olarak API-driven render eder.
+
+Active Growth Hub Faz 8 recommendation endpoints:
+- `GET /api/v1/admin/clients/:clientId/growth-hub/recommendations`
+- `POST /api/v1/admin/clients/:clientId/growth-hub/recommendations/generate`
+- `PATCH /api/v1/admin/growth-hub/recommendations/:recommendationId`
+- `POST /api/v1/admin/growth-hub/recommendations/:recommendationId/convert-to-task`
+- `GET /api/v1/growth-hub/clients/:clientId/recommendations`
+- `POST /api/v1/growth-hub/clients/:clientId/recommendations/generate`
+- `PATCH /api/v1/growth-hub/recommendations/:recommendationId`
+- `POST /api/v1/growth-hub/recommendations/:recommendationId/convert-to-task`
+- `GET /api/v1/clients/me/growth-hub/recommendations`
+
 ## TikTok Ads Faz 0 — Tamamlanan Contract (2026-05-27)
 
 TikTok Ads Faz 0 discovery tamamlandı. Detaylı karar DECISIONS.md'de mevcut. Özet:

@@ -17,6 +17,10 @@ import type {
   GrowthHubGoal,
   GrowthHubReport,
   GrowthHubReportAcknowledgementStatus,
+  GrowthHubRecommendation,
+  GrowthHubRecommendationStatus,
+  GrowthHubRecommendationsResponse,
+  GrowthHubRecommendationType,
   GrowthHubReportsResponse,
   GrowthHubReportStatus,
   GrowthHubReportType,
@@ -121,6 +125,25 @@ const REPORT_ACKNOWLEDGEMENT_STATUS_OPTIONS: GrowthHubReportAcknowledgementStatu
   "CHANGES_REQUESTED",
 ];
 
+const RECOMMENDATION_TYPE_OPTIONS: GrowthHubRecommendationType[] = [
+  "CHANNEL_OPTIMIZATION",
+  "BUDGET_SHIFT",
+  "CREATIVE_REFRESH",
+  "LANDING_PAGE_REVIEW",
+  "APPROVAL_REMINDER",
+  "REPORTING_REQUIRED",
+  "TECHNICAL_FIX",
+  "STRATEGY_REVIEW",
+];
+
+const RECOMMENDATION_STATUS_OPTIONS: GrowthHubRecommendationStatus[] = [
+  "OPEN",
+  "ACCEPTED",
+  "DISMISSED",
+  "CONVERTED_TO_TASK",
+  "DONE",
+];
+
 const SERVICE_LABELS: Record<GrowthHubServiceKey, string> = {
   GROWTH_HUB: "Growth & Hub",
   SOCIAL_MEDIA: "Sosyal Medya",
@@ -220,6 +243,25 @@ const REPORT_ACKNOWLEDGEMENT_STATUS_LABELS: Record<GrowthHubReportAcknowledgemen
   PENDING: "Teyit bekliyor",
   ACKNOWLEDGED: "Teyitlendi",
   CHANGES_REQUESTED: "Revizyon istendi",
+};
+
+const RECOMMENDATION_TYPE_LABELS: Record<GrowthHubRecommendationType, string> = {
+  CHANNEL_OPTIMIZATION: "Kanal optimizasyonu",
+  BUDGET_SHIFT: "Bütçe dağılımı",
+  CREATIVE_REFRESH: "Kreatif yenileme",
+  LANDING_PAGE_REVIEW: "Landing page inceleme",
+  APPROVAL_REMINDER: "Onay hatırlatma",
+  REPORTING_REQUIRED: "Raporlama gerekli",
+  TECHNICAL_FIX: "Teknik aksiyon",
+  STRATEGY_REVIEW: "Strateji gözden geçirme",
+};
+
+const RECOMMENDATION_STATUS_LABELS: Record<GrowthHubRecommendationStatus, string> = {
+  OPEN: "Açık",
+  ACCEPTED: "Kabul edildi",
+  DISMISSED: "Reddedildi",
+  CONVERTED_TO_TASK: "Task'a dönüştü",
+  DONE: "Tamamlandı",
 };
 
 const currencyFormatter = new Intl.NumberFormat("tr-TR", {
@@ -363,6 +405,27 @@ export function normalizeClientGrowthHubReportsResponse(
   };
 }
 
+export function normalizeClientGrowthHubRecommendationsResponse(
+  response: unknown,
+): GrowthHubRecommendationsResponse {
+  const data = readResponseArray(response).map(normalizeRecommendation).filter(isDefined);
+  const meta = isRecord(response) && isRecord(response.meta) ? response.meta : {};
+
+  return {
+    data,
+    meta: {
+      total: readNumber(meta.total, data.length),
+      open: readNumber(meta.open),
+      accepted: readNumber(meta.accepted),
+      dismissed: readNumber(meta.dismissed),
+      convertedToTask: readNumber(meta.convertedToTask),
+      done: readNumber(meta.done),
+      clientVisible: readNumber(meta.clientVisible),
+      generatedAt: readNullableString(meta.generatedAt),
+    },
+  };
+}
+
 export function normalizeClientGrowthHubActivityResponse(response: unknown): GrowthHubActivityResponse {
   const data = readResponseArray(response).map(normalizeActivity).filter(isDefined);
   const meta = isRecord(response) && isRecord(response.meta) ? response.meta : {};
@@ -424,6 +487,16 @@ export function getGrowthHubReportAcknowledgementStatusLabel(
   status: GrowthHubReportAcknowledgementStatus,
 ): string {
   return REPORT_ACKNOWLEDGEMENT_STATUS_LABELS[status] ?? status;
+}
+
+export function getGrowthHubRecommendationTypeLabel(type: GrowthHubRecommendationType): string {
+  return RECOMMENDATION_TYPE_LABELS[type] ?? type;
+}
+
+export function getGrowthHubRecommendationStatusLabel(
+  status: GrowthHubRecommendationStatus,
+): string {
+  return RECOMMENDATION_STATUS_LABELS[status] ?? status;
 }
 
 export function getGrowthHubStatusTone(status: GrowthHubSummaryState | GrowthHubChannelStatus): string {
@@ -680,6 +753,47 @@ function normalizeReport(value: unknown): GrowthHubReport | null {
       "NOT_REQUESTED",
     acknowledgementTaskId: readNullableString(value.acknowledgementTaskId),
     acknowledgementTaskUpdatedAt: readNullableString(value.acknowledgementTaskUpdatedAt),
+    createdBy: normalizeUserReference(value.createdBy),
+    createdAt: readString(value.createdAt),
+    updatedAt: readString(value.updatedAt),
+  };
+}
+
+function normalizeRecommendation(value: unknown): GrowthHubRecommendation | null {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.title !== "string") {
+    return null;
+  }
+
+  const type = readEnumValue(value.type, RECOMMENDATION_TYPE_OPTIONS);
+  const status = readEnumValue(value.status, RECOMMENDATION_STATUS_OPTIONS);
+  const priority = readEnumValue(value.priority, ACTION_PRIORITY_OPTIONS);
+  const convertedTask = isRecord(value.convertedTask) ? value.convertedTask : null;
+  if (!type || !status || !priority) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    clientProfileId: readString(value.clientProfileId),
+    projectId: readNullableString(value.projectId),
+    project: normalizeProjectWithService(value.project),
+    type,
+    priority,
+    title: value.title,
+    description: readNullableString(value.description),
+    source: readNullableString(value.source),
+    relatedEntityType: readNullableString(value.relatedEntityType),
+    relatedEntityId: readNullableString(value.relatedEntityId),
+    status,
+    clientVisible: value.clientVisible === true,
+    convertedTask: convertedTask
+      ? {
+          id: readString(convertedTask.id),
+          title: readString(convertedTask.title),
+          status: readString(convertedTask.status) as GrowthHubActionStatus | "REVIEW",
+        }
+      : null,
+    convertedAt: readNullableString(value.convertedAt),
     createdBy: normalizeUserReference(value.createdBy),
     createdAt: readString(value.createdAt),
     updatedAt: readString(value.updatedAt),

@@ -7,7 +7,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthUserProfile } from "../../features/auth/authTypes";
 import type { AdminAssignmentsListResponse } from "../../features/adminAssignments/adminAssignmentsTypes";
 import type { UpdateAdminClientGrowthHubConfigRequest } from "../../features/clients/clientsTypes";
-import type { GrowthHubClientsResponse } from "../../features/growthHub/growthHubTypes";
+import type {
+  GrowthHubClientsResponse,
+  GrowthHubRecommendationsResponse,
+} from "../../features/growthHub/growthHubTypes";
 import { GrowthHubAdmin } from "../GrowthHubAdmin";
 
 type QueryOptions = {
@@ -44,6 +47,7 @@ const mockUseUpdateAdminClientGrowthHubConfigMutation = vi.fn<
 const mockUseGetAdminGrowthHubClientActionsQuery = vi.fn();
 const mockUseGetAdminGrowthHubClientWeeklyNotesQuery = vi.fn();
 const mockUseGetAdminGrowthHubClientReportsQuery = vi.fn();
+const mockUseGetAdminGrowthHubClientRecommendationsQuery = vi.fn();
 const mockUseCreateAdminGrowthHubActionMutation = vi.fn();
 const mockUseUpdateAdminGrowthHubActionMutation = vi.fn();
 const mockUseDeleteAdminGrowthHubActionMutation = vi.fn();
@@ -52,6 +56,9 @@ const mockUseUpdateAdminGrowthHubWeeklyNoteMutation = vi.fn();
 const mockUseCreateAdminGrowthHubReportMutation = vi.fn();
 const mockUseUpdateAdminGrowthHubReportMutation = vi.fn();
 const mockUsePublishAdminGrowthHubReportMutation = vi.fn();
+const mockUseGenerateAdminGrowthHubRecommendationsMutation = vi.fn();
+const mockUseUpdateAdminGrowthHubRecommendationMutation = vi.fn();
+const mockUseConvertAdminGrowthHubRecommendationToTaskMutation = vi.fn();
 const mockUpdateConfig = vi.fn();
 const mockMutation = vi.fn(() => ({ unwrap: async () => ({}) }));
 
@@ -70,6 +77,8 @@ vi.mock("../../features/growthHub/growthHubApi", () => ({
     mockUseGetAdminGrowthHubClientWeeklyNotesQuery(clientId, options),
   useGetAdminGrowthHubClientReportsQuery: (clientId: string, options?: QueryOptions) =>
     mockUseGetAdminGrowthHubClientReportsQuery(clientId, options),
+  useGetAdminGrowthHubClientRecommendationsQuery: (clientId: string, options?: QueryOptions) =>
+    mockUseGetAdminGrowthHubClientRecommendationsQuery(clientId, options),
   useCreateAdminGrowthHubActionMutation: () => mockUseCreateAdminGrowthHubActionMutation(),
   useUpdateAdminGrowthHubActionMutation: () => mockUseUpdateAdminGrowthHubActionMutation(),
   useDeleteAdminGrowthHubActionMutation: () => mockUseDeleteAdminGrowthHubActionMutation(),
@@ -78,6 +87,12 @@ vi.mock("../../features/growthHub/growthHubApi", () => ({
   useCreateAdminGrowthHubReportMutation: () => mockUseCreateAdminGrowthHubReportMutation(),
   useUpdateAdminGrowthHubReportMutation: () => mockUseUpdateAdminGrowthHubReportMutation(),
   usePublishAdminGrowthHubReportMutation: () => mockUsePublishAdminGrowthHubReportMutation(),
+  useGenerateAdminGrowthHubRecommendationsMutation: () =>
+    mockUseGenerateAdminGrowthHubRecommendationsMutation(),
+  useUpdateAdminGrowthHubRecommendationMutation: () =>
+    mockUseUpdateAdminGrowthHubRecommendationMutation(),
+  useConvertAdminGrowthHubRecommendationToTaskMutation: () =>
+    mockUseConvertAdminGrowthHubRecommendationToTaskMutation(),
 }));
 
 vi.mock("../../features/adminAssignments/adminAssignmentsApi", () => ({
@@ -107,6 +122,8 @@ const adminUser: AuthUserProfile = {
     "growthHub.notes.manage.any",
     "growthHub.reports.read.any",
     "growthHub.reports.manage.any",
+    "growthHub.recommendations.read.any",
+    "growthHub.recommendations.manage.any",
   ],
   clientProfile: null,
 };
@@ -229,6 +246,41 @@ const growthHubClientsResponse: GrowthHubClientsResponse = {
   },
 };
 
+const growthHubRecommendationsResponse: GrowthHubRecommendationsResponse = {
+  data: [
+    {
+      id: "recommendation-1",
+      clientProfileId: "11111111-1111-4111-8111-111111111111",
+      projectId: null,
+      project: null,
+      type: "TECHNICAL_FIX",
+      priority: "HIGH",
+      title: "Geciken işleri temizle",
+      description: "Overdue Growth Hub işleri aksiyon listesine alınmalı.",
+      source: "OVERDUE_TASKS",
+      relatedEntityType: "SUMMARY",
+      relatedEntityId: "overdue-tasks",
+      status: "OPEN",
+      clientVisible: false,
+      convertedTask: null,
+      convertedAt: null,
+      createdBy: null,
+      createdAt: "2026-05-30T09:00:00.000Z",
+      updatedAt: "2026-05-30T09:00:00.000Z",
+    },
+  ],
+  meta: {
+    total: 1,
+    open: 1,
+    accepted: 0,
+    dismissed: 0,
+    convertedToTask: 0,
+    done: 0,
+    clientVisible: 0,
+    generatedAt: "2026-05-30T09:00:00.000Z",
+  },
+};
+
 function setupListState(overrides: Partial<GrowthHubClientsQueryResult> = {}) {
   mockUseGetAdminGrowthHubClientsQuery.mockReturnValue({
     data: growthHubClientsResponse,
@@ -296,6 +348,10 @@ describe("GrowthHubAdmin", () => {
       },
       isLoading: false,
     });
+    mockUseGetAdminGrowthHubClientRecommendationsQuery.mockReturnValue({
+      data: growthHubRecommendationsResponse,
+      isLoading: false,
+    });
     mockUseCreateAdminGrowthHubActionMutation.mockReturnValue([mockMutation]);
     mockUseUpdateAdminGrowthHubActionMutation.mockReturnValue([mockMutation]);
     mockUseDeleteAdminGrowthHubActionMutation.mockReturnValue([mockMutation]);
@@ -304,6 +360,9 @@ describe("GrowthHubAdmin", () => {
     mockUseCreateAdminGrowthHubReportMutation.mockReturnValue([mockMutation]);
     mockUseUpdateAdminGrowthHubReportMutation.mockReturnValue([mockMutation]);
     mockUsePublishAdminGrowthHubReportMutation.mockReturnValue([mockMutation]);
+    mockUseGenerateAdminGrowthHubRecommendationsMutation.mockReturnValue([mockMutation]);
+    mockUseUpdateAdminGrowthHubRecommendationMutation.mockReturnValue([mockMutation]);
+    mockUseConvertAdminGrowthHubRecommendationToTaskMutation.mockReturnValue([mockMutation]);
   });
 
   it("skips the list query without Growth Hub admin permission", () => {
@@ -330,6 +389,7 @@ describe("GrowthHubAdmin", () => {
     expect(screen.getAllByText("Acme E-ticaret").length).toBeGreaterThan(0);
     expect(screen.getByText("Project Manager")).toBeInTheDocument();
     expect(screen.getAllByText("Mayıs optimizasyon onayı").length).toBeGreaterThan(0);
+    expect(screen.getByText("Geciken işleri temizle")).toBeInTheDocument();
   });
 
   it("submits Growth Hub config changes", async () => {

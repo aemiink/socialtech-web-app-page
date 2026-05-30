@@ -9,6 +9,7 @@ import {
   CreateGrowthHubReportDto,
   GrowthHubReportsQueryDto,
 } from "./dto/growth-hub-report.dto";
+import { GrowthHubRecommendationsQueryDto } from "./dto/growth-hub-recommendation.dto";
 import { CreateGrowthHubWeeklyNoteDto } from "./dto/growth-hub-weekly-note.dto";
 import { GrowthHubService } from "./growth-hub.service";
 
@@ -106,6 +107,25 @@ export class AssignedGrowthHubController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.growthHubService.createAssignedClientReport(clientId, dto, actor);
+  }
+
+  @Get(":clientId/recommendations")
+  @RequirePermissions("growthHub.recommendations.read.assigned")
+  getAssignedClientRecommendations(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: GrowthHubRecommendationsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.growthHubService.getAssignedClientRecommendations(clientId, query, actor);
+  }
+
+  @Post(":clientId/recommendations/generate")
+  @RequirePermissions("growthHub.recommendations.manage.assigned")
+  generateAssignedClientRecommendations(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.growthHubService.generateAssignedClientRecommendations(clientId, actor);
   }
 
   @Get(":clientId/activity")

@@ -29,6 +29,7 @@ describe("Growth Hub Config and Summary Authz (e2e)", () => {
   let performanceToken: string;
   let clientToken: string;
   let clientProfileId: string;
+  let outOfScopeClientProfileId: string;
   let growthProjectId: string;
 
   beforeAll(async () => {
@@ -64,6 +65,33 @@ describe("Growth Hub Config and Summary Authz (e2e)", () => {
       select: { id: true },
     });
     clientProfileId = client.id;
+
+    const outOfScopeClient = await prisma.clientProfile.upsert({
+      where: { slug: "growth-hub-out-of-scope-e2e" },
+      update: { status: "ACTIVE" },
+      create: {
+        slug: "growth-hub-out-of-scope-e2e",
+        companyName: "Growth Hub Out Of Scope E2E",
+        contactEmail: "growth-hub-out-of-scope@example.com",
+        status: "ACTIVE",
+      },
+      select: { id: true },
+    });
+    outOfScopeClientProfileId = outOfScopeClient.id;
+    await prisma.clientPurchasedService.upsert({
+      where: {
+        clientProfileId_serviceKey: {
+          clientProfileId: outOfScopeClientProfileId,
+          serviceKey: PurchasedServiceKey.GROWTH_HUB,
+        },
+      },
+      update: { status: PurchasedServiceStatus.ACTIVE },
+      create: {
+        clientProfileId: outOfScopeClientProfileId,
+        serviceKey: PurchasedServiceKey.GROWTH_HUB,
+        status: PurchasedServiceStatus.ACTIVE,
+      },
+    });
 
     const project = await prisma.project.findFirstOrThrow({
       where: {
@@ -472,6 +500,127 @@ describe("Growth Hub Config and Summary Authz (e2e)", () => {
       });
 
     expect(res.status).toBe(403);
+  });
+
+  it("admin can generate Growth Hub recommendations idempotently", async () => {
+    const generateRes = await request(app.getHttpServer())
+      .post(`/api/v1/admin/clients/${clientProfileId}/growth-hub/recommendations/generate`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    expect(generateRes.status).toBe(201);
+    expect(generateRes.body.data.length).toBeGreaterThanOrEqual(1);
+    expect(generateRes.body.meta.created).toBeGreaterThanOrEqual(1);
+    expect(
+      generateRes.body.data.some(
+        (recommendation: { source: string; title: string }) =>
+          recommendation.source === "OVERDUE_TASKS" &&
+          recommendation.title === "Geciken Growth Hub işleri temizlenmeli",
+      ),
+    ).toBe(true);
+
+    const secondGenerateRes = await request(app.getHttpServer())
+      .post(`/api/v1/admin/clients/${clientProfileId}/growth-hub/recommendations/generate`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    expect(secondGenerateRes.status).toBe(201);
+    expect(secondGenerateRes.body.meta.created).toBe(0);
+    expect(secondGenerateRes.body.meta.updated).toBeGreaterThanOrEqual(1);
+  });
+
+  it("assigned project manager can update recommendations and client sees only visible ones", async () => {
+    const recommendationsRes = await request(app.getHttpServer())
+      .get(`/api/v1/growth-hub/clients/${clientProfileId}/recommendations`)
+      .set("Authorization", `Bearer ${projectToken}`);
+
+    expect(recommendationsRes.status).toBe(200);
+    const overdueRecommendation = (
+      recommendationsRes.body.data as Array<{
+        id: string;
+        source: string;
+        title: string;
+        clientVisible: boolean;
+      }>
+    ).find((recommendation) => recommendation.source === "OVERDUE_TASKS");
+    expect(overdueRecommendation).toBeTruthy();
+    expect(overdueRecommendation?.clientVisible).toBe(false);
+
+    const clientHiddenRes = await request(app.getHttpServer())
+      .get("/api/v1/clients/me/growth-hub/recommendations")
+      .set("Authorization", `Bearer ${clientToken}`);
+
+    expect(clientHiddenRes.status).toBe(200);
+    expect(
+      clientHiddenRes.body.data.some(
+        (recommendation: { id: string }) => recommendation.id === overdueRecommendation?.id,
+      ),
+    ).toBe(false);
+
+    const updateRes = await request(app.getHttpServer())
+      .patch(`/api/v1/growth-hub/recommendations/${overdueRecommendation?.id}`)
+      .set("Authorization", `Bearer ${projectToken}`)
+      .send({ status: "ACCEPTED", clientVisible: true });
+
+    expect(updateRes.status).toBe(200);
+    expect(updateRes.body.status).toBe("ACCEPTED");
+    expect(updateRes.body.clientVisible).toBe(true);
+
+    const clientVisibleRes = await request(app.getHttpServer())
+      .get("/api/v1/clients/me/growth-hub/recommendations")
+      .set("Authorization", `Bearer ${clientToken}`);
+
+    expect(clientVisibleRes.status).toBe(200);
+    expect(
+      clientVisibleRes.body.data.some(
+        (recommendation: { id: string; title: string }) =>
+          recommendation.id === overdueRecommendation?.id &&
+          recommendation.title === "Geciken Growth Hub işleri temizlenmeli",
+      ),
+    ).toBe(true);
+  });
+
+  it("assigned project manager can convert recommendation to task", async () => {
+    const recommendationsRes = await request(app.getHttpServer())
+      .get(`/api/v1/growth-hub/clients/${clientProfileId}/recommendations`)
+      .set("Authorization", `Bearer ${projectToken}`);
+
+    expect(recommendationsRes.status).toBe(200);
+    const recommendation = (
+      recommendationsRes.body.data as Array<{ id: string; source: string }>
+    ).find((item) => item.source === "OVERDUE_TASKS");
+    expect(recommendation).toBeTruthy();
+
+    const convertRes = await request(app.getHttpServer())
+      .post(`/api/v1/growth-hub/recommendations/${recommendation?.id}/convert-to-task`)
+      .set("Authorization", `Bearer ${projectToken}`)
+      .send({ title: "E2E converted Growth Hub recommendation task" });
+
+    expect(convertRes.status).toBe(201);
+    expect(convertRes.body.status).toBe("CONVERTED_TO_TASK");
+    expect(convertRes.body.convertedTask.id).toBeTruthy();
+    expect(convertRes.body.convertedTask.title).toBe(
+      "E2E converted Growth Hub recommendation task",
+    );
+
+    const task = await prisma.task.findUnique({
+      where: { id: convertRes.body.convertedTask.id },
+      select: { title: true, projectId: true },
+    });
+    expect(task?.title).toBe("E2E converted Growth Hub recommendation task");
+    expect(task?.projectId).toBe(growthProjectId);
+  });
+
+  it("recommendation endpoints enforce permission and assigned scope", async () => {
+    const forbiddenRes = await request(app.getHttpServer())
+      .post(`/api/v1/growth-hub/clients/${clientProfileId}/recommendations/generate`)
+      .set("Authorization", `Bearer ${performanceToken}`);
+
+    expect(forbiddenRes.status).toBe(403);
+
+    const outOfScopeRes = await request(app.getHttpServer())
+      .get(`/api/v1/growth-hub/clients/${outOfScopeClientProfileId}/recommendations`)
+      .set("Authorization", `Bearer ${projectToken}`);
+
+    expect(outOfScopeRes.status).toBe(404);
   });
 });
 

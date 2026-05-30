@@ -8,6 +8,10 @@ import type {
   GrowthHubClientsResponse,
   GrowthHubConfig,
   GrowthHubReport,
+  GrowthHubRecommendation,
+  GrowthHubRecommendationConvertRequest,
+  GrowthHubRecommendationMutationRequest,
+  GrowthHubRecommendationsResponse,
   GrowthHubReportMutationRequest,
   GrowthHubReportsResponse,
   GrowthHubSummary,
@@ -22,6 +26,7 @@ import {
   normalizeGrowthHubClientsResponse,
   normalizeGrowthHubConfigResponse,
   normalizeGrowthHubReportsResponse,
+  normalizeGrowthHubRecommendationsResponse,
   normalizeGrowthHubSummaryResponse,
   normalizeGrowthHubWeeklyNotesResponse,
 } from "./growthHubUtils";
@@ -51,6 +56,15 @@ function normalizeGrowthHubReportResponse(response: unknown): GrowthHubReport {
   const normalized = normalizeGrowthHubReportsResponse([response]);
   if (!normalized.data[0]) {
     throw new Error("Growth Hub report response could not be normalized.");
+  }
+
+  return normalized.data[0];
+}
+
+function normalizeGrowthHubRecommendationResponse(response: unknown): GrowthHubRecommendation {
+  const normalized = normalizeGrowthHubRecommendationsResponse([response]);
+  if (!normalized.data[0]) {
+    throw new Error("Growth Hub recommendation response could not be normalized.");
   }
 
   return normalized.data[0];
@@ -410,6 +424,78 @@ export const growthHubApi = baseApi.injectEndpoints({
         { type: "GrowthHubSummary", id: ADMIN_GROWTH_HUB_LIST_ID },
       ],
     }),
+    getAdminGrowthHubClientRecommendations: builder.query<
+      GrowthHubRecommendationsResponse,
+      string
+    >({
+      query: (clientId) => ({
+        url: `/admin/clients/${clientId}/growth-hub/recommendations`,
+        method: "GET",
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeGrowthHubRecommendationsResponse(response),
+      providesTags: (_result, _error, clientId) => [
+        { type: "GrowthHubRecommendations", id: clientId },
+      ],
+    }),
+    generateAdminGrowthHubRecommendations: builder.mutation<
+      GrowthHubRecommendationsResponse,
+      { clientId: string }
+    >({
+      query: ({ clientId }) => ({
+        url: `/admin/clients/${clientId}/growth-hub/recommendations/generate`,
+        method: "POST",
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeGrowthHubRecommendationsResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "GrowthHubRecommendations", id: clientId },
+        { type: "GrowthHubSummary", id: clientId },
+        { type: "GrowthHubSummary", id: ADMIN_GROWTH_HUB_LIST_ID },
+      ],
+    }),
+    updateAdminGrowthHubRecommendation: builder.mutation<
+      GrowthHubRecommendation,
+      {
+        recommendationId: string;
+        clientId: string;
+        body: GrowthHubRecommendationMutationRequest;
+      }
+    >({
+      query: ({ recommendationId, body }) => ({
+        url: `/admin/growth-hub/recommendations/${recommendationId}`,
+        method: "PATCH",
+        body,
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeGrowthHubRecommendationResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "GrowthHubRecommendations", id: clientId },
+        { type: "GrowthHubSummary", id: clientId },
+      ],
+    }),
+    convertAdminGrowthHubRecommendationToTask: builder.mutation<
+      GrowthHubRecommendation,
+      {
+        recommendationId: string;
+        clientId: string;
+        body?: GrowthHubRecommendationConvertRequest;
+      }
+    >({
+      query: ({ recommendationId, body }) => ({
+        url: `/admin/growth-hub/recommendations/${recommendationId}/convert-to-task`,
+        method: "POST",
+        body: body ?? {},
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeGrowthHubRecommendationResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "GrowthHubRecommendations", id: clientId },
+        { type: "GrowthHubActions", id: clientId },
+        { type: "GrowthHubSummary", id: clientId },
+        { type: "GrowthHubSummary", id: ADMIN_GROWTH_HUB_LIST_ID },
+      ],
+    }),
     getAssignedGrowthHubClientReports: builder.query<GrowthHubReportsResponse, string>({
       query: (clientId) => ({
         url: `/growth-hub/clients/${clientId}/reports`,
@@ -478,6 +564,78 @@ export const growthHubApi = baseApi.injectEndpoints({
         { type: "GrowthHubSummary", id: ASSIGNED_GROWTH_HUB_LIST_ID },
       ],
     }),
+    getAssignedGrowthHubClientRecommendations: builder.query<
+      GrowthHubRecommendationsResponse,
+      string
+    >({
+      query: (clientId) => ({
+        url: `/growth-hub/clients/${clientId}/recommendations`,
+        method: "GET",
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeGrowthHubRecommendationsResponse(response),
+      providesTags: (_result, _error, clientId) => [
+        { type: "GrowthHubRecommendations", id: `assigned:${clientId}` },
+      ],
+    }),
+    generateAssignedGrowthHubRecommendations: builder.mutation<
+      GrowthHubRecommendationsResponse,
+      { clientId: string }
+    >({
+      query: ({ clientId }) => ({
+        url: `/growth-hub/clients/${clientId}/recommendations/generate`,
+        method: "POST",
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeGrowthHubRecommendationsResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "GrowthHubRecommendations", id: `assigned:${clientId}` },
+        { type: "GrowthHubSummary", id: `assigned:${clientId}` },
+        { type: "GrowthHubSummary", id: ASSIGNED_GROWTH_HUB_LIST_ID },
+      ],
+    }),
+    updateAssignedGrowthHubRecommendation: builder.mutation<
+      GrowthHubRecommendation,
+      {
+        recommendationId: string;
+        clientId: string;
+        body: GrowthHubRecommendationMutationRequest;
+      }
+    >({
+      query: ({ recommendationId, body }) => ({
+        url: `/growth-hub/recommendations/${recommendationId}`,
+        method: "PATCH",
+        body,
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeGrowthHubRecommendationResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "GrowthHubRecommendations", id: `assigned:${clientId}` },
+        { type: "GrowthHubSummary", id: `assigned:${clientId}` },
+      ],
+    }),
+    convertAssignedGrowthHubRecommendationToTask: builder.mutation<
+      GrowthHubRecommendation,
+      {
+        recommendationId: string;
+        clientId: string;
+        body?: GrowthHubRecommendationConvertRequest;
+      }
+    >({
+      query: ({ recommendationId, body }) => ({
+        url: `/growth-hub/recommendations/${recommendationId}/convert-to-task`,
+        method: "POST",
+        body: body ?? {},
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeGrowthHubRecommendationResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "GrowthHubRecommendations", id: `assigned:${clientId}` },
+        { type: "GrowthHubActions", id: `assigned:${clientId}` },
+        { type: "GrowthHubSummary", id: `assigned:${clientId}` },
+        { type: "GrowthHubSummary", id: ASSIGNED_GROWTH_HUB_LIST_ID },
+      ],
+    }),
     getAdminGrowthHubClientActivity: builder.query<GrowthHubActivityResponse, string>({
       query: (clientId) => ({
         url: `/admin/clients/${clientId}/growth-hub/activity`,
@@ -528,10 +686,18 @@ export const {
   useCreateAdminGrowthHubReportMutation,
   useUpdateAdminGrowthHubReportMutation,
   usePublishAdminGrowthHubReportMutation,
+  useGetAdminGrowthHubClientRecommendationsQuery,
+  useGenerateAdminGrowthHubRecommendationsMutation,
+  useUpdateAdminGrowthHubRecommendationMutation,
+  useConvertAdminGrowthHubRecommendationToTaskMutation,
   useGetAssignedGrowthHubClientReportsQuery,
   useCreateAssignedGrowthHubReportMutation,
   useUpdateAssignedGrowthHubReportMutation,
   usePublishAssignedGrowthHubReportMutation,
+  useGetAssignedGrowthHubClientRecommendationsQuery,
+  useGenerateAssignedGrowthHubRecommendationsMutation,
+  useUpdateAssignedGrowthHubRecommendationMutation,
+  useConvertAssignedGrowthHubRecommendationToTaskMutation,
   useGetAdminGrowthHubClientActivityQuery,
   useGetAssignedGrowthHubClientActivityQuery,
 } = growthHubApi;

@@ -4,6 +4,7 @@ import type {
   GrowthHubActivityResponse,
   GrowthHubChannelsResponse,
   GrowthHubConfig,
+  GrowthHubRecommendationsResponse,
   GrowthHubReportsResponse,
   GrowthHubSummary,
   GrowthHubWeeklyNotesResponse,
@@ -13,6 +14,7 @@ import {
   normalizeClientGrowthHubActivityResponse,
   normalizeClientGrowthHubChannelsResponse,
   normalizeClientGrowthHubConfigResponse,
+  normalizeClientGrowthHubRecommendationsResponse,
   normalizeClientGrowthHubReportsResponse,
   normalizeClientGrowthHubSummaryResponse,
   normalizeClientGrowthHubWeeklyNotesResponse,
@@ -68,6 +70,15 @@ export const growthHubApi = baseApi.injectEndpoints({
       transformResponse: (response: unknown) => normalizeClientGrowthHubReportsResponse(response),
       providesTags: [{ type: "GrowthHubReports", id: "OWN" }],
     }),
+    getClientGrowthHubRecommendations: builder.query<GrowthHubRecommendationsResponse, void>({
+      query: () => ({
+        url: "/clients/me/growth-hub/recommendations",
+        method: "GET",
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeClientGrowthHubRecommendationsResponse(response),
+      providesTags: [{ type: "GrowthHubRecommendations", id: "OWN" }],
+    }),
     getClientGrowthHubActivity: builder.query<GrowthHubActivityResponse, void>({
       query: () => ({
         url: "/clients/me/growth-hub/activity",
@@ -86,5 +97,6 @@ export const {
   useGetClientGrowthHubActionsQuery,
   useGetClientGrowthHubWeeklyNotesQuery,
   useGetClientGrowthHubReportsQuery,
+  useGetClientGrowthHubRecommendationsQuery,
   useGetClientGrowthHubActivityQuery,
 } = growthHubApi;

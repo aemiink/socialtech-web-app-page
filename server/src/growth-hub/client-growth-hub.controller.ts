@@ -4,6 +4,7 @@ import { RequirePermissions } from "../auth/decorators/permissions.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
+import { GrowthHubRecommendationsQueryDto } from "./dto/growth-hub-recommendation.dto";
 import { GrowthHubReportsQueryDto } from "./dto/growth-hub-report.dto";
 import { GrowthHubService } from "./growth-hub.service";
 
@@ -49,6 +50,15 @@ export class ClientGrowthHubController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.growthHubService.getOwnReports(query, actor);
+  }
+
+  @Get("recommendations")
+  @RequirePermissions("growthHub.recommendations.read.own")
+  getOwnRecommendations(
+    @Query() query: GrowthHubRecommendationsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.growthHubService.getOwnRecommendations(query, actor);
   }
 
   @Get("activity")

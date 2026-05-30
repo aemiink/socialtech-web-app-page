@@ -20,15 +20,19 @@ import {
   useCreateAssignedGrowthHubActionMutation,
   useCreateAssignedGrowthHubReportMutation,
   useCreateAssignedGrowthHubWeeklyNoteMutation,
+  useConvertAssignedGrowthHubRecommendationToTaskMutation,
   useDeleteAssignedGrowthHubActionMutation,
+  useGenerateAssignedGrowthHubRecommendationsMutation,
   useGetAssignedGrowthHubClientActivityQuery,
   useGetAssignedGrowthHubClientActionsQuery,
+  useGetAssignedGrowthHubClientRecommendationsQuery,
   useGetAssignedGrowthHubClientReportsQuery,
   useGetAssignedGrowthHubClientSummaryQuery,
   useGetAssignedGrowthHubClientWeeklyNotesQuery,
   useGetAssignedGrowthHubClientsQuery,
   usePublishAssignedGrowthHubReportMutation,
   useUpdateAssignedGrowthHubActionMutation,
+  useUpdateAssignedGrowthHubRecommendationMutation,
   useUpdateAssignedGrowthHubReportMutation,
   useUpdateAssignedGrowthHubWeeklyNoteMutation,
 } from "../../features/growthHub/growthHubApi";
@@ -60,6 +64,12 @@ export function GrowthHubWorkspace() {
   const canCreateApprovals = hasUserPermission(currentUser, ["growthHub.approvals.create.assigned"]);
   const canReadReports = hasUserPermission(currentUser, ["growthHub.reports.read.assigned"]);
   const canManageReports = hasUserPermission(currentUser, ["growthHub.reports.manage.assigned"]);
+  const canReadRecommendations = hasUserPermission(currentUser, [
+    "growthHub.recommendations.read.assigned",
+  ]);
+  const canManageRecommendations = hasUserPermission(currentUser, [
+    "growthHub.recommendations.manage.assigned",
+  ]);
   const {
     data: response,
     error,
@@ -110,6 +120,12 @@ export function GrowthHubWorkspace() {
   } = useGetAssignedGrowthHubClientReportsQuery(selectedClient?.client.id ?? "", {
     skip: !selectedClient || !canReadReports,
   });
+  const {
+    data: recommendationsResponse,
+    isLoading: isRecommendationsLoading,
+  } = useGetAssignedGrowthHubClientRecommendationsQuery(selectedClient?.client.id ?? "", {
+    skip: !selectedClient || !canReadRecommendations,
+  });
   const [createAction] = useCreateAssignedGrowthHubActionMutation();
   const [updateAction] = useUpdateAssignedGrowthHubActionMutation();
   const [deleteAction] = useDeleteAssignedGrowthHubActionMutation();
@@ -118,6 +134,9 @@ export function GrowthHubWorkspace() {
   const [createReport] = useCreateAssignedGrowthHubReportMutation();
   const [updateReport] = useUpdateAssignedGrowthHubReportMutation();
   const [publishReport] = usePublishAssignedGrowthHubReportMutation();
+  const [generateRecommendations] = useGenerateAssignedGrowthHubRecommendationsMutation();
+  const [updateRecommendation] = useUpdateAssignedGrowthHubRecommendationMutation();
+  const [convertRecommendationToTask] = useConvertAssignedGrowthHubRecommendationToTaskMutation();
 
   useEffect(() => {
     if (listItems.length === 0) {
@@ -138,6 +157,7 @@ export function GrowthHubWorkspace() {
   const reportActions = actionItems.filter((item) => item.type === "REPORT_ACKNOWLEDGEMENT");
   const weeklyNotes = weeklyNoteResponse?.data ?? [];
   const reports = reportsResponse?.data ?? [];
+  const recommendations = recommendationsResponse?.data ?? [];
   const messages = activity?.data.filter((item) => item.type === "MESSAGE") ?? [];
   const recentActivity = activity?.data.filter((item) => item.type !== "MESSAGE") ?? [];
 
@@ -425,12 +445,15 @@ export function GrowthHubWorkspace() {
                 actions={actionItems}
                 weeklyNotes={weeklyNotes}
                 reports={reports}
+                recommendations={recommendations}
                 canManageActions={canManageActions}
                 canManageNotes={canManageNotes}
                 canManageReports={canManageReports}
+                canManageRecommendations={canManageRecommendations}
                 isActionsLoading={isActionsLoading}
                 isNotesLoading={isWeeklyNotesLoading}
                 isReportsLoading={isReportsLoading}
+                isRecommendationsLoading={isRecommendationsLoading}
                 onCreateAction={(body) =>
                   createAction({ clientId: selectedClient.client.id, body }).unwrap().then(() => undefined)
                 }
@@ -454,6 +477,28 @@ export function GrowthHubWorkspace() {
                 }
                 onPublishReport={(reportId, requestAcknowledgement) =>
                   publishReport({ reportId, clientId: selectedClient.client.id, requestAcknowledgement })
+                    .unwrap()
+                    .then(() => undefined)
+                }
+                onGenerateRecommendations={() =>
+                  generateRecommendations({ clientId: selectedClient.client.id })
+                    .unwrap()
+                    .then(() => undefined)
+                }
+                onUpdateRecommendation={(recommendationId, body) =>
+                  updateRecommendation({
+                    recommendationId,
+                    clientId: selectedClient.client.id,
+                    body,
+                  })
+                    .unwrap()
+                    .then(() => undefined)
+                }
+                onConvertRecommendationToTask={(recommendationId) =>
+                  convertRecommendationToTask({
+                    recommendationId,
+                    clientId: selectedClient.client.id,
+                  })
                     .unwrap()
                     .then(() => undefined)
                 }

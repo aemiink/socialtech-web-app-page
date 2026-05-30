@@ -10,12 +10,15 @@ import {
   GrowthHubActionPriority,
   GrowthHubActionStatus,
   GrowthHubGoal,
+  GrowthHubRecommendationStatus,
+  GrowthHubRecommendationType,
   GrowthHubReportStatus,
   GrowthHubReportType,
   GrowthHubStatus,
   MetaAdsApprovalStatus,
   MetaAdsApprovalType,
   Prisma,
+  Priority,
   PurchasedServiceKey,
   PurchasedServiceStatus,
   TaskStatus,
@@ -38,6 +41,11 @@ import {
   PublishGrowthHubReportDto,
   UpdateGrowthHubReportDto,
 } from "./dto/growth-hub-report.dto";
+import {
+  ConvertGrowthHubRecommendationDto,
+  GrowthHubRecommendationsQueryDto,
+  UpdateGrowthHubRecommendationDto,
+} from "./dto/growth-hub-recommendation.dto";
 import { UpdateGrowthHubConfigDto } from "./dto/update-growth-hub-config.dto";
 import {
   GrowthHubActionItem,
@@ -70,6 +78,13 @@ const GROWTH_HUB_REPORTS_MANAGE_ANY_PERMISSION = "growthHub.reports.manage.any";
 const GROWTH_HUB_REPORTS_READ_ASSIGNED_PERMISSION = "growthHub.reports.read.assigned";
 const GROWTH_HUB_REPORTS_MANAGE_ASSIGNED_PERMISSION = "growthHub.reports.manage.assigned";
 const GROWTH_HUB_REPORTS_READ_OWN_PERMISSION = "growthHub.reports.read.own";
+const GROWTH_HUB_RECOMMENDATIONS_READ_ANY_PERMISSION = "growthHub.recommendations.read.any";
+const GROWTH_HUB_RECOMMENDATIONS_MANAGE_ANY_PERMISSION = "growthHub.recommendations.manage.any";
+const GROWTH_HUB_RECOMMENDATIONS_READ_ASSIGNED_PERMISSION =
+  "growthHub.recommendations.read.assigned";
+const GROWTH_HUB_RECOMMENDATIONS_MANAGE_ASSIGNED_PERMISSION =
+  "growthHub.recommendations.manage.assigned";
+const GROWTH_HUB_RECOMMENDATIONS_READ_OWN_PERMISSION = "growthHub.recommendations.read.own";
 
 const growthHubConfigSelect = {
   id: true,
@@ -190,6 +205,46 @@ const growthHubReportSelect = {
   },
 } satisfies Prisma.GrowthHubReportSelect;
 
+const growthHubRecommendationSelect = {
+  id: true,
+  clientProfileId: true,
+  projectId: true,
+  type: true,
+  priority: true,
+  title: true,
+  description: true,
+  source: true,
+  relatedEntityType: true,
+  relatedEntityId: true,
+  status: true,
+  clientVisible: true,
+  createdAt: true,
+  updatedAt: true,
+  convertedAt: true,
+  project: {
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      serviceKey: true,
+    },
+  },
+  createdBy: {
+    select: {
+      id: true,
+      displayName: true,
+      email: true,
+    },
+  },
+  convertedTask: {
+    select: {
+      id: true,
+      title: true,
+      status: true,
+    },
+  },
+} satisfies Prisma.GrowthHubRecommendationSelect;
+
 type GrowthHubConfigModel = Prisma.ClientGrowthHubConfigGetPayload<{
   select: typeof growthHubConfigSelect;
 }>;
@@ -204,6 +259,10 @@ type GrowthHubWeeklyNoteModel = Prisma.GrowthHubWeeklyNoteGetPayload<{
 
 type GrowthHubReportModel = Prisma.GrowthHubReportGetPayload<{
   select: typeof growthHubReportSelect;
+}>;
+
+type GrowthHubRecommendationModel = Prisma.GrowthHubRecommendationGetPayload<{
+  select: typeof growthHubRecommendationSelect;
 }>;
 
 type GrowthHubConfigPatchData = {
@@ -238,6 +297,28 @@ type GrowthHubWeeklyNotePatchData = {
   nextFocus?: string | null;
   risks?: Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue;
   clientVisible?: boolean;
+};
+
+type GrowthHubRecommendationPatchData = {
+  status?: GrowthHubRecommendationStatus;
+  priority?: GrowthHubActionPriority;
+  title?: string;
+  description?: string | null;
+  clientVisible?: boolean;
+};
+
+type GrowthHubRecommendationDraft = {
+  dedupeKey: string;
+  clientProfileId: string;
+  projectId: string | null;
+  type: GrowthHubRecommendationType;
+  priority: GrowthHubActionPriority;
+  title: string;
+  description: string;
+  source: string;
+  relatedEntityType: string;
+  relatedEntityId: string;
+  clientVisible: boolean;
 };
 
 export type GrowthHubWeeklyNoteItem = {
@@ -310,6 +391,62 @@ export type GrowthHubReportsResponse = {
     published: number;
     clientVisible: number;
     generatedAt: Date;
+  };
+};
+
+export type GrowthHubRecommendationItem = {
+  id: string;
+  clientProfileId: string;
+  projectId: string | null;
+  project: {
+    id: string;
+    name: string;
+    slug: string;
+    serviceKey: PurchasedServiceKey | null;
+  } | null;
+  type: GrowthHubRecommendationType;
+  priority: GrowthHubActionPriority;
+  title: string;
+  description: string | null;
+  source: string | null;
+  relatedEntityType: string | null;
+  relatedEntityId: string | null;
+  status: GrowthHubRecommendationStatus;
+  clientVisible: boolean;
+  convertedTask: {
+    id: string;
+    title: string;
+    status: TaskStatus;
+  } | null;
+  convertedAt: string | null;
+  createdBy: {
+    id: string;
+    displayName: string | null;
+    email: string;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GrowthHubRecommendationsResponse = {
+  data: GrowthHubRecommendationItem[];
+  meta: {
+    total: number;
+    open: number;
+    accepted: number;
+    dismissed: number;
+    convertedToTask: number;
+    done: number;
+    clientVisible: number;
+    generatedAt: Date;
+  };
+};
+
+export type GrowthHubRecommendationGenerateResponse = GrowthHubRecommendationsResponse & {
+  meta: GrowthHubRecommendationsResponse["meta"] & {
+    created: number;
+    updated: number;
+    skipped: number;
   };
 };
 
@@ -673,6 +810,43 @@ export class GrowthHubService {
     );
   }
 
+  async getAdminClientRecommendations(
+    clientProfileId: string,
+    query: GrowthHubRecommendationsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<GrowthHubRecommendationsResponse> {
+    await this.assertCanReadAdminRecommendations(clientProfileId, actor);
+    return this.getRecommendationsByClientProfileId(clientProfileId, query, false);
+  }
+
+  async generateAdminClientRecommendations(
+    clientProfileId: string,
+    actor: AuthenticatedUser,
+  ): Promise<GrowthHubRecommendationGenerateResponse> {
+    await this.assertCanManageAdminRecommendations(clientProfileId, actor);
+    return this.generateRecommendationsByClientProfileId(clientProfileId, actor);
+  }
+
+  async updateAdminRecommendation(
+    recommendationId: string,
+    dto: UpdateGrowthHubRecommendationDto,
+    actor: AuthenticatedUser,
+  ): Promise<GrowthHubRecommendationItem> {
+    this.assertBodyObject(dto);
+    return this.updateRecommendationById(recommendationId, dto, actor, { scope: "ANY" });
+  }
+
+  async convertAdminRecommendationToTask(
+    recommendationId: string,
+    dto: ConvertGrowthHubRecommendationDto,
+    actor: AuthenticatedUser,
+  ): Promise<GrowthHubRecommendationItem> {
+    this.assertBodyObject(dto ?? {});
+    return this.convertRecommendationToTask(recommendationId, dto ?? {}, actor, {
+      scope: "ANY",
+    });
+  }
+
   async getAdminClientActivity(
     clientProfileId: string,
     actor: AuthenticatedUser,
@@ -894,6 +1068,45 @@ export class GrowthHubService {
     );
   }
 
+  async getAssignedClientRecommendations(
+    clientProfileId: string,
+    query: GrowthHubRecommendationsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<GrowthHubRecommendationsResponse> {
+    await this.assertCanReadAssignedRecommendations(clientProfileId, actor);
+    return this.getRecommendationsByClientProfileId(clientProfileId, query, false);
+  }
+
+  async generateAssignedClientRecommendations(
+    clientProfileId: string,
+    actor: AuthenticatedUser,
+  ): Promise<GrowthHubRecommendationGenerateResponse> {
+    await this.assertCanManageAssignedRecommendations(clientProfileId, actor);
+    return this.generateRecommendationsByClientProfileId(clientProfileId, actor);
+  }
+
+  async updateAssignedRecommendation(
+    recommendationId: string,
+    dto: UpdateGrowthHubRecommendationDto,
+    actor: AuthenticatedUser,
+  ): Promise<GrowthHubRecommendationItem> {
+    this.assertBodyObject(dto);
+    return this.updateRecommendationById(recommendationId, dto, actor, {
+      scope: "ASSIGNED",
+    });
+  }
+
+  async convertAssignedRecommendationToTask(
+    recommendationId: string,
+    dto: ConvertGrowthHubRecommendationDto,
+    actor: AuthenticatedUser,
+  ): Promise<GrowthHubRecommendationItem> {
+    this.assertBodyObject(dto ?? {});
+    return this.convertRecommendationToTask(recommendationId, dto ?? {}, actor, {
+      scope: "ASSIGNED",
+    });
+  }
+
   async getAssignedClientActivity(
     clientProfileId: string,
     actor: AuthenticatedUser,
@@ -975,6 +1188,16 @@ export class GrowthHubService {
     const clientProfileId = this.getOwnClientProfileIdOrFail(actor);
     await this.assertClientHasActiveGrowthHubService(clientProfileId);
     return this.getReportsByClientProfileId(clientProfileId, query, true);
+  }
+
+  async getOwnRecommendations(
+    query: GrowthHubRecommendationsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<GrowthHubRecommendationsResponse> {
+    this.assertCanReadOwnRecommendations(actor);
+    const clientProfileId = this.getOwnClientProfileIdOrFail(actor);
+    await this.assertClientHasActiveGrowthHubService(clientProfileId);
+    return this.getRecommendationsByClientProfileId(clientProfileId, query, true);
   }
 
   async getOwnActivity(
@@ -1373,6 +1596,423 @@ export class GrowthHubService {
     return this.toGrowthHubReportItem(updated);
   }
 
+  private async getRecommendationsByClientProfileId(
+    clientProfileId: string,
+    query: GrowthHubRecommendationsQueryDto,
+    clientVisibleOnly: boolean,
+  ): Promise<GrowthHubRecommendationsResponse> {
+    const where: Prisma.GrowthHubRecommendationWhereInput = {
+      clientProfileId,
+      ...(query.status ? { status: query.status } : {}),
+      ...(clientVisibleOnly
+        ? { clientVisible: true }
+        : query.clientVisible !== undefined
+          ? { clientVisible: query.clientVisible }
+          : {}),
+    };
+    const statsWhere: Prisma.GrowthHubRecommendationWhereInput = {
+      clientProfileId,
+      ...(clientVisibleOnly ? { clientVisible: true } : {}),
+    };
+    const take = query.limit ?? 40;
+
+    const [recommendations, total, open, accepted, dismissed, convertedToTask, done, clientVisible] =
+      await Promise.all([
+        this.prisma.growthHubRecommendation.findMany({
+          where,
+          select: growthHubRecommendationSelect,
+          orderBy: [{ priority: "desc" }, { updatedAt: "desc" }],
+          take,
+        }),
+        this.prisma.growthHubRecommendation.count({ where }),
+        this.prisma.growthHubRecommendation.count({
+          where: { ...statsWhere, status: GrowthHubRecommendationStatus.OPEN },
+        }),
+        this.prisma.growthHubRecommendation.count({
+          where: { ...statsWhere, status: GrowthHubRecommendationStatus.ACCEPTED },
+        }),
+        this.prisma.growthHubRecommendation.count({
+          where: { ...statsWhere, status: GrowthHubRecommendationStatus.DISMISSED },
+        }),
+        this.prisma.growthHubRecommendation.count({
+          where: { ...statsWhere, status: GrowthHubRecommendationStatus.CONVERTED_TO_TASK },
+        }),
+        this.prisma.growthHubRecommendation.count({
+          where: { ...statsWhere, status: GrowthHubRecommendationStatus.DONE },
+        }),
+        this.prisma.growthHubRecommendation.count({
+          where: { ...statsWhere, clientVisible: true },
+        }),
+      ]);
+
+    return {
+      data: recommendations.map((recommendation) =>
+        this.toGrowthHubRecommendationItem(recommendation),
+      ),
+      meta: {
+        total,
+        open,
+        accepted,
+        dismissed,
+        convertedToTask,
+        done,
+        clientVisible,
+        generatedAt: new Date(),
+      },
+    };
+  }
+
+  private async generateRecommendationsByClientProfileId(
+    clientProfileId: string,
+    actor: AuthenticatedUser,
+  ): Promise<GrowthHubRecommendationGenerateResponse> {
+    await this.assertClientProfileExists(clientProfileId);
+    await this.assertClientHasActiveGrowthHubService(clientProfileId);
+
+    const now = new Date();
+    const [summary, fallbackProjectId, recentVisibleNote, recentVisibleReport] =
+      await Promise.all([
+        this.summaryService.getSummary(clientProfileId),
+        this.resolveGrowthHubReportProjectId(clientProfileId, null),
+        this.prisma.growthHubWeeklyNote.findFirst({
+          where: {
+            clientProfileId,
+            clientVisible: true,
+            weekEnd: { gte: new Date(now.getTime() - 10 * 86_400_000) },
+          },
+          select: { id: true },
+          orderBy: { weekEnd: "desc" },
+        }),
+        this.prisma.growthHubReport.findFirst({
+          where: {
+            clientProfileId,
+            clientVisible: true,
+            status: GrowthHubReportStatus.PUBLISHED,
+            periodEnd: { gte: new Date(now.getTime() - 35 * 86_400_000) },
+          },
+          select: { id: true },
+          orderBy: { periodEnd: "desc" },
+        }),
+      ]);
+
+    const drafts = this.buildRuleBasedRecommendationDrafts({
+      clientProfileId,
+      projectId: fallbackProjectId,
+      summary,
+      hasRecentVisibleNote: Boolean(recentVisibleNote),
+      hasRecentVisibleReport: Boolean(recentVisibleReport),
+    });
+
+    let created = 0;
+    let updated = 0;
+    let skipped = 0;
+    await this.prisma.$transaction(async (tx) => {
+      const results: GrowthHubRecommendationModel[] = [];
+
+      for (const draft of drafts) {
+        const existing = await tx.growthHubRecommendation.findUnique({
+          where: { dedupeKey: draft.dedupeKey },
+          select: {
+            id: true,
+            status: true,
+          },
+        });
+
+        if (!existing) {
+          const recommendation = await tx.growthHubRecommendation.create({
+            data: {
+              ...draft,
+              createdByUserId: actor.id,
+            },
+            select: growthHubRecommendationSelect,
+          });
+          created += 1;
+          results.push(recommendation);
+          continue;
+        }
+
+        if (
+          existing.status === GrowthHubRecommendationStatus.DISMISSED ||
+          existing.status === GrowthHubRecommendationStatus.CONVERTED_TO_TASK ||
+          existing.status === GrowthHubRecommendationStatus.DONE
+        ) {
+          const recommendation = await tx.growthHubRecommendation.findUniqueOrThrow({
+            where: { id: existing.id },
+            select: growthHubRecommendationSelect,
+          });
+          skipped += 1;
+          results.push(recommendation);
+          continue;
+        }
+
+        const recommendation = await tx.growthHubRecommendation.update({
+          where: { id: existing.id },
+          data: {
+            projectId: draft.projectId,
+            priority: draft.priority,
+            title: draft.title,
+            description: draft.description,
+            source: draft.source,
+            relatedEntityType: draft.relatedEntityType,
+            relatedEntityId: draft.relatedEntityId,
+            clientVisible: draft.clientVisible,
+          },
+          select: growthHubRecommendationSelect,
+        });
+        updated += 1;
+        results.push(recommendation);
+      }
+
+      return results;
+    });
+
+    const response = await this.getRecommendationsByClientProfileId(clientProfileId, {}, false);
+    return {
+      data: response.data,
+      meta: {
+        ...response.meta,
+        created,
+        updated,
+        skipped,
+      },
+    };
+  }
+
+  private buildRuleBasedRecommendationDrafts({
+    clientProfileId,
+    projectId,
+    summary,
+    hasRecentVisibleNote,
+    hasRecentVisibleReport,
+  }: {
+    clientProfileId: string;
+    projectId: string | null;
+    summary: GrowthHubSummaryResponse;
+    hasRecentVisibleNote: boolean;
+    hasRecentVisibleReport: boolean;
+  }): GrowthHubRecommendationDraft[] {
+    const drafts: GrowthHubRecommendationDraft[] = [];
+    const addDraft = (draft: Omit<GrowthHubRecommendationDraft, "dedupeKey" | "clientProfileId">) => {
+      drafts.push({
+        ...draft,
+        clientProfileId,
+        dedupeKey: this.buildRecommendationDedupeKey(
+          clientProfileId,
+          draft.type,
+          draft.relatedEntityType,
+          draft.relatedEntityId,
+        ),
+      });
+    };
+
+    if (summary.metrics.pendingApprovals > 0) {
+      addDraft({
+        projectId,
+        type: GrowthHubRecommendationType.APPROVAL_REMINDER,
+        priority:
+          summary.metrics.pendingApprovals > 3
+            ? GrowthHubActionPriority.CRITICAL
+            : GrowthHubActionPriority.HIGH,
+        title: "Bekleyen müşteri onayları kapatılmalı",
+        description: `${summary.metrics.pendingApprovals} onay/teyit Growth Hub akışını bekletiyor. Müşteri aksiyon merkezi ve kanal workspace'lerinde hatırlatma yapılmalı.`,
+        source: "PENDING_APPROVALS",
+        relatedEntityType: "SUMMARY",
+        relatedEntityId: "pending-approvals",
+        clientVisible: true,
+      });
+    }
+
+    if (summary.metrics.overdueTasks > 0) {
+      addDraft({
+        projectId,
+        type: GrowthHubRecommendationType.TECHNICAL_FIX,
+        priority:
+          summary.metrics.overdueTasks > 2
+            ? GrowthHubActionPriority.CRITICAL
+            : GrowthHubActionPriority.HIGH,
+        title: "Geciken Growth Hub işleri temizlenmeli",
+        description: `${summary.metrics.overdueTasks} geciken iş büyüme ritmini etkiliyor. Önce blocker ve owner kontrolü yapılmalı.`,
+        source: "OVERDUE_TASKS",
+        relatedEntityType: "SUMMARY",
+        relatedEntityId: "overdue-tasks",
+        clientVisible: false,
+      });
+    }
+
+    if (!hasRecentVisibleNote) {
+      addDraft({
+        projectId,
+        type: GrowthHubRecommendationType.STRATEGY_REVIEW,
+        priority: GrowthHubActionPriority.MEDIUM,
+        title: "Haftalık growth yorumu hazırlanmalı",
+        description: "Son 10 gün içinde client-visible weekly note bulunmuyor. Müşteriye kısa durum ve sonraki odak notu paylaşılmalı.",
+        source: "WEEKLY_NOTE_CADENCE",
+        relatedEntityType: "WEEKLY_NOTE",
+        relatedEntityId: "missing-recent-visible-note",
+        clientVisible: false,
+      });
+    }
+
+    if (!hasRecentVisibleReport) {
+      addDraft({
+        projectId,
+        type: GrowthHubRecommendationType.REPORTING_REQUIRED,
+        priority: GrowthHubActionPriority.MEDIUM,
+        title: "Aylık Growth Hub raporu yayımlanmalı",
+        description: "Son 35 gün içinde client-visible published Growth Hub raporu bulunmuyor. Rapor hazırlanıp gerekiyorsa müşteri teyidine açılmalı.",
+        source: "REPORTING_CADENCE",
+        relatedEntityType: "GROWTH_HUB_REPORT",
+        relatedEntityId: "missing-recent-visible-report",
+        clientVisible: true,
+      });
+    }
+
+    const targetRoas = summary.config?.targetRoas ?? null;
+    if (targetRoas && summary.metrics.blendedRoas > 0 && summary.metrics.blendedRoas < targetRoas) {
+      addDraft({
+        projectId,
+        type: GrowthHubRecommendationType.BUDGET_SHIFT,
+        priority: GrowthHubActionPriority.HIGH,
+        title: "ROAS hedefi için bütçe ve kreatif dağılımı gözden geçirilmeli",
+        description: `Blended ROAS ${summary.metrics.blendedRoas.toFixed(2)}x; hedef ${targetRoas.toFixed(2)}x. Düşük performanslı kanallarda bütçe ve kreatif hipotezi yeniden değerlendirilmeli.`,
+        source: "ROAS_TARGET",
+        relatedEntityType: "SUMMARY",
+        relatedEntityId: "target-roas",
+        clientVisible: false,
+      });
+    }
+
+    summary.channels
+      .filter(
+        (channel) =>
+          channel.status === "WAITING_CONFIG" ||
+          channel.status === "RISK" ||
+          channel.sourceStatus === "CONTRACT_ONLY",
+      )
+      .slice(0, 6)
+      .forEach((channel) => {
+        addDraft({
+          projectId,
+          type:
+            channel.status === "WAITING_CONFIG" || channel.sourceStatus === "CONTRACT_ONLY"
+              ? GrowthHubRecommendationType.TECHNICAL_FIX
+              : GrowthHubRecommendationType.CHANNEL_OPTIMIZATION,
+          priority:
+            channel.riskLevel === "HIGH"
+              ? GrowthHubActionPriority.HIGH
+              : GrowthHubActionPriority.MEDIUM,
+          title:
+            channel.status === "RISK"
+              ? `${channel.label} kanalı optimize edilmeli`
+              : `${channel.label} kurulumu tamamlanmalı`,
+          description:
+            channel.status === "RISK"
+              ? `${channel.label} health score ${channel.healthScore}. Risk kaynakları ve kanal aksiyonları kontrol edilmeli.`
+              : `${channel.label} için kaynak durumu ${channel.sourceStatus}; veri/kontrat kurulumu tamamlanmalı.`,
+          source: "CHANNEL_HEALTH",
+          relatedEntityType: "CHANNEL",
+          relatedEntityId: channel.serviceKey,
+          clientVisible: channel.sourceStatus === "CONTRACT_ONLY",
+        });
+      });
+
+    return drafts;
+  }
+
+  private async updateRecommendationById(
+    recommendationId: string,
+    dto: UpdateGrowthHubRecommendationDto,
+    actor: AuthenticatedUser,
+    options: { scope: "ANY" | "ASSIGNED" },
+  ): Promise<GrowthHubRecommendationItem> {
+    this.assertHasRecommendationUpdatePayload(dto);
+    const existing = await this.getGrowthHubRecommendationOrFail(recommendationId);
+
+    if (options.scope === "ASSIGNED") {
+      await this.assertCanManageAssignedRecommendations(existing.clientProfileId, actor);
+    } else {
+      await this.assertCanManageAdminRecommendations(existing.clientProfileId, actor);
+    }
+
+    const recommendation = await this.prisma.growthHubRecommendation.update({
+      where: { id: recommendationId },
+      data: this.buildRecommendationPatchData(dto),
+      select: growthHubRecommendationSelect,
+    });
+
+    return this.toGrowthHubRecommendationItem(recommendation);
+  }
+
+  private async convertRecommendationToTask(
+    recommendationId: string,
+    dto: ConvertGrowthHubRecommendationDto,
+    actor: AuthenticatedUser,
+    options: { scope: "ANY" | "ASSIGNED" },
+  ): Promise<GrowthHubRecommendationItem> {
+    const existing = await this.getGrowthHubRecommendationOrFail(recommendationId);
+
+    if (options.scope === "ASSIGNED") {
+      await this.assertCanManageAssignedRecommendations(existing.clientProfileId, actor);
+    } else {
+      await this.assertCanManageAdminRecommendations(existing.clientProfileId, actor);
+    }
+
+    if (existing.convertedTask) {
+      return this.toGrowthHubRecommendationItem(existing);
+    }
+
+    const projectId =
+      existing.projectId ??
+      (await this.resolveGrowthHubReportProjectId(existing.clientProfileId, null));
+
+    if (!projectId) {
+      throw new BadRequestException("A Growth Hub project is required to convert recommendation.");
+    }
+
+    if (dto.assigneeUserId) {
+      await this.assertUserExists(dto.assigneeUserId);
+    }
+
+    const dueDate = this.parseNullableDate(dto.dueDate) ?? null;
+    const title = dto.title?.trim() || existing.title;
+    const description =
+      dto.description === null
+        ? null
+        : dto.description?.trim() ||
+          existing.description ||
+          "Growth Hub önerisinden oluşturulan takip görevi.";
+    const now = new Date();
+
+    const recommendation = await this.prisma.$transaction(async (tx) => {
+      const task = await tx.task.create({
+        data: {
+          projectId,
+          title,
+          description,
+          status: TaskStatus.TODO,
+          priority: this.toTaskPriority(existing.priority),
+          type: TaskType.FEATURE,
+          assigneeUserId: dto.assigneeUserId ?? null,
+          dueDate,
+        },
+        select: { id: true },
+      });
+
+      return tx.growthHubRecommendation.update({
+        where: { id: existing.id },
+        data: {
+          status: GrowthHubRecommendationStatus.CONVERTED_TO_TASK,
+          convertedTaskId: task.id,
+          convertedAt: now,
+          convertedByUserId: actor.id,
+        },
+        select: growthHubRecommendationSelect,
+      });
+    });
+
+    return this.toGrowthHubRecommendationItem(recommendation);
+  }
+
   private toGrowthHubActionItem(action: GrowthHubActionModel): GrowthHubActionItem {
     return {
       id: action.id,
@@ -1463,6 +2103,44 @@ export class GrowthHubService {
       createdBy: report.createdBy,
       createdAt: report.createdAt.toISOString(),
       updatedAt: report.updatedAt.toISOString(),
+    };
+  }
+
+  private toGrowthHubRecommendationItem(
+    recommendation: GrowthHubRecommendationModel,
+  ): GrowthHubRecommendationItem {
+    return {
+      id: recommendation.id,
+      clientProfileId: recommendation.clientProfileId,
+      projectId: recommendation.projectId ?? null,
+      project: recommendation.project
+        ? {
+            id: recommendation.project.id,
+            name: recommendation.project.name,
+            slug: recommendation.project.slug,
+            serviceKey: recommendation.project.serviceKey,
+          }
+        : null,
+      type: recommendation.type,
+      priority: recommendation.priority,
+      title: recommendation.title,
+      description: recommendation.description ?? null,
+      source: recommendation.source ?? null,
+      relatedEntityType: recommendation.relatedEntityType ?? null,
+      relatedEntityId: recommendation.relatedEntityId ?? null,
+      status: recommendation.status,
+      clientVisible: recommendation.clientVisible,
+      convertedTask: recommendation.convertedTask
+        ? {
+            id: recommendation.convertedTask.id,
+            title: recommendation.convertedTask.title,
+            status: recommendation.convertedTask.status,
+          }
+        : null,
+      convertedAt: recommendation.convertedAt?.toISOString() ?? null,
+      createdBy: recommendation.createdBy,
+      createdAt: recommendation.createdAt.toISOString(),
+      updatedAt: recommendation.updatedAt.toISOString(),
     };
   }
 
@@ -1563,6 +2241,18 @@ export class GrowthHubService {
       data.risks = this.toNullableJsonInput(dto.risks);
     }
     this.assignWeeklyNoteIfDefined(data, "clientVisible", dto.clientVisible);
+    return data;
+  }
+
+  private buildRecommendationPatchData(
+    dto: UpdateGrowthHubRecommendationDto,
+  ): GrowthHubRecommendationPatchData {
+    const data: GrowthHubRecommendationPatchData = {};
+    this.assignRecommendationIfDefined(data, "status", dto.status);
+    this.assignRecommendationIfDefined(data, "priority", dto.priority);
+    this.assignRecommendationIfDefined(data, "title", dto.title?.trim());
+    this.assignRecommendationIfDefined(data, "description", dto.description);
+    this.assignRecommendationIfDefined(data, "clientVisible", dto.clientVisible);
     return data;
   }
 
@@ -1692,6 +2382,39 @@ export class GrowthHubService {
     }
   }
 
+  private async assertCanReadAdminRecommendations(
+    clientProfileId: string,
+    actor: AuthenticatedUser,
+  ): Promise<void> {
+    if (
+      this.isAdminUser(actor) &&
+      (this.hasPermission(actor, GROWTH_HUB_RECOMMENDATIONS_READ_ANY_PERMISSION) ||
+        this.hasPermission(actor, GROWTH_HUB_SUMMARY_READ_ANY_PERMISSION))
+    ) {
+      await this.assertClientProfileExists(clientProfileId);
+      await this.assertClientHasActiveGrowthHubService(clientProfileId);
+      return;
+    }
+
+    throw new ForbiddenException("Missing required Growth Hub recommendations permission.");
+  }
+
+  private async assertCanManageAdminRecommendations(
+    clientProfileId: string,
+    actor: AuthenticatedUser,
+  ): Promise<void> {
+    if (
+      this.isAdminUser(actor) &&
+      this.hasPermission(actor, GROWTH_HUB_RECOMMENDATIONS_MANAGE_ANY_PERMISSION)
+    ) {
+      await this.assertClientProfileExists(clientProfileId);
+      await this.assertClientHasActiveGrowthHubService(clientProfileId);
+      return;
+    }
+
+    throw new ForbiddenException("Missing required Growth Hub recommendations permission.");
+  }
+
   private async assertCanReadAssignedConfig(
     clientProfileId: string,
     actor: AuthenticatedUser,
@@ -1780,6 +2503,28 @@ export class GrowthHubService {
     await this.assertAssignedGrowthHubClientOrFail(actor, clientProfileId);
   }
 
+  private async assertCanReadAssignedRecommendations(
+    clientProfileId: string,
+    actor: AuthenticatedUser,
+  ): Promise<void> {
+    if (!this.hasPermission(actor, GROWTH_HUB_RECOMMENDATIONS_READ_ASSIGNED_PERMISSION)) {
+      throw new ForbiddenException("Missing required Growth Hub recommendations permission.");
+    }
+
+    await this.assertAssignedGrowthHubClientOrFail(actor, clientProfileId);
+  }
+
+  private async assertCanManageAssignedRecommendations(
+    clientProfileId: string,
+    actor: AuthenticatedUser,
+  ): Promise<void> {
+    if (!this.hasPermission(actor, GROWTH_HUB_RECOMMENDATIONS_MANAGE_ASSIGNED_PERMISSION)) {
+      throw new ForbiddenException("Missing required Growth Hub recommendations permission.");
+    }
+
+    await this.assertAssignedGrowthHubClientOrFail(actor, clientProfileId);
+  }
+
   private assertCanReadOwnConfig(actor: AuthenticatedUser): void {
     if (
       actor.accountType !== AccountType.CLIENT ||
@@ -1822,6 +2567,15 @@ export class GrowthHubService {
       !this.hasPermission(actor, GROWTH_HUB_REPORTS_READ_OWN_PERMISSION)
     ) {
       throw new ForbiddenException("Missing required Growth Hub reports permission.");
+    }
+  }
+
+  private assertCanReadOwnRecommendations(actor: AuthenticatedUser): void {
+    if (
+      actor.accountType !== AccountType.CLIENT ||
+      !this.hasPermission(actor, GROWTH_HUB_RECOMMENDATIONS_READ_OWN_PERMISSION)
+    ) {
+      throw new ForbiddenException("Missing required Growth Hub recommendations permission.");
     }
   }
 
@@ -2034,6 +2788,21 @@ export class GrowthHubService {
     return note;
   }
 
+  private async getGrowthHubRecommendationOrFail(
+    recommendationId: string,
+  ): Promise<GrowthHubRecommendationModel> {
+    const recommendation = await this.prisma.growthHubRecommendation.findUnique({
+      where: { id: recommendationId },
+      select: growthHubRecommendationSelect,
+    });
+
+    if (!recommendation) {
+      throw new NotFoundException("Growth Hub recommendation not found.");
+    }
+
+    return recommendation;
+  }
+
   private async hasActiveGrowthHubService(clientProfileId: string): Promise<boolean> {
     const activeService = await this.prisma.clientPurchasedService.findFirst({
       where: {
@@ -2128,6 +2897,18 @@ export class GrowthHubService {
     }
   }
 
+  private assertHasRecommendationUpdatePayload(dto: UpdateGrowthHubRecommendationDto): void {
+    if (
+      dto.status === undefined &&
+      dto.priority === undefined &&
+      dto.title === undefined &&
+      dto.description === undefined &&
+      dto.clientVisible === undefined
+    ) {
+      throw new BadRequestException("At least one Growth Hub recommendation field is required.");
+    }
+  }
+
   private assignIfDefined<K extends keyof GrowthHubConfigPatchData>(
     data: GrowthHubConfigPatchData,
     key: K,
@@ -2156,6 +2937,43 @@ export class GrowthHubService {
     if (value !== undefined) {
       data[key] = value;
     }
+  }
+
+  private assignRecommendationIfDefined<K extends keyof GrowthHubRecommendationPatchData>(
+    data: GrowthHubRecommendationPatchData,
+    key: K,
+    value: GrowthHubRecommendationPatchData[K] | undefined,
+  ): void {
+    if (value !== undefined) {
+      data[key] = value;
+    }
+  }
+
+  private buildRecommendationDedupeKey(
+    clientProfileId: string,
+    type: GrowthHubRecommendationType,
+    relatedEntityType: string | null,
+    relatedEntityId: string | null,
+  ): string {
+    return [
+      clientProfileId,
+      type,
+      relatedEntityType ?? "GENERAL",
+      relatedEntityId ?? "GLOBAL",
+    ].join(":");
+  }
+
+  private toTaskPriority(priority: GrowthHubActionPriority): Priority {
+    if (priority === GrowthHubActionPriority.CRITICAL) {
+      return Priority.URGENT;
+    }
+    if (priority === GrowthHubActionPriority.HIGH) {
+      return Priority.HIGH;
+    }
+    if (priority === GrowthHubActionPriority.LOW) {
+      return Priority.LOW;
+    }
+    return Priority.MEDIUM;
   }
 
   private readDecimalAsNullableNumber(

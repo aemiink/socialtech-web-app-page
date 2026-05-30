@@ -8,6 +8,7 @@ import type { AuthUserProfile } from "../../../features/auth/authTypes";
 import type {
   GrowthHubActivityResponse,
   GrowthHubClientsResponse,
+  GrowthHubRecommendationsResponse,
   GrowthHubSummary,
 } from "../../../features/growthHub/growthHubTypes";
 import { GrowthHubCalismaAlani } from "../GrowthHubCalismaAlani";
@@ -22,6 +23,7 @@ const mockUseGetAssignedGrowthHubClientActivityQuery = vi.fn();
 const mockUseGetAssignedGrowthHubClientActionsQuery = vi.fn();
 const mockUseGetAssignedGrowthHubClientWeeklyNotesQuery = vi.fn();
 const mockUseGetAssignedGrowthHubClientReportsQuery = vi.fn();
+const mockUseGetAssignedGrowthHubClientRecommendationsQuery = vi.fn();
 const mockUseCreateAssignedGrowthHubActionMutation = vi.fn();
 const mockUseUpdateAssignedGrowthHubActionMutation = vi.fn();
 const mockUseDeleteAssignedGrowthHubActionMutation = vi.fn();
@@ -30,6 +32,9 @@ const mockUseUpdateAssignedGrowthHubWeeklyNoteMutation = vi.fn();
 const mockUseCreateAssignedGrowthHubReportMutation = vi.fn();
 const mockUseUpdateAssignedGrowthHubReportMutation = vi.fn();
 const mockUsePublishAssignedGrowthHubReportMutation = vi.fn();
+const mockUseGenerateAssignedGrowthHubRecommendationsMutation = vi.fn();
+const mockUseUpdateAssignedGrowthHubRecommendationMutation = vi.fn();
+const mockUseConvertAssignedGrowthHubRecommendationToTaskMutation = vi.fn();
 const mockMutation = vi.fn(() => ({ unwrap: async () => ({}) }));
 
 let currentUser: AuthUserProfile | null = null;
@@ -51,6 +56,8 @@ vi.mock("../../../features/growthHub/growthHubApi", () => ({
     mockUseGetAssignedGrowthHubClientWeeklyNotesQuery(clientId, options),
   useGetAssignedGrowthHubClientReportsQuery: (clientId: string, options?: QueryOptions) =>
     mockUseGetAssignedGrowthHubClientReportsQuery(clientId, options),
+  useGetAssignedGrowthHubClientRecommendationsQuery: (clientId: string, options?: QueryOptions) =>
+    mockUseGetAssignedGrowthHubClientRecommendationsQuery(clientId, options),
   useCreateAssignedGrowthHubActionMutation: () => mockUseCreateAssignedGrowthHubActionMutation(),
   useUpdateAssignedGrowthHubActionMutation: () => mockUseUpdateAssignedGrowthHubActionMutation(),
   useDeleteAssignedGrowthHubActionMutation: () => mockUseDeleteAssignedGrowthHubActionMutation(),
@@ -59,6 +66,12 @@ vi.mock("../../../features/growthHub/growthHubApi", () => ({
   useCreateAssignedGrowthHubReportMutation: () => mockUseCreateAssignedGrowthHubReportMutation(),
   useUpdateAssignedGrowthHubReportMutation: () => mockUseUpdateAssignedGrowthHubReportMutation(),
   usePublishAssignedGrowthHubReportMutation: () => mockUsePublishAssignedGrowthHubReportMutation(),
+  useGenerateAssignedGrowthHubRecommendationsMutation: () =>
+    mockUseGenerateAssignedGrowthHubRecommendationsMutation(),
+  useUpdateAssignedGrowthHubRecommendationMutation: () =>
+    mockUseUpdateAssignedGrowthHubRecommendationMutation(),
+  useConvertAssignedGrowthHubRecommendationToTaskMutation: () =>
+    mockUseConvertAssignedGrowthHubRecommendationToTaskMutation(),
 }));
 
 const projectManagerUser: AuthUserProfile = {
@@ -76,6 +89,8 @@ const projectManagerUser: AuthUserProfile = {
     "growthHub.notes.manage.assigned",
     "growthHub.reports.read.assigned",
     "growthHub.reports.manage.assigned",
+    "growthHub.recommendations.read.assigned",
+    "growthHub.recommendations.manage.assigned",
   ],
   clientProfile: null,
 };
@@ -253,6 +268,41 @@ const growthHubActivity: GrowthHubActivityResponse = {
   },
 };
 
+const growthHubRecommendationsResponse: GrowthHubRecommendationsResponse = {
+  data: [
+    {
+      id: "recommendation-1",
+      clientProfileId: "11111111-1111-4111-8111-111111111111",
+      projectId: null,
+      project: null,
+      type: "APPROVAL_REMINDER",
+      priority: "HIGH",
+      title: "Bekleyen onayları kapat",
+      description: "Müşteri onayı bekleyen işleri takip listesine al.",
+      source: "PENDING_APPROVALS",
+      relatedEntityType: "SUMMARY",
+      relatedEntityId: "pending-approvals",
+      status: "OPEN",
+      clientVisible: true,
+      convertedTask: null,
+      convertedAt: null,
+      createdBy: null,
+      createdAt: "2026-05-30T09:00:00.000Z",
+      updatedAt: "2026-05-30T09:00:00.000Z",
+    },
+  ],
+  meta: {
+    total: 1,
+    open: 1,
+    accepted: 0,
+    dismissed: 0,
+    convertedToTask: 0,
+    done: 0,
+    clientVisible: 1,
+    generatedAt: "2026-05-30T09:00:00.000Z",
+  },
+};
+
 function renderWorkspace() {
   render(<GrowthHubCalismaAlani />, { wrapper: MemoryRouter });
 }
@@ -295,6 +345,10 @@ describe("GrowthHubCalismaAlani", () => {
       },
       isLoading: false,
     });
+    mockUseGetAssignedGrowthHubClientRecommendationsQuery.mockReturnValue({
+      data: growthHubRecommendationsResponse,
+      isLoading: false,
+    });
     mockUseCreateAssignedGrowthHubActionMutation.mockReturnValue([mockMutation]);
     mockUseUpdateAssignedGrowthHubActionMutation.mockReturnValue([mockMutation]);
     mockUseDeleteAssignedGrowthHubActionMutation.mockReturnValue([mockMutation]);
@@ -303,6 +357,9 @@ describe("GrowthHubCalismaAlani", () => {
     mockUseCreateAssignedGrowthHubReportMutation.mockReturnValue([mockMutation]);
     mockUseUpdateAssignedGrowthHubReportMutation.mockReturnValue([mockMutation]);
     mockUsePublishAssignedGrowthHubReportMutation.mockReturnValue([mockMutation]);
+    mockUseGenerateAssignedGrowthHubRecommendationsMutation.mockReturnValue([mockMutation]);
+    mockUseUpdateAssignedGrowthHubRecommendationMutation.mockReturnValue([mockMutation]);
+    mockUseConvertAssignedGrowthHubRecommendationToTaskMutation.mockReturnValue([mockMutation]);
   });
 
   it("renders permission gate without assigned Growth Hub permission", () => {
@@ -321,6 +378,7 @@ describe("GrowthHubCalismaAlani", () => {
     expect(screen.getAllByText("Acme E-ticaret").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Creative onayı bekleniyor").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Haftalık rapor teyidi").length).toBeGreaterThan(0);
+    expect(screen.getByText("Bekleyen onayları kapat")).toBeInTheDocument();
     expect(screen.getByText("Client yeni kreatif istedi")).toBeInTheDocument();
     expect(screen.getByText("Meta Ads")).toBeInTheDocument();
   });

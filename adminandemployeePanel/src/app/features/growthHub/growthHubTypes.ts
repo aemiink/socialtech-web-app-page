@@ -78,6 +78,23 @@ export type GrowthHubReportAcknowledgementStatus =
   | "ACKNOWLEDGED"
   | "CHANGES_REQUESTED";
 
+export type GrowthHubRecommendationType =
+  | "CHANNEL_OPTIMIZATION"
+  | "BUDGET_SHIFT"
+  | "CREATIVE_REFRESH"
+  | "LANDING_PAGE_REVIEW"
+  | "APPROVAL_REMINDER"
+  | "REPORTING_REQUIRED"
+  | "TECHNICAL_FIX"
+  | "STRATEGY_REVIEW";
+
+export type GrowthHubRecommendationStatus =
+  | "OPEN"
+  | "ACCEPTED"
+  | "DISMISSED"
+  | "CONVERTED_TO_TASK"
+  | "DONE";
+
 export type GrowthHubClientSummary = {
   id: string;
   name: string;
@@ -217,6 +234,35 @@ export type GrowthHubReport = {
   updatedAt: string;
 };
 
+export type GrowthHubRecommendation = {
+  id: string;
+  clientProfileId: string;
+  projectId: string | null;
+  project: (GrowthHubProjectReference & { serviceKey: GrowthHubServiceKey | null }) | null;
+  type: GrowthHubRecommendationType;
+  priority: GrowthHubActionPriority;
+  title: string;
+  description: string | null;
+  source: string | null;
+  relatedEntityType: string | null;
+  relatedEntityId: string | null;
+  status: GrowthHubRecommendationStatus;
+  clientVisible: boolean;
+  convertedTask: {
+    id: string;
+    title: string;
+    status: GrowthHubActionStatus | "REVIEW";
+  } | null;
+  convertedAt: string | null;
+  createdBy: {
+    id: string;
+    displayName: string | null;
+    email: string;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type GrowthHubActionMutationRequest = {
   title?: string;
   description?: string | null;
@@ -250,6 +296,21 @@ export type GrowthHubReportMutationRequest = {
   metricsSnapshot?: Record<string, unknown>;
   clientVisible?: boolean;
   requestAcknowledgement?: boolean;
+};
+
+export type GrowthHubRecommendationMutationRequest = {
+  status?: GrowthHubRecommendationStatus;
+  priority?: GrowthHubActionPriority;
+  title?: string;
+  description?: string | null;
+  clientVisible?: boolean;
+};
+
+export type GrowthHubRecommendationConvertRequest = {
+  title?: string;
+  description?: string | null;
+  assigneeUserId?: string | null;
+  dueDate?: string | null;
 };
 
 export type GrowthHubActivityItem = {
@@ -355,6 +416,23 @@ export type GrowthHubReportsResponse = {
     draft: number;
     published: number;
     clientVisible: number;
+    generatedAt: string | null;
+  };
+};
+
+export type GrowthHubRecommendationsResponse = {
+  data: GrowthHubRecommendation[];
+  meta: {
+    total: number;
+    open: number;
+    accepted: number;
+    dismissed: number;
+    convertedToTask: number;
+    done: number;
+    clientVisible: number;
+    created?: number;
+    updated?: number;
+    skipped?: number;
     generatedAt: string | null;
   };
 };

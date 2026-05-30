@@ -5,6 +5,7 @@ import {
   CheckCircle,
   Clock,
   FileText,
+  Lightbulb,
   Target,
   TrendingUp,
   Users,
@@ -17,6 +18,7 @@ import {
   useGetClientGrowthHubChannelsQuery,
   useGetClientGrowthHubConfigQuery,
   useGetClientGrowthHubReportsQuery,
+  useGetClientGrowthHubRecommendationsQuery,
   useGetClientGrowthHubSummaryQuery,
   useGetClientGrowthHubWeeklyNotesQuery,
 } from "../../features/growthHub/growthHubApi";
@@ -26,6 +28,7 @@ import type {
   GrowthHubChannelSummary,
   GrowthHubConfig,
   GrowthHubReport,
+  GrowthHubRecommendation,
   GrowthHubSummary,
   GrowthHubWeeklyNote,
 } from "../../features/growthHub/growthHubTypes";
@@ -37,12 +40,15 @@ import {
   formatGrowthHubDateRange,
   formatGrowthHubNumber,
   formatGrowthHubRatio,
+  getGrowthHubActionPriorityLabel,
   getGrowthHubActionTypeLabel,
   getGrowthHubActionStatusLabel,
   getGrowthHubActivityTypeLabel,
   getGrowthHubChannelStatusLabel,
   getGrowthHubGoalLabel,
   getGrowthHubReportAcknowledgementStatusLabel,
+  getGrowthHubRecommendationStatusLabel,
+  getGrowthHubRecommendationTypeLabel,
   getGrowthHubReportStatusLabel,
   getGrowthHubReportTypeLabel,
   getGrowthHubServiceLabel,
@@ -81,6 +87,7 @@ export function GrowthHubDashboard() {
   const actionsQuery = useGetClientGrowthHubActionsQuery();
   const weeklyNotesQuery = useGetClientGrowthHubWeeklyNotesQuery();
   const reportsQuery = useGetClientGrowthHubReportsQuery();
+  const recommendationsQuery = useGetClientGrowthHubRecommendationsQuery();
   const activityQuery = useGetClientGrowthHubActivityQuery();
 
   const summary = summaryQuery.data ?? null;
@@ -89,6 +96,7 @@ export function GrowthHubDashboard() {
   const actions = actionsQuery.data?.data ?? summary?.actions ?? [];
   const weeklyNotes = weeklyNotesQuery.data?.data ?? [];
   const reports = reportsQuery.data?.data ?? [];
+  const recommendations = recommendationsQuery.data?.data ?? [];
   const latestWeeklyNote = weeklyNotes[0] ?? null;
   const activity = activityQuery.data?.data ?? summary?.activity ?? [];
   const isLoading =
@@ -98,6 +106,7 @@ export function GrowthHubDashboard() {
     actionsQuery.isLoading ||
     weeklyNotesQuery.isLoading ||
     reportsQuery.isLoading ||
+    recommendationsQuery.isLoading ||
     activityQuery.isLoading;
   const isError =
     summaryQuery.isError ||
@@ -106,6 +115,7 @@ export function GrowthHubDashboard() {
     actionsQuery.isError ||
     weeklyNotesQuery.isError ||
     reportsQuery.isError ||
+    recommendationsQuery.isError ||
     activityQuery.isError;
 
   if (isLoading) {
@@ -207,6 +217,8 @@ export function GrowthHubDashboard() {
 
       <ChannelPerformance channels={channels} />
 
+      <RecommendedNextSteps recommendations={recommendations} />
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <AgencyComment summary={summary} config={config} weeklyNote={latestWeeklyNote} generatedAt={generatedAt} />
         <ClientActions actions={actions} />
@@ -214,6 +226,56 @@ export function GrowthHubDashboard() {
 
       <RecentActivity activity={activity} reports={reports} />
     </PageShell>
+  );
+}
+
+function RecommendedNextSteps({
+  recommendations,
+}: {
+  recommendations: GrowthHubRecommendation[];
+}) {
+  return (
+    <section className={cardClass}>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="text-xl text-white">Önerilen Sonraki Adımlar</h2>
+        <span className="text-sm text-[#A0A0A0]">{formatGrowthHubNumber(recommendations.length)} öneri</span>
+      </div>
+      {recommendations.length > 0 ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {recommendations.slice(0, 6).map((recommendation) => (
+            <div key={recommendation.id} className={innerClass}>
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-3">
+                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#AAFF01]/10 text-[#AAFF01]">
+                    <Lightbulb className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm text-white">{recommendation.title}</p>
+                    <p className="mt-1 text-xs text-[#A0A0A0]">
+                      {getGrowthHubRecommendationTypeLabel(recommendation.type)}
+                    </p>
+                  </div>
+                </div>
+                <span className={`rounded px-2 py-1 text-xs ${getRecommendationTone(recommendation)}`}>
+                  {getGrowthHubRecommendationStatusLabel(recommendation.status)}
+                </span>
+              </div>
+              {recommendation.description ? (
+                <p className="text-xs leading-relaxed text-[#D8D8D8]">
+                  {recommendation.description}
+                </p>
+              ) : null}
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[#A0A0A0]">
+                <span>{getGrowthHubActionPriorityLabel(recommendation.priority)}</span>
+                {recommendation.project ? <span>{recommendation.project.name}</span> : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <EmptyState text="Client-visible Growth Hub önerisi henüz yok." />
+      )}
+    </section>
   );
 }
 
@@ -774,6 +836,22 @@ function getReportTone(report: GrowthHubReport): string {
 
   if (report.acknowledgementStatus === "CHANGES_REQUESTED") {
     return "bg-[#ff4444]/10 text-[#ff4444]";
+  }
+
+  return "bg-[#00D4FF]/10 text-[#00D4FF]";
+}
+
+function getRecommendationTone(recommendation: GrowthHubRecommendation): string {
+  if (recommendation.status === "DONE" || recommendation.status === "CONVERTED_TO_TASK") {
+    return "bg-[#AAFF01]/10 text-[#AAFF01]";
+  }
+
+  if (recommendation.status === "DISMISSED") {
+    return "bg-[#ff4444]/10 text-[#ff4444]";
+  }
+
+  if (recommendation.priority === "CRITICAL" || recommendation.priority === "HIGH") {
+    return "bg-[#FFA726]/10 text-[#FFA726]";
   }
 
   return "bg-[#00D4FF]/10 text-[#00D4FF]";

@@ -1,5 +1,15 @@
 import { type FormEvent, useMemo, useState } from "react";
-import { CheckCircle2, Eye, EyeOff, FileText, Send, Trash2 } from "lucide-react";
+import {
+  CheckCircle2,
+  Eye,
+  EyeOff,
+  FileText,
+  Lightbulb,
+  ListChecks,
+  RefreshCw,
+  Send,
+  Trash2,
+} from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
 import { extractApiErrorMessage } from "../../clients/clientsUtils";
@@ -9,6 +19,8 @@ import type {
   GrowthHubActionStatus,
   GrowthHubReport,
   GrowthHubReportMutationRequest,
+  GrowthHubRecommendation,
+  GrowthHubRecommendationMutationRequest,
   GrowthHubWeeklyNote,
   GrowthHubWeeklyNoteMutationRequest,
 } from "../growthHubTypes";
@@ -18,6 +30,8 @@ import {
   getGrowthHubActionStatusLabel,
   getGrowthHubActionTypeLabel,
   getGrowthHubReportAcknowledgementStatusLabel,
+  getGrowthHubRecommendationStatusLabel,
+  getGrowthHubRecommendationTypeLabel,
   getGrowthHubReportStatusLabel,
   getGrowthHubReportTypeLabel,
   growthHubActionPriorityOptions,
@@ -28,12 +42,15 @@ type GrowthHubActionNotePanelProps = {
   actions: GrowthHubActionItem[];
   weeklyNotes: GrowthHubWeeklyNote[];
   reports: GrowthHubReport[];
+  recommendations: GrowthHubRecommendation[];
   canManageActions: boolean;
   canManageNotes: boolean;
   canManageReports: boolean;
+  canManageRecommendations: boolean;
   isActionsLoading?: boolean;
   isNotesLoading?: boolean;
   isReportsLoading?: boolean;
+  isRecommendationsLoading?: boolean;
   onCreateAction: (
     body: GrowthHubActionMutationRequest & { title: string },
   ) => Promise<void>;
@@ -59,6 +76,12 @@ type GrowthHubActionNotePanelProps = {
   ) => Promise<void>;
   onUpdateReport: (reportId: string, body: GrowthHubReportMutationRequest) => Promise<void>;
   onPublishReport: (reportId: string, requestAcknowledgement?: boolean) => Promise<void>;
+  onGenerateRecommendations: () => Promise<void>;
+  onUpdateRecommendation: (
+    recommendationId: string,
+    body: GrowthHubRecommendationMutationRequest,
+  ) => Promise<void>;
+  onConvertRecommendationToTask: (recommendationId: string) => Promise<void>;
 };
 
 const fieldClass =
@@ -68,12 +91,15 @@ export function GrowthHubActionNotePanel({
   actions,
   weeklyNotes,
   reports,
+  recommendations,
   canManageActions,
   canManageNotes,
   canManageReports,
+  canManageRecommendations,
   isActionsLoading = false,
   isNotesLoading = false,
   isReportsLoading = false,
+  isRecommendationsLoading = false,
   onCreateAction,
   onUpdateAction,
   onDeleteAction,
@@ -82,6 +108,9 @@ export function GrowthHubActionNotePanel({
   onCreateReport,
   onUpdateReport,
   onPublishReport,
+  onGenerateRecommendations,
+  onUpdateRecommendation,
+  onConvertRecommendationToTask,
 }: GrowthHubActionNotePanelProps) {
   const [actionTitle, setActionTitle] = useState("");
   const [actionDescription, setActionDescription] = useState("");
@@ -182,6 +211,26 @@ export function GrowthHubActionNotePanel({
     }
   }
 
+  async function handleGenerateRecommendations() {
+    if (!canManageRecommendations) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setFormMessage(null);
+    try {
+      await onGenerateRecommendations();
+      setFormMessage({ type: "success", text: "Growth recommendation önerileri güncellendi." });
+    } catch (error) {
+      setFormMessage({
+        type: "error",
+        text: extractApiErrorMessage(error, "Growth recommendation üretilemedi."),
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       {formMessage ? (
@@ -196,7 +245,7 @@ export function GrowthHubActionNotePanel({
         </div>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-3">
+      <div className="grid gap-4 xl:grid-cols-4">
         <form onSubmit={handleActionSubmit} className="rounded-2xl border border-white/[0.08] bg-black/20 p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <p className="text-sm font-medium text-white">Growth Action</p>
@@ -377,9 +426,30 @@ export function GrowthHubActionNotePanel({
             </Button>
           </div>
         </form>
+
+        <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="text-sm font-medium text-white">Recommendations</p>
+            <Badge variant="outline">{recommendations.length} kayıt</Badge>
+          </div>
+          <div className="space-y-3">
+            <div className="rounded-xl border border-white/[0.08] bg-black/20 p-3 text-sm leading-relaxed text-[#D6D6D6]">
+              Rule-based öneriler kanal sağlığı, onay bekleme, geciken işler ve raporlama ritmine göre üretilir.
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              disabled={!canManageRecommendations || isSubmitting}
+              onClick={() => void handleGenerateRecommendations()}
+            >
+              <RefreshCw className="h-4 w-4" />
+              Önerileri güncelle
+            </Button>
+          </div>
+        </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-3">
+      <div className="grid gap-4 xl:grid-cols-4">
         <div>
           <p className="text-xs uppercase tracking-wide text-[#7A7A7A]">Aksiyonlar</p>
           {isActionsLoading ? (
@@ -529,6 +599,95 @@ export function GrowthHubActionNotePanel({
             </div>
           ) : (
             <p className="mt-2 text-sm text-[#A0A0A0]">Growth report bulunmuyor.</p>
+          )}
+        </div>
+
+        <div>
+          <p className="text-xs uppercase tracking-wide text-[#7A7A7A]">Recommendations</p>
+          {isRecommendationsLoading ? (
+            <p className="mt-2 text-sm text-[#A0A0A0]">Recommendation yükleniyor...</p>
+          ) : recommendations.length ? (
+            <div className="mt-2 space-y-2">
+              {recommendations.slice(0, 5).map((recommendation) => (
+                <div key={recommendation.id} className="rounded-2xl border border-white/[0.08] bg-black/20 p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm text-white">{recommendation.title}</p>
+                      <p className="mt-1 text-xs text-[#A0A0A0]">
+                        {getGrowthHubRecommendationTypeLabel(recommendation.type)} •{" "}
+                        {getGrowthHubActionPriorityLabel(recommendation.priority)}
+                      </p>
+                    </div>
+                    <Badge variant="outline">
+                      {getGrowthHubRecommendationStatusLabel(recommendation.status)}
+                    </Badge>
+                  </div>
+                  {recommendation.description ? (
+                    <p className="mt-2 text-xs leading-relaxed text-[#D6D6D6]">
+                      {recommendation.description}
+                    </p>
+                  ) : null}
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-[#A0A0A0]">
+                      {recommendation.clientVisible ? "Client görünür" : "Internal"}
+                    </span>
+                    {recommendation.source ? (
+                      <span className="text-xs text-[#A0A0A0]">{recommendation.source}</span>
+                    ) : null}
+                    {recommendation.convertedTask ? (
+                      <span className="text-xs text-[#AAFF01]">
+                        Task: {recommendation.convertedTask.title}
+                      </span>
+                    ) : null}
+                    {canManageRecommendations ? (
+                      <>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={recommendation.status === "CONVERTED_TO_TASK"}
+                          onClick={() =>
+                            onUpdateRecommendation(recommendation.id, { status: "ACCEPTED" })
+                          }
+                        >
+                          <Lightbulb className="h-4 w-4" />
+                          Kabul
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={recommendation.status === "CONVERTED_TO_TASK"}
+                          onClick={() =>
+                            onUpdateRecommendation(recommendation.id, {
+                              clientVisible: !recommendation.clientVisible,
+                            })
+                          }
+                        >
+                          {recommendation.clientVisible ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={recommendation.status === "CONVERTED_TO_TASK"}
+                          onClick={() => onConvertRecommendationToTask(recommendation.id)}
+                        >
+                          <ListChecks className="h-4 w-4" />
+                          Task
+                        </Button>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-[#A0A0A0]">Recommendation bulunmuyor.</p>
           )}
         </div>
       </div>

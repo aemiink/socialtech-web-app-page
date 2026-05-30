@@ -9,6 +9,10 @@ import {
   PublishGrowthHubReportDto,
   UpdateGrowthHubReportDto,
 } from "./dto/growth-hub-report.dto";
+import {
+  ConvertGrowthHubRecommendationDto,
+  UpdateGrowthHubRecommendationDto,
+} from "./dto/growth-hub-recommendation.dto";
 import { UpdateGrowthHubWeeklyNoteDto } from "./dto/growth-hub-weekly-note.dto";
 import { GrowthHubService } from "./growth-hub.service";
 
@@ -64,5 +68,29 @@ export class GrowthHubManagementController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.growthHubService.publishAssignedReport(reportId, dto, actor);
+  }
+
+  @Patch("recommendations/:recommendationId")
+  @RequirePermissions("growthHub.recommendations.manage.assigned")
+  updateAssignedRecommendation(
+    @Param("recommendationId", ParseUUIDPipe) recommendationId: string,
+    @Body() dto: UpdateGrowthHubRecommendationDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.growthHubService.updateAssignedRecommendation(recommendationId, dto, actor);
+  }
+
+  @Post("recommendations/:recommendationId/convert-to-task")
+  @RequirePermissions("growthHub.recommendations.manage.assigned")
+  convertAssignedRecommendationToTask(
+    @Param("recommendationId", ParseUUIDPipe) recommendationId: string,
+    @Body() dto: ConvertGrowthHubRecommendationDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.growthHubService.convertAssignedRecommendationToTask(
+      recommendationId,
+      dto,
+      actor,
+    );
   }
 }

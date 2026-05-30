@@ -29,6 +29,11 @@ import {
   PublishGrowthHubReportDto,
   UpdateGrowthHubReportDto,
 } from "./dto/growth-hub-report.dto";
+import {
+  ConvertGrowthHubRecommendationDto,
+  GrowthHubRecommendationsQueryDto,
+  UpdateGrowthHubRecommendationDto,
+} from "./dto/growth-hub-recommendation.dto";
 import { UpdateGrowthHubConfigDto } from "./dto/update-growth-hub-config.dto";
 import { GrowthHubService } from "./growth-hub.service";
 
@@ -185,6 +190,45 @@ export class AdminGrowthHubController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.growthHubService.publishAdminReport(reportId, dto, actor);
+  }
+
+  @Get("admin/clients/:clientId/growth-hub/recommendations")
+  @RequirePermissions("growthHub.recommendations.read.any")
+  getAdminClientRecommendations(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @Query() query: GrowthHubRecommendationsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.growthHubService.getAdminClientRecommendations(clientId, query, actor);
+  }
+
+  @Post("admin/clients/:clientId/growth-hub/recommendations/generate")
+  @RequirePermissions("growthHub.recommendations.manage.any")
+  generateAdminClientRecommendations(
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.growthHubService.generateAdminClientRecommendations(clientId, actor);
+  }
+
+  @Patch("admin/growth-hub/recommendations/:recommendationId")
+  @RequirePermissions("growthHub.recommendations.manage.any")
+  updateAdminRecommendation(
+    @Param("recommendationId", ParseUUIDPipe) recommendationId: string,
+    @Body() dto: UpdateGrowthHubRecommendationDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.growthHubService.updateAdminRecommendation(recommendationId, dto, actor);
+  }
+
+  @Post("admin/growth-hub/recommendations/:recommendationId/convert-to-task")
+  @RequirePermissions("growthHub.recommendations.manage.any")
+  convertAdminRecommendationToTask(
+    @Param("recommendationId", ParseUUIDPipe) recommendationId: string,
+    @Body() dto: ConvertGrowthHubRecommendationDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.growthHubService.convertAdminRecommendationToTask(recommendationId, dto, actor);
   }
 
   @Get("admin/clients/:clientId/growth-hub/activity")

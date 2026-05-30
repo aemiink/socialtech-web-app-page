@@ -302,6 +302,25 @@ enum GrowthHubReportStatus {
   ARCHIVED
 }
 
+enum GrowthHubRecommendationType {
+  CHANNEL_OPTIMIZATION
+  BUDGET_SHIFT
+  CREATIVE_REFRESH
+  LANDING_PAGE_REVIEW
+  APPROVAL_REMINDER
+  REPORTING_REQUIRED
+  TECHNICAL_FIX
+  STRATEGY_REVIEW
+}
+
+enum GrowthHubRecommendationStatus {
+  OPEN
+  ACCEPTED
+  DISMISSED
+  CONVERTED_TO_TASK
+  DONE
+}
+
 enum EmployeeClientAssignmentScope {
   PROJECT
   PERFORMANCE
@@ -616,6 +635,8 @@ model User {
   createdGrowthHubReports        GrowthHubReport[]                   @relation("GrowthHubReportCreatedBy")
   publishedGrowthHubReports      GrowthHubReport[]                   @relation("GrowthHubReportPublishedBy")
   acknowledgedGrowthHubReports   GrowthHubReport[]                   @relation("GrowthHubReportAcknowledgedBy")
+  createdGrowthHubRecommendations GrowthHubRecommendation[]           @relation("GrowthHubRecommendationCreatedBy")
+  convertedGrowthHubRecommendations GrowthHubRecommendation[]         @relation("GrowthHubRecommendationConvertedBy")
 
   @@index([accountType, role])
   @@index([accountType, status])
@@ -654,6 +675,7 @@ model ClientProfile {
   growthHubActions        GrowthHubAction[]
   growthHubWeeklyNotes    GrowthHubWeeklyNote[]
   growthHubReports        GrowthHubReport[]
+  growthHubRecommendations GrowthHubRecommendation[]
   metaAdsConfig           ClientMetaAdsConfig?
   metaAdsCredential       ClientMetaAdsCredential?
   metaAdsInsights         MetaAdsDailyInsight[]
@@ -1348,6 +1370,42 @@ model TikTokAdsReport {
   @@index([acknowledgementTaskId])
 }
 
+model GrowthHubRecommendation {
+  id                String                        @id @default(uuid()) @db.Uuid
+  clientProfileId   String                        @db.Uuid
+  projectId         String?                       @db.Uuid
+  dedupeKey         String                        @unique
+  type              GrowthHubRecommendationType
+  priority          GrowthHubActionPriority       @default(MEDIUM)
+  title             String
+  description       String?
+  source            String?
+  relatedEntityType String?
+  relatedEntityId   String?
+  status            GrowthHubRecommendationStatus @default(OPEN)
+  clientVisible     Boolean                       @default(false)
+  createdByUserId   String?                       @db.Uuid
+  convertedTaskId   String?                       @unique @db.Uuid
+  convertedAt       DateTime?
+  convertedByUserId String?                       @db.Uuid
+  createdAt         DateTime                      @default(now())
+  updatedAt         DateTime                      @updatedAt
+
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  project       Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdBy     User?         @relation("GrowthHubRecommendationCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  convertedTask Task?         @relation("GrowthHubRecommendationConvertedTask", fields: [convertedTaskId], references: [id], onDelete: SetNull)
+  convertedBy   User?         @relation("GrowthHubRecommendationConvertedBy", fields: [convertedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([clientProfileId, status, priority])
+  @@index([clientProfileId, clientVisible])
+  @@index([projectId])
+  @@index([createdByUserId])
+  @@index([convertedByUserId])
+  @@index([type])
+  @@index([updatedAt])
+}
+
 model ClientPurchasedService {
   id              String                 @id @default(uuid()) @db.Uuid
   clientProfileId String                 @db.Uuid
@@ -1396,6 +1454,7 @@ model Project {
   growthHubActions         GrowthHubAction[]
   growthHubWeeklyNotes     GrowthHubWeeklyNote[]
   growthHubReports         GrowthHubReport[]
+  growthHubRecommendations GrowthHubRecommendation[]
   workspaceSections        WebAppWorkspaceSection[]
   workspaceMessages        WebAppWorkspaceMessage[]
   workspaceRevisions       WebAppWorkspaceRevision[]
@@ -1456,6 +1515,7 @@ model Task {
   metaAdsReportAcknowledgements     MetaAdsReport[]           @relation("MetaAdsReportAcknowledgementTask")
   tikTokAdsReportAcknowledgements   TikTokAdsReport[]         @relation("TikTokAdsReportAcknowledgementTask")
   growthHubReportAcknowledgements   GrowthHubReport[]         @relation("GrowthHubReportAcknowledgementTask")
+  growthHubRecommendationConversions GrowthHubRecommendation[] @relation("GrowthHubRecommendationConvertedTask")
   socialMediaPostApprovals          SocialMediaPost[]         @relation("SocialMediaPostApprovalTask")
   socialMediaReportAcknowledgements SocialMediaReport[]       @relation("SocialMediaReportAcknowledgementTask")
   todos                             TaskTodo[]
