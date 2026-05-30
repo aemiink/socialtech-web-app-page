@@ -52,6 +52,15 @@ vi.mock("../../../features/projects/projectsApi", () => ({
           priority: "HIGH",
           serviceKey: "web-app",
         },
+        {
+          id: "55555555-5555-4555-8555-555555555555",
+          clientProfileId: "11111111-1111-4111-8111-111111111111",
+          name: "Meta Ads Operasyonu",
+          slug: "meta-ads-operasyonu",
+          status: "IN_PROGRESS",
+          priority: "HIGH",
+          serviceKey: "meta-ads",
+        },
       ],
       meta: { page: 1, limit: 20, total: 1, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
     },
@@ -70,6 +79,16 @@ vi.mock("../../../features/projects/projectsApi", () => ({
         id: "33333333-3333-4333-8333-333333333333",
         displayName: "Developer One",
         role: "DEVELOPER",
+      },
+      {
+        id: "66666666-6666-4666-8666-666666666666",
+        displayName: "Performance One",
+        role: "PERFORMANCE_SPECIALIST",
+      },
+      {
+        id: "77777777-7777-4777-8777-777777777777",
+        displayName: "Designer One",
+        role: "DESIGNER",
       },
     ],
   }),
@@ -195,6 +214,65 @@ describe("ProjectManagerServiceWorkspace task routing", () => {
     const payload = mockCreateTask.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(payload.workstream).toBe("BACKEND");
     expect(payload.type).toBe("FEATURE");
+  });
+
+  it("uses service-specific tabs and fields for Meta Ads operations", async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          "/employee/project-manager/clients/11111111-1111-4111-8111-111111111111/services/meta-ads?tab=CAMPAIGNS",
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/employee/project-manager/clients/:clientId/services/:serviceKey"
+            element={<ProjectManagerServiceWorkspace />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("tab", { name: "Kampanyalar" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Optimizasyon" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Kreatifler" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Mesajlar" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Toplantılar" })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByDisplayValue("Atanmamış"), {
+      target: { value: "66666666-6666-4666-8666-666666666666" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("Hedef Sekme: Reklam Kampanyaları")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByRole("option", { name: "Hedef Sekme: Frontend" })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByDisplayValue("Hedef Sekme: Reklam Kampanyaları"), {
+      target: { value: "ADS_OPTIMIZATION" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("Görev başlığı"), {
+      target: { value: "Meta optimizasyon kontrolü" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("Campaign ID / adı"), {
+      target: { value: "campaign-123" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("Ad set / grup"), {
+      target: { value: "adset-456" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Görevi ve Checklist'i Oluştur" }));
+
+    await waitFor(() => {
+      expect(mockCreateTask).toHaveBeenCalled();
+    });
+
+    const payload = mockCreateTask.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(payload.projectId).toBe("55555555-5555-4555-8555-555555555555");
+    expect(payload.workstream).toBe("BACKEND");
+    expect(payload.type).toBe("FEATURE");
+    expect(payload.campaignRef).toBe("campaign-123");
+    expect(payload.adSetRef).toBe("adset-456");
   });
 
   it("applies only valid revision transitions with assignee updates", async () => {

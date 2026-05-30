@@ -160,6 +160,7 @@ export function ClientPortalApp() {
     });
   }, [clientProjects, selectedService]);
   const activeProjectId = selectedProjectId || scopedProjects[0]?.id || null;
+  const activeWebAppProjectId = selectedService === "web-app" ? activeProjectId : null;
 
   useEffect(() => {
     if (!isAuthenticated || !currentUser || isSupportedClientPortalUser(currentUser)) {
@@ -304,8 +305,8 @@ export function ClientPortalApp() {
   }, [activePurchasedServiceSet]);
 
   const renderContent = () => {
-    if (currentPage === "reports") return <ReportsPage projectId={activeProjectId} />;
-    if (currentPage === "meetings") return <MeetingsPage projectId={activeProjectId} />;
+    if (currentPage === "reports") return <ReportsPage projectId={activeWebAppProjectId} />;
+    if (currentPage === "meetings") return <MeetingsPage projectId={activeWebAppProjectId} />;
     if (currentPage === "billing") return <BillingPage />;
     if (currentPage === "settings") return <SettingsPage />;
 

@@ -135,6 +135,7 @@
 - Project Manager service workspace action center
 - Project Manager roadmap sprint planning (goal + date-range) in service workspace
 - Project Manager task creation target-tab routing (type/workstream) for employee panel visibility
+- Project Manager service-profile workspace tabs and task target presets (non-WEB services no longer use Web App workspace surface)
 - Revizyonlar sekmesi hibrit model (WEB_APP workspace + non-WEB task) üretim akışı
 - Client revision create + approve/reject lifecycle (WEB_APP) ve PM transition matrix uyumu
 - Workspace revision authz e2e coverage (`server/test/web-app-workspace-revisions-authz.e2e-spec.ts`)

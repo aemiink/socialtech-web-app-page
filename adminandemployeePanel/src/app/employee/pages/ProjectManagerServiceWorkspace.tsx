@@ -34,7 +34,7 @@ import {
   useGetDeliverySprintsQuery,
   useUpdateDeliverySprintMutation,
 } from "../../features/delivery/deliveryApi";
-import type { DeliverySprintStatus } from "../../features/delivery/deliveryTypes";
+import type { DeliveryRelease, DeliverySprint, DeliverySprintStatus } from "../../features/delivery/deliveryTypes";
 import {
   projectsApi,
   useCreateProjectWorkspaceRevisionMutation,
@@ -66,6 +66,7 @@ import {
   useUpdateTaskTodoMutation,
 } from "../../features/tasks/tasksApi";
 import type {
+  TaskApprovalType,
   TaskStatus,
   Task,
   TaskEnvironment,
@@ -90,9 +91,55 @@ import {
 } from "../../features/tasks/tasksUtils";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
 
-type WorkspaceViewTab = "OVERVIEW" | "TASKS" | "FILES" | "MESSAGES" | "REVISIONS" | "REPORTS" | "MEETINGS";
+type WorkspaceViewTab =
+  | "OVERVIEW"
+  | "ROADMAP"
+  | "TASKS"
+  | "FILES"
+  | "MESSAGES"
+  | "REVISIONS"
+  | "REPORTS"
+  | "MEETINGS"
+  | "CAMPAIGNS"
+  | "CREATIVES"
+  | "OPTIMIZATION"
+  | "INSIGHTS"
+  | "CONTENT"
+  | "PUBLISHING"
+  | "GROWTH_ACTIONS"
+  | "SUPPORT"
+  | "SEO";
 const DEFAULT_VIEW_TAB: WorkspaceViewTab = "OVERVIEW";
-const WORKSPACE_TABS: WorkspaceViewTab[] = ["OVERVIEW", "TASKS", "FILES", "MESSAGES", "REVISIONS", "REPORTS", "MEETINGS"];
+const ALL_WORKSPACE_TABS: WorkspaceViewTab[] = [
+  "OVERVIEW",
+  "ROADMAP",
+  "TASKS",
+  "FILES",
+  "MESSAGES",
+  "REVISIONS",
+  "REPORTS",
+  "MEETINGS",
+  "CAMPAIGNS",
+  "CREATIVES",
+  "OPTIMIZATION",
+  "INSIGHTS",
+  "CONTENT",
+  "PUBLISHING",
+  "GROWTH_ACTIONS",
+  "SUPPORT",
+  "SEO",
+];
+const SERVICE_TASK_FOCUS_TABS: WorkspaceViewTab[] = [
+  "CAMPAIGNS",
+  "CREATIVES",
+  "OPTIMIZATION",
+  "INSIGHTS",
+  "CONTENT",
+  "PUBLISHING",
+  "GROWTH_ACTIONS",
+  "SUPPORT",
+  "SEO",
+];
 type EmployeePanelTargetTab =
   | "GOREVLERIM"
   | "FRONTEND"
@@ -100,7 +147,54 @@ type EmployeePanelTargetTab =
   | "BUGLAR"
   | "REVIZYONLAR"
   | "TEST_YAYIN"
-  | "UI_TASARIMLAR";
+  | "UI_TASARIMLAR"
+  | "ADS_CAMPAIGNS"
+  | "ADS_CREATIVES"
+  | "ADS_OPTIMIZATION"
+  | "ADS_REPORTS"
+  | "ADS_APPROVALS"
+  | "SOCIAL_CALENDAR"
+  | "SOCIAL_PUBLISHING"
+  | "SOCIAL_CREATIVES"
+  | "SOCIAL_REPORTS"
+  | "GROWTH_STRATEGY"
+  | "GROWTH_RECOMMENDATIONS"
+  | "GROWTH_REPORTS"
+  | "SUPPORT_TICKET"
+  | "SEO_AUDIT";
+
+type ServiceWorkspaceKind =
+  | "WEB_DELIVERY"
+  | "PAID_ADS"
+  | "SOCIAL_CONTENT"
+  | "GROWTH"
+  | "DESIGN"
+  | "SUPPORT"
+  | "SEO"
+  | "GENERAL";
+
+type ServiceWorkspaceProfile = {
+  kind: ServiceWorkspaceKind;
+  label: string;
+  description: string;
+  defaultTab: WorkspaceViewTab;
+  tabs: WorkspaceViewTab[];
+  taskTargetTabs: EmployeePanelTargetTab[];
+  referenceLabels?: {
+    campaignRef: string;
+    adSetRef: string;
+    adRef: string;
+  };
+};
+
+type TaskTargetPreset = {
+  type: TaskType;
+  workstream: TaskWorkstream;
+  status?: TaskStatus;
+  priority?: TaskPriority;
+  approvalRequired?: boolean;
+  approvalType?: TaskApprovalType;
+};
 
 const TASK_TARGET_TAB_LABELS: Record<EmployeePanelTargetTab, string> = {
   GOREVLERIM: "Görevlerim",
@@ -110,9 +204,23 @@ const TASK_TARGET_TAB_LABELS: Record<EmployeePanelTargetTab, string> = {
   REVIZYONLAR: "Revizyonlar",
   TEST_YAYIN: "Test & Yayın",
   UI_TASARIMLAR: "UI Tasarımları",
+  ADS_CAMPAIGNS: "Reklam Kampanyaları",
+  ADS_CREATIVES: "Reklam Kreatifleri",
+  ADS_OPTIMIZATION: "Optimizasyon",
+  ADS_REPORTS: "Reklam Raporları",
+  ADS_APPROVALS: "Onay Talepleri",
+  SOCIAL_CALENDAR: "İçerik Takvimi",
+  SOCIAL_PUBLISHING: "Yayın Akışı",
+  SOCIAL_CREATIVES: "Sosyal Kreatifler",
+  SOCIAL_REPORTS: "Sosyal Raporlar",
+  GROWTH_STRATEGY: "Growth Strateji",
+  GROWTH_RECOMMENDATIONS: "Öneriler",
+  GROWTH_REPORTS: "Growth Raporları",
+  SUPPORT_TICKET: "Destek Talepleri",
+  SEO_AUDIT: "SEO Audit",
 };
 
-const TASK_TARGET_TAB_PRESETS: Record<EmployeePanelTargetTab, { type: TaskType; workstream: TaskWorkstream }> = {
+const TASK_TARGET_TAB_PRESETS: Record<EmployeePanelTargetTab, TaskTargetPreset> = {
   GOREVLERIM: { type: "FEATURE", workstream: "FULLSTACK" },
   FRONTEND: { type: "FEATURE", workstream: "FRONTEND" },
   BACKEND_API: { type: "FEATURE", workstream: "BACKEND" },
@@ -120,6 +228,20 @@ const TASK_TARGET_TAB_PRESETS: Record<EmployeePanelTargetTab, { type: TaskType; 
   REVIZYONLAR: { type: "REVISION", workstream: "UI_INTEGRATION" },
   TEST_YAYIN: { type: "DEPLOYMENT", workstream: "DEVOPS" },
   UI_TASARIMLAR: { type: "FEATURE", workstream: "UI_INTEGRATION" },
+  ADS_CAMPAIGNS: { type: "FEATURE", workstream: "FULLSTACK" },
+  ADS_CREATIVES: { type: "FEATURE", workstream: "UI_INTEGRATION" },
+  ADS_OPTIMIZATION: { type: "FEATURE", workstream: "BACKEND" },
+  ADS_REPORTS: { type: "QA", workstream: "QA" },
+  ADS_APPROVALS: { type: "REVISION", workstream: "FULLSTACK", status: "REVIEW", priority: "HIGH", approvalRequired: true },
+  SOCIAL_CALENDAR: { type: "FEATURE", workstream: "FULLSTACK" },
+  SOCIAL_PUBLISHING: { type: "DEPLOYMENT", workstream: "FULLSTACK" },
+  SOCIAL_CREATIVES: { type: "FEATURE", workstream: "UI_INTEGRATION" },
+  SOCIAL_REPORTS: { type: "QA", workstream: "QA" },
+  GROWTH_STRATEGY: { type: "FEATURE", workstream: "FULLSTACK" },
+  GROWTH_RECOMMENDATIONS: { type: "FEATURE", workstream: "FULLSTACK" },
+  GROWTH_REPORTS: { type: "QA", workstream: "QA" },
+  SUPPORT_TICKET: { type: "MAINTENANCE", workstream: "FULLSTACK" },
+  SEO_AUDIT: { type: "QA", workstream: "QA" },
 };
 
 const TASK_PRIORITY_OPTIONS = ["LOW", "MEDIUM", "HIGH", "URGENT"] as const;
@@ -127,13 +249,49 @@ type TaskPriority = (typeof TASK_PRIORITY_OPTIONS)[number];
 const SPRINT_STATUS_OPTIONS: DeliverySprintStatus[] = ["PLANNED", "ACTIVE", "COMPLETED", "CANCELLED"];
 
 const ASSIGNEE_ROLE_TARGET_TABS: Partial<Record<string, EmployeePanelTargetTab[]>> = {
-  DESIGNER: ["UI_TASARIMLAR", "REVIZYONLAR", "GOREVLERIM"],
-  DEVELOPER: ["FRONTEND", "BACKEND_API", "BUGLAR", "TEST_YAYIN", "GOREVLERIM"],
-  PROJECT_MANAGER: ["GOREVLERIM", "REVIZYONLAR"],
-  PERFORMANCE_SPECIALIST: ["GOREVLERIM", "TEST_YAYIN"],
-  SOCIAL_MEDIA_SPECIALIST: ["GOREVLERIM", "REVIZYONLAR"],
-  SUPPORT_SPECIALIST: ["GOREVLERIM", "BUGLAR", "TEST_YAYIN"],
-  SEO_SPECIALIST: ["GOREVLERIM", "BUGLAR"],
+  DESIGNER: [
+    "UI_TASARIMLAR",
+    "REVIZYONLAR",
+    "ADS_CREATIVES",
+    "ADS_APPROVALS",
+    "SOCIAL_CREATIVES",
+    "SOCIAL_CALENDAR",
+    "GOREVLERIM",
+  ],
+  DEVELOPER: [
+    "FRONTEND",
+    "BACKEND_API",
+    "BUGLAR",
+    "TEST_YAYIN",
+    "ADS_OPTIMIZATION",
+    "SUPPORT_TICKET",
+    "GOREVLERIM",
+  ],
+  PROJECT_MANAGER: [
+    "GOREVLERIM",
+    "REVIZYONLAR",
+    "GROWTH_STRATEGY",
+    "GROWTH_RECOMMENDATIONS",
+    "GROWTH_REPORTS",
+  ],
+  PERFORMANCE_SPECIALIST: [
+    "ADS_CAMPAIGNS",
+    "ADS_OPTIMIZATION",
+    "ADS_REPORTS",
+    "ADS_APPROVALS",
+    "GOREVLERIM",
+    "TEST_YAYIN",
+  ],
+  SOCIAL_MEDIA_SPECIALIST: [
+    "SOCIAL_CALENDAR",
+    "SOCIAL_PUBLISHING",
+    "SOCIAL_CREATIVES",
+    "SOCIAL_REPORTS",
+    "GOREVLERIM",
+    "REVIZYONLAR",
+  ],
+  SUPPORT_SPECIALIST: ["SUPPORT_TICKET", "BUGLAR", "TEST_YAYIN", "GOREVLERIM"],
+  SEO_SPECIALIST: ["SEO_AUDIT", "ADS_REPORTS", "BUGLAR", "GOREVLERIM"],
   CRM_SPECIALIST: ["GOREVLERIM"],
 };
 
@@ -150,13 +308,91 @@ const ASSIGNEE_ROLE_LABELS: Partial<Record<string, string>> = {
 
 const DESIGNER_ALLOWED_TASK_TYPES: TaskType[] = ["FEATURE", "REVISION"];
 
+const WEB_DELIVERY_TABS: WorkspaceViewTab[] = [
+  "OVERVIEW",
+  "ROADMAP",
+  "TASKS",
+  "FILES",
+  "MESSAGES",
+  "REVISIONS",
+  "REPORTS",
+  "MEETINGS",
+];
+const CODE_DELIVERY_TABS: WorkspaceViewTab[] = ["OVERVIEW", "ROADMAP", "TASKS", "FILES"];
+const PAID_ADS_TABS: WorkspaceViewTab[] = [
+  "OVERVIEW",
+  "CAMPAIGNS",
+  "OPTIMIZATION",
+  "CREATIVES",
+  "INSIGHTS",
+  "REPORTS",
+  "TASKS",
+  "FILES",
+];
+const SOCIAL_CONTENT_TABS: WorkspaceViewTab[] = [
+  "OVERVIEW",
+  "CONTENT",
+  "PUBLISHING",
+  "CREATIVES",
+  "INSIGHTS",
+  "REPORTS",
+  "TASKS",
+  "FILES",
+];
+const GROWTH_TABS: WorkspaceViewTab[] = [
+  "OVERVIEW",
+  "GROWTH_ACTIONS",
+  "INSIGHTS",
+  "REPORTS",
+  "TASKS",
+  "FILES",
+];
+const DESIGN_TABS: WorkspaceViewTab[] = ["OVERVIEW", "CREATIVES", "REVISIONS", "TASKS", "FILES"];
+const SUPPORT_TABS: WorkspaceViewTab[] = ["OVERVIEW", "SUPPORT", "TASKS", "FILES"];
+const SEO_TABS: WorkspaceViewTab[] = ["OVERVIEW", "SEO", "INSIGHTS", "REPORTS", "TASKS", "FILES"];
+const GENERAL_TABS: WorkspaceViewTab[] = ["OVERVIEW", "TASKS", "FILES"];
+
+const WEB_DELIVERY_TARGETS: EmployeePanelTargetTab[] = [
+  "GOREVLERIM",
+  "FRONTEND",
+  "BACKEND_API",
+  "BUGLAR",
+  "REVIZYONLAR",
+  "TEST_YAYIN",
+  "UI_TASARIMLAR",
+];
+const PAID_ADS_TARGETS: EmployeePanelTargetTab[] = [
+  "ADS_CAMPAIGNS",
+  "ADS_OPTIMIZATION",
+  "ADS_CREATIVES",
+  "ADS_REPORTS",
+  "ADS_APPROVALS",
+  "BUGLAR",
+  "GOREVLERIM",
+];
+const SOCIAL_TARGETS: EmployeePanelTargetTab[] = [
+  "SOCIAL_CALENDAR",
+  "SOCIAL_PUBLISHING",
+  "SOCIAL_CREATIVES",
+  "SOCIAL_REPORTS",
+  "REVIZYONLAR",
+  "GOREVLERIM",
+];
+const GROWTH_TARGETS: EmployeePanelTargetTab[] = [
+  "GROWTH_STRATEGY",
+  "GROWTH_RECOMMENDATIONS",
+  "GROWTH_REPORTS",
+  "GOREVLERIM",
+];
+
 export function ProjectManagerServiceWorkspace() {
   const dispatch = useAppDispatch();
   const accessToken = useAppSelector(selectAccessToken);
   const role = useAppSelector(selectCurrentEmployeeRole);
   const { clientId, serviceKey } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialTab = parseWorkspaceViewTab(searchParams.get("tab"));
+  const serviceProfile = useMemo(() => getServiceWorkspaceProfile(serviceKey), [serviceKey]);
+  const initialTab = parseWorkspaceViewTab(searchParams.get("tab"), serviceProfile);
   const [viewTab, setViewTab] = useState<WorkspaceViewTab>(initialTab);
   const [messageBody, setMessageBody] = useState("");
   const [replyParentId, setReplyParentId] = useState<string | null>(null);
@@ -172,6 +408,9 @@ export function ProjectManagerServiceWorkspace() {
   const [taskPriority, setTaskPriority] = useState<TaskPriority>("MEDIUM");
   const [taskSeverity, setTaskSeverity] = useState<TaskSeverity>("MEDIUM");
   const [taskEnvironment, setTaskEnvironment] = useState<TaskEnvironment>("STAGING");
+  const [taskCampaignRef, setTaskCampaignRef] = useState("");
+  const [taskAdSetRef, setTaskAdSetRef] = useState("");
+  const [taskAdRef, setTaskAdRef] = useState("");
   const [taskDueDate, setTaskDueDate] = useState("");
   const [sprintName, setSprintName] = useState("");
   const [sprintGoal, setSprintGoal] = useState("");
@@ -202,23 +441,25 @@ export function ProjectManagerServiceWorkspace() {
     () => projects.find((item) => normalizeServiceKey(item.serviceKey) === normalizeServiceKey(serviceKey)),
     [projects, serviceKey],
   );
+  const workspaceTabs = serviceProfile.tabs;
+  const shouldUseWebAppWorkspace = isWebAppWorkspaceService(project?.serviceKey ?? serviceKey);
 
   const workspaceTabKey = useMemo(() => mapServiceViewTabToWorkspaceTab(viewTab), [viewTab]);
   const { data: workspaceMessages = [] } = useGetProjectWorkspaceMessagesQuery(
     { projectId: project?.id ?? "", tabKey: workspaceTabKey },
-    { skip: !project || !isWebAppLikeService(serviceKey) },
+    { skip: !project || !shouldUseWebAppWorkspace },
   );
   const { data: revisions = [] } = useGetProjectWorkspaceRevisionsQuery(
     { projectId: project?.id ?? "" },
-    { skip: !project },
+    { skip: !project || !shouldUseWebAppWorkspace },
   );
   const { data: reports = [] } = useGetProjectWorkspaceReportsQuery(
     { projectId: project?.id ?? "" },
-    { skip: !project },
+    { skip: !project || !shouldUseWebAppWorkspace },
   );
   const { data: meetings = [] } = useGetProjectWorkspaceMeetingRequestsQuery(
     { projectId: project?.id ?? "" },
-    { skip: !project },
+    { skip: !project || !shouldUseWebAppWorkspace },
   );
   const { data: filesResponse } = useGetProjectFilesQuery(
     { projectId: project?.id ?? "", limit: 20 },
@@ -276,8 +517,8 @@ export function ProjectManagerServiceWorkspace() {
     [assigneeCandidates, taskAssigneeId],
   );
   const targetTabOptions = useMemo(
-    () => getTargetTabsByAssigneeRole(selectedAssigneeRole),
-    [selectedAssigneeRole],
+    () => getTargetTabsByContext(selectedAssigneeRole, serviceProfile),
+    [selectedAssigneeRole, serviceProfile],
   );
   const taskTypeOptions = useMemo(
     () =>
@@ -293,7 +534,7 @@ export function ProjectManagerServiceWorkspace() {
   );
 
   useEffect(() => {
-    if (!project?.id || !accessToken) {
+    if (!project?.id || !accessToken || !shouldUseWebAppWorkspace) {
       return;
     }
     const socket = createWorkspaceSocket(accessToken);
@@ -358,7 +599,15 @@ export function ProjectManagerServiceWorkspace() {
       socket.off("workspace:update", onWorkspaceUpdate);
       socket.disconnect();
     };
-  }, [accessToken, dispatch, project?.id, workspaceTabKey]);
+  }, [accessToken, dispatch, project?.id, shouldUseWebAppWorkspace, workspaceTabKey]);
+
+  useEffect(() => {
+    if (workspaceTabs.includes(viewTab)) {
+      return;
+    }
+    setViewTab(serviceProfile.defaultTab);
+    setSearchParams({ tab: serviceProfile.defaultTab });
+  }, [serviceProfile.defaultTab, setSearchParams, viewTab, workspaceTabs]);
 
   useEffect(() => {
     if (sprints.length === 0) {
@@ -401,13 +650,16 @@ export function ProjectManagerServiceWorkspace() {
   }, [tasks]);
 
   useEffect(() => {
-    const preset = TASK_TARGET_TAB_PRESETS[taskTargetTab];
+    const preset = resolveTaskTargetPreset(taskTargetTab, serviceKey);
     setTaskType(preset.type);
     setTaskWorkstream(preset.workstream);
+    if (preset.priority) {
+      setTaskPriority(preset.priority);
+    }
     if (preset.type === "BUG") {
       setTaskPriority((prev) => (prev === "LOW" ? "MEDIUM" : prev));
     }
-  }, [taskTargetTab]);
+  }, [serviceKey, taskTargetTab]);
 
   useEffect(() => {
     if (targetTabOptions.length === 0) {
@@ -479,17 +731,21 @@ export function ProjectManagerServiceWorkspace() {
     0,
   );
   const workspaceProgress = totalTodoCount > 0 ? Math.round((completedTodoCount / totalTodoCount) * 100) : 0;
+  const workspaceReports = shouldUseWebAppWorkspace ? reports : [];
+  const workspaceMeetings = shouldUseWebAppWorkspace ? meetings : [];
+  const workspaceRevisions = shouldUseWebAppWorkspace ? revisions : [];
   const latestTask = tasks[0] ?? null;
-  const latestRevision = revisions[0] ?? null;
-  const latestReport = reports[0] ?? null;
-  const latestMeeting = meetings[0] ?? null;
+  const latestRevision = workspaceRevisions[0] ?? null;
+  const latestReport = workspaceReports[0] ?? null;
+  const latestMeeting = workspaceMeetings[0] ?? null;
   const recentFile = files[0] ?? null;
   const roadmapUpcomingCount =
     sprints.filter((sprint) => sprint.status === "PLANNED" || sprint.status === "ACTIVE").length +
     releases.filter((release) => release.status === "PLANNED" || release.status === "TESTING" || release.status === "READY").length;
+  const referenceLabels = serviceProfile.referenceLabels;
 
   const handleViewTabChange = (nextTab: string) => {
-    const parsedTab = parseWorkspaceViewTab(nextTab);
+    const parsedTab = parseWorkspaceViewTab(nextTab, serviceProfile);
     setViewTab(parsedTab);
     setSearchParams({ tab: parsedTab });
   };
@@ -595,6 +851,7 @@ export function ProjectManagerServiceWorkspace() {
     }
     try {
       setActionError(null);
+      const targetPreset = resolveTaskTargetPreset(taskTargetTab, serviceKey);
       const normalizedTask = normalizeTaskByAssigneeRole({
         assigneeRole: selectedAssigneeRole,
         type: taskType,
@@ -604,8 +861,8 @@ export function ProjectManagerServiceWorkspace() {
         projectId: project.id,
         title: taskTitle.trim(),
         description: taskDescription.trim().length > 0 ? taskDescription.trim() : null,
-        status: "TODO",
-        priority: taskPriority,
+        status: targetPreset.status ?? "TODO",
+        priority: targetPreset.priority ?? taskPriority,
         type: normalizedTask.type,
         workstream: normalizedTask.workstream,
         severity: normalizedTask.type === "BUG" ? taskSeverity : null,
@@ -613,6 +870,12 @@ export function ProjectManagerServiceWorkspace() {
         assigneeUserId: taskAssigneeId || null,
         sprintId: taskSprintId,
         dueDate: taskDueDate ? new Date(taskDueDate).toISOString() : null,
+        approvalRequired: targetPreset.approvalRequired,
+        approvalType: targetPreset.approvalType ?? null,
+        approvalStatus: targetPreset.approvalRequired ? "PENDING" : null,
+        campaignRef: taskCampaignRef.trim().length > 0 ? taskCampaignRef.trim() : null,
+        adSetRef: taskAdSetRef.trim().length > 0 ? taskAdSetRef.trim() : null,
+        adRef: taskAdRef.trim().length > 0 ? taskAdRef.trim() : null,
       }).unwrap();
 
       const checklistLines = parseChecklistLines(taskTodoDraft);
@@ -628,6 +891,9 @@ export function ProjectManagerServiceWorkspace() {
       setTaskAssigneeId("");
       setTaskTodoDraft("");
       setTaskDueDate("");
+      setTaskCampaignRef("");
+      setTaskAdSetRef("");
+      setTaskAdRef("");
     } catch (mutationError) {
       setActionError(extractApiErrorMessage(mutationError, "Görev oluşturulamadı."));
     }
@@ -862,7 +1128,7 @@ export function ProjectManagerServiceWorkspace() {
             <div>
               <h1 className="text-2xl font-semibold text-white sm:text-3xl">{project.name}</h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-[#A0A0A0]">
-                Proje yöneticisi workspace: görevler, teslimatlar ve müşteri iletişimi tek akışta yönetilir.
+                {serviceProfile.description}
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
@@ -938,13 +1204,35 @@ export function ProjectManagerServiceWorkspace() {
             </select>
             {selectedAssigneeRole ? (
               <p className="text-xs text-[#9AA0AA]">
-                Atanan rol: <span className="text-[#D8D8D8]">{getAssigneeRoleLabel(selectedAssigneeRole)}</span>. Sekme seçenekleri role göre filtrelendi.
+                Atanan rol: <span className="text-[#D8D8D8]">{getAssigneeRoleLabel(selectedAssigneeRole)}</span>. Sekme seçenekleri rol ve hizmete göre filtrelendi.
               </p>
             ) : (
               <p className="text-xs text-[#9AA0AA]">
-                Çalışan seçmezseniz genel sekme havuzu kullanılır.
+                Çalışan seçmezseniz {serviceProfile.label} hizmetine özel sekme havuzu kullanılır.
               </p>
             )}
+            {referenceLabels ? (
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Input
+                  value={taskCampaignRef}
+                  onChange={(event) => setTaskCampaignRef(event.target.value)}
+                  placeholder={referenceLabels.campaignRef}
+                  className="bg-black/20"
+                />
+                <Input
+                  value={taskAdSetRef}
+                  onChange={(event) => setTaskAdSetRef(event.target.value)}
+                  placeholder={referenceLabels.adSetRef}
+                  className="bg-black/20"
+                />
+                <Input
+                  value={taskAdRef}
+                  onChange={(event) => setTaskAdRef(event.target.value)}
+                  placeholder={referenceLabels.adRef}
+                  className="bg-black/20"
+                />
+              </div>
+            ) : null}
             <div className="grid gap-3 sm:grid-cols-2">
               <select
                 className="h-10 w-full rounded-md border border-white/10 bg-black/30 px-3 text-sm text-white outline-none"
@@ -1201,13 +1489,13 @@ export function ProjectManagerServiceWorkspace() {
 
       <Tabs value={viewTab} onValueChange={handleViewTabChange} className="gap-4">
         <TabsList className="h-auto w-full flex-wrap justify-start gap-2 rounded-2xl border border-white/8 bg-[#141414] p-2">
-          {WORKSPACE_TABS.map((tab) => (
+          {workspaceTabs.map((tab) => (
             <TabsTrigger
               key={tab}
               value={tab}
               className="flex-none rounded-xl border border-transparent px-4 py-2 data-[state=active]:border-white/10 data-[state=active]:bg-white data-[state=active]:text-black"
             >
-              {getViewTabLabel(tab)}
+              {getViewTabLabel(tab, serviceProfile)}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -1261,6 +1549,15 @@ export function ProjectManagerServiceWorkspace() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="ROADMAP">
+          <RoadmapTab
+            sprints={sprints}
+            releases={releases}
+            tasksBySprint={tasksBySprint}
+            onOpenSprintTaskPlanner={handleOpenSprintTaskPlanner}
+          />
         </TabsContent>
 
         <TabsContent value="TASKS">
@@ -1443,6 +1740,16 @@ export function ProjectManagerServiceWorkspace() {
           </Card>
         </TabsContent>
 
+        {SERVICE_TASK_FOCUS_TABS.map((tab) => (
+          <TabsContent key={tab} value={tab}>
+            <ServiceTaskFocusTab
+              tab={tab}
+              profile={serviceProfile}
+              tasks={getTasksForServiceTab(tasks, tab, serviceProfile)}
+            />
+          </TabsContent>
+        ))}
+
         <TabsContent value="FILES">
           <Card className="border-white/[0.06] bg-[#1A1A1A]">
             <CardHeader>
@@ -1529,7 +1836,8 @@ export function ProjectManagerServiceWorkspace() {
         </TabsContent>
 
         <TabsContent value="REVISIONS">
-          <div className="grid gap-4 lg:grid-cols-[minmax(320px,0.8fr)_minmax(0,1.2fr)]">
+          {shouldUseWebAppWorkspace ? (
+            <div className="grid gap-4 lg:grid-cols-[minmax(320px,0.8fr)_minmax(0,1.2fr)]">
             <Card className="border-white/[0.06] bg-[#1A1A1A]">
               <CardHeader>
                 <CardTitle className="text-white">Revizyon Oluştur</CardTitle>
@@ -1573,7 +1881,7 @@ export function ProjectManagerServiceWorkspace() {
                 <CardDescription>Açık veya çözülmüş revizyon talepleri.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                {revisions.map((revision) => {
+                {workspaceRevisions.map((revision) => {
                   const statusOptions = getWorkspaceRevisionTransitionsForEmployee(revision.status);
                   const assigneeDraft =
                     revisionAssigneeDrafts[revision.id] ??
@@ -1671,34 +1979,49 @@ export function ProjectManagerServiceWorkspace() {
                     </div>
                   );
                 })}
-                {revisions.length === 0 ? <EmptyHint text="Revizyon bulunmuyor." /> : null}
+                {workspaceRevisions.length === 0 ? <EmptyHint text="Revizyon bulunmuyor." /> : null}
               </CardContent>
             </Card>
-          </div>
+            </div>
+          ) : (
+            <ServiceTaskFocusTab
+              tab="REVISIONS"
+              profile={serviceProfile}
+              tasks={getTasksForServiceTab(tasks, "REVISIONS", serviceProfile)}
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="REPORTS">
-          <SectionCard
-            title="Raporlar"
-            description="Paylaşılan haftalık rapor özetleri."
-            items={reports}
-            renderItem={(report) => (
-              <EntityCard
-                title={report.summary}
-                meta={formatDate(report.weekStartDate)}
-                supporting={report.plannedNext ?? report.accomplishments ?? "Detay paylaşılmadı."}
-                badge={report.publishedAt ? "Yayınlandı" : "Taslak"}
-              />
-            )}
-            emptyText="Rapor bulunmuyor."
-          />
+          {shouldUseWebAppWorkspace ? (
+            <SectionCard
+              title="Raporlar"
+              description="Paylaşılan haftalık rapor özetleri."
+              items={workspaceReports}
+              renderItem={(report) => (
+                <EntityCard
+                  title={report.summary}
+                  meta={formatDate(report.weekStartDate)}
+                  supporting={report.plannedNext ?? report.accomplishments ?? "Detay paylaşılmadı."}
+                  badge={report.publishedAt ? "Yayınlandı" : "Taslak"}
+                />
+              )}
+              emptyText="Rapor bulunmuyor."
+            />
+          ) : (
+            <ServiceTaskFocusTab
+              tab="REPORTS"
+              profile={serviceProfile}
+              tasks={getTasksForServiceTab(tasks, "REPORTS", serviceProfile)}
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="MEETINGS">
           <SectionCard
             title="Toplantılar"
             description="Son toplantı talepleri ve planlanan zamanlar."
-            items={meetings}
+            items={workspaceMeetings}
             renderItem={(meeting) => (
               <EntityCard
                 title={meeting.title}
@@ -1733,11 +2056,22 @@ function parseChecklistLines(value: string): string[] {
     .filter((line) => line.length > 0);
 }
 
-function getTargetTabsByAssigneeRole(role?: string | null): EmployeePanelTargetTab[] {
+function getTargetTabsByContext(
+  role: string | null | undefined,
+  profile: ServiceWorkspaceProfile,
+): EmployeePanelTargetTab[] {
+  const serviceTabs = profile.taskTargetTabs;
   if (!role) {
-    return Object.keys(TASK_TARGET_TAB_LABELS) as EmployeePanelTargetTab[];
+    return serviceTabs;
   }
-  return ASSIGNEE_ROLE_TARGET_TABS[role] ?? (Object.keys(TASK_TARGET_TAB_LABELS) as EmployeePanelTargetTab[]);
+
+  const roleTabs = ASSIGNEE_ROLE_TARGET_TABS[role];
+  if (!roleTabs) {
+    return serviceTabs;
+  }
+
+  const scopedTabs = serviceTabs.filter((tab) => roleTabs.includes(tab));
+  return scopedTabs.length > 0 ? scopedTabs : serviceTabs;
 }
 
 function getAssigneeRoleLabel(role: string): string {
@@ -1761,6 +2095,35 @@ function normalizeTaskByAssigneeRole({
     type: type === "REVISION" ? "REVISION" : "FEATURE",
     workstream: "UI_INTEGRATION",
   };
+}
+
+function resolveTaskTargetPreset(
+  targetTab: EmployeePanelTargetTab,
+  serviceKey?: string | null,
+): TaskTargetPreset {
+  const preset = TASK_TARGET_TAB_PRESETS[targetTab];
+  if (!preset.approvalRequired) {
+    return preset;
+  }
+
+  const approvalType = resolveApprovalType(targetTab, serviceKey);
+  return approvalType ? { ...preset, approvalType } : preset;
+}
+
+function resolveApprovalType(
+  targetTab: EmployeePanelTargetTab,
+  serviceKey?: string | null,
+): TaskApprovalType | null {
+  const normalized = normalizeServiceKey(serviceKey);
+  if (targetTab === "ADS_APPROVALS") {
+    if (normalized === "meta-ads") return "META_ADS_CAMPAIGN_APPROVAL";
+    if (normalized === "tiktok-ads") return "TIKTOK_ADS_CAMPAIGN_APPROVAL";
+    if (normalized === "amazon-ads") return "AMAZON_ADS_CAMPAIGN_APPROVAL";
+  }
+  if (targetTab === "SOCIAL_CALENDAR" || targetTab === "SOCIAL_PUBLISHING") {
+    return "SOCIAL_MEDIA_CALENDAR_APPROVAL";
+  }
+  return null;
 }
 
 function getWorkspaceRevisionTransitionsForEmployee(
@@ -1830,6 +2193,152 @@ function ActionPanel({
       <CardFooter className="border-t border-white/6 pt-4 text-xs text-[#7D7D7D]">{footer}</CardFooter>
     </Card>
   );
+}
+
+function RoadmapTab({
+  sprints,
+  releases,
+  tasksBySprint,
+  onOpenSprintTaskPlanner,
+}: {
+  sprints: DeliverySprint[];
+  releases: DeliveryRelease[];
+  tasksBySprint: Map<string, Task[]>;
+  onOpenSprintTaskPlanner: (sprintId: string) => void;
+}) {
+  return (
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+      <SectionCard
+        title="Sprint Roadmap"
+        description="Hizmete bağlı sprintler ve sprint içindeki görev dağılımı."
+        items={sprints}
+        renderItem={(sprint) => (
+          <div key={sprint.id} className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-white">{sprint.name}</p>
+                <p className="mt-1 text-xs text-[#A0A0A0]">
+                  {formatDate(sprint.startDate)} → {formatDate(sprint.endDate)}
+                </p>
+              </div>
+              <Badge variant="outline" className="border-white/10 bg-white/5 text-[#D8D8D8]">
+                {sprint.status} · %{sprint.progressPercent}
+              </Badge>
+            </div>
+            <p className="mt-3 text-sm leading-6 text-[#A0A0A0]">
+              {(tasksBySprint.get(sprint.id) ?? []).length} görev bu sprintte planlandı.
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="mt-3"
+              onClick={() => onOpenSprintTaskPlanner(sprint.id)}
+            >
+              Sprint Görevlerini Düzenle
+            </Button>
+          </div>
+        )}
+        emptyText="Roadmap sprinti bulunmuyor."
+      />
+      <SectionCard
+        title="Release / Milestone"
+        description="Planlanan çıkışlar, kampanya milestone'ları veya operasyon teslimleri."
+        items={releases}
+        renderItem={(release) => (
+          <EntityCard
+            key={release.id}
+            title={release.title}
+            meta={release.version ?? release.environment}
+            supporting={release.releaseNotes ?? "Teslim notu paylaşılmadı."}
+            badge={release.status}
+          />
+        )}
+        emptyText="Release veya milestone bulunmuyor."
+      />
+    </div>
+  );
+}
+
+function ServiceTaskFocusTab({
+  tab,
+  profile,
+  tasks,
+}: {
+  tab: WorkspaceViewTab;
+  profile: ServiceWorkspaceProfile;
+  tasks: Task[];
+}) {
+  return (
+    <SectionCard
+      title={getViewTabLabel(tab, profile)}
+      description={getServiceTaskTabDescription(tab, profile)}
+      items={tasks}
+      renderItem={(task) => (
+        <EntityCard
+          key={task.id}
+          title={task.title}
+          meta={`${getTaskTypeLabel(task.type)} · ${getTaskWorkstreamLabel(task.workstream)}`}
+          supporting={task.description ?? "Açıklama girilmedi."}
+          badge={getTaskStatusLabel(task.status)}
+        />
+      )}
+      emptyText={`${getViewTabLabel(tab, profile)} için görev bulunmuyor.`}
+    />
+  );
+}
+
+function getServiceTaskTabDescription(tab: WorkspaceViewTab, profile: ServiceWorkspaceProfile): string {
+  if (tab === "CAMPAIGNS") return `${profile.label} kampanya yönetimi ve kurulum görevleri.`;
+  if (tab === "CREATIVES") return `${profile.label} kreatif, tasarım ve asset üretim görevleri.`;
+  if (tab === "OPTIMIZATION") return `${profile.label} optimizasyon ve teknik takip görevleri.`;
+  if (tab === "INSIGHTS") return `${profile.label} analiz, insight ve kontrol görevleri.`;
+  if (tab === "CONTENT") return "İçerik takvimi ve brief görevleri.";
+  if (tab === "PUBLISHING") return "Planlama, yayın ve dağıtım görevleri.";
+  if (tab === "GROWTH_ACTIONS") return "Growth strateji, aksiyon ve öneri takip görevleri.";
+  if (tab === "SUPPORT") return "Destek, bakım ve incident takip görevleri.";
+  if (tab === "SEO") return "Teknik SEO, audit ve raporlama görevleri.";
+  if (tab === "REVISIONS") return `${profile.label} revizyon görevleri.`;
+  if (tab === "REPORTS") return `${profile.label} rapor hazırlık ve kalite kontrol görevleri.`;
+  return `${profile.label} görevleri.`;
+}
+
+function getTasksForServiceTab(
+  tasks: Task[],
+  tab: WorkspaceViewTab,
+  profile: ServiceWorkspaceProfile,
+): Task[] {
+  if (tab === "CREATIVES") {
+    return tasks.filter((task) => task.workstream === "UI_INTEGRATION" || task.type === "REVISION");
+  }
+  if (tab === "REPORTS" || tab === "INSIGHTS") {
+    return tasks.filter((task) => task.type === "QA" || task.workstream === "QA");
+  }
+  if (tab === "REVISIONS") {
+    return tasks.filter((task) => task.type === "REVISION");
+  }
+  if (tab === "OPTIMIZATION") {
+    return tasks.filter((task) => task.workstream === "BACKEND" || task.workstream === "FULLSTACK");
+  }
+  if (tab === "SUPPORT") {
+    return tasks.filter((task) => task.type === "BUG" || task.type === "MAINTENANCE");
+  }
+  if (tab === "SEO") {
+    return tasks.filter((task) => task.workstream === "QA" || task.type === "QA" || task.type === "BUG");
+  }
+  if (tab === "PUBLISHING") {
+    return tasks.filter((task) => task.type === "DEPLOYMENT");
+  }
+  if (tab === "GROWTH_ACTIONS") {
+    return tasks.filter((task) => task.type === "FEATURE" || task.type === "QA");
+  }
+  if (tab === "CONTENT") {
+    return tasks.filter((task) => task.workstream === "FULLSTACK" || task.workstream === "UI_INTEGRATION");
+  }
+  if (tab === "CAMPAIGNS" && profile.kind === "PAID_ADS") {
+    return tasks.filter((task) => task.workstream !== "UI_INTEGRATION" && task.type !== "QA");
+  }
+  return tasks;
 }
 
 function TaskCard({
@@ -2378,14 +2887,157 @@ function MessageNode({
   );
 }
 
-function getViewTabLabel(tab: WorkspaceViewTab): string {
+function getServiceWorkspaceProfile(serviceKey?: string | null): ServiceWorkspaceProfile {
+  const normalized = normalizeServiceKey(serviceKey);
+  if (normalized === "web-app") {
+    return {
+      kind: "WEB_DELIVERY",
+      label: "Web App",
+      description: "Web geliştirme operasyonu: roadmap, görevler, revizyonlar, raporlar ve müşteri iletişimi tek akışta yönetilir.",
+      defaultTab: "OVERVIEW",
+      tabs: WEB_DELIVERY_TABS,
+      taskTargetTabs: WEB_DELIVERY_TARGETS,
+      referenceLabels: {
+        campaignRef: "Modül / sayfa",
+        adSetRef: "Bileşen / alan",
+        adRef: "URL / issue ref",
+      },
+    };
+  }
+  if (normalized === "mobile-app" || normalized === "landing-pages") {
+    return {
+      kind: "WEB_DELIVERY",
+      label: normalized === "mobile-app" ? "Mobile App" : "Landing Page",
+      description: "Ürün geliştirme operasyonu: roadmap ve sprint görevleri hizmete özel teknik alanlarla yönetilir.",
+      defaultTab: "OVERVIEW",
+      tabs: CODE_DELIVERY_TABS,
+      taskTargetTabs: WEB_DELIVERY_TARGETS,
+      referenceLabels: {
+        campaignRef: "Modül / ekran",
+        adSetRef: "Bileşen / akış",
+        adRef: "URL / issue ref",
+      },
+    };
+  }
+  if (normalized === "meta-ads" || normalized === "tiktok-ads" || normalized === "amazon-ads" || normalized === "google-ads") {
+    return {
+      kind: "PAID_ADS",
+      label: getServiceDisplayLabel(normalized),
+      description: "Reklam operasyonu: kampanya, optimizasyon, kreatif, insight ve rapor görevleri hizmete özel alanlarla ayrılır.",
+      defaultTab: "OVERVIEW",
+      tabs: PAID_ADS_TABS,
+      taskTargetTabs: PAID_ADS_TARGETS,
+      referenceLabels: {
+        campaignRef: "Campaign ID / adı",
+        adSetRef: "Ad set / grup",
+        adRef: "Ad / kreatif ref",
+      },
+    };
+  }
+  if (normalized === "social-media" || normalized === "media-hub") {
+    return {
+      kind: "SOCIAL_CONTENT",
+      label: getServiceDisplayLabel(normalized),
+      description: "Organik içerik operasyonu: içerik takvimi, yayın akışı, kreatif üretim ve rapor görevleri ayrı sekmelerde yönetilir.",
+      defaultTab: "OVERVIEW",
+      tabs: SOCIAL_CONTENT_TABS,
+      taskTargetTabs: SOCIAL_TARGETS,
+      referenceLabels: {
+        campaignRef: "İçerik serisi / kampanya",
+        adSetRef: "Platform / kanal",
+        adRef: "Post / asset ref",
+      },
+    };
+  }
+  if (normalized === "growth-hub") {
+    return {
+      kind: "GROWTH",
+      label: "Growth & Hub",
+      description: "Growth operasyonu: strateji aksiyonları, öneriler, insight ve rapor görevleri kanal kopyalamadan yönetilir.",
+      defaultTab: "OVERVIEW",
+      tabs: GROWTH_TABS,
+      taskTargetTabs: GROWTH_TARGETS,
+      referenceLabels: {
+        campaignRef: "Growth alanı",
+        adSetRef: "Kanal / segment",
+        adRef: "Hipotez / aksiyon ref",
+      },
+    };
+  }
+  if (normalized === "web-mobile-design") {
+    return {
+      kind: "DESIGN",
+      label: "Web & Mobile Design",
+      description: "Tasarım operasyonu: UI tasarım, kreatif teslim ve revizyon görevleri tasarım odaklı sekmelerde yönetilir.",
+      defaultTab: "OVERVIEW",
+      tabs: DESIGN_TABS,
+      taskTargetTabs: ["UI_TASARIMLAR", "REVIZYONLAR", "GOREVLERIM"],
+      referenceLabels: {
+        campaignRef: "Ekran / akış",
+        adSetRef: "Figma frame",
+        adRef: "Asset / prototype ref",
+      },
+    };
+  }
+  if (normalized === "technical-support") {
+    return {
+      kind: "SUPPORT",
+      label: "Technical Support",
+      description: "Destek operasyonu: bakım, bug, güvenlik ve yayın kontrol görevleri destek kuyruğunda yönetilir.",
+      defaultTab: "OVERVIEW",
+      tabs: SUPPORT_TABS,
+      taskTargetTabs: ["SUPPORT_TICKET", "BUGLAR", "TEST_YAYIN", "GOREVLERIM"],
+      referenceLabels: {
+        campaignRef: "Sistem / modül",
+        adSetRef: "Ortam",
+        adRef: "Ticket / incident ref",
+      },
+    };
+  }
+  if (normalized === "seo-audit") {
+    return {
+      kind: "SEO",
+      label: "SEO Audit",
+      description: "SEO operasyonu: audit, teknik bulgu, insight ve rapor görevleri SEO odaklı sekmelerde yönetilir.",
+      defaultTab: "OVERVIEW",
+      tabs: SEO_TABS,
+      taskTargetTabs: ["SEO_AUDIT", "ADS_REPORTS", "BUGLAR", "GOREVLERIM"],
+      referenceLabels: {
+        campaignRef: "Sayfa / URL grubu",
+        adSetRef: "Keyword / konu",
+        adRef: "Issue / rapor ref",
+      },
+    };
+  }
+
+  return {
+    kind: "GENERAL",
+    label: getServiceDisplayLabel(normalized),
+    description: "Hizmet operasyonu görev, dosya ve takip başlıklarıyla yönetilir.",
+    defaultTab: "OVERVIEW",
+    tabs: GENERAL_TABS,
+    taskTargetTabs: ["GOREVLERIM"],
+  };
+}
+
+function getViewTabLabel(tab: WorkspaceViewTab, profile?: ServiceWorkspaceProfile): string {
   if (tab === "OVERVIEW") return "Genel Bakış";
+  if (tab === "ROADMAP") return "Yol Haritası";
   if (tab === "TASKS") return "Görevler";
   if (tab === "FILES") return "Dosyalar";
   if (tab === "MESSAGES") return "Mesajlar";
   if (tab === "REVISIONS") return "Revizyonlar";
   if (tab === "REPORTS") return "Raporlar";
-  return "Toplantılar";
+  if (tab === "MEETINGS") return "Toplantılar";
+  if (tab === "CAMPAIGNS") return "Kampanyalar";
+  if (tab === "CREATIVES") return profile?.kind === "DESIGN" ? "UI Tasarımlar" : "Kreatifler";
+  if (tab === "OPTIMIZATION") return "Optimizasyon";
+  if (tab === "INSIGHTS") return "Insight";
+  if (tab === "CONTENT") return "İçerik Takvimi";
+  if (tab === "PUBLISHING") return "Yayın Akışı";
+  if (tab === "GROWTH_ACTIONS") return "Growth Aksiyonları";
+  if (tab === "SUPPORT") return "Destek";
+  return "SEO";
 }
 
 function formatDate(value: string): string {
@@ -2406,21 +3058,45 @@ function mapServiceViewTabToWorkspaceTab(tab: WorkspaceViewTab): WorkspaceTabKey
   return "OVERVIEW";
 }
 
-function isWebAppLikeService(serviceKey?: string): boolean {
+function getServiceDisplayLabel(serviceKey: string): string {
+  const labels: Record<string, string> = {
+    "growth-hub": "Growth & Hub",
+    "meta-ads": "Meta Ads",
+    "tiktok-ads": "TikTok Ads",
+    "google-ads": "Google Ads",
+    "amazon-ads": "Amazon Ads",
+    "social-media": "Social Media",
+    "media-hub": "Media Hub",
+    "mobile-app": "Mobile App",
+    "landing-pages": "Landing Pages",
+    "web-mobile-design": "Web & Mobile Design",
+    "technical-support": "Technical Support",
+    "seo-audit": "SEO Audit",
+  };
+  return labels[serviceKey] ?? serviceKey;
+}
+
+function isWebAppWorkspaceService(serviceKey?: string | null): boolean {
   const normalized = normalizeServiceKey(serviceKey);
-  return normalized === "web-app" || normalized === "mobile-app" || normalized === "landing-pages";
+  return normalized === "web-app";
 }
 
 function normalizeServiceKey(value?: string | null): string {
   return (value ?? "").toLowerCase().replace(/_/g, "-").trim();
 }
 
-function parseWorkspaceViewTab(raw: string | null): WorkspaceViewTab {
+function parseWorkspaceViewTab(
+  raw: string | null,
+  profile: ServiceWorkspaceProfile = getServiceWorkspaceProfile(null),
+): WorkspaceViewTab {
   if (!raw) {
-    return DEFAULT_VIEW_TAB;
+    return profile.defaultTab;
   }
   const candidate = raw.toUpperCase() as WorkspaceViewTab;
-  return WORKSPACE_TABS.includes(candidate) ? candidate : DEFAULT_VIEW_TAB;
+  if (!ALL_WORKSPACE_TABS.includes(candidate)) {
+    return profile.defaultTab;
+  }
+  return profile.tabs.includes(candidate) ? candidate : profile.defaultTab;
 }
 
 function toDateInput(value: Date): string {

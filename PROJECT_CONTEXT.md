@@ -54,6 +54,7 @@ Role-based sidebar. Common pages: Dashboard, Gorevlerim, Musterilerim, Takvim, B
 `CRM_SPECIALIST` employees receive CRM Leadleri and Bugünkü Takipler routes and only see assigned CRM leads.
 `DEVELOPER` employees now use API-driven Dashboard, Frontend, Backend/API, Buglar, Revizyonlar, Sprintler, Test & Yayın, and Projeler pages backed by delivery/task/repository endpoints.
 `SOCIAL_MEDIA_SPECIALIST`, `PERFORMANCE_SPECIALIST`, and `DESIGNER` now have assigned-scope Meta Ads (`/employee/meta-ads`) and TikTok Ads (`/employee/tiktok-ads`) employee workspaces with role-specific sections/actions via `MetaAdsWorkspace` and `TikTokAdsWorkspace`.
+`PROJECT_MANAGER` service workspaces are service-profile aware: Web App uses web-app workspace tabs/endpoints, while Growth Hub, ads, Social Media, design, support, and SEO services use service-specific tabs, task target presets, and reference fields without calling Web App workspace endpoints.
 
 ### Client Portal
 Separate Vite + React SPA at `clientPanel/`. It is a customer-facing visibility panel, not a public SaaS product.

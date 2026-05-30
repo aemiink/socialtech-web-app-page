@@ -1,6 +1,6 @@
 import { configureStore } from "@reduxjs/toolkit";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Provider } from "react-redux";
 import type { ReactElement } from "react";
 import { ClientVisibleTasksPanel } from "../components/client-visible-tasks-section";
@@ -12,17 +12,34 @@ import type { AuthUserProfile, ClientPurchasedService } from "../features/auth/a
 import { getActivePurchasedServiceIds, parseAuthUserProfile } from "../features/auth/authNormalizers";
 import type { ClientTask } from "../features/tasks/tasksTypes";
 
+const mockUseGetClientProjectsQuery = vi.hoisted(() => vi.fn());
+
 vi.mock("../features/projects/projectsApi", () => ({
-  useGetClientProjectsQuery: () => ({ data: [], isLoading: false, isError: false }),
+  useGetClientProjectsQuery: (...args: unknown[]) => mockUseGetClientProjectsQuery(...args),
+}));
+
+vi.mock("../pages/reports", () => ({
+  ReportsPage: ({ projectId }: { projectId?: string | null }) => (
+    <div data-testid="reports-project-id">{projectId ?? "none"}</div>
+  ),
 }));
 
 const SELECTED_SERVICE_STORAGE_KEY = "socialtech-client-selected-service";
 const CURRENT_PAGE_STORAGE_KEY = "socialtech-client-current-page";
 
 describe("client portal service access", () => {
+  beforeEach(() => {
+    mockUseGetClientProjectsQuery.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: false,
+    });
+  });
+
   afterEach(() => {
     cleanup();
     window.localStorage.clear();
+    mockUseGetClientProjectsQuery.mockReset();
     vi.unstubAllGlobals();
   });
 
@@ -105,6 +122,38 @@ describe("client portal service access", () => {
     });
 
     expect(getActivePurchasedServiceIds(user)).toEqual(["growth-hub", "media-hub", "meta-ads"]);
+  });
+
+  it("does not send Growth Hub project ids to shared web-app report queries", async () => {
+    window.localStorage.setItem(SELECTED_SERVICE_STORAGE_KEY, "growth-hub");
+    window.localStorage.setItem(CURRENT_PAGE_STORAGE_KEY, "reports");
+    mockUseGetClientProjectsQuery.mockReturnValue({
+      data: [{ id: "growth-project", name: "Growth Hub Launch", serviceKey: "GROWTH_HUB" }],
+      isLoading: false,
+      isError: false,
+    });
+
+    renderWithStore(<ClientPortalApp />, {
+      auth: createAuthenticatedAuthState([{ serviceId: "growth-hub", status: "ACTIVE" }]),
+    });
+
+    expect(await screen.findByTestId("reports-project-id")).toHaveTextContent("none");
+  });
+
+  it("keeps web-app project ids available for shared report queries", async () => {
+    window.localStorage.setItem(SELECTED_SERVICE_STORAGE_KEY, "web-app");
+    window.localStorage.setItem(CURRENT_PAGE_STORAGE_KEY, "reports");
+    mockUseGetClientProjectsQuery.mockReturnValue({
+      data: [{ id: "web-project", name: "Client Portal Build", serviceKey: "WEB_APP" }],
+      isLoading: false,
+      isError: false,
+    });
+
+    renderWithStore(<ClientPortalApp />, {
+      auth: createAuthenticatedAuthState([{ serviceId: "web-app", status: "ACTIVE" }]),
+    });
+
+    expect(await screen.findByTestId("reports-project-id")).toHaveTextContent("web-project");
   });
 });
 
