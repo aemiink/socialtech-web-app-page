@@ -37,9 +37,9 @@ export type GrowthHubChannelSourceStatus =
   | "NOT_IMPLEMENTED";
 
 export type GrowthHubChannelStatus =
-  | "READY"
+  | "ACTIVE"
   | "NO_DATA"
-  | "WAITING_SOURCE"
+  | "WAITING_CONFIG"
   | "RISK"
   | "OPTIMIZE"
   | "SCALE";
@@ -109,10 +109,25 @@ export type GrowthHubProjectReference = {
 
 export type GrowthHubChannelSummary = {
   serviceKey: GrowthHubServiceKey;
+  label: string;
   sourceStatus: GrowthHubChannelSourceStatus;
   status: GrowthHubChannelStatus;
+  healthScore: number;
+  primaryMetricLabel: string;
+  primaryMetricValue: number;
+  secondaryMetricLabel: string;
+  secondaryMetricValue: number;
+  spend: number;
+  leads: number;
+  conversions: number;
+  revenue: number;
+  roas: number;
+  cpa: number;
+  progressPercent: number | null;
+  riskLevel: "LOW" | "MEDIUM" | "HIGH";
   metrics: GrowthHubChannelMetrics;
   openTasks: number;
+  openTodos: number;
   pendingApprovals: number;
   overdueTasks: number;
   lastUpdatedAt: string | null;

@@ -19,6 +19,10 @@ import {
 import { getActivePurchasedServiceIds, normalizeServiceId } from "./features/auth/authNormalizers";
 import type { AuthUserProfile } from "./features/auth/authTypes";
 import { useGetClientProjectsQuery } from "./features/projects/projectsApi";
+import {
+  CLIENT_PORTAL_NAVIGATION_EVENT,
+  type ClientPortalNavigationDetail,
+} from "./lib/client-portal-navigation";
 
 const SELECTED_SERVICE_STORAGE_KEY = "socialtech-client-selected-service";
 const CURRENT_PAGE_STORAGE_KEY = "socialtech-client-current-page";
@@ -277,6 +281,27 @@ export function ClientPortalApp() {
       writeStoredPage(page);
     }
   };
+
+  useEffect(() => {
+    const handleServiceNavigation = (event: Event) => {
+      const detail = (event as CustomEvent<ClientPortalNavigationDetail>).detail;
+      const serviceId = normalizeServiceId(detail?.serviceId);
+      if (!serviceId || !activePurchasedServiceSet.has(serviceId)) {
+        return;
+      }
+
+      const page = detail.page ?? "service-dashboard";
+      setSelectedService(serviceId);
+      setCurrentPage(page);
+      writeStoredService(serviceId);
+      writeStoredPage(page);
+    };
+
+    window.addEventListener(CLIENT_PORTAL_NAVIGATION_EVENT, handleServiceNavigation);
+    return () => {
+      window.removeEventListener(CLIENT_PORTAL_NAVIGATION_EVENT, handleServiceNavigation);
+    };
+  }, [activePurchasedServiceSet]);
 
   const renderContent = () => {
     if (currentPage === "reports") return <ReportsPage projectId={activeProjectId} />;

@@ -492,6 +492,15 @@ Active Growth Hub Faz 5 endpoints:
 - `PATCH /api/v1/growth-hub/weekly-notes/:noteId`
 - `GET /api/v1/clients/me/growth-hub/weekly-notes`
 
+## Growth Hub Faz 6 — Channel Aggregation Layer (2026-05-30)
+
+Growth Hub kanal özetleri purchased-service ve platform kaynaklarını ortak sözleşmede birleştiren ayrı agregasyon katmanına taşındı. Özet:
+- Backend `GrowthHubChannelAggregationService`, aktif satın alınmış kanal servislerini Growth Hub dışı kanal listesi olarak toplar ve Meta/TikTok/Amazon/Social insight kaynaklarını canlı adapter kabul eder.
+- Google Ads aktif backend modülü olmadığı için `CONTRACT_ONLY` source status ile kalır; proje/task/file/release gibi operasyon sinyalleri varsa kanal yine progress/risk üzerinden görünür olabilir.
+- Kanal contract'ı `label`, `healthScore`, primary/secondary metric, spend/leads/conversions/revenue/ROAS/CPA, `progressPercent`, `riskLevel`, open todo ve approval alanlarıyla standartlaştırıldı.
+- Admin, employee ve client Growth Hub yüzeyleri aynı kanal sözleşmesini render eder; kanal kartları health/risk göstergesi ve ilgili servis workspace/detail linkleriyle zenginleştirildi.
+- Growth Hub summary artık kanal metriklerini kendi içinde tekrar hesaplamaz; `GrowthHubChannelAggregationService` tek kanal read-model kaynağıdır.
+
 ## TikTok Ads Faz 0 — Tamamlanan Contract (2026-05-27)
 
 TikTok Ads Faz 0 discovery tamamlandı. Detaylı karar DECISIONS.md'de mevcut. Özet:

@@ -42,6 +42,7 @@ import {
   getGrowthHubStatusTone,
   getGrowthHubSummaryStateLabel,
 } from "../../features/growthHub/growthHubUtils";
+import type { GrowthHubChannelSummary } from "../../features/growthHub/growthHubTypes";
 import { useAppSelector } from "../../store/hooks";
 import { extractApiErrorMessage } from "../../features/clients/clientsUtils";
 
@@ -264,10 +265,22 @@ export function GrowthHubWorkspace() {
                     <div className="mt-2 space-y-2">
                       {selectedSummary.channels.map((channel) => (
                         <div key={channel.serviceKey} className="flex items-center justify-between gap-3">
-                          <span className="text-sm text-white">{getGrowthHubServiceLabel(channel.serviceKey)}</span>
-                          <Badge className={getGrowthHubStatusTone(channel.status)}>
-                            {getGrowthHubChannelStatusLabel(channel.status)}
-                          </Badge>
+                          <div>
+                            <span className="text-sm text-white">{getGrowthHubServiceLabel(channel.serviceKey)}</span>
+                            <p className="text-xs text-[#A0A0A0]">
+                              Skor {channel.healthScore}% • {getEmployeeChannelRiskLabel(channel.riskLevel)} risk
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap items-center justify-end gap-2">
+                            <Badge className={getGrowthHubStatusTone(channel.status)}>
+                              {getGrowthHubChannelStatusLabel(channel.status)}
+                            </Badge>
+                            <Button asChild size="sm" variant="outline">
+                              <Link to={getEmployeeChannelDetailPath(channel, selectedClient.client.id)}>
+                                Detay
+                              </Link>
+                            </Button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -420,6 +433,27 @@ export function GrowthHubWorkspace() {
       ) : null}
     </div>
   );
+}
+
+function getEmployeeChannelDetailPath(channel: GrowthHubChannelSummary, clientId: string): string {
+  switch (channel.serviceKey) {
+    case "META_ADS":
+      return "/employee/meta-ads";
+    case "TIKTOK_ADS":
+      return "/employee/tiktok-ads";
+    case "AMAZON_ADS":
+      return "/employee/amazon-ads";
+    case "SOCIAL_MEDIA":
+      return "/employee/social-media";
+    default:
+      return `/employee/project-manager/clients/${clientId}`;
+  }
+}
+
+function getEmployeeChannelRiskLabel(riskLevel: GrowthHubChannelSummary["riskLevel"]): string {
+  if (riskLevel === "HIGH") return "Yüksek";
+  if (riskLevel === "MEDIUM") return "Orta";
+  return "Düşük";
 }
 
 type WorkspaceMetricCardProps = {

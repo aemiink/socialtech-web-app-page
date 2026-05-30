@@ -203,12 +203,23 @@ describe("Growth Hub Config and Summary Authz (e2e)", () => {
     expect(res.body.metrics.totalSpend).toBeGreaterThanOrEqual(100);
     expect(res.body.metrics.totalRevenue).toBeGreaterThanOrEqual(520);
     expect(res.body.actions.length).toBeGreaterThanOrEqual(1);
-    expect(
-      res.body.channels.some(
-        (channel: { serviceKey: string; sourceStatus: string }) =>
-          channel.serviceKey === "META_ADS" && channel.sourceStatus === "ACTIVE_MODULE",
-      ),
-    ).toBe(true);
+    const metaChannel = (
+      res.body.channels as Array<{
+        serviceKey: string;
+        label: string;
+        sourceStatus: string;
+        healthScore: number;
+        primaryMetricLabel: string;
+        primaryMetricValue: number;
+        riskLevel: string;
+      }>
+    ).find((channel) => channel.serviceKey === "META_ADS");
+    expect(metaChannel?.label).toBe("Meta Ads");
+    expect(metaChannel?.sourceStatus).toBe("ACTIVE_MODULE");
+    expect(metaChannel?.healthScore).toBeGreaterThanOrEqual(0);
+    expect(metaChannel?.primaryMetricLabel).toBeTruthy();
+    expect(metaChannel?.primaryMetricValue).toBeGreaterThanOrEqual(0);
+    expect(["LOW", "MEDIUM", "HIGH"]).toContain(metaChannel?.riskLevel);
     expect(JSON.stringify(res.body)).not.toContain("accessTokenEnc");
   });
 

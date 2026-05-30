@@ -11,11 +11,11 @@ import {
   ProjectFileVisibility,
   PurchasedServiceKey,
   PurchasedServiceStatus,
-  SocialMediaPostStatus,
   TaskStatus,
   TaskTodoVisibility,
 } from "@prisma/client";
 import { PrismaService } from "../database/prisma.service";
+import { GrowthHubChannelAggregationService } from "./growth-hub-channel-aggregation.service";
 
 export type GrowthHubSummaryState =
   | "READY"
@@ -31,9 +31,9 @@ export type GrowthHubChannelSourceStatus =
   | "NOT_IMPLEMENTED";
 
 export type GrowthHubChannelStatus =
-  | "READY"
+  | "ACTIVE"
   | "NO_DATA"
-  | "WAITING_SOURCE"
+  | "WAITING_CONFIG"
   | "RISK"
   | "OPTIMIZE"
   | "SCALE";
@@ -44,13 +44,6 @@ export type GrowthHubActionType =
   | "FILE_APPROVAL"
   | "RELEASE_APPROVAL"
   | "REPORT_ACKNOWLEDGEMENT";
-
-const ACTIVE_MODULE_SERVICE_KEYS = [
-  PurchasedServiceKey.META_ADS,
-  PurchasedServiceKey.TIKTOK_ADS,
-  PurchasedServiceKey.AMAZON_ADS,
-  PurchasedServiceKey.SOCIAL_MEDIA,
-] as const;
 
 const growthHubConfigSelect = {
   id: true,
@@ -267,10 +260,25 @@ export type GrowthHubConfigSummary = {
 
 export type GrowthHubChannelSummary = {
   serviceKey: PurchasedServiceKey;
+  label: string;
   sourceStatus: GrowthHubChannelSourceStatus;
   status: GrowthHubChannelStatus;
+  healthScore: number;
+  primaryMetricLabel: string;
+  primaryMetricValue: number;
+  secondaryMetricLabel: string;
+  secondaryMetricValue: number;
+  spend: number;
+  leads: number;
+  conversions: number;
+  revenue: number;
+  roas: number;
+  cpa: number;
+  progressPercent: number | null;
+  riskLevel: "LOW" | "MEDIUM" | "HIGH";
   metrics: GrowthHubChannelMetricSnapshot;
   openTasks: number;
+  openTodos: number;
   pendingApprovals: number;
   overdueTasks: number;
   lastUpdatedAt: Date | null;
@@ -361,7 +369,10 @@ export type GrowthHubSummaryResponse = {
 
 @Injectable()
 export class GrowthHubSummaryService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly channelAggregationService: GrowthHubChannelAggregationService,
+  ) {}
 
   async getSummary(
     clientProfileId: string,
@@ -427,16 +438,20 @@ export class GrowthHubSummaryService {
       releases,
       messages,
       openTodos,
-      channelMetrics,
       reportAcknowledgements,
+      channels,
     ] = await Promise.all([
       this.findTasks(projectIds, options),
       this.findFiles(clientProfileId, projectIds, options),
       this.findReleases(projectIds, options),
       this.findMessages(projectIds, options),
       this.countOpenTodos(projectIds, options),
-      this.getChannelMetrics(clientProfileId, since, now, options),
       this.findReportAcknowledgements(clientProfileId, options),
+      this.channelAggregationService.getClientChannels(clientProfileId, {
+        since,
+        until: now,
+        clientVisibleOnly: options.clientVisibleOnly,
+      }),
     ]);
 
     return this.buildSummary({
@@ -450,8 +465,8 @@ export class GrowthHubSummaryService {
       releases,
       messages,
       openTodos,
-      channelMetrics,
       reportAcknowledgements,
+      channels,
       since,
       until: now,
     });
@@ -580,158 +595,6 @@ export class GrowthHubSummaryService {
     ].sort((first, second) => second.updatedAt.getTime() - first.updatedAt.getTime());
   }
 
-  private async getChannelMetrics(
-    clientProfileId: string,
-    since: Date,
-    until: Date,
-    options: GrowthHubSummaryOptions,
-  ): Promise<Map<PurchasedServiceKey, GrowthHubChannelMetricSnapshot>> {
-    const [meta, tikTok, amazon, socialPosts, socialInsights] = await Promise.all([
-      this.prisma.metaAdsDailyInsight.aggregate({
-        where: { clientProfileId, date: { gte: since, lte: until } },
-        _count: { _all: true },
-        _sum: {
-          spend: true,
-          impressions: true,
-          clicks: true,
-          results: true,
-          purchaseValue: true,
-        },
-        _max: { updatedAt: true },
-      }),
-      this.prisma.tikTokAdsDailyInsight.aggregate({
-        where: { clientProfileId, date: { gte: since, lte: until } },
-        _count: { _all: true },
-        _sum: {
-          spend: true,
-          impressions: true,
-          clicks: true,
-          conversions: true,
-          purchaseValue: true,
-        },
-        _max: { updatedAt: true },
-      }),
-      this.prisma.amazonAdsDailyInsight.aggregate({
-        where: { clientProfileId, date: { gte: since, lte: until } },
-        _count: { _all: true },
-        _sum: {
-          spend: true,
-          impressions: true,
-          clicks: true,
-          sales: true,
-          orders: true,
-        },
-        _max: { updatedAt: true },
-      }),
-      this.prisma.socialMediaPost.count({
-        where: {
-          clientProfileId,
-          status: SocialMediaPostStatus.PUBLISHED,
-          publishedAt: { gte: since, lte: until },
-          ...(options.clientVisibleOnly ? { clientVisible: true } : {}),
-        },
-      }),
-      this.prisma.socialMediaPostInsight.aggregate({
-        where: {
-          clientProfileId,
-          date: { gte: since, lte: until },
-          ...(options.clientVisibleOnly ? { post: { clientVisible: true } } : {}),
-        },
-        _count: { _all: true },
-        _sum: {
-          impressions: true,
-          clicks: true,
-          likes: true,
-          comments: true,
-          shares: true,
-          saves: true,
-        },
-        _max: { updatedAt: true },
-      }),
-    ]);
-
-    const metrics = new Map<PurchasedServiceKey, GrowthHubChannelMetricSnapshot>();
-    const metaSpend = this.readDecimalAsNumber(meta._sum.spend);
-    const metaRevenue = this.readDecimalAsNumber(meta._sum.purchaseValue);
-    const metaLeads = meta._sum.results ?? 0;
-    metrics.set(PurchasedServiceKey.META_ADS, {
-      spend: metaSpend,
-      revenue: metaRevenue,
-      leads: metaLeads,
-      impressions: meta._sum.impressions ?? 0,
-      clicks: meta._sum.clicks ?? 0,
-      conversions: metaLeads,
-      orders: 0,
-      publishedPosts: 0,
-      engagement: 0,
-      roas: this.divide(metaRevenue, metaSpend),
-      cpa: this.divide(metaSpend, metaLeads),
-      sourceRecords: meta._count._all,
-      lastUpdatedAt: meta._max.updatedAt,
-    });
-
-    const tikTokSpend = this.readDecimalAsNumber(tikTok._sum.spend);
-    const tikTokRevenue = this.readDecimalAsNumber(tikTok._sum.purchaseValue);
-    const tikTokConversions = tikTok._sum.conversions ?? 0;
-    metrics.set(PurchasedServiceKey.TIKTOK_ADS, {
-      spend: tikTokSpend,
-      revenue: tikTokRevenue,
-      leads: tikTokConversions,
-      impressions: tikTok._sum.impressions ?? 0,
-      clicks: tikTok._sum.clicks ?? 0,
-      conversions: tikTokConversions,
-      orders: 0,
-      publishedPosts: 0,
-      engagement: 0,
-      roas: this.divide(tikTokRevenue, tikTokSpend),
-      cpa: this.divide(tikTokSpend, tikTokConversions),
-      sourceRecords: tikTok._count._all,
-      lastUpdatedAt: tikTok._max.updatedAt,
-    });
-
-    const amazonSpend = this.readDecimalAsNumber(amazon._sum.spend);
-    const amazonRevenue = this.readDecimalAsNumber(amazon._sum.sales);
-    const amazonOrders = amazon._sum.orders ?? 0;
-    metrics.set(PurchasedServiceKey.AMAZON_ADS, {
-      spend: amazonSpend,
-      revenue: amazonRevenue,
-      leads: amazonOrders,
-      impressions: amazon._sum.impressions ?? 0,
-      clicks: amazon._sum.clicks ?? 0,
-      conversions: amazonOrders,
-      orders: amazonOrders,
-      publishedPosts: 0,
-      engagement: 0,
-      roas: this.divide(amazonRevenue, amazonSpend),
-      cpa: this.divide(amazonSpend, amazonOrders),
-      sourceRecords: amazon._count._all,
-      lastUpdatedAt: amazon._max.updatedAt,
-    });
-
-    const socialEngagement =
-      (socialInsights._sum.likes ?? 0) +
-      (socialInsights._sum.comments ?? 0) +
-      (socialInsights._sum.shares ?? 0) +
-      (socialInsights._sum.saves ?? 0);
-    metrics.set(PurchasedServiceKey.SOCIAL_MEDIA, {
-      spend: 0,
-      revenue: 0,
-      leads: 0,
-      impressions: socialInsights._sum.impressions ?? 0,
-      clicks: socialInsights._sum.clicks ?? 0,
-      conversions: 0,
-      orders: 0,
-      publishedPosts: socialPosts,
-      engagement: socialEngagement,
-      roas: 0,
-      cpa: 0,
-      sourceRecords: socialInsights._count._all + socialPosts,
-      lastUpdatedAt: socialInsights._max.updatedAt,
-    });
-
-    return metrics;
-  }
-
   private buildSummary({
     client,
     growthHubService,
@@ -743,8 +606,8 @@ export class GrowthHubSummaryService {
     releases,
     messages,
     openTodos,
-    channelMetrics,
     reportAcknowledgements,
+    channels,
     since,
     until,
   }: {
@@ -758,14 +621,11 @@ export class GrowthHubSummaryService {
     releases: GrowthHubReleaseModel[];
     messages: GrowthHubMessageModel[];
     openTodos: number;
-    channelMetrics: Map<PurchasedServiceKey, GrowthHubChannelMetricSnapshot>;
     reportAcknowledgements: GrowthHubActionItem[];
+    channels: GrowthHubChannelSummary[];
     since: Date;
     until: Date;
   }): GrowthHubSummaryResponse {
-    const channelServices = activeServices.filter(
-      (service) => service.serviceKey !== PurchasedServiceKey.GROWTH_HUB,
-    );
     const openTasks = tasks.filter((task) => this.isOpenTask(task.status)).length;
     const overdueTasks = tasks.filter((task) => this.isOverdueTask(task, until)).length;
     const approvalActions = [
@@ -774,17 +634,6 @@ export class GrowthHubSummaryService {
       ...this.toReleaseActions(releases),
       ...reportAcknowledgements,
     ].sort((first, second) => second.updatedAt.getTime() - first.updatedAt.getTime());
-    const channels = channelServices.map((service) =>
-      this.toChannelSummary({
-        serviceKey: service.serviceKey,
-        config,
-        tasks,
-        files,
-        releases,
-        channelMetrics,
-        until,
-      }),
-    );
     const totals = channels.reduce(
       (accumulator, channel) => ({
         spend: accumulator.spend + channel.metrics.spend,
@@ -865,62 +714,6 @@ export class GrowthHubSummaryService {
           "SocialMediaReport",
         ],
       },
-    };
-  }
-
-  private toChannelSummary({
-    serviceKey,
-    config,
-    tasks,
-    files,
-    releases,
-    channelMetrics,
-    until,
-  }: {
-    serviceKey: PurchasedServiceKey;
-    config: GrowthHubConfigModel | null;
-    tasks: GrowthHubTaskModel[];
-    files: GrowthHubFileModel[];
-    releases: GrowthHubReleaseModel[];
-    channelMetrics: Map<PurchasedServiceKey, GrowthHubChannelMetricSnapshot>;
-    until: Date;
-  }): GrowthHubChannelSummary {
-    const metrics = channelMetrics.get(serviceKey) ?? this.emptyMetrics();
-    const openTasks = tasks.filter(
-      (task) => task.project.serviceKey === serviceKey && this.isOpenTask(task.status),
-    ).length;
-    const overdueTasks = tasks.filter(
-      (task) => task.project.serviceKey === serviceKey && this.isOverdueTask(task, until),
-    ).length;
-    const pendingApprovals =
-      this.toTaskActions(tasks).filter((action) => action.serviceKey === serviceKey).length +
-      this.toFileActions(files).filter((action) => action.serviceKey === serviceKey).length +
-      this.toReleaseActions(releases).filter((action) => action.serviceKey === serviceKey).length;
-    const sourceStatus = this.resolveSourceStatus(serviceKey);
-
-    return {
-      serviceKey,
-      sourceStatus,
-      status: this.resolveChannelStatus({
-        sourceStatus,
-        metrics,
-        config,
-        openTasks,
-        pendingApprovals,
-        overdueTasks,
-      }),
-      metrics,
-      openTasks,
-      pendingApprovals,
-      overdueTasks,
-      lastUpdatedAt: this.maxDate([
-        metrics.lastUpdatedAt,
-        ...tasks.filter((task) => task.project.serviceKey === serviceKey).map((task) => task.updatedAt),
-        ...files.filter((file) => this.resolveFileServiceKey(file) === serviceKey).map((file) => file.updatedAt),
-        ...releases
-          .filter((release) => release.project.serviceKey === serviceKey)
-          .map((release) => release.updatedAt),
-      ]),
     };
   }
 
@@ -1084,57 +877,6 @@ export class GrowthHubSummaryService {
     return "READY";
   }
 
-  private resolveChannelStatus({
-    sourceStatus,
-    metrics,
-    config,
-    openTasks,
-    pendingApprovals,
-    overdueTasks,
-  }: {
-    sourceStatus: GrowthHubChannelSourceStatus;
-    metrics: GrowthHubChannelMetricSnapshot;
-    config: GrowthHubConfigModel | null;
-    openTasks: number;
-    pendingApprovals: number;
-    overdueTasks: number;
-  }): GrowthHubChannelStatus {
-    if (sourceStatus === "CONTRACT_ONLY") {
-      return "WAITING_SOURCE";
-    }
-
-    if (sourceStatus === "NOT_IMPLEMENTED") {
-      return "NO_DATA";
-    }
-
-    if (pendingApprovals > 0 || overdueTasks > 0) {
-      return "RISK";
-    }
-
-    const targetRoas = this.readDecimalAsNumber(config?.targetRoas);
-    if (targetRoas > 0 && metrics.spend > 0) {
-      return metrics.roas >= targetRoas ? "SCALE" : "OPTIMIZE";
-    }
-
-    if (metrics.sourceRecords === 0 && openTasks === 0) {
-      return "NO_DATA";
-    }
-
-    return "READY";
-  }
-
-  private resolveSourceStatus(serviceKey: PurchasedServiceKey): GrowthHubChannelSourceStatus {
-    if (serviceKey === PurchasedServiceKey.GOOGLE_ADS) {
-      return "CONTRACT_ONLY";
-    }
-
-    if (ACTIVE_MODULE_SERVICE_KEYS.includes(serviceKey as (typeof ACTIVE_MODULE_SERVICE_KEYS)[number])) {
-      return "ACTIVE_MODULE";
-    }
-
-    return "NOT_IMPLEMENTED";
-  }
-
   private hasMeaningfulConfig(config: GrowthHubConfigModel): boolean {
     return [
       config.primaryGoal,
@@ -1209,24 +951,6 @@ export class GrowthHubSummaryService {
       ...messages.map((message) => message.createdAt),
       ...channels.map((channel) => channel.lastUpdatedAt),
     ]);
-  }
-
-  private emptyMetrics(): GrowthHubChannelMetricSnapshot {
-    return {
-      spend: 0,
-      revenue: 0,
-      leads: 0,
-      impressions: 0,
-      clicks: 0,
-      conversions: 0,
-      orders: 0,
-      publishedPosts: 0,
-      engagement: 0,
-      roas: 0,
-      cpa: 0,
-      sourceRecords: 0,
-      lastUpdatedAt: null,
-    };
   }
 
   private maxDate(dates: Array<Date | null | undefined>): Date | null {

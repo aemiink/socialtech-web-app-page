@@ -3494,3 +3494,39 @@ Affected files:
 - `PROJECT_CONTEXT.md`
 - `REPO_MAP.md`
 - `ROAD_MAP.md`
+
+## 2026-05-30 - Growth Hub Faz 6 Channel Aggregation Layer
+
+Context:
+Growth Hub Faz 5 ile action/note persistence tamamlandı; kanal özeti ise hâlâ summary servisinin içinde, sınırlı status/metric sözleşmesiyle üretiliyordu. Faz 6 ihtiyacı, satın alınmış hizmetleri Meta/TikTok/Amazon/Social canlı kaynakları ve Google contract-only durumu ile tek standart kanal read-modelinde birleştirmekti.
+
+Decision:
+Growth Hub Faz 6 kanal aggregation sorumluluğunu ayrı servise taşır:
+- `GrowthHubChannelAggregationService`, aktif purchased service kayıtlarını Growth Hub dışı kanal listesi olarak alır ve Meta/TikTok/Amazon/Social insight/report kaynaklarını, proje/task/file/release progress sinyallerini ve report acknowledgement sayılarını tek kanal özetine toplar.
+- Google Ads aktif backend module/model olmadığı için `CONTRACT_ONLY` source status ile temsil edilir; kanalda proje/task/release sinyali varsa progress/risk görünürlüğü korunur.
+- Kanal response contract'ı `label`, `healthScore`, primary/secondary metric, spend/leads/conversions/revenue/ROAS/CPA, `progressPercent`, `riskLevel`, open todo ve approval alanlarıyla ortak hale getirilir.
+- Admin, employee ve client Growth Hub yüzeyleri aynı kanal sözleşmesini tüketir; kanal kartları health/risk göstergesi ve servis workspace/detail linkleri gösterir.
+- Growth Hub summary servisinde eski channel metric hesaplama yolu kaldırılarak kanal read-modeli tek kaynağa indirildi.
+
+Reason:
+Bu karar Growth Hub'ı kanal modüllerini kopyalamadan gerçek orchestration layer olarak büyütür. Kanal contract'ının tek serviste üretilmesi, Faz 7 rapor/ack ve Faz 8 recommendation katmanlarının aynı health/risk/metric dilini kullanmasını sağlar; Google gibi henüz aktif modülü olmayan kontratlar da UI'da gerçekçi ve güvenli şekilde görünür kalır.
+
+Affected files:
+- `server/src/growth-hub/growth-hub-channel-aggregation.service.ts`
+- `server/src/growth-hub/growth-hub-summary.service.ts`
+- `server/src/growth-hub/growth-hub.module.ts`
+- `server/test/growth-hub-authz.e2e-spec.ts`
+- `adminandemployeePanel/src/app/features/growthHub/*`
+- `adminandemployeePanel/src/app/pages/GrowthHubAdmin.tsx`
+- `adminandemployeePanel/src/app/employee/components/GrowthHubWorkspace.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/GrowthHubAdmin.test.tsx`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/GrowthHubCalismaAlani.test.tsx`
+- `adminandemployeePanel/src/app/features/growthHub/components/__tests__/GrowthHubClientDetailSection.test.tsx`
+- `clientPanel/src/app/features/growthHub/*`
+- `clientPanel/src/app/App.tsx`
+- `clientPanel/src/app/lib/client-portal-navigation.ts`
+- `clientPanel/src/app/pages/services/growth-hub-dashboard.tsx`
+- `clientPanel/src/app/pages/__tests__/growth-hub-dashboard.test.tsx`
+- `PROJECT_CONTEXT.md`
+- `REPO_MAP.md`
+- `ROAD_MAP.md`

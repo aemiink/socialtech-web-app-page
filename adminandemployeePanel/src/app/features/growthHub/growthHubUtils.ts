@@ -68,9 +68,9 @@ const SOURCE_STATUS_OPTIONS: GrowthHubChannelSourceStatus[] = [
 ];
 
 const CHANNEL_STATUS_OPTIONS: GrowthHubChannelStatus[] = [
-  "READY",
+  "ACTIVE",
   "NO_DATA",
-  "WAITING_SOURCE",
+  "WAITING_CONFIG",
   "RISK",
   "OPTIMIZE",
   "SCALE",
@@ -136,9 +136,9 @@ const SUMMARY_STATE_LABELS: Record<GrowthHubSummaryState, string> = {
 };
 
 const CHANNEL_STATUS_LABELS: Record<GrowthHubChannelStatus, string> = {
-  READY: "Hazır",
+  ACTIVE: "Aktif",
   NO_DATA: "Veri yok",
-  WAITING_SOURCE: "Kaynak bekleniyor",
+  WAITING_CONFIG: "Kurulum bekliyor",
   RISK: "Risk var",
   OPTIMIZE: "Optimize",
   SCALE: "Scale",
@@ -395,13 +395,13 @@ export function getGrowthHubStatusTone(
   status: GrowthHubSummaryState | GrowthHubChannelStatus,
 ): string {
   switch (status) {
+    case "ACTIVE":
     case "READY":
     case "SCALE":
       return "border-emerald-500/30 bg-emerald-500/10 text-emerald-200";
     case "OPTIMIZE":
       return "border-sky-500/30 bg-sky-500/10 text-sky-200";
     case "WAITING_CONFIG":
-    case "WAITING_SOURCE":
       return "border-amber-500/30 bg-amber-500/10 text-amber-200";
     case "RISK":
       return "border-red-500/30 bg-red-500/10 text-red-200";
@@ -531,10 +531,25 @@ function normalizeChannel(value: unknown): GrowthHubChannelSummary | null {
 
   return {
     serviceKey: readEnumValue(value.serviceKey, SERVICE_KEY_OPTIONS) ?? "GROWTH_HUB",
+    label: readString(value.label) || getGrowthHubServiceLabel(readEnumValue(value.serviceKey, SERVICE_KEY_OPTIONS)),
     sourceStatus: readEnumValue(value.sourceStatus, SOURCE_STATUS_OPTIONS) ?? "NOT_IMPLEMENTED",
     status: readEnumValue(value.status, CHANNEL_STATUS_OPTIONS) ?? "NO_DATA",
+    healthScore: readNumber(value.healthScore),
+    primaryMetricLabel: readString(value.primaryMetricLabel),
+    primaryMetricValue: readNumber(value.primaryMetricValue),
+    secondaryMetricLabel: readString(value.secondaryMetricLabel),
+    secondaryMetricValue: readNumber(value.secondaryMetricValue),
+    spend: readNumber(value.spend),
+    leads: readNumber(value.leads),
+    conversions: readNumber(value.conversions),
+    revenue: readNumber(value.revenue),
+    roas: readNumber(value.roas),
+    cpa: readNumber(value.cpa),
+    progressPercent: readNullableNumber(value.progressPercent),
+    riskLevel: readEnumValue(value.riskLevel, ["LOW", "MEDIUM", "HIGH"] as const) ?? "LOW",
     metrics: normalizeMetrics(metrics),
     openTasks: readNumber(value.openTasks),
+    openTodos: readNumber(value.openTodos),
     pendingApprovals: readNumber(value.pendingApprovals),
     overdueTasks: readNumber(value.overdueTasks),
     lastUpdatedAt: readNullableString(value.lastUpdatedAt),

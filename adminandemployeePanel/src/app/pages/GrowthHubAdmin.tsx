@@ -30,6 +30,7 @@ import {
   useUpdateAdminGrowthHubActionMutation,
   useUpdateAdminGrowthHubWeeklyNoteMutation,
 } from "../features/growthHub/growthHubApi";
+import type { GrowthHubChannelSummary } from "../features/growthHub/growthHubTypes";
 import {
   formatGrowthHubCompactNumber,
   formatGrowthHubCurrency,
@@ -330,12 +331,22 @@ export function GrowthHubAdmin() {
                         <div>
                           <p className="font-medium text-white">{getGrowthHubServiceLabel(channel.serviceKey)}</p>
                           <p className="text-xs text-[#A0A0A0]">
-                            {channel.pendingApprovals} onay • {channel.openTasks} açık görev
+                            Skor {channel.healthScore}% • {channel.pendingApprovals} onay • {channel.openTasks} açık görev
                           </p>
                         </div>
-                        <Badge className={getGrowthHubStatusTone(channel.status)}>
-                          {getGrowthHubChannelStatusLabel(channel.status)}
-                        </Badge>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge className={getGrowthHubStatusTone(channel.status)}>
+                            {getGrowthHubChannelStatusLabel(channel.status)}
+                          </Badge>
+                          <Badge className={getChannelRiskTone(channel.riskLevel)}>
+                            {getChannelRiskLabel(channel.riskLevel)} risk
+                          </Badge>
+                          <Button asChild size="sm" variant="outline">
+                            <Link to={getAdminChannelDetailPath(channel, selectedClient.client.id)}>
+                              Detay
+                            </Link>
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   ))
@@ -439,6 +450,33 @@ export function GrowthHubAdmin() {
       />
     </div>
   );
+}
+
+function getAdminChannelDetailPath(channel: GrowthHubChannelSummary, clientId: string): string {
+  switch (channel.serviceKey) {
+    case "META_ADS":
+      return "/meta-ads";
+    case "TIKTOK_ADS":
+      return "/tiktok-ads";
+    case "AMAZON_ADS":
+      return "/amazon-ads";
+    case "SOCIAL_MEDIA":
+      return "/social-media";
+    default:
+      return `/musteriler/${clientId}`;
+  }
+}
+
+function getChannelRiskTone(riskLevel: GrowthHubChannelSummary["riskLevel"]): string {
+  if (riskLevel === "HIGH") return "border-red-500/30 bg-red-500/10 text-red-200";
+  if (riskLevel === "MEDIUM") return "border-amber-500/30 bg-amber-500/10 text-amber-200";
+  return "border-emerald-500/30 bg-emerald-500/10 text-emerald-200";
+}
+
+function getChannelRiskLabel(riskLevel: GrowthHubChannelSummary["riskLevel"]): string {
+  if (riskLevel === "HIGH") return "Yüksek";
+  if (riskLevel === "MEDIUM") return "Orta";
+  return "Düşük";
 }
 
 type OverviewMetricCardProps = {

@@ -45,6 +45,8 @@ import {
   getGrowthHubStatusTone,
   getGrowthHubSummaryStateLabel,
 } from "../../features/growthHub/growthHubUtils";
+import type { ServiceId } from "../../data/service-pages";
+import { dispatchClientPortalNavigation } from "../../lib/client-portal-navigation";
 
 const cardClass = "bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]";
 const innerClass = "bg-[#202020] rounded-xl p-4 border border-white/[0.08]";
@@ -377,8 +379,8 @@ function ChannelPerformance({ channels }: { channels: GrowthHubChannelSummary[] 
 }
 
 function ChannelCard({ channel }: { channel: GrowthHubChannelSummary }) {
-  const metricLabel = getPrimaryMetricLabel(channel);
-  const metricValue = getPrimaryMetricValue(channel);
+  const metricLabel = channel.primaryMetricLabel || getPrimaryMetricLabel(channel);
+  const metricValue = formatChannelMetricValue(channel, channel.primaryMetricValue, metricLabel);
 
   return (
     <div className={innerClass}>
@@ -392,11 +394,27 @@ function ChannelCard({ channel }: { channel: GrowthHubChannelSummary }) {
         </span>
       </div>
       <div className="space-y-2">
-        <MetricRow label="Harcama" value={formatGrowthHubCurrency(channel.metrics.spend)} />
+        <MetricRow label="Skor" value={`${formatGrowthHubNumber(channel.healthScore)}%`} />
         <MetricRow label={metricLabel} value={metricValue} />
-        <MetricRow label="ROAS" value={formatGrowthHubRatio(channel.metrics.roas)} accent />
+        <MetricRow
+          label={channel.secondaryMetricLabel || "Harcama"}
+          value={formatChannelMetricValue(channel, channel.secondaryMetricValue, channel.secondaryMetricLabel)}
+        />
+        <MetricRow label="ROAS" value={formatGrowthHubRatio(channel.roas || channel.metrics.roas)} accent />
         <MetricRow label="Açık iş" value={formatGrowthHubNumber(channel.openTasks)} />
         <MetricRow label="Onay" value={formatGrowthHubNumber(channel.pendingApprovals)} />
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <span className={`rounded-full border px-2 py-1 text-xs ${getRiskTone(channel.riskLevel)}`}>
+          {getRiskLabel(channel.riskLevel)} risk
+        </span>
+        <button
+          type="button"
+          className="text-xs text-[#AAFF01] transition hover:text-white"
+          onClick={() => navigateClientServiceTarget(channel.serviceKey)}
+        >
+          Detaya Git
+        </button>
       </div>
       {channel.metrics.sourceRecords === 0 ? (
         <p className="mt-3 text-xs text-[#A0A0A0]">
@@ -625,6 +643,66 @@ function getPrimaryMetricValue(channel: GrowthHubChannelSummary): string {
   if (channel.metrics.engagement > 0) return formatGrowthHubNumber(channel.metrics.engagement);
   if (channel.metrics.conversions > 0) return formatGrowthHubNumber(channel.metrics.conversions);
   return formatGrowthHubNumber(channel.metrics.leads);
+}
+
+function formatChannelMetricValue(
+  channel: GrowthHubChannelSummary,
+  value: number,
+  label: string | undefined,
+): string {
+  const normalizedLabel = label?.toLocaleLowerCase("tr-TR") ?? "";
+  if (normalizedLabel.includes("revenue") || normalizedLabel.includes("harcama")) {
+    return formatGrowthHubCurrency(value);
+  }
+
+  if (normalizedLabel.includes("progress")) {
+    return `${formatGrowthHubNumber(value)}%`;
+  }
+
+  if (normalizedLabel.includes("roas")) {
+    return formatGrowthHubRatio(value || channel.roas);
+  }
+
+  return formatGrowthHubNumber(value);
+}
+
+function getRiskTone(riskLevel: GrowthHubChannelSummary["riskLevel"]): string {
+  if (riskLevel === "HIGH") return "border-[#ff4444]/20 bg-[#ff4444]/10 text-[#ff4444]";
+  if (riskLevel === "MEDIUM") return "border-[#FFA726]/20 bg-[#FFA726]/10 text-[#FFA726]";
+  return "border-[#AAFF01]/20 bg-[#AAFF01]/10 text-[#AAFF01]";
+}
+
+function getRiskLabel(riskLevel: GrowthHubChannelSummary["riskLevel"]): string {
+  if (riskLevel === "HIGH") return "Yüksek";
+  if (riskLevel === "MEDIUM") return "Orta";
+  return "Düşük";
+}
+
+function navigateClientServiceTarget(serviceKey: GrowthHubChannelSummary["serviceKey"]): void {
+  const serviceId = getClientServiceId(serviceKey);
+  if (!serviceId) {
+    return;
+  }
+
+  dispatchClientPortalNavigation({ serviceId, page: "service-dashboard" });
+}
+
+function getClientServiceId(serviceKey: GrowthHubChannelSummary["serviceKey"]): ServiceId | null {
+  const serviceMap: Partial<Record<GrowthHubChannelSummary["serviceKey"], ServiceId>> = {
+    META_ADS: "meta-ads",
+    GOOGLE_ADS: "google-ads",
+    TIKTOK_ADS: "tiktok-ads",
+    AMAZON_ADS: "amazon-ads",
+    SOCIAL_MEDIA: "social-media",
+    MEDIA_HUB: "media-hub",
+    WEB_APP: "web-app",
+    MOBILE_APP: "mobile-app",
+    LANDING_PAGE: "landing-pages",
+    SEO_AUDIT: "seo-audit",
+    TECHNICAL_SUPPORT: "technical-support",
+  };
+
+  return serviceMap[serviceKey] ?? null;
 }
 
 function getActionTone(action: GrowthHubActionItem): string {

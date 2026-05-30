@@ -1,5 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { CLIENT_PORTAL_NAVIGATION_EVENT } from "../../lib/client-portal-navigation";
 import { GrowthHubDashboard } from "../services/growth-hub-dashboard";
 
 const mockUseGetClientGrowthHubConfigQuery = vi.fn();
@@ -93,6 +94,18 @@ describe("GrowthHubDashboard", () => {
     expect(screen.queryByText("16 içerik planlandı")).not.toBeInTheDocument();
     expect(screen.queryByText("Elif Yılmaz - Growth Lead")).not.toBeInTheDocument();
     expect(screen.queryByText("Automation Active")).not.toBeInTheDocument();
+  });
+
+  it("dispatches service navigation from channel detail action", () => {
+    const listener = vi.fn();
+    window.addEventListener(CLIENT_PORTAL_NAVIGATION_EVENT, listener as EventListener);
+
+    render(<GrowthHubDashboard />);
+    fireEvent.click(screen.getAllByText("Detaya Git")[0]);
+
+    const event = listener.mock.calls[0]?.[0] as CustomEvent | undefined;
+    expect(event?.detail).toEqual({ serviceId: "meta-ads", page: "service-dashboard" });
+    window.removeEventListener(CLIENT_PORTAL_NAVIGATION_EVENT, listener as EventListener);
   });
 
   it("shows loading state while Growth Hub data is loading", () => {
@@ -229,8 +242,22 @@ function buildSummary() {
     channels: [
       {
         serviceKey: "META_ADS" as const,
+        label: "Meta Ads",
         sourceStatus: "ACTIVE_MODULE" as const,
         status: "SCALE" as const,
+        healthScore: 92,
+        primaryMetricLabel: "Revenue",
+        primaryMetricValue: 31160,
+        secondaryMetricLabel: "Harcama",
+        secondaryMetricValue: 8200,
+        spend: 8200,
+        leads: 41,
+        conversions: 41,
+        revenue: 31160,
+        roas: 3.8,
+        cpa: 200,
+        progressPercent: 75,
+        riskLevel: "LOW" as const,
         metrics: {
           spend: 8200,
           revenue: 31160,
@@ -247,14 +274,29 @@ function buildSummary() {
           lastUpdatedAt: "2026-06-01T08:00:00.000Z",
         },
         openTasks: 2,
+        openTodos: 4,
         pendingApprovals: 1,
         overdueTasks: 0,
         lastUpdatedAt: "2026-06-01T08:00:00.000Z",
       },
       {
         serviceKey: "GOOGLE_ADS" as const,
+        label: "Google Ads",
         sourceStatus: "CONTRACT_ONLY" as const,
-        status: "WAITING_SOURCE" as const,
+        status: "WAITING_CONFIG" as const,
+        healthScore: 42,
+        primaryMetricLabel: "Kaynak",
+        primaryMetricValue: 0,
+        secondaryMetricLabel: "Açık iş",
+        secondaryMetricValue: 0,
+        spend: 0,
+        leads: 0,
+        conversions: 0,
+        revenue: 0,
+        roas: 0,
+        cpa: 0,
+        progressPercent: null,
+        riskLevel: "LOW" as const,
         metrics: {
           spend: 0,
           revenue: 0,
@@ -271,6 +313,7 @@ function buildSummary() {
           lastUpdatedAt: null,
         },
         openTasks: 0,
+        openTodos: 0,
         pendingApprovals: 0,
         overdueTasks: 0,
         lastUpdatedAt: null,

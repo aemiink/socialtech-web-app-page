@@ -65,9 +65,9 @@ const SOURCE_STATUS_OPTIONS: GrowthHubChannelSourceStatus[] = [
 ];
 
 const CHANNEL_STATUS_OPTIONS: GrowthHubChannelStatus[] = [
-  "READY",
+  "ACTIVE",
   "NO_DATA",
-  "WAITING_SOURCE",
+  "WAITING_CONFIG",
   "RISK",
   "OPTIMIZE",
   "SCALE",
@@ -133,9 +133,9 @@ const SUMMARY_STATE_LABELS: Record<GrowthHubSummaryState, string> = {
 };
 
 const CHANNEL_STATUS_LABELS: Record<GrowthHubChannelStatus, string> = {
-  READY: "Hazır",
+  ACTIVE: "Aktif",
   NO_DATA: "Bu kanal için henüz rapor yok",
-  WAITING_SOURCE: "Bağlantı bekleniyor",
+  WAITING_CONFIG: "Kurulum bekliyor",
   RISK: "Risk var",
   OPTIMIZE: "Optimize",
   SCALE: "Scale",
@@ -350,7 +350,7 @@ export function getGrowthHubActivityTypeLabel(type: GrowthHubActivityType): stri
 }
 
 export function getGrowthHubStatusTone(status: GrowthHubSummaryState | GrowthHubChannelStatus): string {
-  if (status === "SCALE" || status === "READY") {
+  if (status === "SCALE" || status === "READY" || status === "ACTIVE") {
     return "border-[#AAFF01]/20 bg-[#AAFF01]/10 text-[#AAFF01]";
   }
 
@@ -358,7 +358,7 @@ export function getGrowthHubStatusTone(status: GrowthHubSummaryState | GrowthHub
     return "border-[#00D4FF]/20 bg-[#00D4FF]/10 text-[#00D4FF]";
   }
 
-  if (status === "WAITING_CONFIG" || status === "WAITING_SOURCE") {
+  if (status === "WAITING_CONFIG") {
     return "border-[#FFA726]/20 bg-[#FFA726]/10 text-[#FFA726]";
   }
 
@@ -383,9 +383,9 @@ export function calculateGrowthHealthScore(
 
   const channelScores = channels.map((channel) => {
     if (channel.status === "SCALE") return 100;
-    if (channel.status === "READY") return 88;
+    if (channel.status === "ACTIVE") return 88;
     if (channel.status === "OPTIMIZE") return 72;
-    if (channel.status === "WAITING_SOURCE") return 48;
+    if (channel.status === "WAITING_CONFIG") return 48;
     if (channel.status === "RISK") return 36;
     return 20;
   });
@@ -485,10 +485,25 @@ function normalizeChannel(value: unknown): GrowthHubChannelSummary | null {
 
   return {
     serviceKey,
+    label: readString(value.label) || getGrowthHubServiceLabel(serviceKey),
     sourceStatus,
     status,
+    healthScore: readNumber(value.healthScore),
+    primaryMetricLabel: readString(value.primaryMetricLabel),
+    primaryMetricValue: readNumber(value.primaryMetricValue),
+    secondaryMetricLabel: readString(value.secondaryMetricLabel),
+    secondaryMetricValue: readNumber(value.secondaryMetricValue),
+    spend: readNumber(value.spend),
+    leads: readNumber(value.leads),
+    conversions: readNumber(value.conversions),
+    revenue: readNumber(value.revenue),
+    roas: readNumber(value.roas),
+    cpa: readNumber(value.cpa),
+    progressPercent: readNullableNumber(value.progressPercent),
+    riskLevel: readEnumValue(value.riskLevel, ["LOW", "MEDIUM", "HIGH"] as const) ?? "LOW",
     metrics: normalizeMetrics(metrics),
     openTasks: readNumber(value.openTasks),
+    openTodos: readNumber(value.openTodos),
     pendingApprovals: readNumber(value.pendingApprovals),
     overdueTasks: readNumber(value.overdueTasks),
     lastUpdatedAt: readNullableString(value.lastUpdatedAt),
