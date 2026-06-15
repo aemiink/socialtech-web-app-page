@@ -159,6 +159,9 @@ export function Dosyalar() {
       setOverwriteFileId("");
       setFolderId("");
       await refetch();
+      if (typeof window !== "undefined") {
+        window.location.reload();
+      }
     } catch (error) {
       setFeedback(getUploadErrorMessage(error));
     }

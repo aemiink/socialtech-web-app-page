@@ -41,3 +41,8 @@ export type LoginRequest = {
   email: string;
   password: string;
 };
+
+export type ChangeOwnPasswordRequest = {
+  currentPassword: string;
+  newPassword: string;
+};

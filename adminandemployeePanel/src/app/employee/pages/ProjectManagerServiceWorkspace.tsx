@@ -46,9 +46,11 @@ import {
   useGetProjectWorkspaceReportsQuery,
   useGetProjectWorkspaceRevisionsQuery,
   useGetProjectsQuery,
+  useUpdateProjectWorkspaceMeetingRequestMutation,
   useUpdateProjectWorkspaceRevisionStatusMutation,
 } from "../../features/projects/projectsApi";
 import type {
+  WorkspaceMeetingRequest,
   WorkspaceMessage,
   WorkspaceRevision,
   WorkspaceRevisionStatus,
@@ -185,6 +187,16 @@ type ServiceWorkspaceProfile = {
     adSetRef: string;
     adRef: string;
   };
+};
+
+type ReferenceFieldCopy = {
+  title: string;
+  description: string;
+  fields: Array<{
+    key: "campaignRef" | "adSetRef" | "adRef";
+    label: string;
+    placeholder: string;
+  }>;
 };
 
 type TaskTargetPreset = {
@@ -385,6 +397,87 @@ const GROWTH_TARGETS: EmployeePanelTargetTab[] = [
   "GOREVLERIM",
 ];
 
+const ROLE_ROUTING_PROFILES: Partial<Record<string, ServiceWorkspaceProfile>> = {
+  DEVELOPER: {
+    kind: "WEB_DELIVERY",
+    label: "Development",
+    description: "Geliştirme operasyonu: frontend, backend, bug, test ve yayın görevleri teknik sekmelerde yönetilir.",
+    defaultTab: "OVERVIEW",
+    tabs: CODE_DELIVERY_TABS,
+    taskTargetTabs: WEB_DELIVERY_TARGETS,
+    referenceLabels: {
+      campaignRef: "Modül / sayfa",
+      adSetRef: "Bileşen / alan",
+      adRef: "URL / issue ref",
+    },
+  },
+  PERFORMANCE_SPECIALIST: {
+    kind: "PAID_ADS",
+    label: "Paid Ads",
+    description: "Reklam operasyonu: kampanya, optimizasyon, kreatif, insight ve rapor görevleri hizmete özel alanlarla ayrılır.",
+    defaultTab: "OVERVIEW",
+    tabs: PAID_ADS_TABS,
+    taskTargetTabs: PAID_ADS_TARGETS,
+    referenceLabels: {
+      campaignRef: "Campaign ID / adı",
+      adSetRef: "Ad set / grup",
+      adRef: "Ad / kreatif ref",
+    },
+  },
+  SOCIAL_MEDIA_SPECIALIST: {
+    kind: "SOCIAL_CONTENT",
+    label: "Social Media",
+    description: "Organik içerik operasyonu: içerik takvimi, yayın akışı, kreatif üretim ve rapor görevleri ayrı sekmelerde yönetilir.",
+    defaultTab: "OVERVIEW",
+    tabs: SOCIAL_CONTENT_TABS,
+    taskTargetTabs: SOCIAL_TARGETS,
+    referenceLabels: {
+      campaignRef: "İçerik serisi / kampanya",
+      adSetRef: "Platform / kanal",
+      adRef: "Post / asset ref",
+    },
+  },
+  DESIGNER: {
+    kind: "DESIGN",
+    label: "Design",
+    description: "Tasarım operasyonu: UI tasarım, kreatif teslim ve revizyon görevleri tasarım odaklı sekmelerde yönetilir.",
+    defaultTab: "OVERVIEW",
+    tabs: DESIGN_TABS,
+    taskTargetTabs: ["UI_TASARIMLAR", "SOCIAL_CREATIVES", "ADS_CREATIVES", "REVIZYONLAR", "GOREVLERIM"],
+    referenceLabels: {
+      campaignRef: "Ekran / akış",
+      adSetRef: "Figma frame",
+      adRef: "Asset / prototype ref",
+    },
+  },
+  SUPPORT_SPECIALIST: {
+    kind: "SUPPORT",
+    label: "Technical Support",
+    description: "Destek operasyonu: bakım, bug, güvenlik ve yayın kontrol görevleri destek kuyruğunda yönetilir.",
+    defaultTab: "OVERVIEW",
+    tabs: SUPPORT_TABS,
+    taskTargetTabs: ["SUPPORT_TICKET", "BUGLAR", "TEST_YAYIN", "GOREVLERIM"],
+    referenceLabels: {
+      campaignRef: "Sistem / modül",
+      adSetRef: "Ortam",
+      adRef: "Ticket / incident ref",
+    },
+  },
+  SEO_SPECIALIST: {
+    kind: "SEO",
+    label: "SEO Audit",
+    description: "SEO operasyonu: audit, teknik bulgu, insight ve rapor görevleri SEO odaklı sekmelerde yönetilir.",
+    defaultTab: "OVERVIEW",
+    tabs: SEO_TABS,
+    taskTargetTabs: ["SEO_AUDIT", "ADS_REPORTS", "BUGLAR", "GOREVLERIM"],
+    referenceLabels: {
+      campaignRef: "Sayfa / URL grubu",
+      adSetRef: "Keyword / konu",
+      adRef: "Issue / rapor ref",
+    },
+  },
+};
+
 export function ProjectManagerServiceWorkspace() {
   const dispatch = useAppDispatch();
   const accessToken = useAppSelector(selectAccessToken);
@@ -427,6 +520,9 @@ export function ProjectManagerServiceWorkspace() {
   const [revisionNotes, setRevisionNotes] = useState<Record<string, string>>({});
   const [revisionAssigneeDrafts, setRevisionAssigneeDrafts] = useState<Record<string, string>>({});
   const [revisionStatusDrafts, setRevisionStatusDrafts] = useState<Record<string, WorkspaceRevisionStatus>>({});
+  const [meetingResponseDrafts, setMeetingResponseDrafts] = useState<
+    Record<string, { date: string; time: string; note: string }>
+  >({});
   const lastSequenceRef = useRef(0);
   const lastAssigneeRoleRef = useRef<string | null>(null);
   const taskCreatePanelRef = useRef<HTMLDivElement | null>(null);
@@ -499,6 +595,8 @@ export function ProjectManagerServiceWorkspace() {
   const [createRevision, { isLoading: isCreatingRevision }] = useCreateProjectWorkspaceRevisionMutation();
   const [updateRevisionStatus, { isLoading: isUpdatingRevisionStatus }] =
     useUpdateProjectWorkspaceRevisionStatusMutation();
+  const [updateMeetingRequest, { isLoading: isUpdatingMeetingRequest }] =
+    useUpdateProjectWorkspaceMeetingRequestMutation();
   const [createTask, { isLoading: isCreatingTask }] = useCreateTaskMutation();
   const [updateTask, { isLoading: isUpdatingTask }] = useUpdateTaskMutation();
   const [createTaskTodo, { isLoading: isCreatingTodo }] = useCreateTaskTodoMutation();
@@ -516,21 +614,21 @@ export function ProjectManagerServiceWorkspace() {
     () => assigneeCandidates.find((candidate) => candidate.id === taskAssigneeId)?.role ?? null,
     [assigneeCandidates, taskAssigneeId],
   );
-  const targetTabOptions = useMemo(
-    () => getTargetTabsByContext(selectedAssigneeRole, serviceProfile),
+  const taskRoutingProfile = useMemo(
+    () => getTaskRoutingProfile(serviceProfile, selectedAssigneeRole),
     [selectedAssigneeRole, serviceProfile],
   );
+  const targetTabOptions = useMemo(
+    () => getTargetTabsByContext(selectedAssigneeRole, taskRoutingProfile),
+    [selectedAssigneeRole, taskRoutingProfile],
+  );
   const taskTypeOptions = useMemo(
-    () =>
-      selectedAssigneeRole === "DESIGNER" ? DESIGNER_ALLOWED_TASK_TYPES : TASK_TYPE_OPTIONS,
-    [selectedAssigneeRole],
+    () => getTaskTypeOptionsForTargets(targetTabOptions, selectedAssigneeRole),
+    [selectedAssigneeRole, targetTabOptions],
   );
   const taskWorkstreamOptions = useMemo(
-    () =>
-      selectedAssigneeRole === "DESIGNER"
-        ? (["UI_INTEGRATION"] as TaskWorkstream[])
-        : TASK_WORKSTREAM_OPTIONS,
-    [selectedAssigneeRole],
+    () => getTaskWorkstreamOptionsForTargets(targetTabOptions, selectedAssigneeRole),
+    [selectedAssigneeRole, targetTabOptions],
   );
 
   useEffect(() => {
@@ -550,6 +648,7 @@ export function ProjectManagerServiceWorkspace() {
       lastSequenceRef.current = event.sequence;
       const message = (event.payload?.message ?? null) as WorkspaceMessage | null;
       const revisionPayload = (event.payload?.revision ?? null) as WorkspaceRevision | null;
+      const meetingPayload = (event.payload?.meetingRequest ?? null) as WorkspaceMeetingRequest | null;
       if (event.event === "message.created" && message) {
         dispatch(
           projectsApi.util.updateQueryData(
@@ -587,6 +686,20 @@ export function ProjectManagerServiceWorkspace() {
               const target = draft.find((item) => item.id === revisionPayload.id);
               if (target) {
                 Object.assign(target, revisionPayload);
+              }
+            },
+          ),
+        );
+      }
+      if (event.event === "meeting-request.updated" && meetingPayload) {
+        dispatch(
+          projectsApi.util.updateQueryData(
+            "getProjectWorkspaceMeetingRequests",
+            { projectId: project.id },
+            (draft) => {
+              const target = draft.find((item) => item.id === meetingPayload.id);
+              if (target) {
+                Object.assign(target, meetingPayload);
               }
             },
           ),
@@ -681,12 +794,24 @@ export function ProjectManagerServiceWorkspace() {
   }, [selectedAssigneeRole, targetTabOptions]);
 
   useEffect(() => {
-    if (selectedAssigneeRole !== "DESIGNER") {
+    if (normalizeAssigneeRoleKey(selectedAssigneeRole) !== "DESIGNER") {
       return;
     }
     setTaskWorkstream("UI_INTEGRATION");
     setTaskType((prev) => (prev === "REVISION" ? "REVISION" : "FEATURE"));
   }, [selectedAssigneeRole]);
+
+  useEffect(() => {
+    if (!taskTypeOptions.includes(taskType)) {
+      setTaskType(taskTypeOptions[0] ?? "FEATURE");
+    }
+  }, [taskType, taskTypeOptions]);
+
+  useEffect(() => {
+    if (!taskWorkstreamOptions.includes(taskWorkstream)) {
+      setTaskWorkstream(taskWorkstreamOptions[0] ?? "FULLSTACK");
+    }
+  }, [taskWorkstream, taskWorkstreamOptions]);
 
   if (role !== "project-manager") {
     return <Navigate to="/employee/dashboard" replace />;
@@ -742,7 +867,15 @@ export function ProjectManagerServiceWorkspace() {
   const roadmapUpcomingCount =
     sprints.filter((sprint) => sprint.status === "PLANNED" || sprint.status === "ACTIVE").length +
     releases.filter((release) => release.status === "PLANNED" || release.status === "TESTING" || release.status === "READY").length;
-  const referenceLabels = serviceProfile.referenceLabels;
+  const referenceLabels = taskRoutingProfile.referenceLabels;
+  const referenceFieldCopy = referenceLabels
+    ? getReferenceFieldCopy(taskTargetTab, taskRoutingProfile, referenceLabels)
+    : null;
+  const isRoleRoutedToDifferentProfile = Boolean(
+    selectedAssigneeRole && taskRoutingProfile.kind !== serviceProfile.kind,
+  );
+  const workstreamLabelPrefix = getTaskWorkstreamLabelPrefix(taskRoutingProfile);
+  const sprintPlanningCopy = getSprintPlanningCopy(serviceProfile);
 
   const handleViewTabChange = (nextTab: string) => {
     const parsedTab = parseWorkspaceViewTab(nextTab, serviceProfile);
@@ -837,6 +970,65 @@ export function ProjectManagerServiceWorkspace() {
       }
     } catch (mutationError) {
       setActionError(extractApiErrorMessage(mutationError, "Revizyon güncellenemedi."));
+    }
+  };
+
+  const handleMeetingResponse = async (
+    meeting: WorkspaceMeetingRequest,
+    action: "CONFIRM" | "PROPOSE_NEW_TIME",
+  ) => {
+    if (!project) {
+      return;
+    }
+
+    const draft = getMeetingResponseDraft(meeting, meetingResponseDrafts[meeting.id]);
+    const note = draft.note.trim();
+    const preferredDuration = Math.max(
+      new Date(meeting.preferredEndAt).getTime() - new Date(meeting.preferredStartAt).getTime(),
+      30 * 60 * 1000,
+    );
+
+    let scheduledStartAt = meeting.preferredStartAt;
+    let scheduledEndAt = meeting.preferredEndAt;
+    if (action === "PROPOSE_NEW_TIME") {
+      if (!draft.date || !draft.time || !note) {
+        setActionError("Yeni tarih önermek için tarih, TSİ saat ve açıklama notu zorunludur.");
+        return;
+      }
+      if (draft.time < "09:00" || draft.time > "18:00") {
+        setActionError("Toplantı saati TSİ 09:00-18:00 arasında olmalıdır.");
+        return;
+      }
+      const startAt = createIstanbulDateTime(draft.date, draft.time);
+      if (startAt.getTime() <= Date.now()) {
+        setActionError("Geçmiş bir tarih veya saat önerilemez.");
+        return;
+      }
+      if (startAt.getTime() === new Date(meeting.preferredStartAt).getTime()) {
+        setActionError("Yeni tarih önerisi müşterinin talep ettiği zamandan farklı olmalıdır.");
+        return;
+      }
+      scheduledStartAt = startAt.toISOString();
+      scheduledEndAt = new Date(startAt.getTime() + preferredDuration).toISOString();
+    }
+
+    try {
+      setActionError(null);
+      await updateMeetingRequest({
+        projectId: project.id,
+        meetingRequestId: meeting.id,
+        status: action === "CONFIRM" ? "CONFIRMED" : "REQUESTED",
+        responseNote: note || undefined,
+        scheduledStartAt,
+        scheduledEndAt,
+      }).unwrap();
+      setMeetingResponseDrafts((prev) => {
+        const next = { ...prev };
+        delete next[meeting.id];
+        return next;
+      });
+    } catch (mutationError) {
+      setActionError(extractApiErrorMessage(mutationError, "Toplantı talebi yanıtlanamadı."));
     }
   };
 
@@ -1204,33 +1396,52 @@ export function ProjectManagerServiceWorkspace() {
             </select>
             {selectedAssigneeRole ? (
               <p className="text-xs text-[#9AA0AA]">
-                Atanan rol: <span className="text-[#D8D8D8]">{getAssigneeRoleLabel(selectedAssigneeRole)}</span>. Sekme seçenekleri rol ve hizmete göre filtrelendi.
+                Atanan rol: <span className="text-[#D8D8D8]">{getAssigneeRoleLabel(selectedAssigneeRole)}</span>.{" "}
+                {isRoleRoutedToDifferentProfile
+                  ? `${taskRoutingProfile.label} operasyon alanları açıldı; görev ${serviceProfile.label} projesine bağlı kalır.`
+                  : `Sekme seçenekleri ${taskRoutingProfile.label} hizmeti ve role göre filtrelendi.`}
               </p>
             ) : (
               <p className="text-xs text-[#9AA0AA]">
                 Çalışan seçmezseniz {serviceProfile.label} hizmetine özel sekme havuzu kullanılır.
               </p>
             )}
-            {referenceLabels ? (
-              <div className="grid gap-3 sm:grid-cols-3">
-                <Input
-                  value={taskCampaignRef}
-                  onChange={(event) => setTaskCampaignRef(event.target.value)}
-                  placeholder={referenceLabels.campaignRef}
-                  className="bg-black/20"
-                />
-                <Input
-                  value={taskAdSetRef}
-                  onChange={(event) => setTaskAdSetRef(event.target.value)}
-                  placeholder={referenceLabels.adSetRef}
-                  className="bg-black/20"
-                />
-                <Input
-                  value={taskAdRef}
-                  onChange={(event) => setTaskAdRef(event.target.value)}
-                  placeholder={referenceLabels.adRef}
-                  className="bg-black/20"
-                />
+            {referenceFieldCopy ? (
+              <div className="space-y-2 rounded-xl border border-white/8 bg-black/20 p-3">
+                <div>
+                  <p className="text-sm font-medium text-white">{referenceFieldCopy.title}</p>
+                  <p className="text-xs text-[#A0A0A0]">{referenceFieldCopy.description}</p>
+                </div>
+                <div className="grid gap-3 lg:grid-cols-3">
+                  {referenceFieldCopy.fields.map((field) => (
+                    <label key={field.key} className="space-y-1 text-xs text-[#A0A0A0]">
+                      <span>{field.label}</span>
+                      <Input
+                        value={
+                          field.key === "campaignRef"
+                            ? taskCampaignRef
+                            : field.key === "adSetRef"
+                              ? taskAdSetRef
+                              : taskAdRef
+                        }
+                        onChange={(event) => {
+                          if (field.key === "campaignRef") {
+                            setTaskCampaignRef(event.target.value);
+                            return;
+                          }
+                          if (field.key === "adSetRef") {
+                            setTaskAdSetRef(event.target.value);
+                            return;
+                          }
+                          setTaskAdRef(event.target.value);
+                        }}
+                        placeholder={field.placeholder}
+                        aria-label={field.label}
+                        className="bg-black/20"
+                      />
+                    </label>
+                  ))}
+                </div>
               </div>
             ) : null}
             <div className="grid gap-3 sm:grid-cols-2">
@@ -1241,7 +1452,7 @@ export function ProjectManagerServiceWorkspace() {
               >
                 {taskTypeOptions.map((type) => (
                   <option key={type} value={type}>
-                    Tür: {getTaskTypeLabel(type)}
+                    Tür: {getTaskTypeDisplayLabel(type, taskRoutingProfile)}
                   </option>
                 ))}
               </select>
@@ -1253,7 +1464,7 @@ export function ProjectManagerServiceWorkspace() {
               >
                 {taskWorkstreamOptions.map((workstream) => (
                   <option key={workstream} value={workstream}>
-                    Workstream: {getTaskWorkstreamLabel(workstream)}
+                    {workstreamLabelPrefix}: {getTaskWorkstreamDisplayLabel(workstream, taskRoutingProfile)}
                   </option>
                 ))}
               </select>
@@ -1371,16 +1582,16 @@ export function ProjectManagerServiceWorkspace() {
 
         <ActionPanel
           icon={Rocket}
-          title="Yol Haritası Sprinti Oluştur"
-          description="Proje yol haritasını sprint bazlı planla ve hedefi netleştir."
-          footer={sprints.length > 0 ? `${sprints.length} roadmap sprinti listelendi` : "Henüz roadmap sprinti yok"}
+          title={sprintPlanningCopy.title}
+          description={sprintPlanningCopy.description}
+          footer={sprints.length > 0 ? `${sprints.length} ${sprintPlanningCopy.itemLabel} listelendi` : sprintPlanningCopy.emptyLabel}
         >
           <form className="space-y-3" onSubmit={(event) => void handleCreateSprint(event)}>
             <Input value={sprintName} onChange={(event) => setSprintName(event.target.value)} placeholder="Sprint adı" required />
             <Textarea
               value={sprintGoal}
               onChange={(event) => setSprintGoal(event.target.value)}
-              placeholder="Sprint hedefi / yol haritası çıktısı"
+              placeholder={sprintPlanningCopy.goalPlaceholder}
               className="min-h-20 bg-black/20"
             />
             <div className="grid gap-3 sm:grid-cols-2">
@@ -1400,7 +1611,7 @@ export function ProjectManagerServiceWorkspace() {
               />
             </div>
             <Button type="submit" size="sm" className="w-full" disabled={isCreatingSprint}>
-              {isCreatingSprint ? "Oluşturuluyor..." : "Yol Haritasına Sprint Ekle"}
+              {isCreatingSprint ? "Oluşturuluyor..." : sprintPlanningCopy.actionLabel}
             </Button>
           </form>
           <div className="space-y-2">
@@ -1763,10 +1974,25 @@ export function ProjectManagerServiceWorkspace() {
                     <div>
                       <p className="text-sm font-medium text-white">{file.title}</p>
                       <p className="mt-1 text-xs text-[#A0A0A0]">{file.originalFileName}</p>
+                      {file.approvalRequired ? (
+                        <p className="mt-1 text-xs text-[#A0A0A0]">
+                          Onay: {getProjectFileApprovalLabel(file.approvalStatus)}
+                        </p>
+                      ) : null}
                     </div>
-                    <Badge variant="outline" className="border-white/10 bg-white/5 text-[#D8D8D8]">
-                      {file.visibility}
-                    </Badge>
+                    <div className="flex flex-col items-end gap-1">
+                      <Badge variant="outline" className="border-white/10 bg-white/5 text-[#D8D8D8]">
+                        {file.visibility}
+                      </Badge>
+                      {file.approvalRequired ? (
+                        <Badge
+                          variant="outline"
+                          className={getProjectFileApprovalBadgeClass(file.approvalStatus)}
+                        >
+                          {getProjectFileApprovalLabel(file.approvalStatus)}
+                        </Badge>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -2018,20 +2244,113 @@ export function ProjectManagerServiceWorkspace() {
         </TabsContent>
 
         <TabsContent value="MEETINGS">
-          <SectionCard
-            title="Toplantılar"
-            description="Son toplantı talepleri ve planlanan zamanlar."
-            items={workspaceMeetings}
-            renderItem={(meeting) => (
-              <EntityCard
-                title={meeting.title}
-                meta={formatDateTime(meeting.preferredStartAt)}
-                supporting={meeting.agenda ?? "Ajanda belirtilmedi."}
-                badge={meeting.status}
-              />
-            )}
-            emptyText="Toplantı kaydı bulunmuyor."
-          />
+          <Card className="border-white/[0.06] bg-[#1A1A1A]">
+            <CardHeader>
+              <CardTitle className="text-white">Toplantılar</CardTitle>
+              <CardDescription>
+                Müşteri taleplerini kabul edin veya açıklama notuyla yeni tarih önerin.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {workspaceMeetings.map((meeting) => {
+                const draft = getMeetingResponseDraft(meeting, meetingResponseDrafts[meeting.id]);
+                const activeStartAt = meeting.scheduledStartAt ?? meeting.preferredStartAt;
+                return (
+                  <div key={meeting.id} className="rounded-xl border border-white/10 bg-black/20 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-white">{meeting.title}</p>
+                        <p className="mt-1 text-xs text-[#A0A0A0]">
+                          Müşteri talebi: {formatDateTime(meeting.preferredStartAt)}
+                        </p>
+                        {meeting.scheduledStartAt ? (
+                          <p className="mt-1 text-xs text-[#d2ff8a]">
+                            Güncel öneri: {formatDateTime(activeStartAt)}
+                          </p>
+                        ) : null}
+                      </div>
+                      <Badge variant="outline" className="border-white/10 bg-white/5 text-[#D8D8D8]">
+                        {getMeetingStatusLabel(meeting.status)}
+                      </Badge>
+                    </div>
+
+                    <p className="mt-3 text-sm text-[#D0D0D0]">
+                      {meeting.agenda ?? "Müşteri görüşme notu paylaşmadı."}
+                    </p>
+                    {meeting.responseNote ? (
+                      <p className="mt-2 rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2 text-xs text-[#A0A0A0]">
+                        Son yanıt notu: {meeting.responseNote}
+                      </p>
+                    ) : null}
+
+                    {meeting.status === "REQUESTED" ? (
+                      <div className="mt-4 space-y-3 border-t border-white/8 pt-4">
+                        <div className="grid gap-2 md:grid-cols-2">
+                          <Input
+                            type="date"
+                            min={getIstanbulTodayInputValue()}
+                            value={draft.date}
+                            onChange={(event) =>
+                              setMeetingResponseDrafts((prev) => ({
+                                ...prev,
+                                [meeting.id]: { ...draft, date: event.target.value },
+                              }))
+                            }
+                            className="bg-black/20"
+                          />
+                          <Input
+                            type="time"
+                            min="09:00"
+                            max="18:00"
+                            step={900}
+                            value={draft.time}
+                            onChange={(event) =>
+                              setMeetingResponseDrafts((prev) => ({
+                                ...prev,
+                                [meeting.id]: { ...draft, time: event.target.value },
+                              }))
+                            }
+                            className="bg-black/20"
+                          />
+                        </div>
+                        <Textarea
+                          value={draft.note}
+                          onChange={(event) =>
+                            setMeetingResponseDrafts((prev) => ({
+                              ...prev,
+                              [meeting.id]: { ...draft, note: event.target.value },
+                            }))
+                          }
+                          placeholder="Yeni tarih öneriyorsanız değişiklik nedenini müşteriye yazın."
+                          className="min-h-20 bg-black/20"
+                        />
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={isUpdatingMeetingRequest}
+                            onClick={() => void handleMeetingResponse(meeting, "CONFIRM")}
+                          >
+                            Talebi Kabul Et
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={isUpdatingMeetingRequest}
+                            onClick={() => void handleMeetingResponse(meeting, "PROPOSE_NEW_TIME")}
+                          >
+                            Yeni Tarih Öner
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+              {workspaceMeetings.length === 0 ? <EmptyHint text="Toplantı kaydı bulunmuyor." /> : null}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
@@ -2061,11 +2380,12 @@ function getTargetTabsByContext(
   profile: ServiceWorkspaceProfile,
 ): EmployeePanelTargetTab[] {
   const serviceTabs = profile.taskTargetTabs;
-  if (!role) {
+  const roleKey = normalizeAssigneeRoleKey(role);
+  if (!roleKey) {
     return serviceTabs;
   }
 
-  const roleTabs = ASSIGNEE_ROLE_TARGET_TABS[role];
+  const roleTabs = ASSIGNEE_ROLE_TARGET_TABS[roleKey];
   if (!roleTabs) {
     return serviceTabs;
   }
@@ -2074,8 +2394,329 @@ function getTargetTabsByContext(
   return scopedTabs.length > 0 ? scopedTabs : serviceTabs;
 }
 
+function getTaskRoutingProfile(
+  activeProfile: ServiceWorkspaceProfile,
+  role: string | null | undefined,
+): ServiceWorkspaceProfile {
+  const roleKey = normalizeAssigneeRoleKey(role);
+  if (!roleKey) {
+    return activeProfile;
+  }
+
+  return ROLE_ROUTING_PROFILES[roleKey] ?? activeProfile;
+}
+
 function getAssigneeRoleLabel(role: string): string {
-  return ASSIGNEE_ROLE_LABELS[role] ?? role;
+  const roleKey = normalizeAssigneeRoleKey(role);
+  return roleKey ? ASSIGNEE_ROLE_LABELS[roleKey] ?? role : role;
+}
+
+function getProjectFileApprovalLabel(status: string | null | undefined): string {
+  if (status === "PENDING") return "Onay Bekliyor";
+  if (status === "APPROVED") return "Onaylandı";
+  if (status === "ACKNOWLEDGED") return "Onaylandı";
+  if (status === "CHANGES_REQUESTED") return "Revizyon İstendi";
+  if (status === "REJECTED") return "Reddedildi";
+  return "Onay Akışı";
+}
+
+function getProjectFileApprovalBadgeClass(status: string | null | undefined): string {
+  if (status === "PENDING") return "border-[#FFA726]/30 bg-[#FFA726]/10 text-[#FFA726]";
+  if (status === "APPROVED" || status === "ACKNOWLEDGED") {
+    return "border-[#AAFF01]/30 bg-[#AAFF01]/10 text-[#d6ff93]";
+  }
+  if (status === "CHANGES_REQUESTED") return "border-[#00D4FF]/30 bg-[#00D4FF]/10 text-[#9CEEFF]";
+  if (status === "REJECTED") return "border-red-500/40 bg-red-500/10 text-red-200";
+  return "border-white/[0.12] bg-white/[0.04] text-[#A0A0A0]";
+}
+
+function normalizeAssigneeRoleKey(role: string | null | undefined): string | null {
+  const normalized = role?.trim().toUpperCase().replace(/[\s-]+/g, "_") ?? "";
+  return normalized.length > 0 ? normalized : null;
+}
+
+function uniqueValues<T extends string>(values: T[]): T[] {
+  return Array.from(new Set(values));
+}
+
+function getTaskTypeOptionsForTargets(
+  targetTabs: EmployeePanelTargetTab[],
+  role: string | null | undefined,
+): TaskType[] {
+  const options = uniqueValues(targetTabs.map((tab) => TASK_TARGET_TAB_PRESETS[tab].type));
+  const scopedOptions =
+    normalizeAssigneeRoleKey(role) === "DESIGNER"
+      ? options.filter((type) => DESIGNER_ALLOWED_TASK_TYPES.includes(type))
+      : options;
+  return scopedOptions.length > 0 ? scopedOptions : TASK_TYPE_OPTIONS;
+}
+
+function getTaskWorkstreamOptionsForTargets(
+  targetTabs: EmployeePanelTargetTab[],
+  role: string | null | undefined,
+): TaskWorkstream[] {
+  if (normalizeAssigneeRoleKey(role) === "DESIGNER") {
+    return ["UI_INTEGRATION"];
+  }
+
+  const options = uniqueValues(targetTabs.map((tab) => TASK_TARGET_TAB_PRESETS[tab].workstream));
+  return options.length > 0 ? options : TASK_WORKSTREAM_OPTIONS;
+}
+
+function getReferenceFieldCopy(
+  targetTab: EmployeePanelTargetTab,
+  profile: ServiceWorkspaceProfile,
+  fallbackLabels: NonNullable<ServiceWorkspaceProfile["referenceLabels"]>,
+): ReferenceFieldCopy {
+  if (profile.kind === "SOCIAL_CONTENT") {
+    if (targetTab === "SOCIAL_PUBLISHING") {
+      return {
+        title: "Yayın bağlamı",
+        description: "Görevin hangi yayın serisine, platforma ve post/link referansına bağlı olduğunu belirtin.",
+        fields: [
+          { key: "campaignRef", label: "Yayın serisi", placeholder: "Örn. Lansman haftası" },
+          { key: "adSetRef", label: "Platform / kanal", placeholder: "Örn. Instagram Reels" },
+          { key: "adRef", label: "Post / yayın linki", placeholder: "Örn. post URL veya plan ref" },
+        ],
+      };
+    }
+
+    if (targetTab === "SOCIAL_CREATIVES") {
+      return {
+        title: "Kreatif bağlamı",
+        description: "Kreatif üretimin bağlı olduğu seri, format/platform ve asset referansını belirtin.",
+        fields: [
+          { key: "campaignRef", label: "Kampanya / seri", placeholder: "Örn. Mayıs reels serisi" },
+          { key: "adSetRef", label: "Format / platform", placeholder: "Örn. Story, post, carousel" },
+          { key: "adRef", label: "Figma / asset linki", placeholder: "Örn. Figma frame veya Drive linki" },
+        ],
+      };
+    }
+
+    if (targetTab === "SOCIAL_REPORTS") {
+      return {
+        title: "Rapor bağlamı",
+        description: "Raporun bağlı olduğu dönem, platform ve rapor/insight referansını belirtin.",
+        fields: [
+          { key: "campaignRef", label: "Dönem / rapor", placeholder: "Örn. Mayıs performans raporu" },
+          { key: "adSetRef", label: "Platform / kanal", placeholder: "Örn. Instagram + LinkedIn" },
+          { key: "adRef", label: "Rapor / insight linki", placeholder: "Örn. rapor dosyası veya dashboard" },
+        ],
+      };
+    }
+
+    return {
+      title: "Takvim bağlamı",
+      description: "Takvim görevini hangi içerik serisi, platformlar ve brief/asset referansıyla açtığınızı belirtin.",
+      fields: [
+        { key: "campaignRef", label: "Takvim / seri", placeholder: "Örn. Haziran içerik takvimi" },
+        { key: "adSetRef", label: "Platformlar", placeholder: "Örn. Instagram, LinkedIn" },
+        { key: "adRef", label: "Brief / asset linki", placeholder: "Örn. Drive/Figma/post ref" },
+      ],
+    };
+  }
+
+  if (profile.kind === "GROWTH") {
+    return {
+      title: "Growth bağlamı",
+      description: "Aksiyonun bağlı olduğu growth alanını, kanalı ve hipotez/aksiyon referansını belirtin.",
+      fields: [
+        { key: "campaignRef", label: "Growth alanı", placeholder: "Örn. Aktivasyon" },
+        { key: "adSetRef", label: "Kanal / segment", placeholder: "Örn. Organik sosyal / yeni lead" },
+        { key: "adRef", label: "Hipotez / aksiyon", placeholder: "Örn. GH-12 veya deney linki" },
+      ],
+    };
+  }
+
+  if (profile.kind === "PAID_ADS") {
+    return {
+      title: "Reklam bağlamı",
+      description: "Görevin bağlı olduğu kampanya, ad set/grup ve kreatif/reklam referansını belirtin.",
+      fields: [
+        { key: "campaignRef", label: fallbackLabels.campaignRef, placeholder: "Örn. campaign-123 veya kampanya adı" },
+        { key: "adSetRef", label: fallbackLabels.adSetRef, placeholder: "Örn. prospecting / remarketing" },
+        { key: "adRef", label: fallbackLabels.adRef, placeholder: "Örn. kreatif adı veya reklam ID" },
+      ],
+    };
+  }
+
+  return {
+    title: "Görev bağlamı",
+    description: "Görevin bağlı olduğu ana alan, alt alan ve doküman/link referansını belirtin.",
+    fields: [
+      { key: "campaignRef", label: fallbackLabels.campaignRef, placeholder: fallbackLabels.campaignRef },
+      { key: "adSetRef", label: fallbackLabels.adSetRef, placeholder: fallbackLabels.adSetRef },
+      { key: "adRef", label: fallbackLabels.adRef, placeholder: fallbackLabels.adRef },
+    ],
+  };
+}
+
+function getTaskWorkstreamLabelPrefix(profile: ServiceWorkspaceProfile): string {
+  return profile.kind === "WEB_DELIVERY" || profile.kind === "GENERAL" ? "Workstream" : "Akış";
+}
+
+function getTaskTypeDisplayLabel(type: TaskType, profile: ServiceWorkspaceProfile): string {
+  if (profile.kind === "PAID_ADS") {
+    const labels: Partial<Record<TaskType, string>> = {
+      FEATURE: "Kampanya aksiyonu",
+      REVISION: "Onay / revizyon",
+      QA: "Raporlama / kontrol",
+      DEPLOYMENT: "Yayın / entegrasyon",
+      MAINTENANCE: "Bakım",
+    };
+    return labels[type] ?? getTaskTypeLabel(type);
+  }
+
+  if (profile.kind === "SOCIAL_CONTENT") {
+    const labels: Partial<Record<TaskType, string>> = {
+      FEATURE: "İçerik üretimi",
+      REVISION: "Revizyon",
+      QA: "Raporlama / kontrol",
+      DEPLOYMENT: "Yayınlama",
+      MAINTENANCE: "Bakım",
+    };
+    return labels[type] ?? getTaskTypeLabel(type);
+  }
+
+  if (profile.kind === "GROWTH") {
+    const labels: Partial<Record<TaskType, string>> = {
+      FEATURE: "Growth aksiyonu",
+      REVISION: "Hipotez revizyonu",
+      QA: "Growth raporu",
+      DEPLOYMENT: "Aksiyon yayını",
+      MAINTENANCE: "Bakım",
+    };
+    return labels[type] ?? getTaskTypeLabel(type);
+  }
+
+  if (profile.kind === "DESIGN") {
+    const labels: Partial<Record<TaskType, string>> = {
+      FEATURE: "Tasarım üretimi",
+      REVISION: "Tasarım revizyonu",
+      QA: "Tasarım kontrolü",
+    };
+    return labels[type] ?? getTaskTypeLabel(type);
+  }
+
+  if (profile.kind === "SUPPORT") {
+    const labels: Partial<Record<TaskType, string>> = {
+      FEATURE: "Destek aksiyonu",
+      BUG: "Teknik sorun",
+      QA: "Kontrol",
+      DEPLOYMENT: "Yayın / ortam",
+      MAINTENANCE: "Bakım",
+    };
+    return labels[type] ?? getTaskTypeLabel(type);
+  }
+
+  if (profile.kind === "SEO") {
+    const labels: Partial<Record<TaskType, string>> = {
+      FEATURE: "SEO aksiyonu",
+      BUG: "Teknik bulgu",
+      QA: "Audit / rapor",
+      REVISION: "İçerik revizyonu",
+    };
+    return labels[type] ?? getTaskTypeLabel(type);
+  }
+
+  return getTaskTypeLabel(type);
+}
+
+function getTaskWorkstreamDisplayLabel(
+  workstream: TaskWorkstream,
+  profile: ServiceWorkspaceProfile,
+): string {
+  if (profile.kind === "PAID_ADS") {
+    const labels: Partial<Record<TaskWorkstream, string>> = {
+      FULLSTACK: "Kampanya yönetimi",
+      BACKEND: "Optimizasyon",
+      UI_INTEGRATION: "Kreatif üretim",
+      QA: "Raporlama / kontrol",
+      DEVOPS: "Yayın / entegrasyon",
+    };
+    return labels[workstream] ?? getTaskWorkstreamLabel(workstream);
+  }
+
+  if (profile.kind === "SOCIAL_CONTENT") {
+    const labels: Partial<Record<TaskWorkstream, string>> = {
+      FULLSTACK: "İçerik operasyonu",
+      UI_INTEGRATION: "Kreatif üretim",
+      QA: "Raporlama / kontrol",
+      DEVOPS: "Yayın planlama",
+    };
+    return labels[workstream] ?? getTaskWorkstreamLabel(workstream);
+  }
+
+  if (profile.kind === "GROWTH") {
+    const labels: Partial<Record<TaskWorkstream, string>> = {
+      FULLSTACK: "Growth operasyonu",
+      BACKEND: "Veri / otomasyon",
+      FRONTEND: "Deneyim / arayüz",
+      UI_INTEGRATION: "Kreatif / arayüz",
+      QA: "Raporlama / kontrol",
+    };
+    return labels[workstream] ?? getTaskWorkstreamLabel(workstream);
+  }
+
+  if (profile.kind === "DESIGN") {
+    const labels: Partial<Record<TaskWorkstream, string>> = {
+      FULLSTACK: "Tasarım operasyonu",
+      UI_INTEGRATION: "Tasarım üretimi",
+      QA: "Tasarım kontrolü",
+    };
+    return labels[workstream] ?? getTaskWorkstreamLabel(workstream);
+  }
+
+  if (profile.kind === "SUPPORT") {
+    const labels: Partial<Record<TaskWorkstream, string>> = {
+      FULLSTACK: "Destek operasyonu",
+      BACKEND: "Teknik inceleme",
+      QA: "Kontrol",
+      DEVOPS: "Yayın / ortam",
+    };
+    return labels[workstream] ?? getTaskWorkstreamLabel(workstream);
+  }
+
+  if (profile.kind === "SEO") {
+    const labels: Partial<Record<TaskWorkstream, string>> = {
+      FULLSTACK: "SEO operasyonu",
+      BACKEND: "Teknik SEO",
+      FRONTEND: "Sayfa deneyimi",
+      QA: "Audit / rapor",
+    };
+    return labels[workstream] ?? getTaskWorkstreamLabel(workstream);
+  }
+
+  return getTaskWorkstreamLabel(workstream);
+}
+
+function getSprintPlanningCopy(profile: ServiceWorkspaceProfile): {
+  title: string;
+  description: string;
+  itemLabel: string;
+  emptyLabel: string;
+  goalPlaceholder: string;
+  actionLabel: string;
+} {
+  if (profile.kind === "WEB_DELIVERY") {
+    return {
+      title: "Yol Haritası Sprinti Oluştur",
+      description: "Proje yol haritasını sprint bazlı planla ve hedefi netleştir.",
+      itemLabel: "roadmap sprinti",
+      emptyLabel: "Henüz roadmap sprinti yok",
+      goalPlaceholder: "Sprint hedefi / yol haritası çıktısı",
+      actionLabel: "Yol Haritasına Sprint Ekle",
+    };
+  }
+
+  return {
+    title: "Operasyon Sprinti Oluştur",
+    description: `${profile.label} operasyonunu sprint bazlı planla ve çıktıyı netleştir.`,
+    itemLabel: "operasyon sprinti",
+    emptyLabel: "Henüz operasyon sprinti yok",
+    goalPlaceholder: "Sprint hedefi / operasyon çıktısı",
+    actionLabel: "Operasyon Sprinti Ekle",
+  };
 }
 
 function normalizeTaskByAssigneeRole({
@@ -2087,7 +2728,7 @@ function normalizeTaskByAssigneeRole({
   type: TaskType;
   workstream: TaskWorkstream;
 }): { type: TaskType; workstream: TaskWorkstream } {
-  if (assigneeRole !== "DESIGNER") {
+  if (normalizeAssigneeRoleKey(assigneeRole) !== "DESIGNER") {
     return { type, workstream };
   }
 
@@ -3045,7 +3686,66 @@ function formatDate(value: string): string {
 }
 
 function formatDateTime(value: string): string {
-  return new Date(value).toLocaleString("tr-TR");
+  return new Date(value).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" });
+}
+
+function getMeetingStatusLabel(status: WorkspaceMeetingRequest["status"]): string {
+  const labels: Record<WorkspaceMeetingRequest["status"], string> = {
+    REQUESTED: "Yanıt Bekliyor",
+    CONFIRMED: "Onaylandı",
+    DECLINED: "Uygun Bulunmadı",
+    COMPLETED: "Tamamlandı",
+    CANCELLED: "İptal Edildi",
+  };
+  return labels[status];
+}
+
+function getMeetingResponseDraft(
+  meeting: WorkspaceMeetingRequest,
+  existing?: { date: string; time: string; note: string },
+) {
+  if (existing) {
+    return existing;
+  }
+  const sourceDate = meeting.scheduledStartAt ?? meeting.preferredStartAt;
+  return {
+    date: formatIstanbulDateInput(sourceDate),
+    time: formatIstanbulTimeInput(sourceDate),
+    note: meeting.responseNote ?? "",
+  };
+}
+
+function formatIstanbulDateInput(value: string | Date): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Istanbul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(value));
+  const year = parts.find((part) => part.type === "year")?.value ?? "";
+  const month = parts.find((part) => part.type === "month")?.value ?? "";
+  const day = parts.find((part) => part.type === "day")?.value ?? "";
+  return `${year}-${month}-${day}`;
+}
+
+function formatIstanbulTimeInput(value: string | Date): string {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Istanbul",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(value));
+  const hour = parts.find((part) => part.type === "hour")?.value ?? "";
+  const minute = parts.find((part) => part.type === "minute")?.value ?? "";
+  return `${hour}:${minute}`;
+}
+
+function getIstanbulTodayInputValue(): string {
+  return formatIstanbulDateInput(new Date());
+}
+
+function createIstanbulDateTime(date: string, time: string): Date {
+  return new Date(`${date}T${time}:00+03:00`);
 }
 
 function mapServiceViewTabToWorkspaceTab(tab: WorkspaceViewTab): WorkspaceTabKey {

@@ -311,6 +311,43 @@ export type ProjectFile = {
   bytes: number;
   mimeType: string;
   originalFileName: string;
+  approvalRequired?: boolean;
+  approvalType?:
+    | "META_ADS_CAMPAIGN_APPROVAL"
+    | "META_ADS_CREATIVE_APPROVAL"
+    | "META_ADS_BUDGET_CHANGE_APPROVAL"
+    | "META_ADS_REPORT_ACKNOWLEDGEMENT"
+    | "META_ADS_STRATEGY_APPROVAL"
+    | "TIKTOK_ADS_CAMPAIGN_APPROVAL"
+    | "TIKTOK_ADS_VIDEO_CREATIVE_APPROVAL"
+    | "TIKTOK_ADS_HOOK_TEST_APPROVAL"
+    | "TIKTOK_ADS_UGC_SCRIPT_APPROVAL"
+    | "TIKTOK_ADS_BUDGET_CHANGE_APPROVAL"
+    | "TIKTOK_ADS_REPORT_ACKNOWLEDGEMENT"
+    | "AMAZON_ADS_CAMPAIGN_APPROVAL"
+    | "AMAZON_ADS_BUDGET_CHANGE_APPROVAL"
+    | "AMAZON_ADS_REPORT_ACKNOWLEDGEMENT"
+    | "AMAZON_ADS_STRATEGY_APPROVAL"
+    | "AMAZON_ADS_CREATIVE_APPROVAL"
+    | "AMAZON_ADS_PRODUCT_PROMOTION_APPROVAL"
+    | "AMAZON_ADS_SEARCH_TERM_ACTION_APPROVAL"
+    | "SOCIAL_MEDIA_POST_APPROVAL"
+    | "SOCIAL_MEDIA_CREATIVE_APPROVAL"
+    | "SOCIAL_MEDIA_CAPTION_APPROVAL"
+    | "SOCIAL_MEDIA_CALENDAR_APPROVAL"
+    | "SOCIAL_MEDIA_REPORT_ACKNOWLEDGEMENT"
+    | null;
+  approvalStatus?:
+    | "PENDING"
+    | "APPROVED"
+    | "CHANGES_REQUESTED"
+    | "REJECTED"
+    | "ACKNOWLEDGED"
+    | null;
+  approvalResponseNote?: string | null;
+  approvalRequestedAt?: string | null;
+  approvalRespondedAt?: string | null;
+  approvalRespondedByUserId?: string | null;
   uploadedByUserId: string;
   createdAt: string;
   updatedAt: string;
@@ -369,6 +406,9 @@ export type ProjectFileUploadSignatureRequest = {
   folderId?: string;
   overwrite?: boolean;
   overwriteFileId?: string;
+  approvalRequired?: boolean;
+  approvalType?: ProjectFile["approvalType"];
+  approvalStatus?: ProjectFile["approvalStatus"];
 };
 
 export type ProjectFileUploadSignatureResponse = {
@@ -376,6 +416,7 @@ export type ProjectFileUploadSignatureResponse = {
   apiKey: string;
   timestamp: number;
   publicId: string;
+  assetFolder?: string | null;
   signature: string;
   uploadUrl: string;
   overwrite: boolean;
@@ -398,6 +439,9 @@ export type CompleteProjectFileUploadRequest = {
   folderId?: string;
   overwrite?: boolean;
   overwriteFileId?: string;
+  approvalRequired?: boolean;
+  approvalType?: ProjectFile["approvalType"];
+  approvalStatus?: ProjectFile["approvalStatus"];
 };
 
 export type CreateProjectFileFolderRequest = {

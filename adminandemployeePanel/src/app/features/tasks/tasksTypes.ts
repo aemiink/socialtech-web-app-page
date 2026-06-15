@@ -1,5 +1,6 @@
 import type { UserRole } from "../auth/authTypes";
 import type { Priority, ProjectClientProfile, ProjectStatus } from "../projects/projectsTypes";
+import type { ServiceKey } from "../clients/clientsTypes";
 
 export type TaskStatus = "TODO" | "IN_PROGRESS" | "REVIEW" | "DONE" | "BLOCKED";
 export type TaskTodoVisibility = "INTERNAL" | "CLIENT_VISIBLE";
@@ -53,6 +54,7 @@ export type TaskApprovalStatus =
 export type TaskProjectSummary = {
   id: string;
   clientProfileId: string;
+  serviceKey?: ServiceKey | null;
   name: string;
   slug: string;
   status: ProjectStatus;

@@ -1,5 +1,10 @@
 import { baseApi } from "../../services/baseApi";
-import type { AuthUserProfile, LoginRequest, PublicAuthResponse } from "./authTypes";
+import type {
+  AuthUserProfile,
+  ChangeOwnPasswordRequest,
+  LoginRequest,
+  PublicAuthResponse,
+} from "./authTypes";
 
 export const authApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -28,8 +33,21 @@ export const authApi = baseApi.injectEndpoints({
         method: "GET",
       }),
     }),
+    changeOwnPassword: builder.mutation<{ success: true }, ChangeOwnPasswordRequest>({
+      query: (body) => ({
+        url: "/users/me/password",
+        method: "PATCH",
+        body,
+      }),
+    }),
   }),
 });
 
-export const { useLoginMutation, useRefreshMutation, useLogoutMutation, useMeQuery, useLazyMeQuery } =
-  authApi;
+export const {
+  useLoginMutation,
+  useRefreshMutation,
+  useLogoutMutation,
+  useMeQuery,
+  useLazyMeQuery,
+  useChangeOwnPasswordMutation,
+} = authApi;

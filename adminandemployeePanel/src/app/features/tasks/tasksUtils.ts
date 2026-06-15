@@ -1,3 +1,5 @@
+import type { ServiceKey } from "../clients/clientsTypes";
+import { normalizeToUiServiceKey } from "../clients/clientsUtils";
 import type { Priority, ProjectStatus } from "../projects/projectsTypes";
 import {
   PRIORITY_OPTIONS,
@@ -13,6 +15,7 @@ import {
 } from "../projects/projectsUtils";
 import type {
   Task,
+  TaskApprovalType,
   TaskAssigneeSummary,
   TaskCompletion,
   TaskEnvironment,
@@ -289,6 +292,56 @@ export function getTaskWorkNotes(task: Task) {
   return task.workNotes ?? [];
 }
 
+export type DesignApprovalSetup = {
+  approvalType: TaskApprovalType;
+  permission: string;
+};
+
+export function getDesignApprovalSetupForServiceKey(
+  serviceKey: ServiceKey | null | undefined,
+): DesignApprovalSetup | null {
+  if (serviceKey === "meta-ads") {
+    return { approvalType: "META_ADS_CREATIVE_APPROVAL", permission: "metaAds.approvals.create.assigned" };
+  }
+  if (serviceKey === "tiktok-ads") {
+    return {
+      approvalType: "TIKTOK_ADS_VIDEO_CREATIVE_APPROVAL",
+      permission: "tiktokAds.approvals.create.assigned",
+    };
+  }
+  if (serviceKey === "amazon-ads") {
+    return { approvalType: "AMAZON_ADS_CREATIVE_APPROVAL", permission: "amazonAds.approvals.create.assigned" };
+  }
+  if (serviceKey === "social-media") {
+    return { approvalType: "SOCIAL_MEDIA_CREATIVE_APPROVAL", permission: "socialMedia.approvals.create.assigned" };
+  }
+  if (serviceKey === "growth-hub") {
+    return { approvalType: "SOCIAL_MEDIA_CREATIVE_APPROVAL", permission: "socialMedia.approvals.create.assigned" };
+  }
+  return null;
+}
+
+export function getDesignApprovalSetupForTask(
+  task: Pick<Task, "approvalType" | "project"> | null | undefined,
+): DesignApprovalSetup | null {
+  const approvalType = task?.approvalType ?? null;
+
+  if (approvalType?.startsWith("META_ADS")) {
+    return { approvalType, permission: "metaAds.approvals.create.assigned" };
+  }
+  if (approvalType?.startsWith("TIKTOK_ADS")) {
+    return { approvalType, permission: "tiktokAds.approvals.create.assigned" };
+  }
+  if (approvalType?.startsWith("AMAZON_ADS")) {
+    return { approvalType, permission: "amazonAds.approvals.create.assigned" };
+  }
+  if (approvalType?.startsWith("SOCIAL_MEDIA")) {
+    return { approvalType, permission: "socialMedia.approvals.create.assigned" };
+  }
+
+  return getDesignApprovalSetupForServiceKey(task?.project?.serviceKey);
+}
+
 function normalizeListMeta(meta: unknown, dataLength: number): TasksListMeta {
   if (!isRecord(meta)) {
     return createFallbackMeta(dataLength);
@@ -334,12 +387,27 @@ function normalizeTask(value: unknown): Task | null {
     : todos
       ? createCompletionFromTodos(todos)
       : undefined;
+  const normalizedProject = normalizeTaskProjectServiceKey(value.project);
 
   return {
     ...value,
+    ...(normalizedProject !== undefined ? { project: normalizedProject } : {}),
     ...(todos ? { todos } : {}),
     ...(workNotes ? { workNotes } : {}),
     ...(completion ? { completion } : {}),
+  };
+}
+
+function normalizeTaskProjectServiceKey(
+  project: Task["project"] | undefined,
+): Task["project"] | undefined {
+  if (project === undefined || project === null) {
+    return project;
+  }
+
+  return {
+    ...project,
+    serviceKey: normalizeToUiServiceKey(project.serviceKey) ?? null,
   };
 }
 

@@ -1,11 +1,12 @@
 /// <reference types="vitest" />
 /// <reference types="@testing-library/jest-dom" />
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthUserProfile } from "../../../features/auth/authTypes";
 import type {
+  CreateTaskRequest,
   Task,
   TasksListQuery,
   TasksListResponse,
@@ -35,10 +36,13 @@ type ToggleTodoTrigger = (payload: {
   body: { isCompleted: boolean };
 }) => MutationResponse<unknown>;
 
+type CreateTaskTrigger = (payload: CreateTaskRequest) => MutationResponse<unknown>;
+
 const mockUseGetTasksQuery = vi.fn<
   (query: TasksListQuery, options?: QueryOptions) => TasksQueryResult
 >();
 const mockUseToggleTaskTodoMutation = vi.fn<() => [ToggleTodoTrigger, { isLoading: boolean }]>();
+const mockUseCreateTaskMutation = vi.fn<() => [CreateTaskTrigger, { isLoading: boolean }]>();
 
 let currentUser: AuthUserProfile | null = null;
 
@@ -47,6 +51,7 @@ vi.mock("../../../store/hooks", () => ({
 }));
 
 vi.mock("../../../features/tasks/tasksApi", () => ({
+  useCreateTaskMutation: () => mockUseCreateTaskMutation(),
   useGetTasksQuery: (query: TasksListQuery, options?: QueryOptions) =>
     mockUseGetTasksQuery(query, options),
   useToggleTaskTodoMutation: () => mockUseToggleTaskTodoMutation(),
@@ -61,6 +66,15 @@ const employeeUser: AuthUserProfile = {
   status: "ACTIVE",
   permissions: ["tasks.read.assigned"],
   clientProfile: null,
+};
+
+const designerUser: AuthUserProfile = {
+  ...employeeUser,
+  id: "77777777-7777-4777-8777-777777777777",
+  email: "designer@socialtech.com",
+  displayName: "Designer User",
+  role: "DESIGNER",
+  permissions: ["tasks.read.assigned", "socialMedia.approvals.create.assigned"],
 };
 
 const assignedTask: Task = {
@@ -116,6 +130,48 @@ const assignedTask: Task = {
   },
 };
 
+const designerTask: Task = {
+  ...assignedTask,
+  id: "88888888-8888-4888-8888-888888888888",
+  title: "Instagram carousel kreatifi",
+  description: "Mayıs lansman serisi için 3 görsel hazırlanacak.",
+  status: "REVIEW",
+  type: "REVISION",
+  workstream: "UI_INTEGRATION",
+  assigneeUserId: designerUser.id,
+  approvalRequired: true,
+  approvalType: "SOCIAL_MEDIA_CREATIVE_APPROVAL",
+  approvalStatus: "CHANGES_REQUESTED",
+  approvalResponseNote: "Logo kullanımı güncellensin.",
+  campaignRef: "Mayıs lansman",
+  adSetRef: "Carousel 1080x1080",
+  dueDate: "2026-05-01T18:00:00.000Z",
+  project: {
+    ...assignedTask.project!,
+    serviceKey: "social-media",
+    name: "Social Media Operasyonu",
+    slug: "social-media-operasyonu",
+  },
+  assignee: {
+    id: designerUser.id,
+    displayName: "Designer User",
+    role: "DESIGNER",
+  },
+  todos: [
+    {
+      id: "99999999-9999-4999-8999-999999999999",
+      taskId: "88888888-8888-4888-8888-888888888888",
+      title: "Key visual export",
+      isCompleted: false,
+    },
+  ],
+  completion: {
+    totalTodos: 1,
+    completedTodos: 0,
+    percent: 0,
+  },
+};
+
 const assignedTasksResponse: TasksListResponse = {
   data: [assignedTask],
   meta: {
@@ -158,6 +214,12 @@ function setupTodoMutation() {
   return { toggleTodo };
 }
 
+function setupCreateTaskMutation() {
+  const createTask = vi.fn<CreateTaskTrigger>(() => ({ unwrap: async () => ({}) }));
+  mockUseCreateTaskMutation.mockReturnValue([createTask, { isLoading: false }]);
+  return { createTask };
+}
+
 function renderGorevlerim() {
   render(
     <MemoryRouter>
@@ -174,6 +236,7 @@ describe("Gorevlerim", () => {
     currentUser = employeeUser;
     setupTasksState();
     setupTodoMutation();
+    setupCreateTaskMutation();
   });
 
   afterEach(() => {
@@ -222,6 +285,74 @@ describe("Gorevlerim", () => {
     expect(screen.getByText("1/2 tamamlandı")).toBeInTheDocument();
     expect(screen.getByText("%50")).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Detay" }).length).toBeGreaterThan(0);
+  });
+
+  it("uses designer-specific labels and creative context for designer employees", () => {
+    currentUser = designerUser;
+    setupTasksState({
+      data: {
+        ...assignedTasksResponse,
+        data: [designerTask],
+      },
+    });
+
+    renderGorevlerim();
+
+    expect(screen.getByText("Tasarım Görevlerim")).toBeInTheDocument();
+    expect(screen.getByText("Kreatif, UI ve revizyon işlerin")).toBeInTheDocument();
+    expect(screen.getByText("Bugünkü Tasarım")).toBeInTheDocument();
+    expect(screen.getByText("Geciken Teslim")).toBeInTheDocument();
+    expect(screen.getByText("Revizyon / Onay")).toBeInTheDocument();
+    expect(screen.getByText("Teslim Edilen")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Tasarım Görevi" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Alan / Kanal" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Checklist" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Teslim" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Proje" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Deadline" })).not.toBeInTheDocument();
+    expect(screen.getByText("Instagram carousel kreatifi")).toBeInTheDocument();
+    expect(screen.getByText("Social Media Kreatif")).toBeInTheDocument();
+    expect(screen.getByText("Revizyon İstendi")).toBeInTheDocument();
+    expect(screen.getByText("Revizyon notu: Logo kullanımı güncellensin.")).toBeInTheDocument();
+    expect(screen.getByText("Social Media")).toBeInTheDocument();
+    expect(screen.getByText("Format: Carousel 1080x1080")).toBeInTheDocument();
+    expect(screen.getByText("0/1 checklist")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Müşteri Onayına Gönder" })).toBeInTheDocument();
+  });
+
+  it("creates a customer approval task for supported designer work", async () => {
+    currentUser = designerUser;
+    const { createTask } = setupCreateTaskMutation();
+    setupTasksState({
+      data: {
+        ...assignedTasksResponse,
+        data: [designerTask],
+      },
+    });
+
+    renderGorevlerim();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Müşteri Onayına Gönder" }));
+      await Promise.resolve();
+    });
+
+    expect(createTask).toHaveBeenCalled();
+    expect(createTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: designerTask.projectId,
+        title: "Müşteri onayı: Instagram carousel kreatifi",
+        status: "REVIEW",
+        type: "REVISION",
+        workstream: "UI_INTEGRATION",
+        approvalRequired: true,
+        approvalType: "SOCIAL_MEDIA_CREATIVE_APPROVAL",
+        approvalStatus: "PENDING",
+        campaignRef: "Mayıs lansman",
+        adSetRef: "Carousel 1080x1080",
+      }),
+    );
+    expect(screen.getByText("Instagram carousel kreatifi müşteri onayına gönderildi.")).toBeInTheDocument();
   });
 
   it("toggles an own task todo", async () => {

@@ -27,6 +27,7 @@ import {
 } from "../features/projects/projectsApi";
 import type { ProjectFileVisibility } from "../features/projects/projectsTypes";
 import {
+  useCreateTaskMutation,
   useCreateTaskWorkNoteMutation,
   useCreateTaskTodoMutation,
   useGetRelatedTaskCommitsQuery,
@@ -41,6 +42,7 @@ import {
   extractApiErrorMessage,
   formatDate,
   formatDateTime,
+  getDesignApprovalSetupForTask,
   getTaskCompletion,
   getTaskCompletionLabel,
   getTaskCompletionPercent,
@@ -73,11 +75,22 @@ export function TaskDetail() {
     "tasks.manage.any",
     "tasks.manage",
   ]);
+  const canToggleTaskTodos = hasUserPermission(currentUser, [
+    "tasks.manage.any",
+    "tasks.manage",
+    "tasks.todos.manage.assigned",
+    "tasks.update.assigned",
+    "tasks.update.own",
+  ]);
   const canReadRepository = hasUserPermission(currentUser, [
     "integrations.github.read.any",
     "integrations.github.manage.any",
     "integrations.github.read.assigned",
   ]);
+  const canPrepareCode =
+    currentUser?.role === "DEVELOPER" ||
+    currentUser?.role === "PROJECT_MANAGER" ||
+    currentUser?.role === "ADMIN";
   const canManageProjectFiles = hasUserPermission(currentUser, [
     "projects.files.manage.any",
     "projects.files.manage.assigned",
@@ -94,11 +107,12 @@ export function TaskDetail() {
   const [prepareCodeFeedback, setPrepareCodeFeedback] = useState<string | null>(null);
   const [designFolderId, setDesignFolderId] = useState<string>("");
   const [designFolderFeedback, setDesignFolderFeedback] = useState<string | null>(null);
-  const [designFile, setDesignFile] = useState<File | null>(null);
-  const [designFileTitle, setDesignFileTitle] = useState("");
+  const [designFiles, setDesignFiles] = useState<File[]>([]);
   const [designFileDescription, setDesignFileDescription] = useState("");
   const [designFileVisibility, setDesignFileVisibility] = useState<ProjectFileVisibility>("INTERNAL");
   const [designUploadFeedback, setDesignUploadFeedback] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
+  const [approvalTaskFeedback, setApprovalTaskFeedback] = useState<string | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
   const designFileInputRef = useRef<HTMLInputElement | null>(null);
   const ensuredDesignFolderKeyRef = useRef<string | null>(null);
@@ -124,6 +138,14 @@ export function TaskDetail() {
     { skip: !canReadRepository || !repository || !task?.id },
   );
   const isDesignTask = useMemo(() => isDesignTaskType(task), [task]);
+  const designProjectFolderName = useMemo(
+    () => (task ? buildProjectFolderName(task) : ""),
+    [task],
+  );
+  const legacyDesignTaskFolderName = useMemo(
+    () => (task ? buildLegacyDesignTaskFolderName(task) : ""),
+    [task],
+  );
   const designTaskFolderName = useMemo(
     () => (task ? buildDesignTaskFolderName(task) : ""),
     [task],
@@ -152,8 +174,9 @@ export function TaskDetail() {
         designFolderId.length === 0,
     },
   );
-  const designFiles = designFilesResponse?.data ?? [];
+  const uploadedDesignFiles = designFilesResponse?.data ?? [];
 
+  const [createApprovalTask, { isLoading: isCreatingApprovalTask }] = useCreateTaskMutation();
   const [createProjectFileFolder, { isLoading: isCreatingDesignFolder }] = useCreateProjectFileFolderMutation();
   const [updateProjectFileFolderAssignees, { isLoading: isAssigningDesignFolder }] =
     useUpdateProjectFileFolderAssigneesMutation();
@@ -173,6 +196,7 @@ export function TaskDetail() {
     if (!isDesignTask || !task?.id) {
       setDesignFolderId("");
       setDesignFolderFeedback(null);
+      setDesignFiles([]);
       ensuredDesignFolderKeyRef.current = null;
       syncedDesignFolderAssigneeRef.current = null;
       return;
@@ -187,9 +211,15 @@ export function TaskDetail() {
     if (!isDesignTask || !task?.projectId || !canManageProjectFiles || !designTaskFolderName) {
       return;
     }
-    const existing = projectFolders.find(
-      (folder) => folder.name.trim().toLowerCase() === designTaskFolderName.trim().toLowerCase(),
-    );
+    const normalizedTaskFolderName = designTaskFolderName.trim().toLowerCase();
+    const normalizedLegacyTaskFolderName = legacyDesignTaskFolderName.trim().toLowerCase();
+    const existing = projectFolders.find((folder) => {
+      const normalizedFolderName = folder.name.trim().toLowerCase();
+      return (
+        normalizedFolderName === normalizedTaskFolderName ||
+        normalizedFolderName === normalizedLegacyTaskFolderName
+      );
+    });
     if (existing) {
       setDesignFolderId((prev) => (prev === existing.id ? prev : existing.id));
       setDesignFolderFeedback(null);
@@ -205,6 +235,13 @@ export function TaskDetail() {
     let isCancelled = false;
     (async () => {
       try {
+        if (designProjectFolderName.trim()) {
+          await createProjectFileFolder({
+            projectId: task.projectId,
+            name: designProjectFolderName,
+          }).unwrap();
+        }
+
         const createdFolder = await createProjectFileFolder({
           projectId: task.projectId,
           name: designTaskFolderName,
@@ -229,8 +266,10 @@ export function TaskDetail() {
   }, [
     canManageProjectFiles,
     createProjectFileFolder,
+    designProjectFolderName,
     designTaskFolderName,
     isDesignTask,
+    legacyDesignTaskFolderName,
     projectFolders,
     task?.id,
     task?.projectId,
@@ -481,106 +520,279 @@ export function TaskDetail() {
   function handleDesignFileDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
     setIsDragActive(false);
-    const droppedFile = event.dataTransfer.files?.[0] ?? null;
-    if (!droppedFile) {
-      return;
+    const dropped = Array.from(event.dataTransfer.files);
+    if (dropped.length === 0) return;
+    setDesignFiles((prev) => {
+      const existing = new Set(prev.map((f) => f.name));
+      return [...prev, ...dropped.filter((f) => !existing.has(f.name))];
+    });
+  }
+
+  function handleDesignFileInputChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const selected = Array.from(event.target.files ?? []);
+    if (selected.length === 0) return;
+    setDesignFiles((prev) => {
+      const existing = new Set(prev.map((f) => f.name));
+      return [...prev, ...selected.filter((f) => !existing.has(f.name))];
+    });
+    if (designFileInputRef.current) {
+      designFileInputRef.current.value = "";
     }
-    setDesignFile(droppedFile);
-    if (!designFileTitle.trim()) {
-      setDesignFileTitle(droppedFile.name);
+  }
+
+  function removeDesignFile(fileName: string) {
+    setDesignFiles((prev) => prev.filter((f) => f.name !== fileName));
+  }
+
+  async function createApprovalTaskForDesignFile(
+    referenceFileId: string,
+    fileTitle: string,
+    approvalType: NonNullable<ReturnType<typeof getDesignApprovalSetupForTask>>["approvalType"],
+  ): Promise<boolean> {
+    if (!task?.projectId) {
+      return false;
+    }
+
+    try {
+      await createApprovalTask({
+        projectId: task.projectId,
+        title: `Müşteri onayı: ${task.title} • ${fileTitle}`,
+        description: task.description ?? "Designer tarafından müşteri onayına gönderildi.",
+        status: "REVIEW",
+        priority: task.priority,
+        type: "REVISION",
+        workstream: "UI_INTEGRATION",
+        dueDate: task.dueDate,
+        approvalRequired: true,
+        approvalType,
+        approvalStatus: "PENDING",
+        referenceProjectFileId: referenceFileId,
+        campaignRef: task.campaignRef,
+        adSetRef: task.adSetRef,
+        adRef: task.adRef,
+      }).unwrap();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function ensureDesignFolderForUpload(): Promise<string | null> {
+    if (!taskDetail.projectId || !isDesignTask || !canManageProjectFiles) {
+      return null;
+    }
+
+    if (designFolderId) {
+      return designFolderId;
+    }
+
+    const normalizedFolderName = designTaskFolderName.trim().toLowerCase();
+    const normalizedLegacyFolderName = legacyDesignTaskFolderName.trim().toLowerCase();
+    const existingFolder = projectFolders.find(
+      (folder) => {
+        const normalizedName = folder.name.trim().toLowerCase();
+        return (
+          normalizedName === normalizedFolderName ||
+          normalizedName === normalizedLegacyFolderName
+        );
+      },
+    );
+    if (existingFolder) {
+      setDesignFolderId(existingFolder.id);
+      return existingFolder.id;
+    }
+
+    if (!designTaskFolderName.trim()) {
+      return null;
+    }
+
+    try {
+      if (designProjectFolderName.trim()) {
+        await createProjectFileFolder({
+          projectId: taskDetail.projectId,
+          name: designProjectFolderName,
+        }).unwrap();
+      }
+
+      const createdFolder = await createProjectFileFolder({
+        projectId: taskDetail.projectId,
+        name: designTaskFolderName,
+      }).unwrap();
+      setDesignFolderId(createdFolder.id);
+      setDesignFolderFeedback("Klasör otomatik oluşturuldu, dosya yükleyebilirsiniz.");
+      return createdFolder.id;
+    } catch (error) {
+      setDesignFolderFeedback(
+        extractApiErrorMessage(error, "Görev klasörü otomatik oluşturulamadı."),
+      );
+      return null;
     }
   }
 
   async function handleDesignFileUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!taskDetail.projectId || !isDesignTask) {
-      return;
-    }
-    if (!designFolderId) {
+    if (!taskDetail.projectId || !isDesignTask) return;
+    const resolvedFolderId = await ensureDesignFolderForUpload();
+    if (!resolvedFolderId) {
       setDesignUploadFeedback("Önce görev için klasör oluşturulmalı.");
       return;
     }
-    if (!designFile) {
-      setDesignUploadFeedback("Yüklenecek dosyayı seçin.");
+    if (designFiles.length === 0) {
+      setDesignUploadFeedback("Yüklenecek dosyaları seçin.");
       return;
     }
 
-    const title = designFileTitle.trim() || designFile.name;
+    setDesignUploadFeedback(null);
+    setUploadProgress({ done: 0, total: designFiles.length });
+    let lastFileId: string | null = null;
+    const approvalSetup = getDesignApprovalSetupForTask(task);
+    const hasApprovalPermission =
+      approvalSetup !== null &&
+      currentUser?.permissions.includes(approvalSetup.permission) === true;
+    const shouldCreateApprovalPerUpload =
+      hasApprovalPermission && designFileVisibility === "CLIENT_VISIBLE";
+    let createdApprovalCount = 0;
+    let failedApprovalCount = 0;
 
-    try {
-      setDesignUploadFeedback(null);
-      const signature = await createProjectFileUploadSignature({
-        projectId: taskDetail.projectId,
-        fileName: designFile.name,
-        title,
-        description: designFileDescription.trim() || null,
-        mimeType: designFile.type || "application/octet-stream",
-        bytes: designFile.size,
-        category: "BRAND_ASSET",
-        visibility: designFileVisibility,
-        folderId: designFolderId,
-      }).unwrap();
+    for (const file of designFiles) {
+      try {
+        const signature = await createProjectFileUploadSignature({
+          projectId: taskDetail.projectId,
+          fileName: file.name,
+          title: file.name,
+          description: designFileDescription.trim() || null,
+          mimeType: file.type || "application/octet-stream",
+          bytes: file.size,
+          category: "BRAND_ASSET",
+          visibility: designFileVisibility,
+          folderId: resolvedFolderId,
+          approvalRequired: shouldCreateApprovalPerUpload,
+          approvalType: shouldCreateApprovalPerUpload ? approvalSetup?.approvalType : null,
+          approvalStatus: shouldCreateApprovalPerUpload ? "PENDING" : null,
+        }).unwrap();
 
-      const formData = new FormData();
-      formData.set("file", designFile);
-      formData.set("api_key", signature.apiKey);
-      formData.set("timestamp", String(signature.timestamp));
-      formData.set("signature", signature.signature);
-      formData.set("public_id", signature.publicId);
-      if (signature.overwrite) {
-        formData.set("overwrite", "true");
-      }
+        const formData = new FormData();
+        formData.set("file", file);
+        formData.set("api_key", signature.apiKey);
+        formData.set("timestamp", String(signature.timestamp));
+        formData.set("signature", signature.signature);
+        formData.set("public_id", signature.publicId);
+        if (signature.assetFolder) formData.set("asset_folder", signature.assetFolder);
+        if (signature.overwrite) formData.set("overwrite", "true");
 
-      const uploadResponse = await fetch(signature.uploadUrl, {
-        method: "POST",
-        body: formData,
-      });
-      if (!uploadResponse.ok) {
-        let uploadErrorMessage = "Cloudinary upload failed.";
-        try {
-          const uploadErrorJson = (await uploadResponse.json()) as {
-            error?: { message?: string };
-          };
-          if (uploadErrorJson.error?.message) {
-            uploadErrorMessage = `Cloudinary upload failed: ${uploadErrorJson.error.message}`;
-          }
-        } catch {
-          // Keep generic message
+        const uploadResponse = await fetch(signature.uploadUrl, { method: "POST", body: formData });
+        if (!uploadResponse.ok) {
+          let msg = "Cloudinary yüklemesi başarısız.";
+          try {
+            const errJson = (await uploadResponse.json()) as { error?: { message?: string } };
+            if (errJson.error?.message) msg = `Cloudinary yüklemesi başarısız: ${errJson.error.message}`;
+          } catch { /* keep generic */ }
+          throw new Error(msg);
         }
-        throw new Error(uploadErrorMessage);
+
+        const uploadJson = (await uploadResponse.json()) as {
+          secure_url: string;
+          resource_type: string;
+          format?: string;
+          bytes: number;
+        };
+
+        const uploadedFile = await completeProjectFileUpload({
+          projectId: taskDetail.projectId,
+          originalFileName: file.name,
+          title: file.name,
+          description: designFileDescription.trim() || null,
+          publicId: signature.publicId,
+          secureUrl: uploadJson.secure_url,
+          resourceType: uploadJson.resource_type ?? "raw",
+          format: uploadJson.format ?? null,
+          bytes: uploadJson.bytes ?? file.size,
+          mimeType: file.type || "application/octet-stream",
+          category: "BRAND_ASSET",
+          visibility: designFileVisibility,
+          folderId: resolvedFolderId,
+          approvalRequired: shouldCreateApprovalPerUpload,
+          approvalType: shouldCreateApprovalPerUpload ? approvalSetup?.approvalType : null,
+          approvalStatus: shouldCreateApprovalPerUpload ? "PENDING" : null,
+        }).unwrap();
+
+        lastFileId = uploadedFile.id;
+        if (shouldCreateApprovalPerUpload && approvalSetup) {
+          const approvalCreated = await createApprovalTaskForDesignFile(
+            uploadedFile.id,
+            uploadedFile.title,
+            approvalSetup.approvalType,
+          );
+          if (approvalCreated) {
+            createdApprovalCount += 1;
+          } else {
+            failedApprovalCount += 1;
+          }
+        }
+        setUploadProgress((prev) => prev ? { ...prev, done: prev.done + 1 } : null);
+      } catch (error) {
+        setDesignUploadFeedback(extractApiErrorMessage(error, `${file.name} yüklenemedi.`));
+        setUploadProgress(null);
+        return;
       }
+    }
 
-      const uploadJson = (await uploadResponse.json()) as {
-        secure_url: string;
-        resource_type: string;
-        format?: string;
-        bytes: number;
-      };
-
-      await completeProjectFileUpload({
-        projectId: taskDetail.projectId,
-        originalFileName: designFile.name,
-        title,
-        description: designFileDescription.trim() || null,
-        publicId: signature.publicId,
-        secureUrl: uploadJson.secure_url,
-        resourceType: uploadJson.resource_type ?? "raw",
-        format: uploadJson.format ?? null,
-        bytes: uploadJson.bytes ?? designFile.size,
-        mimeType: designFile.type || "application/octet-stream",
-        category: "BRAND_ASSET",
-        visibility: designFileVisibility,
-        folderId: designFolderId,
-      }).unwrap();
-
-      setDesignFile(null);
-      setDesignFileTitle("");
-      setDesignFileDescription("");
-      setDesignUploadFeedback("Tasarım dosyası yüklendi.");
-      await refetchDesignFiles();
-    } catch (error) {
+    setDesignFiles([]);
+    setDesignFileDescription("");
+    setUploadProgress(null);
+    const count = designFiles.length;
+    const uploadSummary = `${count} dosya yüklendi.`;
+    if (!shouldCreateApprovalPerUpload) {
+      setDesignUploadFeedback(uploadSummary);
+    } else if (failedApprovalCount === 0) {
+      setDesignUploadFeedback(`${uploadSummary} ${createdApprovalCount} dosya için ayrı müşteri onay penceresi açıldı.`);
+    } else {
       setDesignUploadFeedback(
-        extractApiErrorMessage(error, "Tasarım dosyası yüklenemedi."),
+        `${uploadSummary} ${createdApprovalCount} onay penceresi açıldı, ${failedApprovalCount} dosya için onay oluşturulamadı.`,
+      );
+    }
+    if (lastFileId) {
+      setApprovalTaskFeedback(null);
+    }
+    await refetchDesignFiles();
+    if (typeof window !== "undefined") {
+      window.location.reload();
+    }
+  }
+
+  async function handleSendApprovalFromDetail() {
+    const approvalSetup = getDesignApprovalSetupForTask(task);
+    if (!approvalSetup || !task?.projectId) return;
+    setApprovalTaskFeedback(null);
+
+    const filesForApproval = uploadedDesignFiles.filter(
+      (file) => file.visibility === "CLIENT_VISIBLE" && file.approvalStatus !== "PENDING",
+    );
+    if (filesForApproval.length === 0) {
+      setApprovalTaskFeedback("Onaya gönderilecek yeni client-visible dosya bulunmuyor.");
+      return;
+    }
+
+    let successCount = 0;
+    let failedCount = 0;
+    for (const file of filesForApproval) {
+      const created = await createApprovalTaskForDesignFile(
+        file.id,
+        file.title,
+        approvalSetup.approvalType,
+      );
+      if (created) {
+        successCount += 1;
+      } else {
+        failedCount += 1;
+      }
+    }
+
+    if (failedCount === 0) {
+      setApprovalTaskFeedback(`${successCount} dosya müşteri onayına gönderildi.`);
+    } else {
+      setApprovalTaskFeedback(
+        `${successCount} dosya müşteri onayına gönderildi, ${failedCount} dosya için onay oluşturulamadı.`,
       );
     }
   }
@@ -678,8 +890,8 @@ export function TaskDetail() {
               className="h-10 rounded-md border border-white/[0.08] bg-[#202020] px-3 text-sm text-white outline-none transition-colors hover:border-white/[0.12] focus:border-[#AAFF01]/50"
               disabled={isTodoMutating}
             >
-              <option value="INTERNAL">Internal</option>
-              <option value="CLIENT_VISIBLE">Client Visible</option>
+              <option value="INTERNAL">Şirket İçi</option>
+              <option value="CLIENT_VISIBLE">Müşteriye Açık</option>
             </select>
             <Button
               type="submit"
@@ -709,7 +921,7 @@ export function TaskDetail() {
                     <Checkbox
                       checked={todo.isCompleted}
                       onCheckedChange={() => void handleToggleTodo(todo.id, todo.isCompleted)}
-                      disabled={!canManageTasks || isTodoMutating}
+                      disabled={!canToggleTaskTodos || isTodoMutating}
                       className="border-white/[0.18] data-[state=checked]:border-[#AAFF01] data-[state=checked]:bg-[#AAFF01] data-[state=checked]:text-[#131313]"
                       aria-label={`${todo.title} durumunu değiştir`}
                     />
@@ -732,7 +944,7 @@ export function TaskDetail() {
                           {todo.title}
                         </span>
                         <span className="mt-1 inline-flex rounded-md border border-white/[0.12] px-2 py-0.5 text-[10px] text-[#A0A0A0]">
-                          {todo.visibility === "CLIENT_VISIBLE" ? "Client Visible" : "Internal"}
+                          {todo.visibility === "CLIENT_VISIBLE" ? "Müşteriye Açık" : "Şirket İçi"}
                         </span>
                       </div>
                     )}
@@ -807,11 +1019,11 @@ export function TaskDetail() {
             <div>
               <h2 className="text-lg font-semibold text-white">Yapılanlar / Çalışma Notu</h2>
               <p className="mt-1 text-sm text-[#A0A0A0]">
-                Geliştirici veya proje yöneticisi olarak göreve iş notu bırakabilirsiniz.
+                Atanan kişi veya proje yöneticisi olarak şirkete iç not bırakabilirsiniz.
               </p>
             </div>
             <Badge variant="outline" className="border-white/[0.12] text-[#A0A0A0]">
-              Internal
+              Şirket içi
             </Badge>
           </div>
 
@@ -822,7 +1034,7 @@ export function TaskDetail() {
               setWorkNoteFeedback(null);
             }}
             className="min-h-32 border-white/[0.08] bg-[#202020]"
-            placeholder="Bug fix, test, deploy veya entegrasyon sırasında yapılanları yazın..."
+            placeholder="Tasarım, revizyon, test, yayın veya entegrasyon sırasında yapılanları yazın..."
           />
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
             <div className="text-xs text-[#A0A0A0]">
@@ -830,9 +1042,11 @@ export function TaskDetail() {
               {task.branchName && <p>Önerilen Branch: <span className="font-mono text-white">{task.branchName}</span></p>}
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" onClick={() => void handlePrepareCode()} disabled={isPreparingCode}>
-                Kod Hazırlığı
-              </Button>
+              {canPrepareCode ? (
+                <Button type="button" variant="outline" onClick={() => void handlePrepareCode()} disabled={isPreparingCode}>
+                  Kod Hazırlığı
+                </Button>
+              ) : null}
               <Button type="button" variant="outline" onClick={() => void saveWorkNoteDraft()} disabled={isCreatingWorkNote}>
                 Notu Kaydet
               </Button>
@@ -885,6 +1099,10 @@ export function TaskDetail() {
                   </p>
                   {designFolderFeedback ? (
                     <p className="mt-2 text-xs text-[#d2ff8a]">{designFolderFeedback}</p>
+                  ) : !designFolderId ? (
+                    <p className="mt-2 text-xs text-[#A0A0A0]">
+                      Klasör hazırlanıyor, birkaç saniye sonra otomatik aktif olur.
+                    </p>
                   ) : null}
                   {task.assigneeUserId ? (
                     <p className="mt-2 text-xs text-[#A0A0A0]">
@@ -895,15 +1113,9 @@ export function TaskDetail() {
 
                 <form onSubmit={(event) => void handleDesignFileUpload(event)} className="space-y-3">
                   <Input
-                    value={designFileTitle}
-                    onChange={(event) => setDesignFileTitle(event.target.value)}
-                    placeholder="Dosya başlığı"
-                    className="border-white/[0.08] bg-[#202020]"
-                  />
-                  <Input
                     value={designFileDescription}
                     onChange={(event) => setDesignFileDescription(event.target.value)}
-                    placeholder="Kısa açıklama (opsiyonel)"
+                    placeholder="Kısa açıklama (opsiyonel, tüm dosyalara uygulanır)"
                     className="border-white/[0.08] bg-[#202020]"
                   />
                   <select
@@ -915,8 +1127,8 @@ export function TaskDetail() {
                     }
                     className="h-10 w-full rounded-md border border-white/[0.08] bg-[#202020] px-3 text-sm text-white outline-none transition-colors hover:border-white/[0.12] focus:border-[#AAFF01]/50"
                   >
-                    <option value="INTERNAL">Internal</option>
-                    <option value="CLIENT_VISIBLE">Client Visible</option>
+                    <option value="INTERNAL">Şirket İçi</option>
+                    <option value="CLIENT_VISIBLE">Müşteriye Açık</option>
                   </select>
 
                   <div
@@ -930,43 +1142,59 @@ export function TaskDetail() {
                     onDrop={handleDesignFileDrop}
                   >
                     <p className="text-[#D8D8D8]">
-                      Tasarım dosyasını buraya sürükleyip bırakın veya
+                      Dosyaları sürükleyip bırakın veya{" "}
                       <button
                         type="button"
-                        className="ml-1 text-[#AAFF01] underline"
+                        className="text-[#AAFF01] underline"
                         onClick={() => designFileInputRef.current?.click()}
                       >
                         seçmek için tıklayın
                       </button>
-                      .
+                      {" "}(çoklu seçim desteklenir).
                     </p>
                     <input
                       ref={designFileInputRef}
                       className="hidden"
                       type="file"
-                      onChange={(event) => setDesignFile(event.target.files?.[0] ?? null)}
+                      multiple
+                      onChange={handleDesignFileInputChange}
                     />
-                    {designFile ? (
-                      <p className="mt-2 text-xs text-[#A0A0A0]">
-                        Seçilen: {designFile.name} ({Math.round(designFile.size / 1024)} KB)
-                      </p>
-                    ) : null}
                   </div>
+
+                  {designFiles.length > 0 && (
+                    <div className="space-y-1.5">
+                      {designFiles.map((f) => (
+                        <div key={f.name} className="flex items-center justify-between rounded-md border border-white/[0.08] bg-[#202020] px-3 py-2">
+                          <span className="min-w-0 truncate text-xs text-white">{f.name}</span>
+                          <div className="ml-2 flex flex-shrink-0 items-center gap-2">
+                            <span className="text-xs text-[#A0A0A0]">{Math.round(f.size / 1024)} KB</span>
+                            <button
+                              type="button"
+                              className="text-[#A0A0A0] hover:text-red-300"
+                              onClick={() => removeDesignFile(f.name)}
+                            >
+                              ×
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   <Button
                     type="submit"
                     className="gap-2 bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
                     disabled={
-                      designFolderId.length === 0 ||
-                      !designFile ||
+                      designFiles.length === 0 ||
                       isCreatingDesignUploadSignature ||
                       isCompletingDesignUpload ||
-                      isCreatingDesignFolder ||
-                      isAssigningDesignFolder
+                      uploadProgress !== null
                     }
                   >
                     <UploadCloud className="h-4 w-4" />
-                    Tasarım Dosyası Yükle
+                    {uploadProgress
+                      ? `Yükleniyor ${uploadProgress.done}/${uploadProgress.total}...`
+                      : `${designFiles.length > 0 ? `${designFiles.length} Dosyayı` : "Dosyaları"} Yükle`}
                   </Button>
                   {designUploadFeedback ? (
                     <p className="text-sm text-[#d2ff8a]">{designUploadFeedback}</p>
@@ -980,12 +1208,12 @@ export function TaskDetail() {
                       Dosyalar güncelleniyor...
                     </p>
                   ) : null}
-                  {!isFetchingDesignFiles && designFiles.length === 0 ? (
+                  {!isFetchingDesignFiles && uploadedDesignFiles.length === 0 ? (
                     <p className="rounded-lg border border-white/[0.06] bg-[#202020] px-3 py-3 text-sm text-[#A0A0A0]">
                       Bu görev klasöründe henüz dosya yok.
                     </p>
                   ) : null}
-                  {designFiles.map((file) => (
+                  {uploadedDesignFiles.map((file) => (
                     <div
                       key={file.id}
                       className="flex items-start justify-between gap-3 rounded-lg border border-white/[0.06] bg-[#202020] px-3 py-3"
@@ -995,8 +1223,21 @@ export function TaskDetail() {
                         <p className="mt-1 text-xs text-[#A0A0A0]">
                           {file.originalFileName} · {Math.round(file.bytes / 1024)} KB · {file.visibility}
                         </p>
+                        {file.approvalRequired ? (
+                          <p className="mt-1 text-xs text-[#A0A0A0]">
+                            Onay: {getProjectFileApprovalLabel(file.approvalStatus)}
+                          </p>
+                        ) : null}
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex items-center gap-2">
+                        {file.approvalRequired ? (
+                          <Badge
+                            variant="outline"
+                            className={getProjectFileApprovalBadgeClass(file.approvalStatus)}
+                          >
+                            {getProjectFileApprovalLabel(file.approvalStatus)}
+                          </Badge>
+                        ) : null}
                         <Button type="button" size="sm" variant="ghost" asChild>
                           <a href={file.secureUrl} target="_blank" rel="noreferrer">
                             <Download className="h-4 w-4" />
@@ -1015,6 +1256,61 @@ export function TaskDetail() {
                       </div>
                     </div>
                   ))}
+                  {(() => {
+                    const hasFiles = uploadedDesignFiles.length > 0;
+                    if (!hasFiles) return null;
+
+                    const approvalSetup = getDesignApprovalSetupForTask(task);
+                    const hasPermission =
+                      approvalSetup !== null &&
+                      currentUser?.permissions.includes(approvalSetup.permission) === true;
+
+                    if (approvalSetup === null) {
+                      return (
+                        <div className="mt-3 rounded-lg border border-white/[0.08] bg-[#202020] p-3">
+                          <p className="text-xs text-[#A0A0A0]">
+                            Bu hizmet türü ({task.project?.serviceKey ?? "tanımsız"}) için müşteri onay akışı
+                            desteklenmiyor. Onay süreci yalnızca Growth Hub, Meta Ads, TikTok Ads, Amazon Ads ve
+                            Sosyal Medya projelerinde kullanılabilir.
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    if (!hasPermission) {
+                      return (
+                        <div className="mt-3 rounded-lg border border-white/[0.08] bg-[#202020] p-3">
+                          <p className="text-xs text-[#A0A0A0]">
+                            Dosyaları müşteri onayına göndermek için bu hizmette onay oluşturma izniniz
+                            bulunmuyor.
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="mt-3 rounded-lg border border-[#AAFF01]/20 bg-[#AAFF01]/5 p-3">
+                        <p className="mb-2 text-xs text-[#A0A0A0]">
+                          Client visible yüklenen her dosya için ayrı onay penceresi otomatik açılır.
+                          Eski dosyalar için dilerseniz aşağıdaki butonla toplu onay görevi oluşturabilirsiniz.
+                        </p>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="bg-[#AAFF01] text-[#131313] hover:bg-[#AAFF01]/90"
+                          disabled={isCreatingApprovalTask}
+                          onClick={() => void handleSendApprovalFromDetail()}
+                        >
+                          {isCreatingApprovalTask ? "Gönderiliyor..." : "Müşteri Onayına Gönder"}
+                        </Button>
+                        {approvalTaskFeedback ? (
+                          <p className={`mt-2 text-xs ${approvalTaskFeedback.includes("oluşturulamadı") || approvalTaskFeedback.includes("hata") ? "text-red-300" : "text-[#d2ff8a]"}`}>
+                            {approvalTaskFeedback}
+                          </p>
+                        ) : null}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             )}
@@ -1082,7 +1378,7 @@ export function TaskDetail() {
         <InfoCard label="Durum" value={getTaskStatusLabel(task.status)} />
         <InfoCard label="Öncelik" value={getPriorityLabel(task.priority)} />
         <InfoCard
-          label="Deadline"
+          label="Teslim Tarihi"
           value={`${formatDate(task.dueDate)}${isTaskOverdue(task) ? " (Gecikmiş)" : ""}`}
         />
         <InfoCard label="Proje ID" value={task.projectId} mono />
@@ -1101,12 +1397,53 @@ function isDesignTaskType(task: Task | undefined): boolean {
   return task.workstream === "UI_INTEGRATION" || task.type === "REVISION";
 }
 
-function buildDesignTaskFolderName(task: Task): string {
+function buildProjectFolderName(task: Task): string {
+  const projectLabel = normalizeFolderSegment(
+    task.project?.name ?? task.project?.slug ?? shortId(task.projectId),
+  );
+  return `PROJECT-${projectLabel}`.slice(0, 80);
+}
+
+function buildLegacyDesignTaskFolderName(task: Task): string {
   const code = task.code?.trim();
   const codePrefix = code && code.length > 0 ? code : shortId(task.id);
-  const normalizedTitle = task.title.trim().replace(/\s+/g, " ");
+  const normalizedTitle = normalizeFolderSegment(task.title);
   const raw = `DESIGN-${codePrefix} - ${normalizedTitle}`;
   return raw.slice(0, 120);
+}
+
+function buildDesignTaskFolderName(task: Task): string {
+  const projectFolderName = buildProjectFolderName(task);
+  const taskFolderName = buildLegacyDesignTaskFolderName(task);
+  const raw = `${projectFolderName}/${taskFolderName}`;
+  return raw.slice(0, 180);
+}
+
+function normalizeFolderSegment(value: string): string {
+  const normalized = value
+    .replace(/[\\\/]+/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+  return normalized.length > 0 ? normalized : "Untitled";
+}
+
+function getProjectFileApprovalLabel(status: string | null | undefined): string {
+  if (status === "PENDING") return "Onay Bekliyor";
+  if (status === "APPROVED") return "Onaylandı";
+  if (status === "ACKNOWLEDGED") return "Onaylandı";
+  if (status === "CHANGES_REQUESTED") return "Revizyon İstendi";
+  if (status === "REJECTED") return "Reddedildi";
+  return "Onay Akışı";
+}
+
+function getProjectFileApprovalBadgeClass(status: string | null | undefined): string {
+  if (status === "PENDING") return "border-[#FFA726]/30 bg-[#FFA726]/10 text-[#FFA726]";
+  if (status === "APPROVED" || status === "ACKNOWLEDGED") {
+    return "border-[#AAFF01]/30 bg-[#AAFF01]/10 text-[#d6ff93]";
+  }
+  if (status === "CHANGES_REQUESTED") return "border-[#00D4FF]/30 bg-[#00D4FF]/10 text-[#9CEEFF]";
+  if (status === "REJECTED") return "border-red-500/40 bg-red-500/10 text-red-200";
+  return "border-white/[0.12] bg-white/[0.04] text-[#A0A0A0]";
 }
 
 function InfoCard({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {

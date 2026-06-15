@@ -119,6 +119,10 @@ export function ProjectDetail() {
     "webapp.workspace.manage.any",
     "webapp.workspace.manage.assigned",
   ]);
+  const canRespondToMeetingRequests =
+    currentUser?.accountType === "EMPLOYEE" &&
+    currentUser.role === "PROJECT_MANAGER" &&
+    canManageWorkspace;
   const canInteractWorkspace = hasUserPermission(currentUser, [
     "webapp.workspace.interact.assigned",
     "webapp.workspace.manage.assigned",
@@ -1413,7 +1417,15 @@ export function ProjectDetail() {
                     <p className="mt-1 text-xs text-[#A0A0A0]">
                       Talep: {formatDateTime(meeting.preferredStartAt)} - {formatDateTime(meeting.preferredEndAt)}
                     </p>
-                    {canManageWorkspace && (
+                    {meeting.scheduledStartAt && meeting.scheduledEndAt ? (
+                      <p className="mt-1 text-xs text-[#d2ff8a]">
+                        Planlanan: {formatDateTime(meeting.scheduledStartAt)} - {formatDateTime(meeting.scheduledEndAt)}
+                      </p>
+                    ) : null}
+                    {meeting.responseNote ? (
+                      <p className="mt-1 text-xs text-[#A0A0A0]">Yanıt notu: {meeting.responseNote}</p>
+                    ) : null}
+                    {canRespondToMeetingRequests && (
                       <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-[180px_1fr_auto]">
                         <select
                           className="h-8 rounded-md border border-white/15 bg-[#151515] px-2 text-xs text-white"

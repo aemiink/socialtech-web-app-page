@@ -263,7 +263,9 @@ export function SocialMediaWorkspace({ initialView = "overview" }: SocialMediaWo
   const posts = postsQuery.data?.data ?? [];
   const summary = summaryQuery.data ?? null;
   const approvalPosts = posts.filter((post) =>
-    post.status === "WAITING_APPROVAL" || post.status === "REVISION_REQUIRED",
+    post.status === "WAITING_APPROVAL" ||
+    post.status === "REVISION_REQUIRED" ||
+    post.status === "APPROVED",
   );
   const designPosts = posts.filter((post) =>
     post.status === "DESIGN" || post.status === "REVISION_REQUIRED",
@@ -797,8 +799,8 @@ function ApprovalsPanel({
       <Card className="rounded-lg border-white/[0.08] bg-[#181818] p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-[#F7F7F7]">Onay Bekleyen İçerikler</h2>
-            <p className="mt-1 text-sm text-[#BDBDBD]">Client approval ve revizyon kuyruğu.</p>
+            <h2 className="text-lg font-semibold text-[#F7F7F7]">Onay Akışı İçerikleri</h2>
+            <p className="mt-1 text-sm text-[#BDBDBD]">Bekleyen, revizyondaki ve onaylanan içerik akışı.</p>
           </div>
           <Button
             onClick={onCreateApproval}
@@ -820,7 +822,7 @@ function ApprovalsPanel({
               />
             ))
           ) : (
-            <p className="text-sm text-[#BDBDBD]">Onay bekleyen içerik bulunamadı.</p>
+            <p className="text-sm text-[#BDBDBD]">Onay akışında içerik bulunamadı.</p>
           )}
         </div>
       </Card>

@@ -56,6 +56,7 @@ const mockUseCreateProjectFileUploadSignatureMutation = vi.fn();
 const mockUseCompleteProjectFileUploadMutation = vi.fn();
 const mockUseDeleteProjectFileMutation = vi.fn();
 const mockUseGetRelatedTaskCommitsQuery = vi.fn();
+const mockUseCreateTaskMutation = vi.fn(() => [vi.fn(() => ({ unwrap: async () => ({}) })), { isLoading: false }]);
 const mockUseCreateTaskTodoMutation = vi.fn<() => [TodoMutationTrigger, { isLoading: boolean }]>();
 const mockUseCreateTaskWorkNoteMutation = vi.fn();
 const mockUsePrepareTaskCodeMutation = vi.fn();
@@ -72,6 +73,7 @@ vi.mock("../../store/hooks", () => ({
 vi.mock("../../features/tasks/tasksApi", () => ({
   useGetTaskQuery: (id: string, options: QueryOptions) =>
     mockUseGetTaskQuery(id, options),
+  useCreateTaskMutation: () => mockUseCreateTaskMutation(),
   useCreateTaskTodoMutation: () => mockUseCreateTaskTodoMutation(),
   useCreateTaskWorkNoteMutation: () => mockUseCreateTaskWorkNoteMutation(),
   usePrepareTaskCodeMutation: () => mockUsePrepareTaskCodeMutation(),
@@ -279,6 +281,16 @@ function renderTaskDetail(id: string = taskId) {
   );
 }
 
+function renderEmployeeTaskDetail(id: string = taskId) {
+  render(
+    <MemoryRouter initialEntries={[`/employee/gorevlerim/${id}`]}>
+      <Routes>
+        <Route path="/employee/gorevlerim/:id" element={<TaskDetail />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 describe("TaskDetail", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -362,6 +374,27 @@ describe("TaskDetail", () => {
     expect(screen.getByRole("heading", { name: "Landing page QA tamamla" })).toBeInTheDocument();
     expect(mockUseGetTaskQuery).toHaveBeenCalledWith(taskId, {
       skip: false,
+    });
+  });
+
+  it("allows assigned employee users with update permission to toggle todos on employee detail page", async () => {
+    currentUser = {
+      ...developerUser,
+      permissions: [...developerUser.permissions, "tasks.update.assigned"],
+    };
+    const { toggleTodo } = setupTodoMutations();
+    setupQueryState({ data: taskDetail });
+
+    renderEmployeeTaskDetail();
+
+    fireEvent.click(screen.getByLabelText("Mobile QA durumunu değiştir"));
+
+    await waitFor(() => {
+      expect(toggleTodo).toHaveBeenCalledWith({
+        taskId,
+        todoId: "66666666-6666-4666-8666-666666666666",
+        body: { isCompleted: true },
+      });
     });
   });
 
@@ -509,6 +542,83 @@ describe("TaskDetail", () => {
       expect(screen.getByText("Tasarım Klasörü")).toBeInTheDocument();
     });
     expect(screen.queryByText("İlgili Commitler")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Tasarım Dosyası Yükle" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Dosyaları Yükle" })).toBeInTheDocument();
+  });
+
+  it("shows customer approval action for growth-hub design tasks with uploaded files", async () => {
+    currentUser = {
+      ...designerUser,
+      permissions: [
+        "tasks.read.assigned",
+        "projects.files.manage.assigned",
+        "socialMedia.approvals.create.assigned",
+      ],
+    };
+
+    const createApprovalTask = vi.fn(() => ({ unwrap: async () => ({ id: "approval-task-1" }) }));
+    mockUseCreateTaskMutation.mockReturnValue([createApprovalTask, { isLoading: false }]);
+
+    setupQueryState({
+      data: {
+        ...taskDetail,
+        title: "Kreatif Oluşturma",
+        type: "FEATURE",
+        workstream: "UI_INTEGRATION",
+        code: "FEAT-030",
+        project: {
+          ...taskDetail.project!,
+          serviceKey: "growth-hub",
+          name: "Growth & Hub Operasyon",
+        },
+      },
+    });
+
+    mockUseGetProjectFileFoldersQuery.mockReturnValue({
+      data: [
+        {
+          id: "folder-1",
+          projectId,
+          name: "DESIGN-FEAT-030 - Kreatif Oluşturma",
+          createdAt: "2026-05-01T00:00:00.000Z",
+          updatedAt: "2026-05-01T00:00:00.000Z",
+        },
+      ],
+    });
+    mockUseGetProjectFilesQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "file-1",
+            projectId,
+            folderId: "folder-1",
+            title: "Slide7Post1.png",
+            originalFileName: "Slide7Post1.png",
+            secureUrl: "https://cdn.socialtech.test/slide7.png",
+            bytes: 1200,
+            visibility: "CLIENT_VISIBLE",
+          },
+        ],
+      },
+      refetch: vi.fn(),
+      isFetching: false,
+    });
+
+    renderTaskDetail();
+
+    const sendApprovalButton = await screen.findByRole("button", { name: "Müşteri Onayına Gönder" });
+    fireEvent.click(sendApprovalButton);
+
+    await waitFor(() => {
+      expect(createApprovalTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectId,
+          title: "Müşteri onayı: Kreatif Oluşturma • Slide7Post1.png",
+          approvalRequired: true,
+          approvalType: "SOCIAL_MEDIA_CREATIVE_APPROVAL",
+          approvalStatus: "PENDING",
+          referenceProjectFileId: "file-1",
+        }),
+      );
+    });
   });
 });
