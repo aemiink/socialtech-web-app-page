@@ -5,6 +5,7 @@ import { createHash } from "crypto";
 type SignatureParams = {
   timestamp: number;
   publicId: string;
+  assetFolder?: string | null;
   overwrite?: boolean;
 };
 
@@ -17,11 +18,16 @@ export class CloudinaryService {
     const apiKey = this.getRequired("CLOUDINARY_API_KEY");
     const apiSecret = this.getRequired("CLOUDINARY_API_SECRET");
 
-    const signaturePayload = [
-      `public_id=${params.publicId}`,
-      `timestamp=${params.timestamp}`,
-      ...(params.overwrite ? ["overwrite=true"] : []),
-    ].join("&");
+    const signatureParams = {
+      ...(params.assetFolder ? { asset_folder: params.assetFolder } : {}),
+      ...(params.overwrite ? { overwrite: "true" } : {}),
+      public_id: params.publicId,
+      timestamp: String(params.timestamp),
+    };
+    const signaturePayload = Object.entries(signatureParams)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, value]) => `${key}=${value}`)
+      .join("&");
     const signature = createHash("sha1").update(`${signaturePayload}${apiSecret}`).digest("hex");
 
     return {
@@ -29,6 +35,7 @@ export class CloudinaryService {
       apiKey,
       timestamp: params.timestamp,
       publicId: params.publicId,
+      assetFolder: params.assetFolder ?? null,
       signature,
     };
   }
@@ -76,4 +83,3 @@ export class CloudinaryService {
     return value;
   }
 }
-

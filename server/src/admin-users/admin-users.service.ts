@@ -134,6 +134,7 @@ export class AdminUsersService {
     this.assertCanManageUsers(currentUser);
 
     const where: Prisma.UserWhereInput = {
+      deletedAt: null,
       ...(query.accountType ? { accountType: query.accountType } : {}),
       ...(query.role ? { role: query.role } : {}),
       ...(query.isActive === undefined
@@ -331,6 +332,63 @@ export class AdminUsersService {
     return this.toAdminUserResponse(deactivatedUser);
   }
 
+  async deleteAdminUser(
+    currentUser: AuthenticatedUser,
+    userId: string,
+    auditRequestContext?: AuditLogRequestContext,
+  ): Promise<{ success: true }> {
+    this.assertCanManageUsers(currentUser);
+    this.assertNotSelfDeactivation(currentUser, userId);
+
+    const manageableUser = await this.getManageableEmployeeOrFail(userId);
+    const deletedAt = new Date();
+
+    await this.prisma.$transaction(async (tx) => {
+      const deletedUser = await tx.user.update({
+        where: { id: userId },
+        data: {
+          status: UserStatus.INACTIVE,
+          deletedAt,
+          sessionInvalidatedAt: deletedAt,
+        },
+        select: adminUserReadSelect,
+      });
+
+      await tx.refreshToken.updateMany({
+        where: {
+          userId,
+          revokedAt: null,
+        },
+        data: { revokedAt: deletedAt },
+      });
+
+      await tx.employeeClientAssignment.updateMany({
+        where: {
+          employeeUserId: userId,
+          isActive: true,
+        },
+        data: { isActive: false },
+      });
+
+      await this.recordAdminUserAudit(
+        tx,
+        currentUser,
+        ADMIN_USER_AUDIT_ACTIONS.deleted,
+        deletedUser.id,
+        this.buildAuditMetadata({
+          actorUserId: currentUser.id,
+          targetUserId: deletedUser.id,
+          changedFields: ["status", "deletedAt", "assignments"],
+          previousStatus: manageableUser.status,
+          nextStatus: deletedUser.status,
+        }),
+        auditRequestContext,
+      );
+    });
+
+    return { success: true };
+  }
+
   async activateAdminUser(
     currentUser: AuthenticatedUser,
     userId: string,
@@ -398,8 +456,8 @@ export class AdminUsersService {
   }
 
   private async getUserOrFail(userId: string): Promise<AdminUserReadModel> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, deletedAt: null },
       select: adminUserReadSelect,
     });
 

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { Request } from "express";
 import { AuditLogRequestContext } from "../audit-log/audit-log.service";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
@@ -82,6 +82,19 @@ export class AdminUsersController {
     @Req() request: Request,
   ) {
     return this.adminUsersService.activateAdminUser(
+      currentUser,
+      userId,
+      this.toAuditRequestContext(request),
+    );
+  }
+
+  @Delete(":id")
+  deleteAdminUser(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("id", ParseUUIDPipe) userId: string,
+    @Req() request: Request,
+  ) {
+    return this.adminUsersService.deleteAdminUser(
       currentUser,
       userId,
       this.toAuditRequestContext(request),

@@ -180,6 +180,7 @@ const socialMediaPostSelect = {
       file: {
         select: {
           id: true,
+          folderId: true,
           projectId: true,
           title: true,
           secureUrl: true,
@@ -187,6 +188,12 @@ const socialMediaPostSelect = {
           category: true,
           visibility: true,
           serviceKey: true,
+          folder: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
         },
       },
     },
@@ -2872,11 +2879,13 @@ export class SocialMediaService {
           createdAt: asset.createdAt,
           file: {
             id: asset.file.id,
+            folderId: asset.file.folderId,
             title: asset.file.title,
             secureUrl: asset.file.secureUrl,
             mimeType: asset.file.mimeType,
             category: asset.file.category,
             visibility: asset.file.visibility,
+            folder: asset.file.folder,
           },
         })),
     };

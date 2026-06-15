@@ -63,7 +63,7 @@ export class AuthService {
       throw new UnauthorizedException("Invalid email or password.");
     }
 
-    if (user.status !== UserStatus.ACTIVE) {
+    if (user.status !== UserStatus.ACTIVE || user.deletedAt || user.clientProfile?.deletedAt) {
       throw new ForbiddenException("User account is inactive.");
     }
 
@@ -113,7 +113,11 @@ export class AuthService {
       throw new UnauthorizedException("Refresh token payload mismatch.");
     }
 
-    if (storedRefreshToken.user.status !== UserStatus.ACTIVE) {
+    if (
+      storedRefreshToken.user.status !== UserStatus.ACTIVE ||
+      storedRefreshToken.user.deletedAt ||
+      storedRefreshToken.user.clientProfile?.deletedAt
+    ) {
       throw new ForbiddenException("User account is inactive.");
     }
 
@@ -216,7 +220,7 @@ export class AuthService {
       },
     });
 
-    if (!user) {
+    if (!user || user.deletedAt || user.clientProfile?.deletedAt) {
       throw new UnauthorizedException("User not found.");
     }
 

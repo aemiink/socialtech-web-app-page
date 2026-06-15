@@ -419,6 +419,7 @@ enum MetaAdsApprovalType {
   GROWTH_STRATEGY_APPROVAL
   BUDGET_DISTRIBUTION_APPROVAL
   CHANNEL_PRIORITY_APPROVAL
+  DESIGN_CREATIVE_APPROVAL
 }
 
 enum MetaAdsApprovalStatus {
@@ -586,6 +587,7 @@ model User {
   status               UserStatus  @default(ACTIVE)
   sessionInvalidatedAt DateTime?
   lastLoginAt          DateTime?
+  deletedAt            DateTime?
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
 
@@ -641,6 +643,7 @@ model User {
   @@index([accountType, role])
   @@index([accountType, status])
   @@index([clientProfileId])
+  @@index([deletedAt])
   @@index([status])
 }
 
@@ -665,6 +668,7 @@ model ClientProfile {
   companyName  String
   contactEmail String?
   status       ClientStatus @default(ACTIVE)
+  deletedAt    DateTime?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
@@ -700,6 +704,7 @@ model ClientProfile {
   convertedCrmLeads       CrmLead[]                  @relation("CrmLeadConvertedClient")
 
   @@index([status])
+  @@index([deletedAt])
 }
 
 model ClientGrowthHubConfig {

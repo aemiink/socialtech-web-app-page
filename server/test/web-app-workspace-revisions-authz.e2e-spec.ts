@@ -6,6 +6,7 @@ import {
   Priority,
   ProjectStatus,
   PurchasedServiceKey,
+  WebAppWorkspaceMeetingRequestStatus,
   WebAppWorkspaceRevisionStatus,
 } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
@@ -197,6 +198,104 @@ describe("Web App Workspace Revision Lifecycle (e2e)", () => {
       .expect(404);
   });
 
+  it("validates TSİ meeting requests and allows only the assigned project manager to respond", async () => {
+    const validStartAt = futureIstanbulIso(3, 10, 0);
+    const validEndAt = futureIstanbulIso(3, 10, 45);
+    const createResponse = await request(app.getHttpServer())
+      .post(`${workspaceBasePath(acmeWorkspaceProjectId)}/meeting-requests`)
+      .set("Authorization", `Bearer ${clientToken}`)
+      .send({
+        title: "Client meeting request",
+        agenda: "Review project progress.",
+        preferredStartAt: validStartAt,
+        preferredEndAt: validEndAt,
+        timezone: "Europe/Istanbul",
+      })
+      .expect(201);
+
+    const meetingRequestId = createResponse.body.id as string;
+
+    await request(app.getHttpServer())
+      .patch(meetingRequestPath(acmeWorkspaceProjectId, meetingRequestId))
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        status: WebAppWorkspaceMeetingRequestStatus.CONFIRMED,
+      })
+      .expect(403);
+
+    const changedStartAt = futureIstanbulIso(4, 11, 0);
+    const changedEndAt = futureIstanbulIso(4, 11, 45);
+    const missingNoteResponse = await request(app.getHttpServer())
+      .patch(meetingRequestPath(acmeWorkspaceProjectId, meetingRequestId))
+      .set("Authorization", `Bearer ${projectManagerToken}`)
+      .send({
+        status: WebAppWorkspaceMeetingRequestStatus.REQUESTED,
+        scheduledStartAt: changedStartAt,
+        scheduledEndAt: changedEndAt,
+      })
+      .expect(400);
+
+    expect(missingNoteResponse.body.error.message).toBe(
+      "A response note is required when proposing a different meeting time.",
+    );
+
+    const proposedResponse = await request(app.getHttpServer())
+      .patch(meetingRequestPath(acmeWorkspaceProjectId, meetingRequestId))
+      .set("Authorization", `Bearer ${projectManagerToken}`)
+      .send({
+        status: WebAppWorkspaceMeetingRequestStatus.REQUESTED,
+        scheduledStartAt: changedStartAt,
+        scheduledEndAt: changedEndAt,
+        responseNote: "Müşteri görüşmesi için bu saat daha uygun.",
+      })
+      .expect(200);
+
+    expect(proposedResponse.body).toEqual(
+      expect.objectContaining({
+        id: meetingRequestId,
+        status: WebAppWorkspaceMeetingRequestStatus.REQUESTED,
+        responseNote: "Müşteri görüşmesi için bu saat daha uygun.",
+        scheduledStartAt: changedStartAt,
+        scheduledEndAt: changedEndAt,
+      }),
+    );
+
+    const confirmedResponse = await request(app.getHttpServer())
+      .patch(meetingRequestPath(acmeWorkspaceProjectId, meetingRequestId))
+      .set("Authorization", `Bearer ${projectManagerToken}`)
+      .send({
+        status: WebAppWorkspaceMeetingRequestStatus.CONFIRMED,
+        scheduledStartAt: changedStartAt,
+        scheduledEndAt: changedEndAt,
+        responseNote: "Yeni tarih teyit edildi.",
+      })
+      .expect(200);
+
+    expect(confirmedResponse.body.status).toBe(WebAppWorkspaceMeetingRequestStatus.CONFIRMED);
+
+    await request(app.getHttpServer())
+      .post(`${workspaceBasePath(acmeWorkspaceProjectId)}/meeting-requests`)
+      .set("Authorization", `Bearer ${clientToken}`)
+      .send({
+        title: "Past meeting request",
+        preferredStartAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+        preferredEndAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+        timezone: "Europe/Istanbul",
+      })
+      .expect(400);
+
+    await request(app.getHttpServer())
+      .post(`${workspaceBasePath(acmeWorkspaceProjectId)}/meeting-requests`)
+      .set("Authorization", `Bearer ${clientToken}`)
+      .send({
+        title: "Outside business hours",
+        preferredStartAt: futureIstanbulIso(3, 8, 0),
+        preferredEndAt: futureIstanbulIso(3, 8, 45),
+        timezone: "Europe/Istanbul",
+      })
+      .expect(400);
+  });
+
   async function setDeterministicDemoPasswords(): Promise<void> {
     const deterministicPasswordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
     await prisma.user.updateMany({
@@ -363,5 +462,25 @@ describe("Web App Workspace Revision Lifecycle (e2e)", () => {
 
   function workspaceRevisionStatusPath(projectId: string, revisionId: string) {
     return `${workspaceBasePath(projectId)}/revisions/${revisionId}/status`;
+  }
+
+  function meetingRequestPath(projectId: string, meetingRequestId: string) {
+    return `${workspaceBasePath(projectId)}/meeting-requests/${meetingRequestId}`;
+  }
+
+  function futureIstanbulIso(dayOffset: number, hour: number, minute: number): string {
+    const future = new Date(Date.now() + dayOffset * 24 * 60 * 60 * 1000);
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/Istanbul",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(future);
+    const year = parts.find((part) => part.type === "year")?.value ?? "";
+    const month = parts.find((part) => part.type === "month")?.value ?? "";
+    const day = parts.find((part) => part.type === "day")?.value ?? "";
+    return new Date(
+      `${year}-${month}-${day}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00+03:00`,
+    ).toISOString();
   }
 });

@@ -36,6 +36,7 @@ const META_ADS_CREATIVES_MANAGE_ASSIGNED_PERMISSION = "metaAds.creatives.manage.
 const TIKTOK_ADS_CREATIVES_MANAGE_ASSIGNED_PERMISSION = "tiktokAds.creatives.manage.assigned";
 const AMAZON_ADS_PRODUCT_COLLABORATION_MANAGE_ASSIGNED_PERMISSION =
   "amazonAds.productCollaboration.manage.assigned";
+const FINAL_DELIVERY_FOLDER_PREFIX = "FINAL-";
 
 const projectFileReadSelect = {
   id: true,
@@ -129,7 +130,7 @@ export class ProjectFilesService {
     if (overwrite && dto.overwriteFileId) {
       await this.assertOverwriteFile(currentUser, project.id, dto.overwriteFileId);
     }
-    await this.assertFolder(project.id, dto.folderId);
+    const folder = await this.assertFolder(project.id, dto.folderId);
     await this.assertEmployeeFolderAssignmentForUpload(currentUser, project.id, dto.folderId);
 
     const datePrefix = new Date().toISOString().slice(0, 10).replace(/-/g, "/");
@@ -138,6 +139,7 @@ export class ProjectFilesService {
     const signature = this.cloudinaryService.createUploadSignature({
       timestamp,
       publicId,
+      assetFolder: folder.name,
       overwrite,
     });
 
@@ -428,10 +430,16 @@ export class ProjectFilesService {
         projectId: project.id,
         name: { equals: normalizedName, mode: "insensitive" },
       },
-      select: { id: true },
+      select: {
+        id: true,
+        projectId: true,
+        name: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
     if (existing) {
-      throw new BadRequestException("Folder name already exists in this project.");
+      return existing;
     }
 
     return this.prisma.projectFileFolder.create({
@@ -489,7 +497,10 @@ export class ProjectFilesService {
       throw new NotFoundException("Project file not found.");
     }
 
-    await this.cloudinaryService.deleteAsset(file.publicId, file.resourceType);
+    if (file.resourceType !== "url") {
+      await this.cloudinaryService.deleteAsset(file.publicId, file.resourceType);
+    }
+
     await this.prisma.projectFile.delete({ where: { id: file.id } });
     return { success: true };
   }
@@ -798,11 +809,13 @@ export class ProjectFilesService {
   private async assertFolder(projectId: string, folderId: string) {
     const folder = await this.prisma.projectFileFolder.findFirst({
       where: { id: folderId, projectId },
-      select: { id: true },
+      select: { id: true, name: true },
     });
     if (!folder) {
       throw new NotFoundException("Project folder not found.");
     }
+
+    return folder;
   }
 
   private async getAssignableEmployees(clientProfileId: string) {
@@ -848,7 +861,20 @@ export class ProjectFilesService {
       return null;
     }
 
-    return assignedFolderRows.map((item: { folderId: string }) => item.folderId);
+    const finalDeliveryFolders = await this.prisma.projectFileFolder.findMany({
+      where: {
+        projectId,
+        name: { startsWith: FINAL_DELIVERY_FOLDER_PREFIX },
+      },
+      select: { id: true },
+    });
+
+    return Array.from(
+      new Set([
+        ...assignedFolderRows.map((item: { folderId: string }) => item.folderId),
+        ...finalDeliveryFolders.map((folder: { id: string }) => folder.id),
+      ]),
+    );
   }
 
   private assertFolderSelectionRequired(folderId: string | null | undefined) {

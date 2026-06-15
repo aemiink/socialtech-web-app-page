@@ -59,10 +59,11 @@ export class UsersService {
         email: true,
         passwordHash: true,
         status: true,
+        deletedAt: true,
       },
     });
 
-    if (!user || user.status !== UserStatus.ACTIVE) {
+    if (!user || user.status !== UserStatus.ACTIVE || user.deletedAt) {
       throw new UnauthorizedException("User session is no longer valid.");
     }
 
@@ -110,6 +111,7 @@ export class UsersService {
     this.assertCanReadUsers(currentUser);
 
     return this.prisma.user.findMany({
+      where: { deletedAt: null },
       select: userReadSelect,
       orderBy: { createdAt: "desc" },
     });
@@ -125,8 +127,8 @@ export class UsersService {
       this.assertCanReadUsers(currentUser);
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, deletedAt: null },
       select: userReadSelect,
     });
 

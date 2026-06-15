@@ -28,6 +28,7 @@ const E2E_TODO_TITLE_PREFIX = "Authz E2E Todo";
 const E2E_META_APPROVAL_TASK_PREFIX = "Authz E2E Meta Approval";
 const E2E_TIKTOK_APPROVAL_TASK_PREFIX = "Authz E2E TikTok Approval";
 const E2E_AMAZON_APPROVAL_TASK_PREFIX = "Authz E2E Amazon Approval";
+const E2E_GROWTH_HUB_APPROVAL_TASK_PREFIX = "Authz E2E Growth Hub Approval";
 
 type LoginBody = {
   accessToken: string;
@@ -133,6 +134,7 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
   let clientOwnMetaAdsProjectId = "";
   let clientOwnTikTokAdsProjectId = "";
   let clientOwnAmazonAdsProjectId = "";
+  let clientOwnGrowthHubProjectId = "";
   let createdProjectId = "";
   const taskStatusRestores: TaskStatusRestore[] = [];
   const taskTodoRestores: TaskTodoRestore[] = [];
@@ -919,6 +921,47 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
     expect(updated?.approvalRespondedAt).toBeTruthy();
   });
 
+  it("client can approve own Growth Hub approval task", async () => {
+    const pendingApproval = await prisma.task.create({
+      data: {
+        projectId: clientOwnGrowthHubProjectId,
+        title: `${E2E_GROWTH_HUB_APPROVAL_TASK_PREFIX} Own ${Date.now()}`,
+        status: TaskStatus.REVIEW,
+        priority: Priority.MEDIUM,
+        type: TaskType.REVISION,
+        approvalRequired: true,
+        approvalType: MetaAdsApprovalType.META_ADS_STRATEGY_APPROVAL,
+        approvalStatus: MetaAdsApprovalStatus.PENDING,
+        approvalRequestedAt: new Date(),
+      },
+      select: { id: true },
+    });
+
+    await request(app.getHttpServer())
+      .patch(`${TASKS_PATH}/${pendingApproval.id}`)
+      .set("Authorization", `Bearer ${clientToken}`)
+      .send({ approvalStatus: MetaAdsApprovalStatus.APPROVED })
+      .expect(200);
+
+    const updated = await prisma.task.findUnique({
+      where: { id: pendingApproval.id },
+      select: {
+        approvalStatus: true,
+        approvalResponseNote: true,
+        approvalRespondedAt: true,
+        status: true,
+      },
+    });
+    expect(updated).toEqual(
+      expect.objectContaining({
+        approvalStatus: MetaAdsApprovalStatus.APPROVED,
+        approvalResponseNote: null,
+        status: TaskStatus.DONE,
+      }),
+    );
+    expect(updated?.approvalRespondedAt).toBeTruthy();
+  });
+
   it("client can acknowledge own Amazon Ads report approval task", async () => {
     const pendingApproval = await prisma.task.create({
       data: {
@@ -1125,6 +1168,7 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
     clientOwnMetaAdsProjectId = await resolveClientMetaAdsProjectId(clientOwnProfileId);
     clientOwnTikTokAdsProjectId = await resolveClientTikTokAdsProjectId(clientOwnProfileId);
     clientOwnAmazonAdsProjectId = await resolveClientAmazonAdsProjectId(clientOwnProfileId);
+    clientOwnGrowthHubProjectId = await resolveClientGrowthHubProjectId(clientOwnProfileId);
 
     const otherClientMetaAdsProject = await prisma.project.findFirst({
       where: {
@@ -1491,6 +1535,34 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
     return createdProject.id;
   }
 
+  async function resolveClientGrowthHubProjectId(clientProfileId: string): Promise<string> {
+    const existingGrowthHubProject = await prisma.project.findFirst({
+      where: {
+        clientProfileId,
+        serviceKey: PurchasedServiceKey.GROWTH_HUB,
+      },
+      select: { id: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    if (existingGrowthHubProject) {
+      return existingGrowthHubProject.id;
+    }
+
+    const createdProject = await prisma.project.create({
+      data: {
+        clientProfileId,
+        serviceKey: PurchasedServiceKey.GROWTH_HUB,
+        name: `${E2E_PROJECT_NAME_PREFIX} Growth Hub ${Date.now()}`,
+        slug: `authz-growth-hub-${Date.now()}`,
+        status: ProjectStatus.IN_PROGRESS,
+        priority: Priority.HIGH,
+      },
+      select: { id: true },
+    });
+
+    return createdProject.id;
+  }
+
   async function getProjectIds(where: Prisma.ProjectWhereInput): Promise<string[]> {
     const rows = await prisma.project.findMany({
       where,
@@ -1538,6 +1610,9 @@ describe("Projects and Tasks Authorization Matrix (e2e)", () => {
 
     await prisma.task.deleteMany({
       where: { title: { startsWith: E2E_META_APPROVAL_TASK_PREFIX } },
+    });
+    await prisma.task.deleteMany({
+      where: { title: { startsWith: E2E_GROWTH_HUB_APPROVAL_TASK_PREFIX } },
     });
 
     if (createdProjectId) {

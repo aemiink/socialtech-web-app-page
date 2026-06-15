@@ -395,6 +395,7 @@ export class ClientsService {
       : null;
     const filters: Prisma.ClientProfileWhereInput[] = [
       visibilityWhere,
+      { deletedAt: null },
       ...(statusFilter ? [statusFilter] : []),
       ...(searchFilter ? [searchFilter] : []),
     ];
@@ -422,8 +423,8 @@ export class ClientsService {
   }
 
   private async getClientProfileOrFail(clientId: string): Promise<ClientReadModel> {
-    const clientProfile = await this.prisma.clientProfile.findUnique({
-      where: { id: clientId },
+    const clientProfile = await this.prisma.clientProfile.findFirst({
+      where: { id: clientId, deletedAt: null },
       select: clientReadSelect,
     });
 
@@ -441,6 +442,7 @@ export class ClientsService {
     const clientProfile = await this.prisma.clientProfile.findFirst({
       where: {
         id: clientId,
+        deletedAt: null,
         employeeAssignments: {
           some: {
             employeeUserId,

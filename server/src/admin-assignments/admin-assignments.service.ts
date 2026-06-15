@@ -99,6 +99,8 @@ export class AdminAssignmentsService {
     this.assertCanReadAssignments(currentUser);
 
     const where: Prisma.EmployeeClientAssignmentWhereInput = {
+      employeeUser: { deletedAt: null },
+      clientProfile: { deletedAt: null },
       ...(query.employeeUserId ? { employeeUserId: query.employeeUserId } : {}),
       ...(query.clientProfileId ? { clientProfileId: query.clientProfileId } : {}),
       ...(query.isActive === undefined ? {} : { isActive: query.isActive }),
@@ -251,6 +253,7 @@ export class AdminAssignmentsService {
         id: employeeUserId,
         accountType: AccountType.EMPLOYEE,
         status: UserStatus.ACTIVE,
+        deletedAt: null,
       },
       select: { id: true },
     });
@@ -265,6 +268,7 @@ export class AdminAssignmentsService {
       where: {
         id: clientProfileId,
         status: ClientStatus.ACTIVE,
+        deletedAt: null,
       },
       select: { id: true },
     });

@@ -294,43 +294,65 @@ export class TasksService {
     const shouldSetApprovalResponder =
       approvalStatus !== null && this.isTerminalApprovalStatus(approvalStatus);
 
-    const task = await this.prisma.task.create({
-      data: {
-        title: dto.title,
-        description: dto.description ?? null,
-        status: dto.status,
-        priority: dto.priority,
-        type: dto.type,
-        workstream: dto.workstream,
-        severity: dto.severity ?? null,
-        environment: dto.environment ?? null,
-        affectedUrl: dto.affectedUrl ?? null,
-        reproductionSteps: dto.reproductionSteps ?? null,
-        reportedBy: dto.reportedBy ?? null,
-        code: generatedCode,
-        dueDate: this.parseNullableDate(dto.dueDate) ?? null,
-        project: {
-          connect: { id: dto.projectId },
+    const task = await this.prisma.$transaction(async (tx) => {
+      const createdTask = await tx.task.create({
+        data: {
+          title: dto.title,
+          description: dto.description ?? null,
+          status: dto.status,
+          priority: dto.priority,
+          type: dto.type,
+          workstream: dto.workstream,
+          severity: dto.severity ?? null,
+          environment: dto.environment ?? null,
+          affectedUrl: dto.affectedUrl ?? null,
+          reproductionSteps: dto.reproductionSteps ?? null,
+          reportedBy: dto.reportedBy ?? null,
+          code: generatedCode,
+          dueDate: this.parseNullableDate(dto.dueDate) ?? null,
+          project: {
+            connect: { id: dto.projectId },
+          },
+          ...(dto.sprintId ? { sprint: { connect: { id: dto.sprintId } } } : {}),
+          ...(dto.assigneeUserId
+            ? { assignee: { connect: { id: dto.assigneeUserId } } }
+            : {}),
+          approvalRequired: dto.approvalRequired ?? false,
+          approvalType: dto.approvalType ?? null,
+          approvalStatus,
+          approvalResponseNote: dto.approvalResponseNote ?? null,
+          approvalRequestedAt,
+          approvalRespondedAt,
+          ...(shouldSetApprovalResponder ? { approvalRespondedBy: { connect: { id: currentUser.id } } } : {}),
+          ...(dto.referenceProjectFileId
+            ? { referenceProjectFile: { connect: { id: dto.referenceProjectFileId } } }
+            : {}),
+          campaignRef: dto.campaignRef ?? null,
+          adSetRef: dto.adSetRef ?? null,
+          adRef: dto.adRef ?? null,
         },
-        ...(dto.sprintId ? { sprint: { connect: { id: dto.sprintId } } } : {}),
-        ...(dto.assigneeUserId
-          ? { assignee: { connect: { id: dto.assigneeUserId } } }
-          : {}),
-        approvalRequired: dto.approvalRequired ?? false,
-        approvalType: dto.approvalType ?? null,
-        approvalStatus,
-        approvalResponseNote: dto.approvalResponseNote ?? null,
-        approvalRequestedAt,
-        approvalRespondedAt,
-        ...(shouldSetApprovalResponder ? { approvalRespondedBy: { connect: { id: currentUser.id } } } : {}),
-        ...(dto.referenceProjectFileId
-          ? { referenceProjectFile: { connect: { id: dto.referenceProjectFileId } } }
-          : {}),
-        campaignRef: dto.campaignRef ?? null,
-        adSetRef: dto.adSetRef ?? null,
-        adRef: dto.adRef ?? null,
-      },
-      select: taskReadSelect,
+        select: taskReadSelect,
+      });
+
+      if (createdTask.referenceProjectFileId && createdTask.approvalRequired) {
+        await tx.projectFile.updateMany({
+          where: {
+            id: createdTask.referenceProjectFileId,
+            projectId: createdTask.projectId,
+          },
+          data: {
+            approvalRequired: true,
+            approvalType: createdTask.approvalType ?? null,
+            approvalStatus: createdTask.approvalStatus ?? null,
+            approvalResponseNote: createdTask.approvalResponseNote ?? null,
+            approvalRequestedAt: createdTask.approvalRequestedAt ?? null,
+            approvalRespondedAt: createdTask.approvalRespondedAt ?? null,
+            approvalRespondedByUserId: createdTask.approvalRespondedByUserId ?? null,
+          },
+        });
+      }
+
+      return createdTask;
     });
 
     return this.toTaskResponse(task, currentUser);
@@ -797,14 +819,6 @@ export class TasksService {
         approvalStatus: MetaAdsApprovalStatus.PENDING,
         project: {
           clientProfileId,
-          serviceKey: {
-            in: [
-              PurchasedServiceKey.META_ADS,
-              PurchasedServiceKey.TIKTOK_ADS,
-              PurchasedServiceKey.AMAZON_ADS,
-              PurchasedServiceKey.SOCIAL_MEDIA,
-            ],
-          },
         },
       },
       select: {
@@ -815,6 +829,7 @@ export class TasksService {
         workstream: true,
         assigneeUserId: true,
         approvalType: true,
+        referenceProjectFileId: true,
         campaignRef: true,
         adSetRef: true,
         adRef: true,
@@ -837,6 +852,23 @@ export class TasksService {
         },
         select: taskReadSelect,
       });
+
+      if (task.referenceProjectFileId) {
+        await tx.projectFile.updateMany({
+          where: {
+            id: task.referenceProjectFileId,
+            projectId: task.projectId,
+          },
+          data: {
+            approvalRequired: true,
+            approvalType: task.approvalType ?? null,
+            approvalStatus,
+            approvalResponseNote: dto.approvalResponseNote ?? null,
+            approvalRespondedAt: new Date(),
+            approvalRespondedByUserId: currentUser.id,
+          },
+        });
+      }
 
       if (approvalStatus === MetaAdsApprovalStatus.CHANGES_REQUESTED || approvalStatus === MetaAdsApprovalStatus.REJECTED) {
         await tx.task.create({
@@ -1531,6 +1563,10 @@ export class TasksService {
       return SOCIAL_MEDIA_APPROVALS_CREATE_ASSIGNED_PERMISSION;
     }
 
+    if (projectServiceKey === PurchasedServiceKey.GROWTH_HUB) {
+      return SOCIAL_MEDIA_APPROVALS_CREATE_ASSIGNED_PERMISSION;
+    }
+
     return null;
   }
 
@@ -1607,9 +1643,10 @@ export class TasksService {
     this.assertCanUpdateOwnTask(currentUser);
     if (
       currentUser.role !== UserRole.DEVELOPER &&
-      currentUser.role !== UserRole.PROJECT_MANAGER
+      currentUser.role !== UserRole.PROJECT_MANAGER &&
+      currentUser.role !== UserRole.DESIGNER
     ) {
-      throw new ForbiddenException("Only developers and project managers can write task work notes.");
+      throw new ForbiddenException("Only assigned delivery employees can write task work notes.");
     }
 
     const task = await this.prisma.task.findFirst({

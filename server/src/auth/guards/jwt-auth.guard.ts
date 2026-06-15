@@ -43,10 +43,16 @@ export class JwtAuthGuard implements CanActivate {
         clientProfileId: true,
         status: true,
         sessionInvalidatedAt: true,
+        deletedAt: true,
+        clientProfile: {
+          select: {
+            deletedAt: true,
+          },
+        },
       },
     });
 
-    if (!user || user.status !== UserStatus.ACTIVE) {
+    if (!user || user.status !== UserStatus.ACTIVE || user.deletedAt || user.clientProfile?.deletedAt) {
       throw new UnauthorizedException("User session is no longer valid.");
     }
 

@@ -282,6 +282,40 @@ const taskSummarySelect = {
       role: true,
     },
   },
+  todos: {
+    select: {
+      id: true,
+      taskId: true,
+      title: true,
+      description: true,
+      visibility: true,
+      sortOrder: true,
+      isCompleted: true,
+      completedAt: true,
+      completedByUserId: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+  },
+  referenceProjectFile: {
+    select: {
+      id: true,
+      title: true,
+      category: true,
+      originalFileName: true,
+      secureUrl: true,
+      mimeType: true,
+      visibility: true,
+      createdAt: true,
+      folder: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+  },
 } satisfies Prisma.TaskSelect;
 
 const sprintSummarySelect = {
@@ -312,6 +346,8 @@ const fileSummarySelect = {
   category: true,
   originalFileName: true,
   secureUrl: true,
+  mimeType: true,
+  bytes: true,
   createdAt: true,
   folder: {
     select: {
@@ -322,6 +358,25 @@ const fileSummarySelect = {
 } satisfies Prisma.ProjectFileSelect;
 
 type WorkspaceProject = Prisma.ProjectGetPayload<{ select: typeof projectSummarySelect }>;
+type WorkspaceTaskTodo = Prisma.TaskTodoGetPayload<{
+  select: (typeof taskSummarySelect)["todos"]["select"];
+}>;
+
+function buildWorkspaceTaskCompletion(todos: WorkspaceTaskTodo[]) {
+  const totalTodos = todos.length;
+  const completedTodos = todos.filter((todo) => todo.isCompleted).length;
+  const remainingTodos = totalTodos - completedTodos;
+  const completionPercentage =
+    totalTodos === 0 ? 0 : Math.round((completedTodos / totalTodos) * 100);
+
+  return {
+    totalTodos,
+    completedTodos,
+    remainingTodos,
+    completionPercentage,
+    isComplete: totalTodos > 0 && completedTodos === totalTodos,
+  };
+}
 
 @Injectable()
 export class WebAppWorkspaceService {
@@ -394,12 +449,28 @@ export class WebAppWorkspaceService {
           select: fileSummarySelect,
         }),
       ]);
+    const hideInternalRecords = this.shouldHideInternalRecords(currentUser);
+    const sourceTasks = tasks.map((task) => {
+      const { todos, ...taskWithoutTodos } = task;
+      const completion = buildWorkspaceTaskCompletion(todos);
+
+      return {
+        ...taskWithoutTodos,
+        todos: hideInternalRecords ? [] : todos,
+        completion,
+        progressPercent: completion.completionPercentage,
+        referenceProjectFile:
+          hideInternalRecords && task.referenceProjectFile?.visibility !== ProjectFileVisibility.CLIENT_VISIBLE
+            ? null
+            : task.referenceProjectFile,
+      };
+    });
 
     return {
       project,
       tabKey: query.tabKey ?? null,
       sourceOfTruth: {
-        tasks,
+        tasks: sourceTasks,
         sprints,
         releases,
         files,
@@ -873,6 +944,7 @@ export class WebAppWorkspaceService {
       preferredEndAt,
       "preferredEndAt cannot be earlier than preferredStartAt.",
     );
+    this.assertMeetingSchedule(preferredStartAt, preferredEndAt, dto.timezone);
 
     const request = await this.prisma.webAppWorkspaceMeetingRequest.create({
       data: {
@@ -900,11 +972,14 @@ export class WebAppWorkspaceService {
     meetingRequestId: string,
     dto: UpdateMeetingRequestDto,
   ) {
-    const project = await this.assertWorkspaceProjectAccess(currentUser, projectId, "manage");
+    const project = await this.assertMeetingResponderAccess(currentUser, projectId);
     const existing = await this.prisma.webAppWorkspaceMeetingRequest.findFirst({
       where: { id: meetingRequestId, projectId: project.id },
       select: {
         id: true,
+        preferredStartAt: true,
+        preferredEndAt: true,
+        timezone: true,
         scheduledStartAt: true,
         scheduledEndAt: true,
       },
@@ -915,12 +990,20 @@ export class WebAppWorkspaceService {
 
     const nextScheduledStartAt =
       dto.scheduledStartAt === undefined
-        ? existing.scheduledStartAt
+        ? (dto.status === "CONFIRMED" && !existing.scheduledStartAt
+          ? existing.preferredStartAt
+          : existing.scheduledStartAt)
         : (dto.scheduledStartAt ? new Date(dto.scheduledStartAt) : null);
     const nextScheduledEndAt =
       dto.scheduledEndAt === undefined
-        ? existing.scheduledEndAt
+        ? (dto.status === "CONFIRMED" && !existing.scheduledEndAt
+          ? existing.preferredEndAt
+          : existing.scheduledEndAt)
         : (dto.scheduledEndAt ? new Date(dto.scheduledEndAt) : null);
+
+    if ((nextScheduledStartAt && !nextScheduledEndAt) || (!nextScheduledStartAt && nextScheduledEndAt)) {
+      throw new BadRequestException("scheduledStartAt and scheduledEndAt must be provided together.");
+    }
 
     if (nextScheduledStartAt && nextScheduledEndAt) {
       this.assertDateRange(
@@ -928,6 +1011,14 @@ export class WebAppWorkspaceService {
         nextScheduledEndAt,
         "scheduledEndAt cannot be earlier than scheduledStartAt.",
       );
+      this.assertMeetingSchedule(nextScheduledStartAt, nextScheduledEndAt, existing.timezone);
+
+      const dateChanged =
+        nextScheduledStartAt.getTime() !== existing.preferredStartAt.getTime() ||
+        nextScheduledEndAt.getTime() !== existing.preferredEndAt.getTime();
+      if (dateChanged && !dto.responseNote?.trim()) {
+        throw new BadRequestException("A response note is required when proposing a different meeting time.");
+      }
     }
 
     const request = await this.prisma.webAppWorkspaceMeetingRequest.update({
@@ -947,6 +1038,42 @@ export class WebAppWorkspaceService {
     });
 
     return request;
+  }
+
+  private async assertMeetingResponderAccess(
+    currentUser: AuthenticatedUser,
+    projectId: string,
+  ): Promise<WorkspaceProject> {
+    if (
+      currentUser.accountType !== AccountType.EMPLOYEE ||
+      currentUser.role !== UserRole.PROJECT_MANAGER
+    ) {
+      throw new ForbiddenException("Only the assigned project manager can respond to meeting requests.");
+    }
+
+    this.assertEmployeeWorkspacePermission(currentUser, "manage");
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: projectSummarySelect,
+    });
+    if (!project || project.serviceKey !== PurchasedServiceKey.WEB_APP) {
+      throw new NotFoundException("Project not found.");
+    }
+
+    const assignment = await this.prisma.employeeClientAssignment.findFirst({
+      where: {
+        employeeUserId: currentUser.id,
+        clientProfileId: project.clientProfileId,
+        isActive: true,
+        scope: EmployeeClientAssignmentScope.PROJECT,
+      },
+      select: { id: true },
+    });
+    if (!assignment) {
+      throw new NotFoundException("Project not found.");
+    }
+
+    return project;
   }
 
   private async assertWorkspaceProjectAccess(
@@ -1274,6 +1401,31 @@ export class WebAppWorkspaceService {
     }
     if (endDate.getTime() < startDate.getTime()) {
       throw new BadRequestException(message);
+    }
+  }
+
+  private assertMeetingSchedule(startDate: Date, endDate: Date, timezone: string) {
+    if (timezone !== "Europe/Istanbul") {
+      throw new BadRequestException("Meeting timezone must be Europe/Istanbul.");
+    }
+    if (endDate.getTime() <= startDate.getTime()) {
+      throw new BadRequestException("Meeting end time must be later than start time.");
+    }
+    if (startDate.getTime() <= Date.now()) {
+      throw new BadRequestException("Meeting date cannot be in the past.");
+    }
+
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/Istanbul",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(startDate);
+    const hour = Number(parts.find((part) => part.type === "hour")?.value ?? "-1");
+    const minute = Number(parts.find((part) => part.type === "minute")?.value ?? "-1");
+    const minutesSinceMidnight = hour * 60 + minute;
+    if (minutesSinceMidnight < 9 * 60 || minutesSinceMidnight > 18 * 60) {
+      throw new BadRequestException("Meeting start time must be between 09:00 and 18:00 TSİ.");
     }
   }
 

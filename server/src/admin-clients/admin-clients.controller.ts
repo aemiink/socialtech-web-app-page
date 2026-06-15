@@ -1,4 +1,4 @@
-import { Body, Controller, Param, ParseUUIDPipe, Patch, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Param, ParseUUIDPipe, Patch, Post, Req, UseGuards } from "@nestjs/common";
 import { Request } from "express";
 import { AuditLogRequestContext } from "../audit-log/audit-log.service";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
@@ -66,6 +66,19 @@ export class AdminClientsController {
     @Req() request: Request,
   ) {
     return this.adminClientsService.activateAdminClient(
+      currentUser,
+      clientProfileId,
+      this.toAuditRequestContext(request),
+    );
+  }
+
+  @Delete(":id")
+  deleteAdminClient(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("id", ParseUUIDPipe) clientProfileId: string,
+    @Req() request: Request,
+  ) {
+    return this.adminClientsService.deleteAdminClient(
       currentUser,
       clientProfileId,
       this.toAuditRequestContext(request),

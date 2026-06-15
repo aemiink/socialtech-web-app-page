@@ -1,15 +1,7 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Req,
-  Res,
-  Post,
-  UnauthorizedException,
-  UseGuards,
-} from "@nestjs/common";
+import { Body, Controller, Get, Req, Res, Post, UnauthorizedException, UseGuards } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { CookieOptions, Request, Response } from "express";
+import { AccountType } from "@prisma/client";
 import { AuthService } from "./auth.service";
 import { CurrentUser } from "./decorators/current-user.decorator";
 import { LoginDto } from "./dto/login.dto";
@@ -18,6 +10,8 @@ import { RefreshTokenDto } from "./dto/refresh-token.dto";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { AuthenticatedUser } from "./types/authenticated-user.type";
 import { AuthServiceResponse, PublicAuthResponse } from "./types/auth-response.type";
+
+type AuthScope = "WORKFORCE" | "CLIENT";
 
 @Controller("auth")
 export class AuthController {
@@ -36,7 +30,9 @@ export class AuthController {
       response,
       authResponse.refreshToken,
       authResponse.refreshTokenExpiresAt,
+      authResponse.user.accountType,
     );
+    this.clearLegacyRefreshTokenCookie(response);
 
     return this.toPublicAuthResponse(authResponse);
   }
@@ -57,7 +53,9 @@ export class AuthController {
       response,
       authResponse.refreshToken,
       authResponse.refreshTokenExpiresAt,
+      authResponse.user.accountType,
     );
+    this.clearLegacyRefreshTokenCookie(response);
 
     return this.toPublicAuthResponse(authResponse);
   }
@@ -70,7 +68,7 @@ export class AuthController {
   ): Promise<{ success: true }> {
     const refreshToken = this.extractRefreshToken(request, payload.refreshToken);
     const result = await this.authService.logout(refreshToken ?? undefined);
-    this.clearRefreshTokenCookie(response);
+    this.clearRefreshTokenCookie(response, this.resolveAuthScope(request));
 
     return result;
   }
@@ -82,11 +80,12 @@ export class AuthController {
   }
 
   private extractRefreshToken(request: Request, bodyToken?: string): string | null {
-    const cookieName =
-      this.configService.get<string>("REFRESH_TOKEN_COOKIE_NAME") ?? "socialtech_refresh_token";
-    const cookieToken = request.cookies?.[cookieName];
-    if (typeof cookieToken === "string" && cookieToken.length > 0) {
-      return cookieToken;
+    const scope = this.resolveAuthScope(request);
+    for (const cookieName of this.getCookieNamesByScope(scope)) {
+      const cookieToken = request.cookies?.[cookieName];
+      if (typeof cookieToken === "string" && cookieToken.length > 0) {
+        return cookieToken;
+      }
     }
 
     if (typeof bodyToken === "string" && bodyToken.length > 0) {
@@ -96,16 +95,85 @@ export class AuthController {
     return null;
   }
 
-  private setRefreshTokenCookie(response: Response, refreshToken: string, expiresAt: Date): void {
+  private setRefreshTokenCookie(
+    response: Response,
+    refreshToken: string,
+    expiresAt: Date,
+    accountType: AccountType,
+  ): void {
     const cookieName =
-      this.configService.get<string>("REFRESH_TOKEN_COOKIE_NAME") ?? "socialtech_refresh_token";
+      accountType === AccountType.CLIENT
+        ? this.getClientRefreshCookieName()
+        : this.getWorkforceRefreshCookieName();
     response.cookie(cookieName, refreshToken, this.buildCookieOptions(expiresAt));
   }
 
-  private clearRefreshTokenCookie(response: Response): void {
-    const cookieName =
-      this.configService.get<string>("REFRESH_TOKEN_COOKIE_NAME") ?? "socialtech_refresh_token";
-    response.clearCookie(cookieName, this.buildCookieOptions(new Date(0)));
+  private clearRefreshTokenCookie(response: Response, scope: AuthScope | null): void {
+    const cookieNames = scope
+      ? this.getCookieNamesByScope(scope)
+      : [
+          this.getWorkforceRefreshCookieName(),
+          this.getClientRefreshCookieName(),
+          this.getLegacyRefreshCookieName(),
+        ];
+
+    for (const cookieName of cookieNames) {
+      response.clearCookie(cookieName, this.buildCookieOptions(new Date(0)));
+    }
+  }
+
+  private clearLegacyRefreshTokenCookie(response: Response): void {
+    response.clearCookie(this.getLegacyRefreshCookieName(), this.buildCookieOptions(new Date(0)));
+  }
+
+  private resolveAuthScope(request: Request): AuthScope | null {
+    const rawScope = request.get("x-auth-scope");
+    if (!rawScope) {
+      return null;
+    }
+
+    const normalizedScope = rawScope.trim().toUpperCase();
+    if (normalizedScope === "CLIENT") {
+      return "CLIENT";
+    }
+    if (normalizedScope === "WORKFORCE") {
+      return "WORKFORCE";
+    }
+    return null;
+  }
+
+  private getCookieNamesByScope(scope: AuthScope | null): string[] {
+    if (scope === "CLIENT") {
+      return [this.getClientRefreshCookieName(), this.getLegacyRefreshCookieName()];
+    }
+
+    if (scope === "WORKFORCE") {
+      return [this.getWorkforceRefreshCookieName(), this.getLegacyRefreshCookieName()];
+    }
+
+    return [
+      this.getLegacyRefreshCookieName(),
+      this.getWorkforceRefreshCookieName(),
+      this.getClientRefreshCookieName(),
+    ];
+  }
+
+  private getLegacyRefreshCookieName(): string {
+    return this.configService.get<string>("REFRESH_TOKEN_COOKIE_NAME") ?? "socialtech_refresh_token";
+  }
+
+  private getWorkforceRefreshCookieName(): string {
+    return (
+      this.configService.get<string>("REFRESH_TOKEN_COOKIE_NAME_WORKFORCE") ??
+      `${this.getLegacyRefreshCookieName()}_workforce`
+    );
+  }
+
+  private getClientRefreshCookieName(): string {
+    return (
+      this.configService.get<string>("REFRESH_TOKEN_COOKIE_NAME_CLIENT") ??
+      `${this.getLegacyRefreshCookieName()}_client`
+    );
   }
 
   private buildCookieOptions(expiresAt: Date): CookieOptions {

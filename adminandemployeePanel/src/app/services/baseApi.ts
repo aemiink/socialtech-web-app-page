@@ -17,6 +17,8 @@ const rawBaseQuery = fetchBaseQuery({
   baseUrl: apiBaseUrl,
   credentials: "include",
   prepareHeaders: (headers, { getState }) => {
+    headers.set("X-Auth-Scope", "WORKFORCE");
+
     const token = (getState() as RootState).auth.accessToken;
     if (token) {
       headers.set("Authorization", `Bearer ${token}`);

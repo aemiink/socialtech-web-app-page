@@ -66,6 +66,7 @@ const adminClientReadSelect = {
     where: {
       accountType: AccountType.CLIENT,
       role: UserRole.CLIENT_OWNER,
+      deletedAt: null,
     },
     select: clientOwnerSummarySelect,
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -300,6 +301,82 @@ export class AdminClientsService {
     return this.toAdminClientResponse(deactivatedClient);
   }
 
+  async deleteAdminClient(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+    auditRequestContext?: AuditLogRequestContext,
+  ): Promise<{ success: true }> {
+    this.assertCanManageClients(currentUser);
+
+    const existingClient = await this.getClientProfileOrFail(clientProfileId);
+    const deletedAt = new Date();
+
+    await this.prisma.$transaction(async (tx) => {
+      const linkedClientUsers = await tx.user.findMany({
+        where: {
+          clientProfileId,
+          accountType: AccountType.CLIENT,
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+      const linkedClientUserIds = linkedClientUsers.map((user) => user.id);
+
+      if (linkedClientUserIds.length > 0) {
+        await tx.user.updateMany({
+          where: { id: { in: linkedClientUserIds } },
+          data: {
+            status: UserStatus.INACTIVE,
+            deletedAt,
+            sessionInvalidatedAt: deletedAt,
+          },
+        });
+
+        await tx.refreshToken.updateMany({
+          where: {
+            userId: { in: linkedClientUserIds },
+            revokedAt: null,
+          },
+          data: { revokedAt: deletedAt },
+        });
+      }
+
+      await tx.employeeClientAssignment.updateMany({
+        where: {
+          clientProfileId,
+          isActive: true,
+        },
+        data: { isActive: false },
+      });
+
+      const deletedClient = await tx.clientProfile.update({
+        where: { id: clientProfileId },
+        data: {
+          status: ClientStatus.INACTIVE,
+          deletedAt,
+        },
+        select: adminClientReadSelect,
+      });
+
+      await this.recordAdminClientAudit(
+        tx,
+        currentUser,
+        ADMIN_CLIENT_AUDIT_ACTIONS.deleted,
+        deletedClient.id,
+        this.buildAuditMetadata({
+          actorUserId: currentUser.id,
+          targetClientProfileId: deletedClient.id,
+          changedFields: ["status", "deletedAt", "ownerUsers", "assignments"],
+          previousState: this.toClientAuditState(existingClient),
+          nextState: this.toClientAuditState(deletedClient),
+        }),
+        auditRequestContext,
+      );
+    });
+
+    return { success: true };
+  }
+
   async activateAdminClient(
     currentUser: AuthenticatedUser,
     clientProfileId: string,
@@ -467,8 +544,8 @@ export class AdminClientsService {
     ownerUserId: string,
     auditRequestContext?: AuditLogRequestContext,
   ): Promise<ClientOwnerReadModel> {
-    const user = await tx.user.findUnique({
-      where: { id: ownerUserId },
+    const user = await tx.user.findFirst({
+      where: { id: ownerUserId, deletedAt: null },
       select: clientOwnerSummarySelect,
     });
 
@@ -568,8 +645,8 @@ export class AdminClientsService {
     clientProfileId: string,
     tx?: Prisma.TransactionClient,
   ): Promise<AdminClientReadModel> {
-    const client = await (tx ?? this.prisma).clientProfile.findUnique({
-      where: { id: clientProfileId },
+    const client = await (tx ?? this.prisma).clientProfile.findFirst({
+      where: { id: clientProfileId, deletedAt: null },
       select: adminClientReadSelect,
     });
 
@@ -589,6 +666,7 @@ export class AdminClientsService {
         clientProfileId,
         accountType: AccountType.CLIENT,
         role: UserRole.CLIENT_OWNER,
+        deletedAt: null,
       },
       select: { id: true },
     });

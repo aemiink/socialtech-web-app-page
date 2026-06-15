@@ -7,6 +7,7 @@ export const ADMIN_USER_AUDIT_ACTIONS = {
   updated: "ADMIN_USER_UPDATED",
   deactivated: "ADMIN_USER_DEACTIVATED",
   activated: "ADMIN_USER_ACTIVATED",
+  deleted: "ADMIN_USER_DELETED",
   passwordReset: "ADMIN_USER_PASSWORD_RESET",
 } as const;
 
@@ -15,6 +16,7 @@ export const ADMIN_CLIENT_AUDIT_ACTIONS = {
   updated: "ADMIN_CLIENT_UPDATED",
   deactivated: "ADMIN_CLIENT_DEACTIVATED",
   activated: "ADMIN_CLIENT_ACTIVATED",
+  deleted: "ADMIN_CLIENT_DELETED",
   ownerCreated: "ADMIN_CLIENT_OWNER_CREATED",
   ownerLinked: "ADMIN_CLIENT_OWNER_LINKED",
   ownerPasswordReset: "ADMIN_CLIENT_OWNER_PASSWORD_RESET",
