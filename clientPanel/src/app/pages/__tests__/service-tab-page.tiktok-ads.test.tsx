@@ -330,13 +330,13 @@ describe("ServiceTabPage TikTok Ads tabs", () => {
     render(<ServiceTabPage serviceId="tiktok-ads" tabId="hook-tests" />);
 
     expect(screen.getByText("UGC Creative 01")).toBeInTheDocument();
-    expect(screen.getByText("Winning hook")).toBeInTheDocument();
+    expect(screen.getByText("En iyi hook")).toBeInTheDocument();
   });
 
   it("renders pixel tab from connection and conversion snapshot data", () => {
     render(<ServiceTabPage serviceId="tiktok-ads" tabId="pixel-events" />);
 
-    expect(screen.getByText(/Advertiser ID:/i)).toBeInTheDocument();
+    expect(screen.getByText("1234567890")).toBeInTheDocument();
     expect(screen.getByText("Dönüşüm sinyali var")).toBeInTheDocument();
   });
 
@@ -358,7 +358,9 @@ describe("ServiceTabPage TikTok Ads tabs", () => {
 
     expect(screen.getByText("Bekleyen TikTok Ads onayı: 1")).toBeInTheDocument();
     expect(screen.getByText("UGC Storyboard")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Onayla" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "UGC script müşteri onayı için onayla" }),
+    );
 
     await waitFor(() =>
       expect(mockUpdateClientTaskApproval).toHaveBeenCalledWith({

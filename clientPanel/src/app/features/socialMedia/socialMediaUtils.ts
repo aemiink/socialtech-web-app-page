@@ -516,6 +516,7 @@ function normalizeSocialMediaPost(value: unknown): SocialMediaPost | null {
     id: value.id,
     clientProfileId: value.clientProfileId,
     projectId: value.projectId,
+    approvalTaskId: readNullableString(value.approvalTaskId),
     platform: value.platform,
     type: value.type,
     status: value.status,
@@ -682,11 +683,26 @@ function normalizePostAssetFile(value: unknown): SocialMediaPostAssetFile | null
 
   return {
     id: value.id,
+    folderId: readNullableString(value.folderId),
     title: value.title,
     secureUrl: value.secureUrl,
     mimeType: value.mimeType,
     category: value.category,
     visibility: value.visibility,
+    folder: normalizePostAssetFolder(value.folder),
+  };
+}
+
+function normalizePostAssetFolder(
+  value: unknown,
+): SocialMediaPostAssetFile["folder"] {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.name !== "string") {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    name: value.name,
   };
 }
 

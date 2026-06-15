@@ -126,12 +126,81 @@ describe("ServiceTabPage Social Media tabs", () => {
     });
     mockUseGetOwnSocialMediaPostsQuery.mockReturnValue({
       data: [
-        buildPost({ id: "post-2", title: "Caption onayı", status: "WAITING_APPROVAL" }),
+        buildPost({
+          id: "post-2",
+          title: "Caption onayı",
+          status: "WAITING_APPROVAL",
+          approvalTaskId: "task-1",
+          assets: [
+            {
+              id: "asset-1",
+              sortOrder: 0,
+              createdAt: "2026-06-01T07:50:00.000Z",
+              file: {
+                id: "file-1",
+                folderId: "folder-approval-1",
+                title: "FeedPost2.png",
+                secureUrl: "https://cdn.socialtech.test/feed-post-2.png",
+                mimeType: "image/png",
+                category: "CREATIVE",
+                visibility: "CLIENT_VISIBLE",
+                folder: {
+                  id: "folder-approval-1",
+                  name: "Onay Klasörü 1",
+                },
+              },
+            },
+          ],
+        }),
         buildPost({
           id: "post-3",
           title: "Yayınlanan Post",
           status: "PUBLISHED",
           externalPostUrl: "https://instagram.com/p/acme-phase-7",
+        }),
+        buildPost({
+          id: "post-4",
+          title: "Onaylanan Carousel",
+          status: "APPROVED",
+          type: "CAROUSEL",
+          assets: [
+            {
+              id: "asset-2",
+              sortOrder: 0,
+              createdAt: "2026-06-01T08:10:00.000Z",
+              file: {
+                id: "file-2",
+                folderId: "folder-approval-1",
+                title: "Carousel1.png",
+                secureUrl: "https://cdn.socialtech.test/carousel-1.png",
+                mimeType: "image/png",
+                category: "CREATIVE",
+                visibility: "CLIENT_VISIBLE",
+                folder: {
+                  id: "folder-approval-1",
+                  name: "Onay Klasörü 1",
+                },
+              },
+            },
+            {
+              id: "asset-3",
+              sortOrder: 1,
+              createdAt: "2026-06-01T08:11:00.000Z",
+              file: {
+                id: "file-3",
+                folderId: "folder-approval-1",
+                title: "Carousel2.png",
+                secureUrl: "https://cdn.socialtech.test/carousel-2.png",
+                mimeType: "image/png",
+                category: "CREATIVE",
+                visibility: "CLIENT_VISIBLE",
+                folder: {
+                  id: "folder-approval-1",
+                  name: "Onay Klasörü 1",
+                },
+              },
+            },
+          ],
         }),
       ],
       isLoading: false,
@@ -305,12 +374,13 @@ describe("ServiceTabPage Social Media tabs", () => {
 
     render(<ServiceTabPage serviceId="social-media" tabId="pending-approvals" />);
 
-    expect(screen.getByText("Caption onayı")).toBeInTheDocument();
-    expect(screen.getByText("Caption müşteri onayı")).toBeInTheDocument();
-    expect(screen.getByText("Onay tipi: SOCIAL MEDIA POST APPROVAL")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Onayla" })).toBeInTheDocument();
+    expect(screen.getAllByText("Caption onayı").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Onaylanan Carousel").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Onay Klasörü 1").length).toBeGreaterThan(0);
+    expect(screen.getAllByAltText("FeedPost2.png").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Klasörü Onayla" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Onayla" }));
+    fireEvent.click(screen.getByRole("button", { name: "Klasörü Onayla" }));
 
     await waitFor(() => expect(mockUpdateClientTaskApproval).toHaveBeenCalled());
     expect(mockUpdateClientTaskApproval).toHaveBeenCalledWith({
@@ -398,9 +468,10 @@ type SocialPost = {
   id: string;
   clientProfileId: string;
   projectId: string;
+  approvalTaskId: string | null;
   platform: "INSTAGRAM";
-  type: "REEL";
-  status: "DRAFT" | "SCHEDULED" | "WAITING_APPROVAL" | "PUBLISHED";
+  type: "REEL" | "CAROUSEL";
+  status: "DRAFT" | "SCHEDULED" | "WAITING_APPROVAL" | "APPROVED" | "PUBLISHED";
   title: string;
   caption: string;
   scheduledAt: string;
@@ -415,7 +486,24 @@ type SocialPost = {
     slug: string;
     serviceKey: string;
   };
-  assets: [];
+  assets: Array<{
+    id: string;
+    sortOrder: number;
+    createdAt: string;
+    file: {
+      id: string;
+      folderId?: string;
+      title: string;
+      secureUrl: string;
+      mimeType: string;
+      category: string;
+      visibility: string;
+      folder?: {
+        id: string;
+        name: string;
+      };
+    } | null;
+  }>;
 };
 
 function buildPost(overrides: Partial<SocialPost> = {}): SocialPost {
@@ -423,6 +511,7 @@ function buildPost(overrides: Partial<SocialPost> = {}): SocialPost {
     id: "post-id",
     clientProfileId: "client-1",
     projectId: "project-1",
+    approvalTaskId: null,
     platform: "INSTAGRAM",
     type: "REEL",
     status: "SCHEDULED",

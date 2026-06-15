@@ -385,7 +385,9 @@ describe("ServiceTabPage Amazon Ads tabs", () => {
     render(<ServiceTabPage serviceId="amazon-ads" tabId="approvals" />);
 
     expect(screen.getByText("Amazon bütçe artışı onayı")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Onayla" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Amazon bütçe artışı onayı için onayla" }),
+    ).toBeInTheDocument();
   });
 
   it("renders report acknowledgement action as Okudum", () => {
@@ -420,6 +422,8 @@ describe("ServiceTabPage Amazon Ads tabs", () => {
 
     render(<ServiceTabPage serviceId="amazon-ads" tabId="approvals" />);
 
-    expect(screen.getByRole("button", { name: "Okudum" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Amazon haftalık rapor paylaşımı için onayla" }),
+    ).toHaveTextContent("Okudum");
   });
 });

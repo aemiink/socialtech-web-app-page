@@ -81,11 +81,16 @@ export type SocialMediaProjectSummary = {
 
 export type SocialMediaPostAssetFile = {
   id: string;
+  folderId?: string | null;
   title: string;
   secureUrl: string;
   mimeType: string;
   category: string;
   visibility: string;
+  folder?: {
+    id: string;
+    name: string;
+  } | null;
 };
 
 export type SocialMediaPostAsset = {
@@ -99,6 +104,7 @@ export type SocialMediaPost = {
   id: string;
   clientProfileId: string;
   projectId: string | null;
+  approvalTaskId: string | null;
   platform: SocialMediaPlatform;
   type: SocialMediaPostType;
   status: SocialMediaPostStatus;

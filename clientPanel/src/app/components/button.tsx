@@ -1,18 +1,28 @@
-import { isValidElement, MouseEvent, ReactNode, useState } from 'react';
+import { ButtonHTMLAttributes, isValidElement, MouseEvent, ReactNode, useState } from 'react';
 import { CheckCircle, LucideIcon } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { getActionCompletedLabel, inferClientAction, runClientAction } from '../lib/client-actions';
 
-interface ButtonProps {
+interface ButtonProps extends Pick<ButtonHTMLAttributes<HTMLButtonElement>, "type"> {
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
   children: ReactNode;
   icon?: LucideIcon;
   onClick?: () => void;
   className?: string;
   disabled?: boolean;
+  ariaLabel?: string;
 }
 
-export function Button({ variant = 'primary', children, icon: Icon, onClick, className, disabled = false }: ButtonProps) {
+export function Button({
+  variant = 'primary',
+  children,
+  icon: Icon,
+  onClick,
+  className,
+  disabled = false,
+  ariaLabel,
+  type = "button",
+}: ButtonProps) {
   const [completedLabel, setCompletedLabel] = useState<string | null>(null);
 
   const variants = {
@@ -45,6 +55,8 @@ export function Button({ variant = 'primary', children, icon: Icon, onClick, cla
 
   return (
     <button
+      type={type}
+      aria-label={ariaLabel}
       onClick={handleClick}
       disabled={disabled}
       className={cn(

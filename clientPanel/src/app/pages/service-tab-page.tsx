@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  type LucideIcon,
   Activity,
   AlertCircle,
   ArrowRight,
@@ -14,7 +15,6 @@ import {
   FileText,
   Gauge,
   Grid,
-  Image,
   Layers,
   LineChart,
   Link,
@@ -31,10 +31,12 @@ import {
   TrendingUp,
   Users,
   Wrench,
+  X,
   Zap,
 } from 'lucide-react';
 import { Button } from '../components/button';
 import { getServiceTabContent, ServiceTabContent } from '../data/service-pages';
+import { GrowthHubDashboard } from './services/growth-hub-dashboard';
 import {
   useGetOwnMetaAdsAdSetsQuery,
   useGetOwnMetaAdsAdsQuery,
@@ -139,6 +141,36 @@ import { createWorkspaceSocket, type WorkspaceUpdateEvent } from '../features/we
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { selectAccessToken, selectCurrentUser } from '../features/auth/authSelectors';
 import { runClientAction } from '../lib/client-actions';
+import {
+  useGetClientGrowthHubActionsQuery,
+  useGetClientGrowthHubChannelsQuery,
+  useGetClientGrowthHubSummaryQuery,
+  useGetClientGrowthHubWeeklyNotesQuery,
+} from '../features/growthHub/growthHubApi';
+import type {
+  GrowthHubActionItem,
+  GrowthHubChannelSummary,
+  GrowthHubSummary,
+  GrowthHubWeeklyNote,
+} from '../features/growthHub/growthHubTypes';
+import {
+  calculateGrowthHealthScore,
+  formatGrowthHubCompactNumber,
+  formatGrowthHubCurrency,
+  formatGrowthHubDate,
+  formatGrowthHubDateRange,
+  formatGrowthHubNumber,
+  formatGrowthHubRatio,
+  getGrowthHubActionPriorityLabel,
+  getGrowthHubActionStatusLabel,
+  getGrowthHubActionTypeLabel,
+  getGrowthHubChannelStatusLabel,
+  getGrowthHubGoalLabel,
+  getGrowthHubServiceLabel,
+  getGrowthHubSourceStatusLabel,
+  getGrowthHubStatusTone,
+  getGrowthHubSummaryStateLabel,
+} from '../features/growthHub/growthHubUtils';
 
 interface ServiceTabPageProps {
   serviceId: string;
@@ -373,6 +405,10 @@ export function ServiceTabPage({ serviceId, tabId, projectId }: ServiceTabPagePr
     );
   }
 
+  if (serviceId === 'growth-hub' && tabId !== 'service-dashboard' && tabId !== 'content-approvals') {
+    return <GrowthHubDashboard tabId={tabId} />;
+  }
+
   const content = getServiceTabContent(serviceId, tabId);
 
   if (serviceId === "meta-ads" && tabId !== "service-dashboard") {
@@ -391,6 +427,14 @@ export function ServiceTabPage({ serviceId, tabId, projectId }: ServiceTabPagePr
     return (
       <div className="p-8 space-y-6">
         <SocialMediaClientWorkspace tabId={tabId} />
+      </div>
+    );
+  }
+
+  if (serviceId === "growth-hub" && tabId === "service-dashboard") {
+    return (
+      <div className="p-8 space-y-6">
+        <GrowthHubClientWorkspace tabId={tabId} />
       </div>
     );
   }
@@ -524,6 +568,7 @@ function WebAppWorkspaceTab({
       {projectId && !workspaceLoading ? (
         <WebAppSourceOfTruthPanel
           tabId={tabId}
+          project={projectSummary}
           tasks={tabTasks}
           allTasks={tasks}
           sprints={sprints}
@@ -649,6 +694,7 @@ function WorkspaceProjectLinksPanel({ project }: { project: WorkspaceProjectSumm
 
 function WebAppSourceOfTruthPanel({
   tabId,
+  project,
   tasks,
   allTasks,
   sprints,
@@ -656,6 +702,7 @@ function WebAppSourceOfTruthPanel({
   files,
 }: {
   tabId: string;
+  project?: WorkspaceProjectSummary;
   tasks: WorkspaceSourceTask[];
   allTasks: WorkspaceSourceTask[];
   sprints: WorkspaceSourceSprint[];
@@ -663,7 +710,7 @@ function WebAppSourceOfTruthPanel({
   files: WorkspaceSourceFile[];
 }) {
   if (tabId === "project-roadmap") {
-    return <RoadmapSourcePanel sprints={sprints} releases={releases} />;
+    return <RoadmapSourcePanel project={project} sprints={sprints} releases={releases} tasks={allTasks} files={files} />;
   }
 
   if (tabId === "sprint-status") {
@@ -716,30 +763,30 @@ function TaskSourcePanel({
           <div key={task.id} className="rounded-xl border border-white/[0.08] bg-[#202020] p-4">
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <span className="rounded border border-[#AAFF01]/20 bg-[#AAFF01]/10 px-2 py-1 text-[11px] text-[#AAFF01]">
-                {task.type ?? "TASK"}
+                {task.type ? getWorkspaceTaskTypeLabel(task.type) : "Görev"}
               </span>
               {task.workstream ? (
                 <span className="rounded border border-[#00D4FF]/20 bg-[#00D4FF]/10 px-2 py-1 text-[11px] text-[#00D4FF]">
-                  {task.workstream}
+                  {getWorkspaceTaskWorkstreamLabel(task.workstream)}
                 </span>
               ) : null}
               {task.severity ? (
                 <span className="rounded border border-[#FFA726]/20 bg-[#FFA726]/10 px-2 py-1 text-[11px] text-[#FFA726]">
-                  {task.severity}
+                  {getWorkspaceTaskSeverityLabel(task.severity)}
                 </span>
               ) : null}
               {task.environment ? (
                 <span className="rounded border border-[#7B61FF]/20 bg-[#7B61FF]/10 px-2 py-1 text-[11px] text-[#7B61FF]">
-                  {task.environment}
+                  {getWorkspaceEnvironmentLabel(task.environment)}
                 </span>
               ) : null}
               <span className={`rounded border px-2 py-1 text-[11px] ${getTaskStatusTone(task.status)}`}>
-                {task.status}
+                {getWorkspaceTaskStatusLabel(task.status)}
               </span>
             </div>
             <p className="text-white">{task.title}</p>
             <div className="mt-2 flex flex-wrap gap-4 text-xs text-[#A0A0A0]">
-              <span>Öncelik: {task.priority}</span>
+              <span>Öncelik: {getWorkspacePriorityLabel(task.priority)}</span>
               {task.code ? <span>Kod: {task.code}</span> : null}
               {task.sprint?.name ? <span>Sprint: {task.sprint.name}</span> : null}
               {task.assignee?.displayName ? <span>Atanan: {task.assignee.displayName}</span> : null}
@@ -753,35 +800,391 @@ function TaskSourcePanel({
 }
 
 function RoadmapSourcePanel({
+  project,
   sprints,
   releases,
+  tasks,
+  files,
 }: {
+  project?: WorkspaceProjectSummary;
   sprints: WorkspaceSourceSprint[];
   releases: WorkspaceSourceRelease[];
+  tasks: WorkspaceSourceTask[];
+  files: WorkspaceSourceFile[];
 }) {
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const tasksBySprint = useMemo(() => {
+    const bucket = new Map<string, WorkspaceSourceTask[]>();
+    for (const task of tasks) {
+      const key = task.sprint?.id ?? task.sprintId ?? "UNASSIGNED";
+      const list = bucket.get(key) ?? [];
+      list.push(task);
+      bucket.set(key, list);
+    }
+    return bucket;
+  }, [tasks]);
+  const unassignedTasks = tasksBySprint.get("UNASSIGNED") ?? [];
+  const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null;
+  const selectedTaskFiles = useMemo(
+    () => (selectedTask ? getWorkspaceTaskVisibleFiles(selectedTask, files, project) : []),
+    [files, project, selectedTask],
+  );
+
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-      <div className={cardClass}>
-        <h2 className="mb-4 text-xl text-white">Sprint Roadmap</h2>
-        {sprints.length === 0 ? <p className="text-sm text-[#A0A0A0]">Henüz sprint planı bulunmuyor.</p> : null}
-        <div className="space-y-3">
-          {sprints.map((sprint) => (
-            <div key={sprint.id} className="rounded-xl border border-white/[0.08] bg-[#202020] p-4">
-              <p className="text-white">{sprint.name}</p>
-              {sprint.goal ? <p className="mt-1 text-xs text-[#d7d7d7]">Hedef: {sprint.goal}</p> : null}
-              <p className="mt-1 text-xs text-[#A0A0A0]">
-                {new Date(sprint.startDate).toLocaleDateString("tr-TR")} - {new Date(sprint.endDate).toLocaleDateString("tr-TR")}
-              </p>
-              <span className={`mt-2 inline-flex rounded border px-2 py-1 text-[11px] ${getSprintStatusTone(sprint.status)}`}>
-                {sprint.status}
-              </span>
-            </div>
-          ))}
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className={cardClass}>
+          <h2 className="mb-4 text-xl text-white">Sprint Yol Haritası</h2>
+          {sprints.length === 0 ? <p className="text-sm text-[#A0A0A0]">Henüz sprint planı bulunmuyor.</p> : null}
+          <div className="space-y-3">
+            {sprints.map((sprint) => {
+              const sprintTasks = tasksBySprint.get(sprint.id) ?? [];
+
+              return (
+                <div key={sprint.id} className="rounded-xl border border-white/[0.08] bg-[#202020] p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-white">{sprint.name}</p>
+                      {sprint.goal ? <p className="mt-1 text-xs text-[#d7d7d7]">Hedef: {sprint.goal}</p> : null}
+                      <p className="mt-1 text-xs text-[#A0A0A0]">
+                        {new Date(sprint.startDate).toLocaleDateString("tr-TR")} - {new Date(sprint.endDate).toLocaleDateString("tr-TR")}
+                      </p>
+                    </div>
+                    <span className={`inline-flex rounded border px-2 py-1 text-[11px] ${getSprintStatusTone(sprint.status)}`}>
+                      {getWorkspaceSprintStatusLabel(sprint.status)}
+                    </span>
+                  </div>
+                  {sprintTasks.length > 0 ? (
+                    <div className="mt-4 space-y-2">
+                      {sprintTasks.map((task) => (
+                        <RoadmapTaskButton
+                          key={task.id}
+                          task={task}
+                          isActive={task.id === selectedTaskId}
+                          hasVisibleFiles={getWorkspaceTaskVisibleFiles(task, files, project).length > 0}
+                          onSelect={() => setSelectedTaskId(task.id)}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-4 text-xs text-[#A0A0A0]">Bu sprintte henüz görev yok.</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
+        <RoadmapTaskFilesPanel task={selectedTask} files={selectedTaskFiles} />
       </div>
+
       <ReleaseSourcePanel releases={releases} />
+
+      {unassignedTasks.length > 0 ? (
+        <div className={cardClass}>
+          <h2 className="mb-4 text-xl text-white">Sprint’e Atanmamış Görevler</h2>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            {unassignedTasks.map((task) => (
+              <RoadmapTaskButton
+                key={task.id}
+                task={task}
+                isActive={task.id === selectedTaskId}
+                hasVisibleFiles={getWorkspaceTaskVisibleFiles(task, files, project).length > 0}
+                onSelect={() => setSelectedTaskId(task.id)}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
     </div>
   );
+}
+
+function RoadmapTaskButton({
+  task,
+  isActive,
+  hasVisibleFiles,
+  onSelect,
+}: {
+  task: WorkspaceSourceTask;
+  isActive: boolean;
+  hasVisibleFiles: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`w-full rounded-lg border p-3 text-left transition ${
+        isActive
+          ? "border-[#AAFF01]/60 bg-[#AAFF01]/10"
+          : "border-white/[0.08] bg-black/20 hover:border-[#AAFF01]/30 hover:bg-[#AAFF01]/5"
+      }`}
+      onClick={onSelect}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-sm text-white">{task.title}</span>
+        <span className={`rounded border px-2 py-1 text-[11px] ${getTaskStatusTone(task.status)}`}>
+          {getWorkspaceTaskStatusLabel(task.status)}
+        </span>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-[#A0A0A0]">
+        {task.code ? <span>{task.code}</span> : null}
+        <span>Öncelik: {getWorkspacePriorityLabel(task.priority)}</span>
+        {hasVisibleFiles ? (
+          <span className="inline-flex items-center gap-1 text-[#AAFF01]">
+            <Package className="h-3.5 w-3.5" />
+            Dosya var
+          </span>
+        ) : null}
+      </div>
+    </button>
+  );
+}
+
+function RoadmapTaskFilesPanel({
+  task,
+  files,
+}: {
+  task: WorkspaceSourceTask | null;
+  files: WorkspaceSourceFile[];
+}) {
+  const [activeFileId, setActiveFileId] = useState<string | null>(null);
+  const [modalFile, setModalFile] = useState<WorkspaceSourceFile | null>(null);
+  const activeFile = files.find((file) => file.id === activeFileId) ?? files[0] ?? null;
+
+  useEffect(() => {
+    setActiveFileId(files[0]?.id ?? null);
+    setModalFile(null);
+  }, [files, task?.id]);
+
+  return (
+    <div className={cardClass}>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl text-white">Göreve Eklenen Dosyalar</h2>
+          <p className="mt-1 text-sm text-[#A0A0A0]">
+            {task ? task.title : "Roadmap içinden bir görev seçildiğinde dosyalar burada görüntülenir."}
+          </p>
+        </div>
+        {task ? (
+          <span className={`rounded border px-2 py-1 text-xs ${getTaskStatusTone(task.status)}`}>
+            {getWorkspaceTaskStatusLabel(task.status)}
+          </span>
+        ) : null}
+      </div>
+      {!task ? null : files.length === 0 ? (
+        <p className="text-sm text-[#A0A0A0]">Bu görev için müşteriye açık dosya bulunmuyor.</p>
+      ) : (
+        <div className="space-y-3">
+          {activeFile ? (
+            <button
+              type="button"
+              className="block w-full overflow-hidden rounded-xl border border-white/[0.08] bg-[#202020] text-left transition hover:border-[#AAFF01]/40"
+              onClick={() => setModalFile(activeFile)}
+              aria-label={`${activeFile.title} önizlemeyi büyüt`}
+            >
+              <WorkspaceFilePreview file={activeFile} className="h-72" />
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.08] p-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm text-white">{activeFile.title}</p>
+                  <p className="mt-1 truncate text-xs text-[#A0A0A0]">{activeFile.originalFileName}</p>
+                </div>
+                <span className="inline-flex items-center gap-1 text-xs text-[#AAFF01]">
+                  <Eye className="h-3.5 w-3.5" />
+                  Büyük Önizleme
+                </span>
+              </div>
+            </button>
+          ) : null}
+          <div className="space-y-2">
+            {files.map((file) => (
+              <button
+                key={file.id}
+                type="button"
+                className={`w-full rounded-xl border p-3 text-left transition ${
+                  file.id === activeFile?.id
+                    ? "border-[#AAFF01]/50 bg-[#AAFF01]/10"
+                    : "border-white/[0.08] bg-[#202020] hover:border-white/[0.16]"
+                }`}
+                onClick={() => setActiveFileId(file.id)}
+              >
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  {file.folder?.name ? (
+                    <span className="rounded border border-[#AAFF01]/20 bg-[#AAFF01]/10 px-2 py-1 text-[11px] text-[#AAFF01]">
+                      {formatWorkspaceFolderLabel(file.folder.name)}
+                    </span>
+                  ) : null}
+                  <span className="rounded border border-white/[0.16] px-2 py-1 text-[11px] text-[#CFCFCF]">
+                    {getWorkspaceFileCategoryLabel(file.category)}
+                  </span>
+                </div>
+                <p className="text-sm text-white">{file.title}</p>
+                <p className="mt-1 text-xs text-[#A0A0A0]">{file.originalFileName}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {modalFile ? <WorkspaceFilePreviewModal file={modalFile} onClose={() => setModalFile(null)} /> : null}
+    </div>
+  );
+}
+
+function getWorkspaceTaskVisibleFiles(
+  task: WorkspaceSourceTask,
+  projectFiles: WorkspaceSourceFile[],
+  project?: WorkspaceProjectSummary,
+): WorkspaceSourceFile[] {
+  const matchedFiles = projectFiles.filter((file) => isWorkspaceFileLinkedToTask(file, task, project));
+  const referenceFile = task.referenceProjectFile;
+  if (!referenceFile || referenceFile.visibility !== "CLIENT_VISIBLE") {
+    return matchedFiles;
+  }
+
+  const projectFile = projectFiles.find((file) => file.id === referenceFile.id);
+  const normalizedReferenceFile: WorkspaceSourceFile =
+    projectFile ?? {
+      id: referenceFile.id,
+      title: referenceFile.title,
+      category: referenceFile.category ?? "GENEL",
+      visibility: referenceFile.visibility,
+      originalFileName: referenceFile.originalFileName ?? referenceFile.title,
+      secureUrl: referenceFile.secureUrl,
+      mimeType: referenceFile.mimeType ?? null,
+      createdAt: referenceFile.createdAt ?? "",
+      folder: referenceFile.folder ?? null,
+    };
+
+  const merged = new Map<string, WorkspaceSourceFile>();
+  for (const file of [normalizedReferenceFile, ...matchedFiles]) {
+    merged.set(file.id, file);
+  }
+
+  return Array.from(merged.values());
+}
+
+function isWorkspaceFileLinkedToTask(
+  file: WorkspaceSourceFile,
+  task: WorkspaceSourceTask,
+  project?: WorkspaceProjectSummary,
+): boolean {
+  if (file.visibility !== "CLIENT_VISIBLE") {
+    return false;
+  }
+
+  const folderName = normalizeFolderMatchValue(file.folder?.name);
+  if (!folderName) {
+    return false;
+  }
+
+  const candidates = buildWorkspaceTaskFolderCandidates(task, project).map(normalizeFolderMatchValue);
+  return candidates.some((candidate) => candidate && (folderName === candidate || folderName.endsWith(`/${candidate}`)));
+}
+
+function buildWorkspaceTaskFolderCandidates(
+  task: WorkspaceSourceTask,
+  project?: WorkspaceProjectSummary,
+): string[] {
+  const code = task.code?.trim() || task.id.slice(0, 8);
+  const title = normalizeFolderSegment(task.title);
+  const taskFolderName = `DESIGN-${code} - ${title}`.slice(0, 120);
+  const projectLabel = normalizeFolderSegment(project?.name ?? project?.slug ?? project?.id ?? "");
+  const projectFolderName = projectLabel ? `PROJECT-${projectLabel}`.slice(0, 80) : "";
+
+  return projectFolderName ? [`${projectFolderName}/${taskFolderName}`.slice(0, 180), taskFolderName] : [taskFolderName];
+}
+
+function normalizeFolderSegment(value: string): string {
+  const normalized = value.replace(/[\\/]+/g, "-").replace(/\s+/g, " ").trim();
+  return normalized.length > 0 ? normalized : "Untitled";
+}
+
+function normalizeFolderMatchValue(value: string | null | undefined): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function WorkspaceFilePreview({
+  file,
+  className,
+}: {
+  file: WorkspaceSourceFile;
+  className?: string;
+}) {
+  const previewKind = getWorkspaceFilePreviewKind(file);
+  const wrapperClass = `flex w-full items-center justify-center bg-black/30 ${className ?? "h-96"}`;
+
+  if (previewKind === "image") {
+    return (
+      <div className={wrapperClass}>
+        <img src={file.secureUrl} alt={file.title} className="h-full w-full object-contain" loading="lazy" />
+      </div>
+    );
+  }
+
+  if (previewKind === "pdf") {
+    return (
+      <iframe
+        title={`${file.title} önizleme`}
+        src={file.secureUrl}
+        className={`${className ?? "h-96"} w-full border-0 bg-[#101010]`}
+      />
+    );
+  }
+
+  return (
+    <div className={`${wrapperClass} flex-col gap-3 p-6 text-center`}>
+      <FileText className="h-10 w-10 text-[#AAFF01]" />
+      <div>
+        <p className="text-sm text-white">Önizleme desteklenmiyor</p>
+        <p className="mt-1 text-xs text-[#A0A0A0]">{file.originalFileName}</p>
+      </div>
+    </div>
+  );
+}
+
+function WorkspaceFilePreviewModal({
+  file,
+  onClose,
+}: {
+  file: WorkspaceSourceFile;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6">
+      <div className="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-white/[0.12] bg-[#151515] shadow-2xl">
+        <div className="flex items-center justify-between gap-4 border-b border-white/[0.08] px-5 py-4">
+          <div className="min-w-0">
+            <p className="truncate text-white">{file.title}</p>
+            <p className="mt-1 truncate text-xs text-[#A0A0A0]">{file.originalFileName}</p>
+          </div>
+          <button
+            type="button"
+            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-white/[0.12] text-white transition hover:border-[#AAFF01]/60 hover:text-[#AAFF01]"
+            onClick={onClose}
+            aria-label="Önizlemeyi kapat"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <WorkspaceFilePreview file={file} className="h-[78vh]" />
+      </div>
+    </div>
+  );
+}
+
+function getWorkspaceFilePreviewKind(file: WorkspaceSourceFile): "image" | "pdf" | "unknown" {
+  const mimeType = file.mimeType?.toLowerCase() ?? "";
+  const fileName = file.originalFileName.toLowerCase();
+
+  if (mimeType.startsWith("image/") || /\.(png|jpe?g|webp|gif|svg)$/.test(fileName)) {
+    return "image";
+  }
+
+  if (mimeType === "application/pdf" || fileName.endsWith(".pdf")) {
+    return "pdf";
+  }
+
+  return "unknown";
 }
 
 function SprintStatusSourcePanel({
@@ -791,68 +1194,150 @@ function SprintStatusSourcePanel({
   tasks: WorkspaceSourceTask[];
   sprints: WorkspaceSourceSprint[];
 }) {
-  const counts = useMemo(
-    () => ({
-      total: tasks.length,
-      done: tasks.filter((task) => task.status === "DONE").length,
-      inProgress: tasks.filter((task) => task.status === "IN_PROGRESS").length,
-      blocked: tasks.filter((task) => task.status === "BLOCKED").length,
-    }),
-    [tasks],
-  );
-
-  const progress = counts.total === 0 ? 0 : Math.round((counts.done / counts.total) * 100);
+  const [selectedSprintId, setSelectedSprintId] = useState<string | null>(sprints[0]?.id ?? null);
   const tasksBySprint = useMemo(() => {
     const bucket = new Map<string, WorkspaceSourceTask[]>();
     for (const task of tasks) {
-      const key = task.sprint?.id ?? "UNASSIGNED";
+      const key = task.sprint?.id ?? task.sprintId ?? "UNASSIGNED";
       const list = bucket.get(key) ?? [];
       list.push(task);
       bucket.set(key, list);
     }
     return bucket;
   }, [tasks]);
+  const selectedSprint = sprints.find((sprint) => sprint.id === selectedSprintId) ?? sprints[0] ?? null;
+  const selectedSprintTasks = selectedSprint ? tasksBySprint.get(selectedSprint.id) ?? [] : [];
+  const selectedStats = getSprintTaskStats(selectedSprintTasks);
+  const totalStats = getSprintTaskStats(tasks);
+
+  useEffect(() => {
+    if (sprints.length === 0) {
+      setSelectedSprintId(null);
+      return;
+    }
+
+    if (!selectedSprintId || !sprints.some((sprint) => sprint.id === selectedSprintId)) {
+      setSelectedSprintId(sprints[0].id);
+    }
+  }, [selectedSprintId, sprints]);
 
   return (
     <div className={cardClass}>
       <h2 className="mb-4 text-xl text-white">Sprint Durumu</h2>
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <MetricPill label="Toplam" value={String(counts.total)} />
-        <MetricPill label="Tamamlanan" value={String(counts.done)} />
-        <MetricPill label="Devam Eden" value={String(counts.inProgress)} />
-        <MetricPill label="Blocked" value={String(counts.blocked)} />
+        <MetricPill label="Toplam Görev" value={String(totalStats.total)} />
+        <MetricPill label="Tamamlanan" value={String(totalStats.done)} />
+        <MetricPill label="Devam Eden" value={String(totalStats.inProgress)} />
+        <MetricPill label="Bloklanan" value={String(totalStats.blocked)} />
       </div>
-      <div className="mb-5 h-2 overflow-hidden rounded-full bg-[#121212]">
-        <div className="h-full rounded-full bg-[#AAFF01]" style={{ width: `${progress}%` }} />
-      </div>
-      <p className="mb-4 text-xs text-[#A0A0A0]">Sprint tamamlanma oranı: %{progress}</p>
       {sprints.length > 0 ? (
-        <div className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-2">
-          {sprints.map((sprint) => (
-            <div key={sprint.id} className="rounded-xl border border-white/[0.08] bg-[#202020] p-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="text-sm text-white">{sprint.name}</p>
-                <span className={`rounded border px-2 py-1 text-[11px] ${getSprintStatusTone(sprint.status)}`}>
-                  {sprint.status}
-                </span>
+        <div className="space-y-5">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {sprints.map((sprint) => {
+              const sprintTasks = tasksBySprint.get(sprint.id) ?? [];
+              const stats = getSprintTaskStats(sprintTasks);
+              const isSelected = selectedSprint?.id === sprint.id;
+
+              return (
+                <button
+                  key={sprint.id}
+                  type="button"
+                  className={`rounded-xl border p-4 text-left transition ${
+                    isSelected
+                      ? "border-[#AAFF01]/60 bg-[#AAFF01]/10"
+                      : "border-white/[0.08] bg-[#202020] hover:border-[#AAFF01]/30"
+                  }`}
+                  onClick={() => setSelectedSprintId(sprint.id)}
+                >
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <p className="text-sm text-white">{sprint.name}</p>
+                    <span className={`rounded border px-2 py-1 text-[11px] ${getSprintStatusTone(sprint.status)}`}>
+                      {getWorkspaceSprintStatusLabel(sprint.status)}
+                    </span>
+                  </div>
+                  {sprint.goal ? <p className="mb-2 text-xs text-[#d7d7d7]">Hedef: {sprint.goal}</p> : null}
+                  <p className="text-xs text-[#A0A0A0]">
+                    {new Date(sprint.startDate).toLocaleDateString("tr-TR")} - {new Date(sprint.endDate).toLocaleDateString("tr-TR")}
+                  </p>
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#121212]">
+                    <div className="h-full rounded-full bg-[#AAFF01]" style={{ width: `${stats.percent}%` }} />
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-[#A0A0A0]">
+                    <span>{stats.total} görev</span>
+                    <span className="text-[#AAFF01]">%{stats.percent} tamamlandı</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="rounded-xl border border-white/[0.08] bg-[#202020] p-4">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg text-white">{selectedSprint?.name ?? "Sprint seçilmedi"}</h3>
+                <p className="mt-1 text-xs text-[#A0A0A0]">
+                  Seçili sprint kontrol listesi tamamlanma oranı: %{selectedStats.percent}
+                </p>
               </div>
-              {sprint.goal ? <p className="text-xs text-[#d7d7d7]">Hedef: {sprint.goal}</p> : null}
-              <p className="mt-1 text-xs text-[#A0A0A0]">
-                {new Date(sprint.startDate).toLocaleDateString("tr-TR")} - {new Date(sprint.endDate).toLocaleDateString("tr-TR")}
-              </p>
-              <p className="mt-1 text-xs text-[#A0A0A0]">
-                Görev: {(tasksBySprint.get(sprint.id) ?? []).length}
-              </p>
+              {selectedSprint ? (
+                <span className={`rounded border px-2 py-1 text-xs ${getSprintStatusTone(selectedSprint.status)}`}>
+                  {getWorkspaceSprintStatusLabel(selectedSprint.status)}
+                </span>
+              ) : null}
             </div>
-          ))}
+            <div className="mb-4 h-2 overflow-hidden rounded-full bg-[#121212]">
+              <div className="h-full rounded-full bg-[#AAFF01]" style={{ width: `${selectedStats.percent}%` }} />
+            </div>
+            <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+              <MetricPill label="Görev" value={String(selectedStats.total)} />
+              <MetricPill label="Tamamlandı" value={String(selectedStats.done)} />
+              <MetricPill label="Sürüyor" value={String(selectedStats.inProgress)} />
+              <MetricPill label="Bloklandı" value={String(selectedStats.blocked)} />
+            </div>
+            {selectedSprintTasks.length > 0 ? (
+              <div className="space-y-2">
+                {selectedSprintTasks.map((task) => {
+                  const taskProgress = getWorkspaceTaskChecklistProgress(task);
+
+                  return (
+                    <div key={task.id} className="rounded-lg border border-white/[0.08] bg-black/20 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm text-white">{task.title}</p>
+                        <span className={`rounded border px-2 py-1 text-[11px] ${getTaskStatusTone(task.status)}`}>
+                          {getWorkspaceTaskStatusLabel(task.status)}
+                        </span>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-3 text-xs text-[#A0A0A0]">
+                        {task.code ? <span>Kod: {task.code}</span> : null}
+                        <span>Öncelik: {getWorkspacePriorityLabel(task.priority)}</span>
+                        {task.assignee?.displayName ? <span>Atanan: {task.assignee.displayName}</span> : null}
+                        <span>
+                          Kontrol listesi: {taskProgress.totalTodos > 0
+                            ? `${taskProgress.completedTodos}/${taskProgress.totalTodos}`
+                            : "Henüz yok"}
+                        </span>
+                        <span>İlerleme: %{taskProgress.percent}</span>
+                      </div>
+                      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#121212]">
+                        <div className="h-full rounded-full bg-[#AAFF01]" style={{ width: `${taskProgress.percent}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-[#A0A0A0]">Bu sprint için görev bulunmuyor.</p>
+            )}
+          </div>
         </div>
-      ) : null}
+      ) : (
+        <p className="text-sm text-[#A0A0A0]">Henüz sprint planı bulunmuyor.</p>
+      )}
       {tasksBySprint.get("UNASSIGNED")?.length ? (
         <div className="mb-5 rounded-xl border border-[#FFA726]/20 bg-[#FFA726]/10 p-3 text-xs text-[#FFA726]">
           Sprint’e atanmamış görev: {tasksBySprint.get("UNASSIGNED")?.length}
         </div>
       ) : null}
-      <TaskSourcePanel title="Sprint Görevleri" tasks={tasks} emptyText="Sprint görevi bulunmuyor." />
     </div>
   );
 }
@@ -860,21 +1345,21 @@ function SprintStatusSourcePanel({
 function ReleaseSourcePanel({ releases }: { releases: WorkspaceSourceRelease[] }) {
   return (
     <div className={cardClass}>
-      <h2 className="mb-4 text-xl text-white">Release / Yayın Planı</h2>
-      {releases.length === 0 ? <p className="text-sm text-[#A0A0A0]">Henüz release planı bulunmuyor.</p> : null}
+      <h2 className="mb-4 text-xl text-white">Yayın Planı</h2>
+      {releases.length === 0 ? <p className="text-sm text-[#A0A0A0]">Henüz yayın planı bulunmuyor.</p> : null}
       <div className="space-y-3">
         {releases.slice(0, 10).map((release) => (
           <div key={release.id} className="rounded-xl border border-white/[0.08] bg-[#202020] p-4">
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <span className="rounded border border-[#7B61FF]/20 bg-[#7B61FF]/10 px-2 py-1 text-[11px] text-[#7B61FF]">
-                {release.environment}
+                {getWorkspaceEnvironmentLabel(release.environment)}
               </span>
               <span className={`rounded border px-2 py-1 text-[11px] ${getReleaseStatusTone(release.status)}`}>
-                {release.status}
+                {getWorkspaceReleaseStatusLabel(release.status)}
               </span>
               {release.approvalStatus ? (
                 <span className="rounded border border-[#00D4FF]/20 bg-[#00D4FF]/10 px-2 py-1 text-[11px] text-[#00D4FF]">
-                  {release.approvalStatus}
+                  {getWorkspaceApprovalStatusLabel(release.approvalStatus)}
                 </span>
               ) : null}
             </div>
@@ -901,11 +1386,11 @@ function WorkspaceSourceFilesPanel({ files }: { files: WorkspaceSourceFile[] }) 
             <div className="mb-2 flex flex-wrap items-center gap-2">
               {file.folder?.name ? (
                 <span className="rounded border border-[#AAFF01]/20 bg-[#AAFF01]/10 px-2 py-1 text-[11px] text-[#AAFF01]">
-                  {file.folder.name}
+                  {formatWorkspaceFolderLabel(file.folder.name)}
                 </span>
               ) : null}
               <span className="rounded border border-white/[0.16] px-2 py-1 text-[11px] text-[#CFCFCF]">
-                {file.category ?? "GENEL"}
+                {getWorkspaceFileCategoryLabel(file.category)}
               </span>
             </div>
             <p className="text-white">{file.title}</p>
@@ -970,7 +1455,7 @@ function WorkspaceRevisionPanel({
     <div className={cardClass}>
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-xl text-white">Revizyon Durumları</h2>
-        <span className="text-xs text-[#A0A0A0]">WEB_APP workspace lifecycle</span>
+        <span className="text-xs text-[#A0A0A0]">Web App iş akışı</span>
       </div>
       <div className="mb-4 space-y-3 rounded-xl border border-white/[0.08] bg-[#202020] p-3">
         <p className="text-sm text-white">Yeni revizyon talebi oluştur</p>
@@ -1002,7 +1487,7 @@ function WorkspaceRevisionPanel({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-sm text-white">{revision.title}</p>
               <span className={`rounded border px-2 py-1 text-[11px] ${getRevisionStatusTone(revision.status)}`}>
-                {revision.status}
+                {getWorkspaceRevisionStatusLabel(revision.status)}
               </span>
             </div>
             <p className="mt-1 text-xs text-[#d7d7d7]">{revision.description}</p>
@@ -1215,17 +1700,17 @@ function MetaAdsServiceTab({
   } = useGetClientProjectFilesQuery(
     {
       projectId: approvalProjectId ?? "",
-      category: "ADS_CREATIVE",
       approvalRequired: true,
     },
     { skip: tabId !== "approvals" || !approvalProjectId },
   );
   const pendingApprovalCreativeFiles = useMemo(
     () =>
-      (approvalCreativeFilesResponse?.data ?? [])
-        .filter((file) => file.approvalStatus === "PENDING")
-        .slice(0, 6),
-    [approvalCreativeFilesResponse?.data],
+      mergePreviewFiles(
+        approvalCreativeFilesResponse?.data ?? [],
+        buildTaskReferencePreviewFiles(metaAdsApprovalTasks),
+      ),
+    [approvalCreativeFilesResponse?.data, metaAdsApprovalTasks],
   );
   const notes = useMemo(() => buildMetaAdsAgencyNotes(summary, campaigns), [summary, campaigns]);
   const lastSyncAt =
@@ -1484,17 +1969,17 @@ function TikTokAdsServiceTab({
   } = useGetClientProjectFilesQuery(
     {
       projectId: tiktokApprovalProjectId ?? "",
-      category: "ADS_CREATIVE",
       approvalRequired: true,
     },
     { skip: tabId !== "ugc-scripts" || !tiktokApprovalProjectId },
   );
   const pendingTikTokApprovalCreativeFiles = useMemo(
     () =>
-      (tiktokApprovalCreativeFilesResponse?.data ?? [])
-        .filter((file) => file.approvalStatus === "PENDING")
-        .slice(0, 6),
-    [tiktokApprovalCreativeFilesResponse?.data],
+      mergePreviewFiles(
+        tiktokApprovalCreativeFilesResponse?.data ?? [],
+        buildTaskReferencePreviewFiles(tiktokApprovalTasks),
+      ),
+    [tiktokApprovalCreativeFilesResponse?.data, tiktokApprovalTasks],
   );
   const notes = useMemo(
     () => buildTikTokAgencyNotes(summary, campaigns, ads),
@@ -1793,17 +2278,17 @@ function AmazonAdsServiceTab({
   } = useGetClientProjectFilesQuery(
     {
       projectId: approvalProjectId ?? "",
-      category: "ADS_CREATIVE",
       approvalRequired: true,
     },
     { skip: tabId !== "approvals" || !approvalProjectId },
   );
   const pendingApprovalCreativeFiles = useMemo(
     () =>
-      (approvalCreativeFilesResponse?.data ?? [])
-        .filter((file) => file.approvalStatus === "PENDING")
-        .slice(0, 6),
-    [approvalCreativeFilesResponse?.data],
+      mergePreviewFiles(
+        approvalCreativeFilesResponse?.data ?? [],
+        buildTaskReferencePreviewFiles(amazonApprovalTasks),
+      ),
+    [approvalCreativeFilesResponse?.data, amazonApprovalTasks],
   );
   const lastSyncAt =
     summary?.lastSyncAt ??
@@ -2172,7 +2657,7 @@ function TikTokHookPanel({
                 ? "border-[#AAFF01]/20 bg-[#AAFF01]/10 text-[#AAFF01]"
                 : "border-[#00D4FF]/20 bg-[#00D4FF]/10 text-[#00D4FF]"
             }`}>
-              {index === 0 ? "Winning hook" : "Test"}
+              {index === 0 ? "En iyi hook" : "Test"}
             </span>
           </div>
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -2218,11 +2703,11 @@ function TikTokAudiencePanel({
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       {rows.slice(0, 10).map((row) => (
         <div key={row.id} className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-4">
-          <p className="text-white">{row.entityName ?? "Audience Segment"}</p>
+          <p className="text-white">{row.entityName ?? "Kitle segmenti"}</p>
           <div className="mt-3 grid grid-cols-3 gap-2">
-            <MetricPill label="Reach" value={formatTikTokInteger(row.reach)} />
+            <MetricPill label="Erişim" value={formatTikTokInteger(row.reach)} />
             <MetricPill label="VTR" value={formatTikTokPercent(row.vtr)} />
-            <MetricPill label="Conversion" value={formatTikTokInteger(row.conversions)} />
+            <MetricPill label="Dönüşüm" value={formatTikTokInteger(row.conversions)} />
           </div>
         </div>
       ))}
@@ -2270,7 +2755,7 @@ function TikTokPixelPanel({
       <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-5">
         <h3 className="mb-3 text-white">Kurulum</h3>
         <div className="space-y-2 text-sm">
-          <p className="text-[#A0A0A0]">Advertiser ID: <span className="text-white">{advertiserId ?? "—"}</span></p>
+          <p className="text-[#A0A0A0]">Reklamveren ID: <span className="text-white">{advertiserId ?? "—"}</span></p>
           <p className="text-[#A0A0A0]">
             Event Sinyali:{" "}
             <span className={hasConversionSignal ? "text-[#AAFF01]" : "text-[#FFA726]"}>
@@ -2278,7 +2763,7 @@ function TikTokPixelPanel({
             </span>
           </p>
           <p className="text-[#A0A0A0]">
-            Conversion Rate: <span className="text-white">{formatTikTokPercent(summary?.conversionRate ?? 0)}</span>
+            Dönüşüm Oranı: <span className="text-white">{formatTikTokPercent(summary?.conversionRate ?? 0)}</span>
           </p>
         </div>
       </div>
@@ -2511,9 +2996,9 @@ function MetaAdsAudiencePanel({
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       {rows.slice(0, 8).map((row) => (
         <div key={row.id} className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-4">
-          <p className="text-white">{row.entityName ?? "Audience Segment"}</p>
+          <p className="text-white">{row.entityName ?? "Kitle segmenti"}</p>
           <div className="mt-3 grid grid-cols-3 gap-2">
-            <MetricPill label="Reach" value={formatMetaInteger(row.reach)} />
+            <MetricPill label="Erişim" value={formatMetaInteger(row.reach)} />
             <MetricPill label="CTR" value={formatMetaPercent(row.ctr)} />
             <MetricPill label="Result" value={formatMetaInteger(row.results)} />
           </div>
@@ -3052,6 +3537,7 @@ function MetaAdsApprovalsPanel({
             <Button
               variant="primary"
               className="text-xs"
+              ariaLabel={`${task.title} için onayla`}
               disabled={isActionLoading}
               onClick={() => {
                 const primaryStatus = task.approvalType?.endsWith("REPORT_ACKNOWLEDGEMENT")
@@ -3069,6 +3555,7 @@ function MetaAdsApprovalsPanel({
             <Button
               variant="secondary"
               className="text-xs"
+              ariaLabel={`${task.title} için revizyon iste`}
               disabled={isActionLoading || (decisionNotes[task.id]?.trim().length ?? 0) < 2}
               onClick={() => void onDecision(task, "CHANGES_REQUESTED", decisionNotes[task.id])}
             >
@@ -3995,6 +4482,189 @@ function getApprovalDecisionFeedback(
   };
 }
 
+function buildTaskReferencePreviewFiles(tasks: ClientTask[]): ProjectFile[] {
+  const seen = new Set<string>();
+  const result: ProjectFile[] = [];
+
+  for (const task of tasks) {
+    const referenceFile = task.referenceProjectFile;
+    if (!referenceFile || seen.has(referenceFile.id)) {
+      continue;
+    }
+    seen.add(referenceFile.id);
+    result.push({
+      id: referenceFile.id,
+      projectId: task.projectId ?? "",
+      category: referenceFile.category,
+      visibility: referenceFile.visibility,
+      title: referenceFile.title,
+      secureUrl: referenceFile.secureUrl,
+      originalFileName: referenceFile.title,
+      bytes: 0,
+      mimeType: referenceFile.mimeType,
+      approvalRequired: referenceFile.approvalRequired,
+      approvalStatus: referenceFile.approvalStatus,
+      createdAt: task.updatedAt ?? task.approvalRequestedAt ?? new Date().toISOString(),
+    });
+  }
+
+  return result;
+}
+
+type SocialMediaApprovalFolderGroup = {
+  key: string;
+  folderId: string | null;
+  folderName: string;
+  posts: SocialMediaPost[];
+  pendingTasks: ClientTask[];
+  historyTasks: ClientTask[];
+  updatedAt: string;
+};
+
+function buildSocialMediaApprovalFolders(
+  posts: SocialMediaPost[],
+  pendingTasks: ClientTask[],
+  historyTasks: ClientTask[],
+): SocialMediaApprovalFolderGroup[] {
+  const pendingTaskById = new Map(pendingTasks.map((task) => [task.id, task]));
+  const historyTaskById = new Map(historyTasks.map((task) => [task.id, task]));
+  const folderMap = new Map<
+    string,
+    {
+      key: string;
+      folderId: string | null;
+      folderName: string;
+      posts: SocialMediaPost[];
+      pendingTaskIds: Set<string>;
+      historyTaskIds: Set<string>;
+      updatedAt: string;
+    }
+  >();
+
+  for (const post of posts) {
+    const primaryFolder = getSocialMediaPostPrimaryFolder(post);
+    const key = primaryFolder.id ? `folder:${primaryFolder.id}` : `post:${post.id}`;
+    const group = folderMap.get(key);
+
+    if (group) {
+      group.posts.push(post);
+      if (new Date(post.updatedAt).getTime() > new Date(group.updatedAt).getTime()) {
+        group.updatedAt = post.updatedAt;
+      }
+      if (post.approvalTaskId && pendingTaskById.has(post.approvalTaskId)) {
+        group.pendingTaskIds.add(post.approvalTaskId);
+      }
+      if (post.approvalTaskId && historyTaskById.has(post.approvalTaskId)) {
+        group.historyTaskIds.add(post.approvalTaskId);
+      }
+      continue;
+    }
+
+    folderMap.set(key, {
+      key,
+      folderId: primaryFolder.id,
+      folderName: primaryFolder.name,
+      posts: [post],
+      pendingTaskIds:
+        post.approvalTaskId && pendingTaskById.has(post.approvalTaskId)
+          ? new Set([post.approvalTaskId])
+          : new Set(),
+      historyTaskIds:
+        post.approvalTaskId && historyTaskById.has(post.approvalTaskId)
+          ? new Set([post.approvalTaskId])
+          : new Set(),
+      updatedAt: post.updatedAt,
+    });
+  }
+
+  const linkedTaskIds = new Set<string>();
+  for (const group of folderMap.values()) {
+    for (const taskId of group.pendingTaskIds) {
+      linkedTaskIds.add(taskId);
+    }
+    for (const taskId of group.historyTaskIds) {
+      linkedTaskIds.add(taskId);
+    }
+  }
+
+  const orphanPendingTasks = pendingTasks.filter((task) => !linkedTaskIds.has(task.id));
+  const orphanHistoryTasks = historyTasks.filter((task) => !linkedTaskIds.has(task.id));
+
+  if (orphanPendingTasks.length > 0 || orphanHistoryTasks.length > 0) {
+    folderMap.set("orphan-tasks", {
+      key: "orphan-tasks",
+      folderId: null,
+      folderName: "Bağlı Klasör Bulunamadı",
+      posts: [],
+      pendingTaskIds: new Set(orphanPendingTasks.map((task) => task.id)),
+      historyTaskIds: new Set(orphanHistoryTasks.map((task) => task.id)),
+      updatedAt:
+        orphanPendingTasks[0]?.updatedAt ??
+        orphanHistoryTasks[0]?.updatedAt ??
+        new Date().toISOString(),
+    });
+  }
+
+  const groups = Array.from(folderMap.values()).map<SocialMediaApprovalFolderGroup>((group) => ({
+    key: group.key,
+    folderId: group.folderId,
+    folderName: group.folderName,
+    posts: group.posts.sort((a, b) => compareIsoDateDesc(a.updatedAt, b.updatedAt)),
+    pendingTasks: Array.from(group.pendingTaskIds)
+      .map((taskId) => pendingTaskById.get(taskId))
+      .filter((task): task is ClientTask => Boolean(task))
+      .sort((a, b) => compareIsoDateDesc(a.updatedAt, b.updatedAt)),
+    historyTasks: Array.from(group.historyTaskIds)
+      .map((taskId) => historyTaskById.get(taskId))
+      .filter((task): task is ClientTask => Boolean(task))
+      .sort((a, b) => compareIsoDateDesc(a.updatedAt, b.updatedAt)),
+    updatedAt: group.updatedAt,
+  }));
+
+  return groups.sort((a, b) => {
+    if (a.pendingTasks.length > 0 && b.pendingTasks.length === 0) {
+      return -1;
+    }
+    if (a.pendingTasks.length === 0 && b.pendingTasks.length > 0) {
+      return 1;
+    }
+    return compareIsoDateDesc(a.updatedAt, b.updatedAt);
+  });
+}
+
+function getSocialMediaPostPrimaryFolder(post: SocialMediaPost): { id: string | null; name: string } {
+  for (const asset of post.assets) {
+    const folder = asset.file?.folder;
+    if (folder?.id) {
+      return { id: folder.id, name: folder.name || "Onay Klasörü" };
+    }
+  }
+
+  return {
+    id: null,
+    name: "Klasör Atanmamış İçerikler",
+  };
+}
+
+function compareIsoDateDesc(a: string | null | undefined, b: string | null | undefined): number {
+  const aValue = a ? new Date(a).getTime() : 0;
+  const bValue = b ? new Date(b).getTime() : 0;
+  return bValue - aValue;
+}
+
+function mergePreviewFiles(primary: ProjectFile[], secondary: ProjectFile[]): ProjectFile[] {
+  const merged = new Map<string, ProjectFile>();
+
+  for (const file of [...primary, ...secondary]) {
+    if (merged.has(file.id)) {
+      continue;
+    }
+    merged.set(file.id, file);
+  }
+
+  return Array.from(merged.values());
+}
+
 function formatAdsApprovalType(value: string): string {
   return value
     .replace("META_ADS_", "")
@@ -4006,11 +4676,11 @@ function formatAdsApprovalType(value: string): string {
 
 function getClientTaskStatusLabel(status: ClientTaskStatus): string {
   const labels: Record<ClientTaskStatus, string> = {
-    TODO: 'Yapilacak',
-    IN_PROGRESS: 'Devam Ediyor',
-    REVIEW: 'Incelemede',
-    DONE: 'Tamamlandi',
-    BLOCKED: 'Bloke',
+    TODO: 'Yapılacak',
+    IN_PROGRESS: 'Devam ediyor',
+    REVIEW: 'İncelemede',
+    DONE: 'Tamamlandı',
+    BLOCKED: 'Bloklandı',
   };
   return labels[status] ?? status;
 }
@@ -4024,9 +4694,9 @@ function getClientTaskStatusTone(status: ClientTaskStatus): string {
 
 function getClientTaskPriorityLabel(priority: ClientTaskPriority): string {
   const labels: Record<ClientTaskPriority, string> = {
-    LOW: 'Dusuk',
+    LOW: 'Düşük',
     MEDIUM: 'Orta',
-    HIGH: 'Yuksek',
+    HIGH: 'Yüksek',
     URGENT: 'Acil',
   };
   return labels[priority] ?? priority;
@@ -4041,30 +4711,43 @@ function getClientTaskPriorityTone(priority: ClientTaskPriority): string {
 
 function getClientTaskTypeLabel(type: ClientTaskType): string {
   const labels: Record<ClientTaskType, string> = {
-    FEATURE: 'Feature',
-    BUG: 'Bug',
+    FEATURE: 'Özellik',
+    BUG: 'Hata',
     REVISION: 'Revizyon',
-    QA: 'QA',
-    DEPLOYMENT: 'Yayin',
-    MAINTENANCE: 'Bakim',
+    QA: 'Kalite kontrol',
+    DEPLOYMENT: 'Yayın',
+    MAINTENANCE: 'Bakım',
   };
   return labels[type] ?? type;
 }
 
 function getClientTaskWorkstreamLabel(workstream: ClientTaskWorkstream): string {
   const labels: Record<ClientTaskWorkstream, string> = {
-    FRONTEND: 'Frontend',
+    FRONTEND: 'Arayüz',
     BACKEND: 'Backend / API',
-    FULLSTACK: 'Fullstack',
-    QA: 'QA',
-    DEVOPS: 'DevOps',
-    UI_INTEGRATION: 'UI Integration',
+    FULLSTACK: 'Tam kapsam',
+    QA: 'Kalite kontrol',
+    DEVOPS: 'Yayın altyapısı',
+    UI_INTEGRATION: 'UI entegrasyonu',
   };
   return labels[workstream] ?? workstream;
 }
 
 function getServiceLabel(serviceId: string): string {
   return serviceId.replace(/-/g, ' ').toUpperCase();
+}
+
+function getWorkspaceRevisionStatusLabel(status: WorkspaceRevisionStatus): string {
+  const labels: Record<WorkspaceRevisionStatus, string> = {
+    REQUESTED: "Talep edildi",
+    ACKNOWLEDGED: "Alındı",
+    IN_PROGRESS: "Üzerinde çalışılıyor",
+    READY_FOR_REVIEW: "İncelemeye hazır",
+    APPROVED: "Onaylandı",
+    REJECTED: "Revizyon istendi",
+    CANCELLED: "İptal edildi",
+  };
+  return labels[status] ?? status;
 }
 
 function getRevisionStatusTone(status: WorkspaceRevisionStatus): string {
@@ -4137,6 +4820,180 @@ function includesText(value: string | null | undefined, keyword: string): boolea
   return value.toLowerCase().includes(keyword.toLowerCase());
 }
 
+function getSprintTaskStats(tasks: WorkspaceSourceTask[]) {
+  const blocked = tasks.filter((task) => task.status === "BLOCKED").length;
+  const progressItems = tasks.map(getWorkspaceTaskChecklistProgress);
+  const done = progressItems.filter((item, index) => item.percent >= 100 && tasks[index]?.status !== "BLOCKED").length;
+  const inProgress = progressItems.filter(
+    (item, index) => item.percent > 0 && item.percent < 100 && tasks[index]?.status !== "BLOCKED",
+  ).length;
+  const totalTodos = progressItems.reduce((sum, item) => sum + item.totalTodos, 0);
+  const completedTodos = progressItems.reduce((sum, item) => sum + item.completedTodos, 0);
+  const total = tasks.length;
+
+  return {
+    total,
+    done,
+    inProgress,
+    blocked,
+    completedTodos,
+    totalTodos,
+    percent: totalTodos === 0 ? 0 : Math.round((completedTodos / totalTodos) * 100),
+  };
+}
+
+function getWorkspaceTaskChecklistProgress(task: WorkspaceSourceTask) {
+  if (task.completion && Number.isFinite(task.completion.totalTodos)) {
+    const totalTodos = Math.max(0, Math.round(task.completion.totalTodos));
+    const completedTodos = Math.min(
+      totalTodos,
+      Math.max(0, Math.round(task.completion.completedTodos)),
+    );
+
+    return {
+      totalTodos,
+      completedTodos,
+      percent: totalTodos === 0 ? 0 : Math.round((completedTodos / totalTodos) * 100),
+    };
+  }
+
+  const todos = task.todos ?? [];
+  if (todos.length > 0) {
+    const completedTodos = todos.filter((todo) => todo.isCompleted).length;
+    return {
+      totalTodos: todos.length,
+      completedTodos,
+      percent: Math.round((completedTodos / todos.length) * 100),
+    };
+  }
+
+  return {
+    totalTodos: 0,
+    completedTodos: 0,
+    percent:
+      typeof task.progressPercent === "number" && Number.isFinite(task.progressPercent)
+        ? Math.min(100, Math.max(0, Math.round(task.progressPercent)))
+        : 0,
+  };
+}
+
+function getWorkspaceTaskStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    TODO: "Yapılacak",
+    IN_PROGRESS: "Devam ediyor",
+    REVIEW: "İncelemede",
+    READY_FOR_REVIEW: "İncelemeye hazır",
+    DONE: "Tamamlandı",
+    BLOCKED: "Bloklandı",
+  };
+  return labels[status] ?? status;
+}
+
+function getWorkspaceSprintStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    PLANNED: "Planlandı",
+    ACTIVE: "Aktif",
+    COMPLETED: "Tamamlandı",
+    CANCELLED: "İptal edildi",
+  };
+  return labels[status] ?? status;
+}
+
+function getWorkspaceReleaseStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    PLANNED: "Planlandı",
+    READY: "Hazır",
+    TESTING: "Test ediliyor",
+    DEPLOYED: "Yayında",
+    FAILED: "Başarısız",
+    ROLLED_BACK: "Geri alındı",
+    CANCELLED: "İptal edildi",
+  };
+  return labels[status] ?? status;
+}
+
+function getWorkspaceApprovalStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    PENDING: "Onay bekliyor",
+    APPROVED: "Onaylandı",
+    REJECTED: "Reddedildi",
+    CHANGES_REQUESTED: "Revizyon istendi",
+  };
+  return labels[status] ?? status;
+}
+
+function getWorkspacePriorityLabel(priority: string): string {
+  const labels: Record<string, string> = {
+    LOW: "Düşük",
+    MEDIUM: "Orta",
+    HIGH: "Yüksek",
+    URGENT: "Acil",
+  };
+  return labels[priority] ?? priority;
+}
+
+function getWorkspaceTaskTypeLabel(type: string): string {
+  const labels: Record<string, string> = {
+    FEATURE: "Özellik",
+    BUG: "Hata",
+    REVISION: "Revizyon",
+    QA: "Kalite kontrol",
+    DEPLOYMENT: "Yayın",
+    MAINTENANCE: "Bakım",
+  };
+  return labels[type] ?? type;
+}
+
+function getWorkspaceTaskWorkstreamLabel(workstream: string): string {
+  const labels: Record<string, string> = {
+    FRONTEND: "Arayüz",
+    BACKEND: "Backend / API",
+    FULLSTACK: "Tam kapsam",
+    QA: "Kalite kontrol",
+    DEVOPS: "Yayın altyapısı",
+    UI_INTEGRATION: "UI entegrasyonu",
+  };
+  return labels[workstream] ?? workstream;
+}
+
+function getWorkspaceTaskSeverityLabel(severity: string): string {
+  const labels: Record<string, string> = {
+    LOW: "Düşük etki",
+    MEDIUM: "Orta etki",
+    HIGH: "Yüksek etki",
+    CRITICAL: "Kritik",
+  };
+  return labels[severity] ?? severity;
+}
+
+function getWorkspaceEnvironmentLabel(environment: string): string {
+  const labels: Record<string, string> = {
+    DEVELOPMENT: "Geliştirme",
+    STAGING: "Test ortamı",
+    PRODUCTION: "Canlı ortam",
+  };
+  return labels[environment] ?? environment;
+}
+
+function getWorkspaceFileCategoryLabel(category: string | null | undefined): string {
+  const labels: Record<string, string> = {
+    BRAND_ASSET: "Marka dosyası",
+    DESIGN: "Tasarım",
+    REPORT: "Rapor",
+    DELIVERABLE: "Teslim dosyası",
+    DOCUMENT: "Doküman",
+    CREATIVE: "Kreatif",
+  };
+  return category ? labels[category] ?? category : "Genel";
+}
+
+function formatWorkspaceFolderLabel(folderName: string): string {
+  return folderName
+    .replace(/^PROJECT-/i, "Proje: ")
+    .replace(/\/DESIGN-/i, " / Tasarım görevi: ")
+    .replace(/_/g, " ");
+}
+
 function getTaskStatusTone(status: string): string {
   if (status === "DONE") return statusTone.good;
   if (status === "IN_PROGRESS" || status === "REVIEW") return statusTone.info;
@@ -4179,7 +5036,7 @@ function buildFigmaEmbedUrl(url: string | null | undefined): string | null {
 function getViewKind(serviceId: string, tabId: string): ViewKind {
   if (['growth-summary', 'weekly-actions', 'channels'].includes(tabId)) return 'growth';
   if (['content-calendar'].includes(tabId)) return 'calendar';
-  if (['pending-approvals', 'content-approvals', 'copywriting', 'wireframe', 'revisions', 'ugc-scripts', 'ad-copies'].includes(tabId)) return 'approval';
+  if (['approvals', 'pending-approvals', 'content-approvals', 'copywriting', 'wireframe', 'revisions', 'ugc-scripts', 'ad-copies'].includes(tabId)) return 'approval';
   if (['published-content'].includes(tabId)) return 'published';
   if (['dm-comments'].includes(tabId)) return 'inbox';
   if (['competitor-analysis', 'trend-notes', 'keywords', 'negative-keywords', 'audiences', 'search-terms', 'asin-targeting'].includes(tabId)) return 'insights';
@@ -4257,7 +5114,14 @@ function renderWorkspace(
     case 'calendar':
       return <CalendarWorkspace content={content} />;
     case 'approval':
-      return <ApprovalWorkspace content={content} tabId={tabId} />;
+      return (
+        <ApprovalWorkspace
+          content={content}
+          tabId={tabId}
+          serviceId={serviceId}
+          projectId={projectId}
+        />
+      );
     case 'published':
       return <PublishedWorkspace content={content} />;
     case 'inbox':
@@ -4338,6 +5202,10 @@ function SocialMediaClientWorkspace({ tabId }: { tabId: string }) {
   const posts = isCalendarTab
     ? filterSocialMediaTabPosts('content-calendar', calendarData?.posts ?? [])
     : filterSocialMediaTabPosts(tabId, listPosts);
+  const approvalFlowPosts = useMemo(
+    () => filterSocialMediaTabPosts('pending-approvals', listPosts),
+    [listPosts],
+  );
   const socialApprovalTasks = useMemo(
     () => approvalTasks.filter((task) => task.projectServiceId === 'social-media' && task.approvalRequired),
     [approvalTasks],
@@ -4352,6 +5220,15 @@ function SocialMediaClientWorkspace({ tabId }: { tabId: string }) {
         .filter((task) => task.approvalStatus && task.approvalStatus !== 'PENDING')
         .slice(0, 8),
     [socialApprovalTasks],
+  );
+  const approvalFolders = useMemo(
+    () =>
+      buildSocialMediaApprovalFolders(
+        approvalFlowPosts,
+        pendingApprovalTasks,
+        approvalHistoryTasks,
+      ),
+    [approvalFlowPosts, pendingApprovalTasks, approvalHistoryTasks],
   );
   const isLoading =
     summaryLoading ||
@@ -4370,24 +5247,36 @@ function SocialMediaClientWorkspace({ tabId }: { tabId: string }) {
     (isReportsTab && socialReportsError) ||
     (isApprovalTab && approvalsError);
 
-  const handleApprovalDecision = async (
-    task: ClientTask,
+  const handleFolderApprovalDecision = async (
+    folder: SocialMediaApprovalFolderGroup,
     approvalStatus: ClientTaskMetaAdsApprovalStatus,
     approvalResponseNote?: string,
   ) => {
-    setActiveApprovalTaskId(task.id);
+    if (folder.pendingTasks.length === 0) {
+      return;
+    }
+
+    setActiveApprovalTaskId(folder.key);
     try {
-      await updateClientTaskApproval({
-        taskId: task.id,
-        body: {
-          approvalStatus,
-          approvalResponseNote: approvalResponseNote?.trim() || undefined,
-        },
-      }).unwrap();
-      const feedback = getApprovalDecisionFeedback(task.title, approvalStatus);
-      runClientAction(feedback.message, feedback.action);
+      for (const task of folder.pendingTasks) {
+        await updateClientTaskApproval({
+          taskId: task.id,
+          body: {
+            approvalStatus,
+            approvalResponseNote: approvalResponseNote?.trim() || undefined,
+          },
+        }).unwrap();
+      }
+      const folderLabel = folder.folderName;
+      if (approvalStatus === 'APPROVED' || approvalStatus === 'ACKNOWLEDGED') {
+        runClientAction(`${folderLabel} klasörü onaylandı`, 'approve');
+      } else if (approvalStatus === 'CHANGES_REQUESTED' || approvalStatus === 'REJECTED') {
+        runClientAction(`${folderLabel} klasörü revizyona gönderildi`, 'revision');
+      } else {
+        runClientAction(`${folderLabel} klasör onayı güncellendi`, 'comment');
+      }
     } catch {
-      runClientAction(`${task.title} onayı güncellenemedi`, 'comment');
+      runClientAction(`${folder.folderName} klasör onayı güncellenemedi`, 'comment');
     } finally {
       setActiveApprovalTaskId(null);
     }
@@ -4459,7 +5348,7 @@ function SocialMediaClientWorkspace({ tabId }: { tabId: string }) {
   }
 
   if (tabId === 'pending-approvals' || tabId === 'approvals') {
-    const postApprovals = filterSocialMediaTabPosts('pending-approvals', listPosts);
+    const postApprovals = approvalFlowPosts;
     return (
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <div className={`${cardClass} xl:col-span-2`}>
@@ -4483,16 +5372,13 @@ function SocialMediaClientWorkspace({ tabId }: { tabId: string }) {
           </div>
         </div>
         <div className="space-y-3">
-          <MetaAdsApprovalsPanel
-            serviceLabel="Social Media"
-            tasks={pendingApprovalTasks}
-            history={approvalHistoryTasks}
-            creativeFiles={[]}
-            loading={false}
-            isError={false}
+          <SocialMediaFolderApprovalsPanel
+            folders={approvalFolders}
+            isLoading={approvalsLoading}
+            isError={approvalsError}
             isActionLoading={approvalActionLoading}
-            activeTaskId={activeApprovalTaskId}
-            onDecision={handleApprovalDecision}
+            activeFolderKey={activeApprovalTaskId}
+            onDecision={handleFolderApprovalDecision}
           />
         </div>
       </div>
@@ -4562,6 +5448,8 @@ function SocialMediaClientWorkspace({ tabId }: { tabId: string }) {
 }
 
 function SocialMediaClientPostCard({ post }: { post: SocialMediaPost }) {
+  const folderLabel = getSocialMediaPostPrimaryFolder(post).name;
+
   return (
     <div className={innerClass}>
       <div className="flex items-start justify-between gap-3 mb-3">
@@ -4570,6 +5458,7 @@ function SocialMediaClientPostCard({ post }: { post: SocialMediaPost }) {
           {getSocialMediaPostStatusLabel(post.status)}
         </span>
       </div>
+      <SocialMediaPostMediaPreview post={post} />
       <div className="space-y-2 mb-4 text-sm">
         <div className="flex justify-between gap-4">
           <span className="text-[#A0A0A0]">Platform</span>
@@ -4582,6 +5471,10 @@ function SocialMediaClientPostCard({ post }: { post: SocialMediaPost }) {
         <div className="flex justify-between gap-4">
           <span className="text-[#A0A0A0]">Tarih</span>
           <span className="text-white text-right">{formatSocialMediaDate(post.scheduledAt ?? post.publishedAt)}</span>
+        </div>
+        <div className="flex justify-between gap-4">
+          <span className="text-[#A0A0A0]">Onay klasörü</span>
+          <span className="text-white text-right">{folderLabel}</span>
         </div>
       </div>
       {post.caption ? <p className="line-clamp-3 text-sm text-[#A0A0A0]">{post.caption}</p> : null}
@@ -4596,6 +5489,234 @@ function SocialMediaClientPostCard({ post }: { post: SocialMediaPost }) {
           Dış yayını aç
         </a>
       ) : null}
+    </div>
+  );
+}
+
+function SocialMediaPostMediaPreview({ post }: { post: SocialMediaPost }) {
+  const mediaAssets = useMemo(
+    () =>
+      post.assets
+        .map((asset) => asset.file)
+        .filter(
+          (
+            file,
+          ): file is NonNullable<SocialMediaPost["assets"][number]["file"]> =>
+            Boolean(file && (file.mimeType.startsWith("image/") || file.mimeType.startsWith("video/"))),
+        ),
+    [post.assets],
+  );
+  const [carouselIndex, setCarouselIndex] = useState(0);
+
+  useEffect(() => {
+    setCarouselIndex(0);
+  }, [post.id, post.type, mediaAssets.length]);
+
+  if (mediaAssets.length === 0) {
+    return (
+      <div className="mb-4 rounded-xl border border-dashed border-white/[0.12] bg-[#161616] p-4 text-xs text-[#8F8F8F]">
+        Bu içerik için yüklenmiş önizleme medyası yok.
+      </div>
+    );
+  }
+
+  if (post.type === "CAROUSEL") {
+    const boundedIndex = Math.min(carouselIndex, mediaAssets.length - 1);
+    const currentAsset = mediaAssets[boundedIndex];
+    return (
+      <div className="mb-4">
+        <div className="relative overflow-hidden rounded-xl border border-white/[0.08] bg-[#151515]">
+          <SocialMediaPostAssetPreviewMedia asset={currentAsset} />
+          {mediaAssets.length > 1 ? (
+            <>
+              <button
+                className="absolute left-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/[0.15] bg-black/50 text-white transition hover:border-[#AAFF01]/40 hover:text-[#AAFF01] disabled:opacity-40"
+                type="button"
+                disabled={boundedIndex === 0}
+                onClick={() => setCarouselIndex((index) => Math.max(0, index - 1))}
+              >
+                <ArrowRight className="h-4 w-4 rotate-180" />
+              </button>
+              <button
+                className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/[0.15] bg-black/50 text-white transition hover:border-[#AAFF01]/40 hover:text-[#AAFF01] disabled:opacity-40"
+                type="button"
+                disabled={boundedIndex >= mediaAssets.length - 1}
+                onClick={() =>
+                  setCarouselIndex((index) => Math.min(mediaAssets.length - 1, index + 1))
+                }
+              >
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </>
+          ) : null}
+        </div>
+        <p className="mt-2 text-xs text-[#A0A0A0]">
+          Carousel · {boundedIndex + 1}/{mediaAssets.length}
+        </p>
+      </div>
+    );
+  }
+
+  const primaryAsset =
+    post.type === "REEL" || post.type === "SHORT_VIDEO"
+      ? mediaAssets.find((asset) => asset.mimeType.startsWith("video/")) ?? mediaAssets[0]
+      : mediaAssets[0];
+
+  return (
+    <div className="mb-4 rounded-xl border border-white/[0.08] bg-[#151515]">
+      <SocialMediaPostAssetPreviewMedia asset={primaryAsset} />
+      <p className="px-3 pb-3 pt-2 text-xs text-[#A0A0A0]">
+        {post.type === "REEL" || post.type === "SHORT_VIDEO" ? "Reel / Video" : "Tekli Gösterim"}
+      </p>
+    </div>
+  );
+}
+
+function SocialMediaPostAssetPreviewMedia({
+  asset,
+}: {
+  asset: NonNullable<SocialMediaPost["assets"][number]["file"]>;
+}) {
+  if (asset.mimeType.startsWith("video/")) {
+    return (
+      <video
+        className="h-52 w-full object-cover"
+        controls
+        preload="metadata"
+        src={asset.secureUrl}
+      />
+    );
+  }
+
+  return (
+    <img
+      src={asset.secureUrl}
+      alt={asset.title}
+      className="h-52 w-full object-cover"
+      loading="lazy"
+    />
+  );
+}
+
+function SocialMediaFolderApprovalsPanel({
+  folders,
+  isLoading,
+  isError,
+  isActionLoading,
+  activeFolderKey,
+  onDecision,
+}: {
+  folders: SocialMediaApprovalFolderGroup[];
+  isLoading: boolean;
+  isError: boolean;
+  isActionLoading: boolean;
+  activeFolderKey: string | null;
+  onDecision: (
+    folder: SocialMediaApprovalFolderGroup,
+    approvalStatus: ClientTaskMetaAdsApprovalStatus,
+    approvalResponseNote?: string,
+  ) => Promise<void>;
+}) {
+  const [notes, setNotes] = useState<Record<string, string>>({});
+
+  if (isLoading) {
+    return <MetaAdsStatePanel title="Onay klasörleri yükleniyor..." />;
+  }
+
+  if (isError) {
+    return (
+      <MetaAdsStatePanel
+        title="Onay klasörleri alınamadı"
+        description="Social Media onay akışı şu an görüntülenemiyor."
+        tone="error"
+      />
+    );
+  }
+
+  if (folders.length === 0) {
+    return <MetaAdsStatePanel title="Onay akışında klasör bulunmuyor." tone="muted" />;
+  }
+
+  return (
+    <div className="space-y-3">
+      {folders.map((folder) => {
+        const pendingCount = folder.pendingTasks.length;
+        const historyCount = folder.historyTasks.length;
+        const latestHistory = folder.historyTasks[0] ?? null;
+        const isActiveFolder = activeFolderKey === folder.key;
+
+        return (
+          <div key={folder.key} className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-4">
+            <div className="mb-3 flex items-start justify-between gap-2">
+              <div>
+                <p className="text-sm text-white">{folder.folderName}</p>
+                <p className="mt-1 text-xs text-[#A0A0A0]">
+                  {folder.posts.length} içerik · {pendingCount} bekleyen onay · {historyCount} geçmiş
+                </p>
+              </div>
+              <span className={`rounded border px-2 py-1 text-[11px] ${pendingCount > 0 ? statusTone.warn : statusTone.good}`}>
+                {pendingCount > 0 ? "Onay Bekliyor" : "Tamamlandı"}
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              {folder.posts.map((post) => (
+                <SocialMediaClientPostCard key={post.id} post={post} />
+              ))}
+            </div>
+
+            {pendingCount > 0 ? (
+              <>
+                <textarea
+                  className="mt-3 min-h-20 w-full rounded-xl border border-white/[0.08] bg-[#151515] p-3 text-sm text-white outline-none focus:border-[#AAFF01]/40"
+                  placeholder="Revizyon notu (klasör geneli)"
+                  value={notes[folder.key] ?? ""}
+                  onChange={(event) =>
+                    setNotes((prev) => ({
+                      ...prev,
+                      [folder.key]: event.target.value,
+                    }))
+                  }
+                />
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    variant="primary"
+                    className="text-xs"
+                    disabled={isActionLoading}
+                    onClick={() =>
+                      void onDecision(
+                        folder,
+                        folder.pendingTasks.every((task) =>
+                          Boolean(task.approvalType?.endsWith("REPORT_ACKNOWLEDGEMENT")),
+                        )
+                          ? "ACKNOWLEDGED"
+                          : "APPROVED",
+                        notes[folder.key],
+                      )
+                    }
+                  >
+                    {isActiveFolder ? "Kaydediliyor..." : "Klasörü Onayla"}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="text-xs"
+                    disabled={isActionLoading || (notes[folder.key]?.trim().length ?? 0) < 2}
+                    onClick={() => void onDecision(folder, "CHANGES_REQUESTED", notes[folder.key])}
+                  >
+                    Revizyon İste
+                  </Button>
+                </div>
+              </>
+            ) : null}
+
+            {latestHistory?.approvalResponseNote ? (
+              <p className="mt-3 rounded-xl border border-orange-400/30 bg-orange-500/10 p-3 text-xs text-orange-100">
+                Son not: {latestHistory.approvalResponseNote}
+              </p>
+            ) : null}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -4727,9 +5848,9 @@ function SocialMediaPerformanceWorkspace({
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6">
           {[
-            ['Impression', totals?.impressions ?? 0],
-            ['Reach', totals?.reach ?? 0],
-            ['Engagement', `${formatCompactNumber(totals?.engagementRate ?? 0)}%`],
+            ['Gösterim', totals?.impressions ?? 0],
+            ['Erişim', totals?.reach ?? 0],
+            ['Etkileşim', `${formatCompactNumber(totals?.engagementRate ?? 0)}%`],
             ['Yayınlanan', summary?.metrics.publishedPosts ?? 0],
           ].map(([label, value]) => (
             <div key={label} className="rounded-xl border border-white/[0.08] bg-[#202020] p-4">
@@ -4755,9 +5876,9 @@ function SocialMediaPerformanceWorkspace({
                   </span>
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-xs text-[#A0A0A0]">
-                  <span>Reach {formatCompactNumber(insight.reach)}</span>
-                  <span>Like {formatCompactNumber(insight.likes)}</span>
-                  <span>Click {formatCompactNumber(insight.clicks)}</span>
+                  <span>Erişim {formatCompactNumber(insight.reach)}</span>
+                  <span>Beğeni {formatCompactNumber(insight.likes)}</span>
+                  <span>Tıklama {formatCompactNumber(insight.clicks)}</span>
                 </div>
               </div>
             ))
@@ -4938,7 +6059,9 @@ function filterSocialMediaTabPosts(tabId: string, posts: SocialMediaPost[]): Soc
   }
 
   if (tabId === 'pending-approvals') {
-    return posts.filter((post) => ['WAITING_APPROVAL', 'REVISION_REQUIRED', 'DESIGN'].includes(post.status));
+    return posts.filter((post) =>
+      ['WAITING_APPROVAL', 'REVISION_REQUIRED', 'DESIGN', 'APPROVED'].includes(post.status),
+    );
   }
 
   return posts;
@@ -4969,6 +6092,370 @@ function getSocialMediaUnavailableTabLabel(tabId: string): string {
   };
 
   return labels[tabId] ?? 'Social Media Sekmesi';
+}
+
+function GrowthHubClientWorkspace({ tabId }: { tabId: string }) {
+  const isChannelsTab = tabId === 'channels';
+  const isWeeklyActionsTab = tabId === 'weekly-actions';
+
+  const { data: summary, isLoading: summaryLoading, isError: summaryError } =
+    useGetClientGrowthHubSummaryQuery();
+  const { data: channelsResponse, isLoading: channelsLoading, isError: channelsError } =
+    useGetClientGrowthHubChannelsQuery(undefined, { skip: !isChannelsTab });
+  const { data: actionsResponse, isLoading: actionsLoading, isError: actionsError } =
+    useGetClientGrowthHubActionsQuery(undefined, { skip: !isWeeklyActionsTab });
+  const { data: weeklyNotesResponse, isLoading: notesLoading, isError: notesError } =
+    useGetClientGrowthHubWeeklyNotesQuery(undefined, { skip: !isWeeklyActionsTab });
+
+  const channels = channelsResponse?.data ?? summary?.channels ?? [];
+  const actions = actionsResponse?.data ?? summary?.actions ?? [];
+  const weeklyNotes = weeklyNotesResponse?.data ?? [];
+  const latestNote = weeklyNotes[0] ?? null;
+
+  const isLoading =
+    summaryLoading ||
+    (isChannelsTab && channelsLoading) ||
+    (isWeeklyActionsTab && (actionsLoading || notesLoading));
+  const isError =
+    summaryError ||
+    (isChannelsTab && channelsError) ||
+    (isWeeklyActionsTab && (actionsError || notesError));
+
+  if (isLoading) {
+    return (
+      <div className={`${cardClass} flex items-start gap-4`}>
+        <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border border-[#00D4FF]/20 bg-[#00D4FF]/10 text-[#00D4FF]">
+          <Clock className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="mb-1 text-xl text-white">Growth Hub yükleniyor</h2>
+          <p className="text-sm text-[#A0A0A0]">Veriler hazırlanıyor.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isError || !summary) {
+    return (
+      <div className={`${cardClass} flex items-start gap-4`}>
+        <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border border-[#ff4444]/20 bg-[#ff4444]/10 text-[#ff4444]">
+          <AlertCircle className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="mb-1 text-xl text-white">Veriler alınamadı</h2>
+          <p className="text-sm text-[#A0A0A0]">Growth Hub API yanıtı okunamıyor. Kısa süre sonra tekrar deneyin.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isChannelsTab) {
+    return <GrowthHubChannelsTab summary={summary} channels={channels} />;
+  }
+
+  if (isWeeklyActionsTab) {
+    return <GrowthHubWeeklyActionsTab summary={summary} actions={actions} weeklyNote={latestNote} />;
+  }
+
+  return <GrowthHubSummaryTab summary={summary} channels={channels} />;
+}
+
+type GrowthHubKpiTone = 'green' | 'blue' | 'purple' | 'orange' | 'red';
+
+const growthHubKpiToneMap: Record<GrowthHubKpiTone, { bg: string; text: string }> = {
+  green: { bg: 'bg-[#AAFF01]/10', text: 'text-[#AAFF01]' },
+  blue: { bg: 'bg-[#00D4FF]/10', text: 'text-[#00D4FF]' },
+  purple: { bg: 'bg-[#7B61FF]/10', text: 'text-[#7B61FF]' },
+  orange: { bg: 'bg-[#FFA726]/10', text: 'text-[#FFA726]' },
+  red: { bg: 'bg-[#ff4444]/10', text: 'text-[#ff4444]' },
+};
+
+function GrowthHubKpiCard({
+  label,
+  value,
+  note,
+  tone,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  note: string;
+  tone: GrowthHubKpiTone;
+  icon: LucideIcon;
+}) {
+  const colors = growthHubKpiToneMap[tone];
+  return (
+    <div className={cardClass}>
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <span className="text-sm text-[#A0A0A0]">{label}</span>
+        <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${colors.bg}`}>
+          <Icon className={`h-5 w-5 ${colors.text}`} />
+        </div>
+      </div>
+      <div className={`mb-1 text-3xl ${colors.text}`}>{value}</div>
+      <div className="text-sm text-[#A0A0A0]">{note}</div>
+    </div>
+  );
+}
+
+function GrowthHubSummaryTab({
+  summary,
+  channels,
+}: {
+  summary: GrowthHubSummary;
+  channels: GrowthHubChannelSummary[];
+}) {
+  const healthScore = calculateGrowthHealthScore(summary, channels);
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <GrowthHubKpiCard
+          label="Toplam Lead"
+          value={formatGrowthHubCompactNumber(summary.metrics.totalLeads)}
+          note={formatGrowthHubDateRange(summary.dateRange.since, summary.dateRange.until)}
+          tone="green"
+          icon={Users}
+        />
+        <GrowthHubKpiCard
+          label="Reklam Harcaması"
+          value={formatGrowthHubCurrency(summary.metrics.totalSpend)}
+          note={`${formatGrowthHubNumber(summary.metrics.activeChannels)} aktif kanal`}
+          tone="blue"
+          icon={BarChart3}
+        />
+        <GrowthHubKpiCard
+          label="Blended ROAS"
+          value={formatGrowthHubRatio(summary.metrics.blendedRoas)}
+          note={summary.config?.targetRoas ? `Hedef ${formatGrowthHubRatio(summary.config.targetRoas)}` : 'Hedef tanımlı değil'}
+          tone="purple"
+          icon={TrendingUp}
+        />
+        <GrowthHubKpiCard
+          label="Bekleyen Onay"
+          value={formatGrowthHubNumber(summary.metrics.pendingApprovals)}
+          note={`${formatGrowthHubNumber(summary.metrics.overdueTasks)} geciken iş`}
+          tone={summary.metrics.pendingApprovals > 0 ? 'orange' : 'green'}
+          icon={Clock}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <div className={cardClass}>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-xl text-white">Büyüme Özeti</h2>
+            <span className={`rounded-full border px-3 py-1 text-xs ${getGrowthHubStatusTone(summary.state)}`}>
+              {getGrowthHubSummaryStateLabel(summary.state)}
+            </span>
+          </div>
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 rounded-xl bg-[#202020] p-4">
+              <Target className="h-5 w-5 flex-shrink-0 text-[#AAFF01]" />
+              <span className="text-white">Growth sağlığı: {healthScore}%</span>
+            </div>
+            <div className="flex items-center gap-3 rounded-xl bg-[#202020] p-4">
+              <TrendingUp className="h-5 w-5 flex-shrink-0 text-[#AAFF01]" />
+              <span className="text-white">Ana hedef: {getGrowthHubGoalLabel(summary.config?.primaryGoal ?? null)}</span>
+            </div>
+            <div className="flex items-center gap-3 rounded-xl bg-[#202020] p-4">
+              <Activity className="h-5 w-5 flex-shrink-0 text-[#AAFF01]" />
+              <span className="text-white">
+                {formatGrowthHubNumber(summary.metrics.activeServices)} aktif hizmet,{' '}
+                {formatGrowthHubNumber(summary.metrics.activeChannels)} kanal
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className={cardClass}>
+          <h2 className="mb-4 text-xl text-white">Kanal Durumu</h2>
+          {channels.length > 0 ? (
+            <div className="space-y-2">
+              {channels.slice(0, 5).map((channel) => (
+                <div key={channel.serviceKey} className="flex items-center justify-between rounded-xl bg-[#202020] p-3">
+                  <span className="text-sm text-white">{getGrowthHubServiceLabel(channel.serviceKey)}</span>
+                  <span className={`rounded-full border px-2 py-1 text-xs ${getGrowthHubStatusTone(channel.status)}`}>
+                    {getGrowthHubChannelStatusLabel(channel.status)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-white/[0.12] bg-[#202020] p-4 text-sm text-[#A0A0A0]">
+              Aktif kanal bulunmuyor.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GrowthHubChannelsTab({
+  summary,
+  channels,
+}: {
+  summary: GrowthHubSummary;
+  channels: GrowthHubChannelSummary[];
+}) {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="mb-1 text-xl text-white">Kanal Performansı</h2>
+          <p className="text-sm text-[#A0A0A0]">
+            {formatGrowthHubDateRange(summary.dateRange.since, summary.dateRange.until)} &middot;{' '}
+            {formatGrowthHubNumber(channels.length)} kanal
+          </p>
+        </div>
+        <span className={`rounded-full border px-3 py-1 text-xs ${getGrowthHubStatusTone(summary.state)}`}>
+          {getGrowthHubSummaryStateLabel(summary.state)}
+        </span>
+      </div>
+
+      {channels.length > 0 ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {channels.map((channel) => (
+            <GrowthHubChannelDetailCard key={channel.serviceKey} channel={channel} />
+          ))}
+        </div>
+      ) : (
+        <div className={cardClass}>
+          <p className="text-sm text-[#A0A0A0]">Aktif Growth Hub kanalı bulunmuyor.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GrowthHubChannelDetailCard({ channel }: { channel: GrowthHubChannelSummary }) {
+  return (
+    <div className={innerClass}>
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="font-medium text-white">{getGrowthHubServiceLabel(channel.serviceKey)}</h3>
+          <p className="mt-1 text-xs text-[#A0A0A0]">{getGrowthHubSourceStatusLabel(channel.sourceStatus)}</p>
+        </div>
+        <span className={`rounded-full border px-2 py-1 text-xs ${getGrowthHubStatusTone(channel.status)}`}>
+          {getGrowthHubChannelStatusLabel(channel.status)}
+        </span>
+      </div>
+      <div className="space-y-2 text-sm">
+        <div className="flex justify-between gap-3">
+          <span className="text-[#A0A0A0]">Skor</span>
+          <span className="text-white">{formatGrowthHubNumber(channel.healthScore)}%</span>
+        </div>
+        <div className="flex justify-between gap-3">
+          <span className="text-[#A0A0A0]">{channel.primaryMetricLabel || 'Lead'}</span>
+          <span className="text-white">{formatGrowthHubNumber(channel.primaryMetricValue)}</span>
+        </div>
+        <div className="flex justify-between gap-3">
+          <span className="text-[#A0A0A0]">Harcama</span>
+          <span className="text-white">{formatGrowthHubCurrency(channel.spend)}</span>
+        </div>
+        <div className="flex justify-between gap-3">
+          <span className="text-[#A0A0A0]">ROAS</span>
+          <span className="text-[#AAFF01]">{formatGrowthHubRatio(channel.roas || channel.metrics.roas)}</span>
+        </div>
+        <div className="flex justify-between gap-3">
+          <span className="text-[#A0A0A0]">Açık iş</span>
+          <span className="text-white">{formatGrowthHubNumber(channel.openTasks)}</span>
+        </div>
+        <div className="flex justify-between gap-3">
+          <span className="text-[#A0A0A0]">Onay</span>
+          <span className={channel.pendingApprovals > 0 ? 'text-[#FFA726]' : 'text-white'}>
+            {formatGrowthHubNumber(channel.pendingApprovals)}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GrowthHubWeeklyActionsTab({
+  summary,
+  actions,
+  weeklyNote,
+}: {
+  summary: GrowthHubSummary;
+  actions: GrowthHubActionItem[];
+  weeklyNote: GrowthHubWeeklyNote | null;
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+      <div className={`${cardClass} xl:col-span-2`}>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-xl text-white">Haftalık Aksiyonlar</h2>
+          <span className="text-sm text-[#A0A0A0]">{formatGrowthHubNumber(actions.length)} aksiyon</span>
+        </div>
+        {actions.length > 0 ? (
+          <div className="space-y-3">
+            {actions.map((action) => (
+              <div key={`${action.type}-${action.id}`} className={innerClass}>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <span className="text-xs text-[#A0A0A0]">{getGrowthHubActionTypeLabel(action.type)}</span>
+                  {action.dueAt ? (
+                    <span className="text-xs text-[#A0A0A0]">{formatGrowthHubDate(action.dueAt)}</span>
+                  ) : null}
+                </div>
+                <p className="text-sm text-white">{action.title}</p>
+                {action.description ? (
+                  <p className="mt-2 text-xs leading-relaxed text-[#D8D8D8]">{action.description}</p>
+                ) : null}
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className={`rounded px-2 py-1 text-xs ${getGrowthHubActionItemTone(action)}`}>
+                    {getGrowthHubActionStatusLabel(action.status)}
+                  </span>
+                  <span className="text-xs text-[#A0A0A0]">{getGrowthHubActionPriorityLabel(action.priority)}</span>
+                  {action.project ? (
+                    <span className="text-xs text-[#A0A0A0]">{action.project.name}</span>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed border-white/[0.12] bg-[#202020] p-4 text-sm text-[#A0A0A0]">
+            Bekleyen müşteri aksiyonu yok.
+          </div>
+        )}
+      </div>
+
+      <div className={cardClass}>
+        <h2 className="mb-4 text-xl text-white">Haftalık Ajans Notu</h2>
+        {weeklyNote ? (
+          <div className="space-y-3">
+            <p className="text-xs text-[#A0A0A0]">{formatGrowthHubDate(weeklyNote.weekStart)} haftası</p>
+            <p className="text-sm leading-relaxed text-white">{weeklyNote.summary}</p>
+            {weeklyNote.nextFocus ? (
+              <div className="rounded-xl bg-[#202020] p-3 border border-white/[0.08]">
+                <p className="mb-1 text-xs text-[#A0A0A0]">Sonraki odak</p>
+                <p className="text-sm text-white">{weeklyNote.nextFocus}</p>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed border-white/[0.12] bg-[#202020] p-4 text-sm text-[#A0A0A0]">
+            Haftalık ajans notu henüz hazırlanmadı.
+          </div>
+        )}
+        {summary.metrics.pendingReportAcknowledgements > 0 ? (
+          <div className="mt-4 rounded-xl border border-[#FFA726]/20 bg-[#FFA726]/10 p-3 text-xs text-[#FFA726]">
+            {formatGrowthHubNumber(summary.metrics.pendingReportAcknowledgements)} rapor teyidiniz bekliyor.
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function getGrowthHubActionItemTone(action: GrowthHubActionItem): string {
+  if (action.status === 'DONE') return 'bg-[#AAFF01]/10 text-[#AAFF01]';
+  if (action.status === 'BLOCKED' || action.status === 'CANCELLED') return 'bg-[#ff4444]/10 text-[#ff4444]';
+  if (action.dueAt && new Date(action.dueAt).getTime() < Date.now()) return 'bg-[#ff4444]/10 text-[#ff4444]';
+  if (action.type === 'REPORT_ACKNOWLEDGEMENT') return 'bg-[#00D4FF]/10 text-[#00D4FF]';
+  if (action.type === 'RELEASE_APPROVAL') return 'bg-[#7B61FF]/10 text-[#7B61FF]';
+  return 'bg-[#FFA726]/10 text-[#FFA726]';
 }
 
 function GrowthWorkspace({ content }: { content: ServiceTabContent }) {
@@ -5067,71 +6554,110 @@ function CalendarWorkspace({ content }: { content: ServiceTabContent }) {
   );
 }
 
-function ApprovalWorkspace({ content, tabId }: { content: ServiceTabContent; tabId: string }) {
-  const labels = tabId.includes('copy') ? ['Headline', 'CTA', 'Section Copy'] : tabId.includes('wireframe') ? ['Wireframe', 'Feedback', 'Approval'] : ['Visual', 'Caption', 'Platform'];
-  const [itemStatuses, setItemStatuses] = useState<Record<string, 'Onaylandı' | 'Revizyon İstendi' | 'Yorum Eklendi'>>({});
+function ApprovalWorkspace({
+  content,
+  tabId,
+  serviceId,
+  projectId,
+}: {
+  content: ServiceTabContent;
+  tabId: string;
+  serviceId: string;
+  projectId?: string | null;
+}) {
+  const [activeApprovalTaskId, setActiveApprovalTaskId] = useState<string | null>(null);
+  const {
+    data: approvalTasks = [],
+    isLoading: approvalsLoading,
+    isError: approvalsError,
+  } = useGetClientTasksQuery(projectId ? { projectId, approvalRequired: true } : { approvalRequired: true });
+  const [updateClientTaskApproval, { isLoading: approvalActionLoading }] =
+    useUpdateClientTaskApprovalMutation();
 
-  const updateItem = (itemId: string, status: 'Onaylandı' | 'Revizyon İstendi' | 'Yorum Eklendi') => {
-    setItemStatuses((current) => ({ ...current, [itemId]: status }));
-    runClientAction(`${itemId} - ${status}`, status === 'Onaylandı' ? 'approve' : status === 'Revizyon İstendi' ? 'revision' : 'comment');
-  };
+  const serviceApprovalTasks = useMemo(
+    () =>
+      approvalTasks.filter((task) => {
+        if (!task.approvalRequired) {
+          return false;
+        }
+        if (task.projectServiceId !== serviceId) {
+          return false;
+        }
+        if (projectId && task.projectId !== projectId) {
+          return false;
+        }
+        return true;
+      }),
+    [approvalTasks, projectId, serviceId],
+  );
+  const pendingApprovalTasks = useMemo(
+    () => serviceApprovalTasks.filter((task) => task.approvalStatus === "PENDING").slice(0, 12),
+    [serviceApprovalTasks],
+  );
+  const approvalHistoryTasks = useMemo(
+    () =>
+      serviceApprovalTasks
+        .filter((task) => task.approvalStatus && task.approvalStatus !== "PENDING")
+        .slice(0, 10),
+    [serviceApprovalTasks],
+  );
+  const referenceFiles = useMemo(
+    () => buildTaskReferencePreviewFiles(serviceApprovalTasks),
+    [serviceApprovalTasks],
+  );
 
-  const approveAll = () => {
-    const nextStatus = content.table.rows.slice(0, 4).reduce<Record<string, 'Onaylandı'>>((acc, row) => {
-      acc[row[0]] = 'Onaylandı';
-      return acc;
-    }, {});
-    setItemStatuses((current) => ({ ...current, ...nextStatus }));
-    runClientAction(`${content.title} - Toplu Onay`, 'approve');
+  const handleApprovalDecision = async (
+    task: ClientTask,
+    approvalStatus: ClientTaskMetaAdsApprovalStatus,
+    approvalResponseNote?: string,
+  ) => {
+    if (approvalActionLoading) {
+      return;
+    }
+
+    setActiveApprovalTaskId(task.id);
+    try {
+      await updateClientTaskApproval({
+        taskId: task.id,
+        body: {
+          approvalStatus,
+          approvalResponseNote: approvalResponseNote?.trim() || undefined,
+        },
+      }).unwrap();
+      const feedback = getApprovalDecisionFeedback(task.title, approvalStatus);
+      runClientAction(feedback.message, feedback.action);
+    } catch {
+      runClientAction(`${task.title} onayı güncellenemedi`, "comment");
+    } finally {
+      setActiveApprovalTaskId(null);
+    }
   };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
       <div className={`${cardClass} xl:col-span-2`}>
-        <div className="flex items-center justify-between mb-6">
+        <div className="mb-5 flex items-center justify-between gap-3">
           <div>
             <h2 className="text-xl text-white mb-1">Onay Masası</h2>
-            <p className="text-sm text-[#A0A0A0]">Onay, revizyon ve yorum akışı burada ilerler.</p>
+            <p className="text-sm text-[#A0A0A0]">
+              Bu hizmete ait müşteri onay görevleri canlı olarak listelenir.
+            </p>
           </div>
-          <Button variant="primary" icon={CheckCircle} onClick={approveAll}>Toplu Onayla</Button>
+          <span className={`rounded border px-2 py-1 text-xs ${statusTone.info}`}>
+            {pendingApprovalTasks.length} bekleyen
+          </span>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {content.table.rows.slice(0, 4).map((row, index) => (
-            <div key={row.join('-')} className={innerClass}>
-              <div className="h-32 rounded-xl bg-gradient-to-br from-[#AAFF01]/10 via-[#7B61FF]/10 to-[#202020] border border-white/[0.08] mb-4 flex items-center justify-center">
-                <Image className="w-8 h-8 text-[#AAFF01]" />
-              </div>
-              <div className="flex items-start justify-between gap-3 mb-3">
-                <h3 className="text-white text-sm">{row[0]}</h3>
-                <span className={`text-xs px-2 py-1 rounded border ${
-                  itemStatuses[row[0]] === 'Onaylandı'
-                    ? statusTone.good
-                    : itemStatuses[row[0]] === 'Revizyon İstendi'
-                      ? statusTone.warn
-                      : itemStatuses[row[0]] === 'Yorum Eklendi'
-                        ? statusTone.info
-                        : statusTone.violet
-                }`}>
-                  {itemStatuses[row[0]] || 'Onay Bekliyor'}
-                </span>
-              </div>
-              <div className="space-y-2 mb-4">
-                {labels.map((label, labelIndex) => (
-                  <div key={label} className="flex justify-between gap-4 text-sm">
-                    <span className="text-[#A0A0A0]">{label}</span>
-                    <span className="text-white text-right">{row[labelIndex] || row[0]}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="primary" className="text-xs px-3 py-2" onClick={() => updateItem(row[0], 'Onaylandı')}>Onayla</Button>
-                <Button variant="secondary" className="text-xs px-3 py-2" onClick={() => updateItem(row[0], 'Revizyon İstendi')}>Revizyon İste</Button>
-                <Button variant="ghost" className="text-xs px-3 py-2" onClick={() => updateItem(row[0], 'Yorum Eklendi')}>Yorum</Button>
-              </div>
-              {index === 0 && <p className="text-xs text-[#AAFF01] mt-3">Ajans önerisi: bu versiyon yayın için hazır.</p>}
-            </div>
-          ))}
-        </div>
+        <MetaAdsApprovalsPanel
+          serviceLabel={getServiceLabel(serviceId)}
+          tasks={pendingApprovalTasks}
+          history={approvalHistoryTasks}
+          creativeFiles={referenceFiles}
+          loading={approvalsLoading}
+          isError={approvalsError}
+          isActionLoading={approvalActionLoading}
+          activeTaskId={activeApprovalTaskId}
+          onDecision={handleApprovalDecision}
+        />
       </div>
       <CommentRail content={content} />
     </div>
@@ -5152,8 +6678,8 @@ function PublishedWorkspace({ content }: { content: ServiceTabContent }) {
               <div className="p-4">
                 <h3 className="text-white text-sm mb-3">{row[0]}</h3>
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  <MetricPill label="Reach" value={row[1] || '12K'} />
-                  <MetricPill label="Eng." value={row[2] || '%7.4'} />
+                  <MetricPill label="Erişim" value={row[1] || '12K'} />
+                  <MetricPill label="Etkileşim" value={row[2] || '%7.4'} />
                 </div>
               </div>
             </div>

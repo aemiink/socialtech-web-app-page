@@ -17,7 +17,7 @@ export const projectFilesApi = baseApi.injectEndpoints({
         method: "GET",
         params: {
           visibility: "CLIENT_VISIBLE",
-          limit: 50,
+          limit: 100,
           ...(category ? { category } : {}),
           ...(approvalRequired !== undefined ? { approvalRequired } : {}),
           ...(approvalStatus ? { approvalStatus } : {}),

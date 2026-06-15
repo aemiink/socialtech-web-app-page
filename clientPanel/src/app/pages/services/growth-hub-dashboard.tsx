@@ -80,7 +80,46 @@ const statToneMap: Record<StatCardTone, { bg: string; text: string }> = {
   red: { bg: "bg-[#ff4444]/10", text: "text-[#ff4444]" },
 };
 
-export function GrowthHubDashboard() {
+type GrowthHubDashboardTab =
+  | "service-dashboard"
+  | "growth-summary"
+  | "channels"
+  | "campaigns"
+  | "content-approvals"
+  | "weekly-actions";
+
+type GrowthHubDashboardProps = {
+  tabId?: string;
+};
+
+const growthHubTabMeta: Record<GrowthHubDashboardTab, { title: string; description: string }> = {
+  "service-dashboard": {
+    title: "Growth & Hub",
+    description: "Büyüme stratejisi, sosyal medya, reklamlar ve raporlama",
+  },
+  "growth-summary": {
+    title: "Growth Özeti",
+    description: "Hedefler, sağlık skoru ve haftalık ilerleme tek görünümde.",
+  },
+  channels: {
+    title: "Kanallar",
+    description: "Aktif kanalların performansı, riskleri ve durum etiketleri.",
+  },
+  campaigns: {
+    title: "Kampanyalar",
+    description: "Kampanya odaklı kanallar, ilgili öneriler ve güncel raporlar.",
+  },
+  "content-approvals": {
+    title: "İçerik Onayları",
+    description: "Müşteri onayı bekleyen görev, dosya ve rapor aksiyonları.",
+  },
+  "weekly-actions": {
+    title: "Haftalık Aksiyonlar",
+    description: "Bu haftanın müşteri aksiyonları, öneriler ve son aktiviteler.",
+  },
+};
+
+export function GrowthHubDashboard({ tabId = "service-dashboard" }: GrowthHubDashboardProps) {
   const summaryQuery = useGetClientGrowthHubSummaryQuery();
   const configQuery = useGetClientGrowthHubConfigQuery();
   const channelsQuery = useGetClientGrowthHubChannelsQuery();
@@ -164,13 +203,23 @@ export function GrowthHubDashboard() {
     actionsQuery.data?.meta.generatedAt ??
     activityQuery.data?.meta.generatedAt ??
     null;
+  const activeTab = resolveGrowthHubDashboardTab(tabId);
+  const tabMeta = growthHubTabMeta[activeTab];
+  const isOverviewTab = activeTab === "service-dashboard";
+  const showSummaryBlocks = isOverviewTab || activeTab === "growth-summary";
+  const showChannelsBlock = isOverviewTab || activeTab === "channels" || activeTab === "campaigns";
+  const showRecommendationsBlock = isOverviewTab || activeTab === "campaigns" || activeTab === "weekly-actions";
+  const showActionsBlock = isOverviewTab || activeTab === "weekly-actions" || activeTab === "content-approvals";
+  const showActivityBlock = isOverviewTab || activeTab === "weekly-actions" || activeTab === "campaigns";
+  const channelsForView = activeTab === "campaigns" ? getCampaignChannels(channels) : channels;
+  const actionsForView = activeTab === "content-approvals" ? getApprovalActions(actions) : actions;
 
   return (
     <PageShell>
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <h1 className="mb-2 text-3xl text-white">Growth & Hub</h1>
-          <p className="text-[#A0A0A0]">Büyüme stratejisi, sosyal medya, reklamlar ve raporlama</p>
+          <h1 className="mb-2 text-3xl text-white">{tabMeta.title}</h1>
+          <p className="text-[#A0A0A0]">{tabMeta.description}</p>
         </div>
         <div className="rounded-xl border border-white/[0.08] bg-[#1A1A1A] px-4 py-3 text-sm text-[#A0A0A0]">
           <span className="text-white">{getGrowthHubSummaryStateLabel(summary.state)}</span>
@@ -188,45 +237,83 @@ export function GrowthHubDashboard() {
         />
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
-        {stats.map((stat) => (
-          <KpiCard key={stat.title} stat={stat} />
-        ))}
-      </div>
+      {showSummaryBlocks ? (
+        <>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
+            {stats.map((stat) => (
+              <KpiCard key={stat.title} stat={stat} />
+            ))}
+          </div>
 
-      <section className={cardClass}>
-        <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <h2 className="text-xl text-white">Büyüme Sağlığı Genel Bakış</h2>
-          <span className={`w-fit rounded-full border px-3 py-1 text-xs ${getGrowthHubStatusTone(summary.state)}`}>
-            {getGrowthHubSummaryStateLabel(summary.state)}
-          </span>
+          <section className={cardClass}>
+            <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <h2 className="text-xl text-white">Büyüme Sağlığı Genel Bakış</h2>
+              <span className={`w-fit rounded-full border px-3 py-1 text-xs ${getGrowthHubStatusTone(summary.state)}`}>
+                {getGrowthHubSummaryStateLabel(summary.state)}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
+              <HealthTile icon={Target} label="Growth Sağlığı" value={`${healthScore}%`} tone={summary.state} />
+              <HealthTile icon={BarChart3} label="Aktif Kanal" value={formatGrowthHubNumber(summary.metrics.activeChannels)} tone="READY" />
+              <HealthTile icon={Clock} label="Bekleyen Onay" value={formatGrowthHubNumber(summary.metrics.pendingApprovals)} tone={summary.metrics.pendingApprovals > 0 ? "RISK" : "READY"} />
+              <HealthTile icon={AlertCircle} label="Geciken İş" value={formatGrowthHubNumber(summary.metrics.overdueTasks)} tone={summary.metrics.overdueTasks > 0 ? "RISK" : "READY"} />
+              <HealthTile icon={Activity} label="Kaynak Sayısı" value={formatGrowthHubNumber(summary.meta.sources.length)} tone="OPTIMIZE" />
+            </div>
+          </section>
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <WeeklySummary summary={summary} config={config} activity={activity} weeklyNote={latestWeeklyNote} />
+            <LeadTrendState summary={summary} />
+          </div>
+        </>
+      ) : null}
+
+      {showChannelsBlock ? <ChannelPerformance channels={channelsForView} /> : null}
+
+      {showRecommendationsBlock ? <RecommendedNextSteps recommendations={recommendations} /> : null}
+
+      {showActionsBlock ? (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <AgencyComment summary={summary} config={config} weeklyNote={latestWeeklyNote} generatedAt={generatedAt} />
+          <ClientActions actions={actionsForView} />
         </div>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
-          <HealthTile icon={Target} label="Growth Sağlığı" value={`${healthScore}%`} tone={summary.state} />
-          <HealthTile icon={BarChart3} label="Aktif Kanal" value={formatGrowthHubNumber(summary.metrics.activeChannels)} tone="READY" />
-          <HealthTile icon={Clock} label="Bekleyen Onay" value={formatGrowthHubNumber(summary.metrics.pendingApprovals)} tone={summary.metrics.pendingApprovals > 0 ? "RISK" : "READY"} />
-          <HealthTile icon={AlertCircle} label="Geciken İş" value={formatGrowthHubNumber(summary.metrics.overdueTasks)} tone={summary.metrics.overdueTasks > 0 ? "RISK" : "READY"} />
-          <HealthTile icon={Activity} label="Kaynak Sayısı" value={formatGrowthHubNumber(summary.meta.sources.length)} tone="OPTIMIZE" />
-        </div>
-      </section>
+      ) : null}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <WeeklySummary summary={summary} config={config} activity={activity} weeklyNote={latestWeeklyNote} />
-        <LeadTrendState summary={summary} />
-      </div>
-
-      <ChannelPerformance channels={channels} />
-
-      <RecommendedNextSteps recommendations={recommendations} />
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <AgencyComment summary={summary} config={config} weeklyNote={latestWeeklyNote} generatedAt={generatedAt} />
-        <ClientActions actions={actions} />
-      </div>
-
-      <RecentActivity activity={activity} reports={reports} />
+      {showActivityBlock ? <RecentActivity activity={activity} reports={reports} /> : null}
     </PageShell>
   );
+}
+
+function resolveGrowthHubDashboardTab(tabId: string): GrowthHubDashboardTab {
+  const supportedTabs: GrowthHubDashboardTab[] = [
+    "service-dashboard",
+    "growth-summary",
+    "channels",
+    "campaigns",
+    "content-approvals",
+    "weekly-actions",
+  ];
+
+  return supportedTabs.includes(tabId as GrowthHubDashboardTab)
+    ? (tabId as GrowthHubDashboardTab)
+    : "service-dashboard";
+}
+
+function getCampaignChannels(channels: GrowthHubChannelSummary[]): GrowthHubChannelSummary[] {
+  const campaignChannelKeys = new Set([
+    "META_ADS",
+    "GOOGLE_ADS",
+    "TIKTOK_ADS",
+    "AMAZON_ADS",
+    "SOCIAL_MEDIA",
+    "MEDIA_HUB",
+  ]);
+  const filtered = channels.filter((channel) => campaignChannelKeys.has(channel.serviceKey));
+  return filtered.length > 0 ? filtered : channels;
+}
+
+function getApprovalActions(actions: GrowthHubActionItem[]): GrowthHubActionItem[] {
+  return actions.filter((action) => action.type !== "GROWTH_ACTION");
 }
 
 function RecommendedNextSteps({

@@ -89,7 +89,24 @@ describe("ServiceTabPage workspace and revision flows", () => {
       data: {
         project: { id: "p1", clientProfileId: "c1", serviceKey: "WEB_APP", name: "Acme Web App" },
         sourceOfTruth: {
-          tasks: [],
+          tasks: [
+            {
+              id: "t1",
+              title: "Homepage review",
+              code: "FEAT-001",
+              status: "REVIEW",
+              priority: "HIGH",
+              type: "FEATURE",
+              sprintId: "s1",
+              sprint: {
+                id: "s1",
+                name: "Sprint 1",
+                status: "ACTIVE",
+                startDate: "2026-05-01T00:00:00.000Z",
+                endDate: "2026-05-15T00:00:00.000Z",
+              },
+            },
+          ],
           sprints: [
             {
               id: "s1",
@@ -108,7 +125,20 @@ describe("ServiceTabPage workspace and revision flows", () => {
               version: "1.0.0",
             },
           ],
-          files: [],
+          files: [
+            {
+              id: "file-1",
+              title: "Homepage wireframe",
+              category: "DESIGN",
+              originalFileName: "homepage-wireframe.pdf",
+              secureUrl:
+                "https://res.cloudinary.com/demo/image/upload/v1781469859/project/homepage-wireframe.pdf",
+              mimeType: "application/pdf",
+              visibility: "CLIENT_VISIBLE",
+              createdAt: "2026-05-02T09:00:00.000Z",
+              folder: { id: "folder-1", name: "PROJECT-Acme Web App/DESIGN-FEAT-001 - Homepage review" },
+            },
+          ],
         },
         sections: [],
         messages: [],
@@ -119,10 +149,145 @@ describe("ServiceTabPage workspace and revision flows", () => {
 
     render(<ServiceTabPage serviceId="web-app" tabId="project-roadmap" projectId="p1" />);
 
-    expect(screen.getByText("Sprint Roadmap")).toBeInTheDocument();
+    expect(screen.getByText("Sprint Yol Haritası")).toBeInTheDocument();
     expect(screen.getByText("Sprint 1")).toBeInTheDocument();
-    expect(screen.getByText("Release / Yayın Planı")).toBeInTheDocument();
+    expect(screen.getByText("Yayın Planı")).toBeInTheDocument();
     expect(screen.getByText("Release 1.0.0")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Homepage review/ }));
+
+    expect(screen.getByText("Göreve Eklenen Dosyalar")).toBeInTheDocument();
+    expect(screen.getAllByText("Homepage wireframe").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("homepage-wireframe.pdf").length).toBeGreaterThan(0);
+    expect(screen.getByTitle("Homepage wireframe önizleme")).toHaveAttribute(
+      "src",
+      "https://res.cloudinary.com/demo/image/upload/v1781469859/project/homepage-wireframe.pdf",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Homepage wireframe önizlemeyi büyüt" }));
+
+    expect(screen.getByRole("button", { name: "Önizlemeyi kapat" })).toBeInTheDocument();
+    expect(screen.getAllByTitle("Homepage wireframe önizleme")).toHaveLength(2);
+  });
+
+  it("shows selectable sprint progress on sprint-status tab", () => {
+    mockUseGetWebAppWorkspaceQuery.mockReturnValue({
+      data: {
+        project: { id: "p1", clientProfileId: "c1", serviceKey: "WEB_APP", name: "Acme Web App" },
+        sourceOfTruth: {
+          tasks: [
+            {
+              id: "t1",
+              title: "Arayüz analizi",
+              code: "FEAT-010",
+              status: "TODO",
+              priority: "HIGH",
+              type: "FEATURE",
+              sprintId: "s1",
+              completion: {
+                totalTodos: 2,
+                completedTodos: 1,
+                remainingTodos: 1,
+                completionPercentage: 50,
+              },
+              progressPercent: 50,
+              sprint: {
+                id: "s1",
+                name: "Sprint 1",
+                status: "ACTIVE",
+                startDate: "2026-05-01T00:00:00.000Z",
+                endDate: "2026-05-15T00:00:00.000Z",
+              },
+            },
+            {
+              id: "t2",
+              title: "Wireframe tasarımı",
+              code: "FEAT-011",
+              status: "IN_PROGRESS",
+              priority: "MEDIUM",
+              type: "FEATURE",
+              sprintId: "s1",
+              completion: {
+                totalTodos: 2,
+                completedTodos: 1,
+                remainingTodos: 1,
+                completionPercentage: 50,
+              },
+              progressPercent: 50,
+              sprint: {
+                id: "s1",
+                name: "Sprint 1",
+                status: "ACTIVE",
+                startDate: "2026-05-01T00:00:00.000Z",
+                endDate: "2026-05-15T00:00:00.000Z",
+              },
+            },
+            {
+              id: "t3",
+              title: "Yayın kontrolü",
+              code: "FEAT-012",
+              status: "TODO",
+              priority: "LOW",
+              type: "QA",
+              sprintId: "s2",
+              completion: {
+                totalTodos: 3,
+                completedTodos: 3,
+                remainingTodos: 0,
+                completionPercentage: 100,
+              },
+              progressPercent: 100,
+              sprint: {
+                id: "s2",
+                name: "Sprint 2",
+                status: "COMPLETED",
+                startDate: "2026-05-16T00:00:00.000Z",
+                endDate: "2026-05-30T00:00:00.000Z",
+              },
+            },
+          ],
+          sprints: [
+            {
+              id: "s1",
+              name: "Sprint 1",
+              status: "ACTIVE",
+              startDate: "2026-05-01T00:00:00.000Z",
+              endDate: "2026-05-15T00:00:00.000Z",
+            },
+            {
+              id: "s2",
+              name: "Sprint 2",
+              status: "COMPLETED",
+              startDate: "2026-05-16T00:00:00.000Z",
+              endDate: "2026-05-30T00:00:00.000Z",
+            },
+          ],
+          releases: [],
+          files: [],
+        },
+        sections: [],
+        messages: [],
+        revisions: [],
+      },
+      isLoading: false,
+    });
+
+    render(<ServiceTabPage serviceId="web-app" tabId="sprint-status" projectId="p1" />);
+
+    expect(screen.getByText("Sprint Durumu")).toBeInTheDocument();
+    expect(screen.getByText("%50 tamamlandı")).toBeInTheDocument();
+    expect(screen.getByText("Seçili sprint kontrol listesi tamamlanma oranı: %50")).toBeInTheDocument();
+    expect(screen.getByText("Arayüz analizi")).toBeInTheDocument();
+    expect(screen.getByText("Wireframe tasarımı")).toBeInTheDocument();
+    expect(screen.getAllByText("Kontrol listesi: 1/2").length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: /Sprint 2/ }));
+
+    expect(screen.getAllByText("%100 tamamlandı").length).toBeGreaterThan(0);
+    expect(screen.getByText("Seçili sprint kontrol listesi tamamlanma oranı: %100")).toBeInTheDocument();
+    expect(screen.getByText("Yayın kontrolü")).toBeInTheDocument();
+    expect(screen.getByText("Kontrol listesi: 3/3")).toBeInTheDocument();
+    expect(screen.queryByText("Wireframe tasarımı")).not.toBeInTheDocument();
   });
 
   it("filters tasks for frontend tab by workstream", () => {

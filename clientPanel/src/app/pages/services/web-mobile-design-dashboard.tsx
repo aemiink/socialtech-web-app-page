@@ -10,34 +10,34 @@ import {
 } from '../../components/dashboard-widgets';
 
 const kpis = [
-  { title: 'Tasarlanan Ekran', value: '24', note: 'desktop, mobile ve tablet', icon: MonitorSmartphone },
+  { title: 'Tasarlanan Ekran', value: '24', note: 'masaüstü, mobil ve tablet', icon: MonitorSmartphone },
   { title: 'UX Akışı', value: '%90', note: 'ana path netleşti', icon: Layers },
   { title: 'Revizyon Sayısı', value: '2', note: 'aktif müşteri notu', icon: PenTool, tone: 'violet' as const },
-  { title: 'Design System', value: '%80', note: 'component seti ilerliyor', icon: Palette },
+  { title: 'Tasarım Sistemi', value: '%80', note: 'bileşen seti ilerliyor', icon: Palette },
   { title: 'Onay Durumu', value: '18/24', note: 'ekran onaylı', icon: CheckCircle, tone: 'blue' as const },
 ];
 
 const gallery = [
-  { title: 'Desktop Preview', status: 'Onaylandı', note: 'Ana landing ve dashboard ekranları tamamlandı.' },
-  { title: 'Mobile Preview', status: 'Revizyon', note: 'CTA alanları daha net hale getiriliyor.', tone: 'violet' as const },
-  { title: 'Tablet Preview', status: 'Testte', note: 'Breakpoint ve kart yoğunluğu kontrol ediliyor.', tone: 'blue' as const },
+  { title: 'Masaüstü Önizlemesi', status: 'Onaylandı', note: 'Ana açılış sayfası ve panel ekranları tamamlandı.' },
+  { title: 'Mobil Önizleme', status: 'Revizyon', note: 'CTA alanları daha net hale getiriliyor.', tone: 'violet' as const },
+  { title: 'Tablet Önizlemesi', status: 'Testte', note: 'Kırılım noktaları ve kart yoğunluğu kontrol ediliyor.', tone: 'blue' as const },
 ];
 
 const checklist = [
-  { title: 'Colors', status: 'Hazır', note: 'Marka neon lime ve koyu yüzey tokenları tanımlı.' },
-  { title: 'Typography', status: 'Hazır', note: 'Başlık, gövde ve mikro metin ölçekleri net.' },
-  { title: 'Buttons', status: 'Hazır', note: 'Primary, secondary ve ghost varyantları hazır.' },
-  { title: 'Forms', status: 'Devam', note: 'Hata ve success state’leri tamamlanıyor.', tone: 'blue' as const },
-  { title: 'Cards', status: 'Hazır', note: 'Dashboard ve içerik kartları componentleşti.' },
-  { title: 'Components', status: 'Devam', note: 'Teslim paketine eklenecek set olgunlaştırılıyor.', tone: 'violet' as const },
+  { title: 'Renkler', status: 'Hazır', note: 'Marka neon lime ve koyu yüzey tokenları tanımlı.' },
+  { title: 'Tipografi', status: 'Hazır', note: 'Başlık, gövde ve mikro metin ölçekleri net.' },
+  { title: 'Butonlar', status: 'Hazır', note: 'Birincil, ikincil ve sade varyantlar hazır.' },
+  { title: 'Formlar', status: 'Devam', note: 'Hata ve başarı durumları tamamlanıyor.', tone: 'blue' as const },
+  { title: 'Kartlar', status: 'Hazır', note: 'Panel ve içerik kartları bileşenleşti.' },
+  { title: 'Bileşenler', status: 'Devam', note: 'Teslim paketine eklenecek set olgunlaştırılıyor.', tone: 'violet' as const },
 ];
 
 export function WebMobileDesignDashboard() {
   return (
     <div className="p-8 space-y-6">
       <DashboardHeader
-        title="Web & Mobil Tasarımlar Paneli"
-        description="UI/UX üretimi, responsive ekranlar, design system, prototip ve revizyon sürecinin müşteri görünümü."
+        title="Web ve Mobil Tasarımlar Paneli"
+        description="Arayüz/deneyim üretimi, responsive ekranlar, tasarım sistemi, prototip ve revizyon sürecinin müşteri görünümü."
       />
 
       <KpiGrid items={kpis} />
@@ -50,7 +50,7 @@ export function WebMobileDesignDashboard() {
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <StatusGrid title="Screen Gallery" description="Desktop, mobile ve tablet önizleme kartları." items={gallery} />
-        <StatusGrid title="Design System Checklist" description="Marka tutarlılığı için kontrol edilen tasarım yapı taşları." items={checklist} />
+        <StatusGrid title="Tasarım Sistemi Kontrol Listesi" description="Marka tutarlılığı için kontrol edilen tasarım yapı taşları." items={checklist} />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">

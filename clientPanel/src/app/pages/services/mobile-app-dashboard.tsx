@@ -12,24 +12,24 @@ import {
 const kpis = [
   { title: 'Proje İlerlemesi', value: '%58', note: 'UX ve geliştirme paralel ilerliyor', icon: Rocket },
   { title: 'Tamamlanan Ekranlar', value: '12/18', note: '5 ekran onay bekliyor', icon: Smartphone },
-  { title: 'Açık Bug', value: '6', note: 'test build içinde takipte', icon: Bug, tone: 'violet' as const },
-  { title: 'Test Build Durumu', value: 'Beta 0.8', note: 'son build hazırlandı', icon: CheckCircle },
-  { title: 'Store Hazırlığı', value: '%40', note: 'bilgi ve görsel bekliyor', icon: Bell, tone: 'blue' as const },
+  { title: 'Açık Hata', value: '6', note: 'test paketi içinde takipte', icon: Bug, tone: 'violet' as const },
+  { title: 'Test Paketi Durumu', value: 'Beta 0.8', note: 'son paket hazırlandı', icon: CheckCircle },
+  { title: 'Mağaza Hazırlığı', value: '%40', note: 'bilgi ve görsel bekliyor', icon: Bell, tone: 'blue' as const },
 ];
 
 const screenStatus = [
-  { title: 'Login / Register', status: 'Onaylandı', note: 'Kayıt ve giriş akışı test edildi.' },
-  { title: 'Home', status: 'Revizyon', note: 'Kart yoğunluğu azaltılıyor.', tone: 'violet' as const },
-  { title: 'Profile', status: 'Tasarımda', note: 'Kullanıcı bilgileri ve tercih akışı şekilleniyor.', tone: 'blue' as const },
-  { title: 'Notifications', status: 'Testte', note: 'Push senaryoları cihaz bazlı kontrol ediliyor.', tone: 'violet' as const },
-  { title: 'Admin Panel', status: 'Devam', note: 'Rol ve içerik yönetimi modülleri bağlanıyor.', tone: 'blue' as const },
+  { title: 'Giriş / Kayıt', status: 'Onaylandı', note: 'Kayıt ve giriş akışı test edildi.' },
+  { title: 'Ana Sayfa', status: 'Revizyon', note: 'Kart yoğunluğu azaltılıyor.', tone: 'violet' as const },
+  { title: 'Profil', status: 'Tasarımda', note: 'Kullanıcı bilgileri ve tercih akışı şekilleniyor.', tone: 'blue' as const },
+  { title: 'Bildirimler', status: 'Testte', note: 'Push senaryoları cihaz bazlı kontrol ediliyor.', tone: 'violet' as const },
+  { title: 'Yönetim Paneli', status: 'Devam', note: 'Rol ve içerik yönetimi modülleri bağlanıyor.', tone: 'blue' as const },
 ];
 
 const technicalStatus = [
   { title: 'API Bağlantıları', status: 'Devam', note: 'Auth ve profil endpointleri tamamlandı.', tone: 'blue' as const },
-  { title: 'Admin Panel', status: 'Kurulum', note: 'Kullanıcı yönetimi ve içerik akışı netleştiriliyor.', tone: 'violet' as const },
-  { title: 'Push Notification Setup', status: 'Testte', note: 'Hoş geldin, teklif ve hatırlatma senaryoları ayrıştırıldı.' },
-  { title: 'Crash Tracking', status: 'Aktif', note: 'Beta build cihaz hataları izleniyor.' },
+  { title: 'Yönetim Paneli', status: 'Kurulum', note: 'Kullanıcı yönetimi ve içerik akışı netleştiriliyor.', tone: 'violet' as const },
+  { title: 'Push Bildirim Kurulumu', status: 'Testte', note: 'Hoş geldin, teklif ve hatırlatma senaryoları ayrıştırıldı.' },
+  { title: 'Hata Takibi', status: 'Aktif', note: 'Beta paketi cihaz hataları izleniyor.' },
 ];
 
 export function MobileAppDashboard() {
@@ -78,7 +78,7 @@ export function MobileAppDashboard() {
         items={[
           'Login/Register akışı tamamlandı',
           'Push bildirim senaryoları test listesine alındı',
-          'Beta test build crash tracking ile paylaşıldı',
+          'Beta test paketi hata takibiyle paylaşıldı',
         ]}
       />
 
@@ -88,9 +88,9 @@ export function MobileAppDashboard() {
             <AlertCircle className="w-5 h-5 text-[#AAFF01]" />
           </div>
           <div>
-            <h2 className="text-xl text-white mb-2">Test Build & Crash Tracking</h2>
+            <h2 className="text-xl text-white mb-2">Test Paketi ve Hata Takibi</h2>
             <p className="text-sm text-[#A0A0A0]">
-              Son test build cihaz uyumluluğu, crash takibi ve müşteri geri bildirimleri için açık. Kritik hatalar ayrıştırıldığında store submission listesine geçeceğiz.
+              Son test paketi cihaz uyumluluğu, hata takibi ve müşteri geri bildirimleri için açık. Kritik hatalar ayrıştırıldığında mağaza gönderim listesine geçeceğiz.
             </p>
           </div>
         </div>

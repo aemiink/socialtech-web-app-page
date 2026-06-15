@@ -161,6 +161,35 @@ export type WorkspaceSourceTask = {
     displayName?: string | null;
     role?: string | null;
   } | null;
+  todos?: Array<{
+    id: string;
+    title: string;
+    description?: string | null;
+    visibility: "INTERNAL" | "CLIENT_VISIBLE" | string;
+    isCompleted: boolean;
+  }>;
+  completion?: {
+    totalTodos: number;
+    completedTodos: number;
+    remainingTodos: number;
+    completionPercentage: number;
+    isComplete?: boolean;
+  } | null;
+  progressPercent?: number | null;
+  referenceProjectFile?: {
+    id: string;
+    title: string;
+    category?: string | null;
+    originalFileName?: string | null;
+    secureUrl: string;
+    mimeType?: string | null;
+    visibility: "INTERNAL" | "CLIENT_VISIBLE" | string;
+    createdAt?: string | null;
+    folder?: {
+      id: string;
+      name: string;
+    } | null;
+  } | null;
 };
 
 export type WorkspaceSourceSprint = {
@@ -191,6 +220,8 @@ export type WorkspaceSourceFile = {
   category?: string | null;
   originalFileName: string;
   secureUrl: string;
+  mimeType?: string | null;
+  bytes?: number | null;
   createdAt: string;
   folder?: {
     id: string;

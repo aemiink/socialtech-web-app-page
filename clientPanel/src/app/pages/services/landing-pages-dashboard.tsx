@@ -12,22 +12,22 @@ import {
 const kpis = [
   { title: 'Sayfa İlerlemesi', value: '%76', note: 'tracking ve yayın hazırlığı', icon: Rocket },
   { title: 'Form Leadleri', value: '124', note: 'son 30 gün', icon: FileText },
-  { title: 'Conversion Rate', value: '%5.8', note: '+1.1 puan iyileşme', icon: MousePointerClick },
-  { title: 'Page Speed', value: '91', note: 'mobil performans skoru', icon: BarChart3, tone: 'blue' as const },
+  { title: 'Dönüşüm Oranı', value: '%5.8', note: '+1.1 puan iyileşme', icon: MousePointerClick },
+  { title: 'Sayfa Hızı', value: '91', note: 'mobil performans skoru', icon: BarChart3, tone: 'blue' as const },
   { title: 'Açık Revizyon', value: '2', note: 'copy ve mobil tasarım', icon: Activity, tone: 'violet' as const },
 ];
 
 const conversionStructure = [
-  { title: 'Ad Traffic', status: 'Hazır', note: 'Meta ve Google kampanyaları doğru UTM ile bağlanacak.' },
-  { title: 'Landing Page', status: 'Devam', note: 'Hero, sosyal kanıt ve teklif blokları son revizyonda.', tone: 'blue' as const },
+  { title: 'Reklam Trafiği', status: 'Hazır', note: 'Meta ve Google kampanyaları doğru UTM ile bağlanacak.' },
+  { title: 'Açılış Sayfası', status: 'Devam', note: 'Hero, sosyal kanıt ve teklif blokları son revizyonda.', tone: 'blue' as const },
   { title: 'Form', status: 'Testte', note: 'Lead bildirimi ve alan validasyonları kontrol ediliyor.', tone: 'violet' as const },
-  { title: 'Lead', status: 'Aktif', note: 'CRM/WhatsApp bilgilendirme akışı hazır.' },
+  { title: 'Potansiyel Müşteri', status: 'Aktif', note: 'CRM/WhatsApp bilgilendirme akışı hazır.' },
 ];
 
 const reviewStatus = [
-  { title: 'Copy & CTA Review', status: 'Onay Bekliyor', note: 'Ana headline ve buton metni için son yorum bekliyoruz.', tone: 'violet' as const },
-  { title: 'Desktop Design Preview', status: 'Onaylandı', note: 'Masaüstü tasarım hazır.' },
-  { title: 'Mobile Design Preview', status: 'Revizyon', note: 'Form alanları daha kısa ve net hale getiriliyor.', tone: 'blue' as const },
+  { title: 'Metin ve CTA İncelemesi', status: 'Onay Bekliyor', note: 'Ana başlık ve buton metni için son yorum bekliyoruz.', tone: 'violet' as const },
+  { title: 'Masaüstü Tasarım Önizlemesi', status: 'Onaylandı', note: 'Masaüstü tasarım hazır.' },
+  { title: 'Mobil Tasarım Önizlemesi', status: 'Revizyon', note: 'Form alanları daha kısa ve net hale getiriliyor.', tone: 'blue' as const },
   { title: 'Tracking & Form Status', status: 'Testte', note: 'Pixel, GA4 event ve form notification kontrol ediliyor.', tone: 'violet' as const },
 ];
 
@@ -35,28 +35,28 @@ export function LandingPagesDashboard() {
   return (
     <div className="p-8 space-y-6">
       <DashboardHeader
-        title="Landing Pages Dönüşüm Paneli"
-        description="Reklam trafiğini forma ve satış fırsatına taşıyan landing page üretim sürecinin müşteri görünümü."
+        title="Açılış Sayfaları Dönüşüm Paneli"
+        description="Reklam trafiğini forma ve satış fırsatına taşıyan açılış sayfası üretim sürecinin müşteri görünümü."
       />
 
       <KpiGrid items={kpis} />
 
       <ProgressPath
-        title="Landing Page Build Progress"
-        subtitle="Brief → Copy → Design → Development → Tracking → Publish hattında üretim ve onay akışı."
-        phases={['Brief', 'Copy', 'Design', 'Development', 'Tracking']}
+        title="Açılış Sayfası Üretim İlerlemesi"
+        subtitle="Brief → Metin → Tasarım → Geliştirme → Takip → Yayın hattında üretim ve onay akışı."
+        phases={['Brief', 'Metin', 'Tasarım', 'Geliştirme', 'Takip']}
       />
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <StatusGrid title="Conversion Structure" description="Trafikten lead'e giden yapının net kontrol listesi." items={conversionStructure} />
-        <StatusGrid title="Copy, Design & Tracking Review" description="Onay bekleyen ve test edilen dönüşüm parçaları." items={reviewStatus} />
+        <StatusGrid title="Dönüşüm Yapısı" description="Trafikten potansiyel müşteriye giden yapının net kontrol listesi." items={conversionStructure} />
+        <StatusGrid title="Metin, Tasarım ve Takip Kontrolü" description="Onay bekleyen ve test edilen dönüşüm parçaları." items={reviewStatus} />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <div className="xl:col-span-2">
           <AgencyComment author="Mert Aksoy - Conversion Lead">
             <p>
-              Landing page’in dönüşüm omurgası güçlü. Tek teklif, net CTA, kısa form ve güven öğelerini aynı akışta tutuyoruz.
+              Açılış sayfasının dönüşüm omurgası güçlü. Tek teklif, net CTA, kısa form ve güven öğelerini aynı akışta tutuyoruz.
             </p>
             <p>
               Bu hafta ana odağımız mobil form sürtünmesini azaltmak ve tracking testlerini tamamlamak. Yayına çıktığında reklam trafiğini doğru eventlerle ölçebileceğiz.
@@ -87,12 +87,12 @@ export function LandingPagesDashboard() {
             <CheckCircle className="w-5 h-5 text-[#AAFF01]" />
           </div>
           <div>
-            <h2 className="text-xl text-white">Desktop / Mobile Design Preview</h2>
+              <h2 className="text-xl text-white">Masaüstü / Mobil Tasarım Önizlemesi</h2>
             <p className="text-sm text-[#A0A0A0]">Canlı önizleme linkleri yayın öncesi onay için bu alanda takip edilir.</p>
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {['Desktop Preview', 'Mobile Preview'].map((item) => (
+          {['Masaüstü Önizlemesi', 'Mobil Önizlemesi'].map((item) => (
             <div key={item} className="h-40 rounded-xl bg-gradient-to-br from-[#AAFF01]/10 to-[#7B61FF]/10 border border-white/[0.08] flex items-center justify-center">
               <span className="text-white">{item}</span>
             </div>

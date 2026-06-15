@@ -289,7 +289,9 @@ describe("ServiceTabPage Meta Ads tabs", () => {
     render(<ServiceTabPage serviceId="meta-ads" tabId="approvals" />);
 
     expect(screen.getByText("Kreatif set onayı")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Onayla" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Kreatif set onayı için onayla" }),
+    ).toBeInTheDocument();
   });
 
   it("renders meta reports tab from report API data", () => {

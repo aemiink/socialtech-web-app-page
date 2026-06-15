@@ -47,7 +47,10 @@ export function SocialMediaDashboard() {
     isFetching: isCalendarFetching,
   } = useGetOwnSocialMediaCalendarQuery({ limit: 80 });
   const posts = data?.posts ?? [];
-  const pendingPosts = useMemo(() => filterByStatuses(posts, ['WAITING_APPROVAL', 'REVISION_REQUIRED', 'DESIGN']), [posts]);
+  const pendingPosts = useMemo(
+    () => filterByStatuses(posts, ['WAITING_APPROVAL', 'REVISION_REQUIRED', 'DESIGN', 'APPROVED']),
+    [posts],
+  );
   const publishedPosts = useMemo(() => filterByStatuses(posts, ['PUBLISHED']), [posts]);
   const upcomingPosts = useMemo(
     () =>
