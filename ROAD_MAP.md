@@ -69,6 +69,9 @@
 - Employee `Musterilerim` API integration (`GET /clients`, assignment-scope)
 - Employee `Gorevlerim` API integration (`GET /tasks`, assignment-scope)
 - Employee `Gorevlerim` frontend tests
+- Designer `Gorevlerim` role-shaped task surface
+- Designer `Gorevlerim` customer approval task creation
+- Designer Dashboard API-driven profile/workload summary
 - Client purchased services backend model/API
 - Admin client services selection UI
 - Client Portal purchased-service visibility
@@ -671,3 +674,20 @@ None identified.
 - [ ] Service-specific domain modules for ads/social/SEO/support
 - [ ] Assignment-scoped assignee candidates refinements
 - [ ] Mobile app: Admin + Employee sidebar hamburger menu / drawer (deferred to mobile app phase)
+
+## 2026-06-15 Checkpoint
+
+### Completed
+- [x] Employee `MarkaDosyalari` mock->API migration with client/project/folder accordion tree
+- [x] Employee `TeslimDosyalari` final-delivery workflow with per-project final folders, file upload and external link records
+- [x] Designer role allowed to create internal task work notes on assigned tasks
+- [x] Employee `Takvim` mock->API migration using assigned task due dates and workspace meeting requests
+- [x] Employee `Bildirimler` mock->API migration using live task, approval and due-date signals
+- [x] Employee `Ayarlar` mock session/preference data removed; real profile and password-change mutation wired
+- [x] Admin müşteri detayında aktif satın alınan hizmetlere göre entegrasyon görünürlüğü ve Web/Mobil proje repository bağlantıları
+- [x] Müşteri toplantı talebi için TSİ tarih-saat seçimi, gönderim onayı ve atanmış proje yöneticisi yanıt akışı
+
+### Planned / Follow-up
+- [ ] Dedicated delivery-folder permissions model if final deliveries need client-level folders independent of project folders
+- [ ] Persist employee notification read state on backend instead of browser local storage
+- [ ] Visual QA with an active designer seed/user after employee demo accounts are reactivated

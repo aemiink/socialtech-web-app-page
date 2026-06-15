@@ -306,6 +306,7 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - Social Media foundation models: `ClientSocialMediaConfig`, `SocialMediaPost`, `SocialMediaPostAsset`
   - `User.role` enum remains the primary fixed role field
   - `User.sessionInvalidatedAt` is used for access-token invalidation lifecycle
+  - `User.deletedAt` and `ClientProfile.deletedAt` support soft-delete removal from admin/user/client list surfaces while preserving historical operational records
   - `ClientProfile.slug` is unique
   - `ClientProfile.status` enum (`ACTIVE | INACTIVE | SUSPENDED`) and indexed
   - `Project` slug uniqueness is client-scoped (`@@unique([clientProfileId, slug])`)
@@ -881,8 +882,8 @@ Purpose: shared NestJS REST API that serves as the common backend for Admin Pane
   - `dto/audit-log-query.dto.ts` - query validation (`page`, `limit`, `sortBy`, `sortOrder`, `action`, `actorUserId`, `targetUserId`, `targetClientProfileId`, `entityType`, `entityId`, `dateFrom`, `dateTo`, `search`)
   - `admin-audit-logs.module.ts` - module wiring
 - `server/src/admin-users/` - admin employee-user management module:
-  - `admin-users.controller.ts` - `POST /api/v1/admin/users`, `GET /api/v1/admin/users`, `GET /api/v1/admin/users/:id`, `PATCH /api/v1/admin/users/:id`, `PATCH /api/v1/admin/users/:id/deactivate`, `PATCH /api/v1/admin/users/:id/activate`, `PATCH /api/v1/admin/users/:id/reset-password`
-  - `admin-users.service.ts` - admin-only employee lifecycle management (create/list/detail/update/deactivate/activate/reset-password), self-protection guards, refresh-token revocation on deactivate/reset-password, paginated/sorted list responses (`data` + `meta`), and transactional admin action audit writes
+  - `admin-users.controller.ts` - `POST /api/v1/admin/users`, `GET /api/v1/admin/users`, `GET /api/v1/admin/users/:id`, `PATCH /api/v1/admin/users/:id`, `PATCH /api/v1/admin/users/:id/deactivate`, `PATCH /api/v1/admin/users/:id/activate`, `DELETE /api/v1/admin/users/:id`, `PATCH /api/v1/admin/users/:id/reset-password`
+  - `admin-users.service.ts` - admin-only employee lifecycle management (create/list/detail/update/deactivate/activate/soft-delete/reset-password), self-protection guards, refresh-token revocation on deactivate/delete/reset-password, active assignment deactivation on delete, paginated/sorted list responses (`data` + `meta`), and transactional admin action audit writes
   - `dto/admin-user-query.dto.ts` - list query validation (`accountType`, `role`, `isActive`, `search`) + pagination (`page`, `limit`) + sorting (`sortBy`, `sortOrder`)
   - `dto/update-admin-user.dto.ts` - update payload validation (`displayName`, `role`, `isActive`)
   - `dto/reset-admin-user-password.dto.ts` - reset-password payload validation
@@ -1519,3 +1520,33 @@ The `client/` directory is the public/marketing Social Tech website, not the Cli
   - `manualChunks` vendor split
 - `adminandemployeePanel/src/app/employee/pages/__tests__/MetaAdsWorkspace.test.tsx`
   - role-based view visibility assertions (`social` vs `performance`)
+
+## 2026-06-14 Update Map (Admin Employee + Client Soft Delete)
+
+### Backend
+- `server/prisma/schema.prisma`
+  - `User.deletedAt` and `ClientProfile.deletedAt` soft-delete fields + indexes
+- `server/prisma/migrations/20260614183000_add_user_client_soft_delete/migration.sql`
+- `server/src/admin-users/admin-users.controller.ts`
+  - `DELETE /api/v1/admin/users/:id`
+- `server/src/admin-users/admin-users.service.ts`
+  - employee soft-delete, refresh-token revocation, active assignment deactivation, audit write
+- `server/src/admin-clients/admin-clients.controller.ts`
+  - `DELETE /api/v1/admin/clients/:id`
+- `server/src/admin-clients/admin-clients.service.ts`
+  - client soft-delete, linked portal-user soft-delete/session invalidation, active assignment deactivation, audit write
+- `server/src/auth/*`, `server/src/users/users.service.ts`, `server/src/clients/clients.service.ts`, `server/src/admin-summary/admin-summary.service.ts`, `server/src/admin-assignments/admin-assignments.service.ts`
+  - deleted user/client filtering and session invalidation safeguards
+
+### Admin + Employee Panel Frontend
+- `adminandemployeePanel/src/app/features/adminUsers/adminUsersApi.ts`
+  - `deleteAdminUser` mutation
+- `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
+  - `deleteAdminClient` mutation
+- `adminandemployeePanel/src/app/pages/Employees.tsx`
+  - confirmed employee delete action
+- `adminandemployeePanel/src/app/pages/Clients.tsx`
+  - confirmed client delete action
+- `adminandemployeePanel/src/app/pages/Employees.create.test.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/Clients.test.tsx`
+  - API hook mock updates for delete mutations

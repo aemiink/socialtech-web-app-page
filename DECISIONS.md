@@ -3629,3 +3629,146 @@ Affected files:
 - `PROJECT_CONTEXT.md`
 - `REPO_MAP.md`
 - `ROAD_MAP.md`
+
+## 2026-05-31 - Multi-Host Dev Auth Stabilization + Scoped Refresh Cookies
+
+Context:
+Admin/Employee panel ile Client Portal farklı host/port kombinasyonlarında açıldığında login/refresh akışında kesintiler yaşanıyordu. Ayrıca aynı tarayıcıda iki panel birlikte kullanıldığında ortak refresh cookie adı nedeniyle oturum yenileme çakışmaları görülebiliyordu.
+
+Decision:
+- Backend CORS dev modunda (`NODE_ENV != production`) daha esnek hale getirildi:
+  - `CORS_ALLOW_ALL_DEV_ORIGINS=true` (default) iken origin callback dev ortamda tüm originleri kabul eder.
+  - `CLIENT_ORIGIN_EXTRA` ile ek origin listesi (comma-separated) tanımlanabilir.
+- Refresh cookie stratejisi panel-scope bazlı ayrıştırıldı:
+  - Workforce cookie: `REFRESH_TOKEN_COOKIE_NAME_WORKFORCE` (default: `socialtech_refresh_token_workforce`)
+  - Client cookie: `REFRESH_TOKEN_COOKIE_NAME_CLIENT` (default: `socialtech_refresh_token_client`)
+  - Legacy cookie (`REFRESH_TOKEN_COOKIE_NAME`) okunabilir tutuldu, fakat login/refresh sonrası temizlenir.
+- Frontend base API katmanları her isteğe `X-Auth-Scope` header’ı ekler:
+  - Admin/Employee panel: `WORKFORCE`
+  - Client Portal: `CLIENT`
+- `VITE_API_BASE_URL` verilmezse frontend fallback artık sabit `localhost` yerine aktif host adıyla (`window.location.hostname`) `:4000/api/v1` üretir; böylece farklı hostlarda login çağrıları yanlış loopback’e gitmez.
+
+Reason:
+Bu karar çoklu host geliştirme akışını stabil hale getirir, iki panelin aynı tarayıcıda bağımsız refresh oturumlarını sürdürebilmesini sağlar ve minimum invaziv şekilde mevcut auth mimarisini korur.
+
+Affected files:
+- `server/src/config/cors.config.ts`
+- `server/src/auth/auth.controller.ts`
+- `server/.env.example`
+- `adminandemployeePanel/src/app/services/baseApi.ts`
+- `clientPanel/src/app/services/baseApi.ts`
+
+## 2026-06-14 - Admin Employee + Client Soft Delete
+
+Context:
+Admin panelde çalışan ve müşteri kayıtlarının kullanıcı tarafından silinebilmesi gerekiyordu. `User` ve `ClientProfile` kayıtları görevler, proje dosyaları, workspace revizyonları, CRM lead'leri, raporlar ve audit geçmişi gibi çok sayıda operasyonel kayıtla ilişkilidir; fiziksel silme bu geçmişi kırabilir veya foreign key kısıtlarına takılabilir.
+
+Decision:
+- `User` ve `ClientProfile` modellerine `deletedAt` soft-delete alanı eklendi.
+- `DELETE /api/v1/admin/users/:id` çalışanı soft-delete eder, status'u `INACTIVE` yapar, aktif refresh token'ları iptal eder ve aktif müşteri atamalarını pasife alır.
+- `DELETE /api/v1/admin/clients/:id` müşteriyi soft-delete eder, bağlı portal kullanıcılarını soft-delete/pasif hale getirir, oturumlarını iptal eder ve aktif çalışan atamalarını pasife alır.
+- Admin/user/client list ve detail yüzeyleri silinen kayıtları filtreler; admin summary sayaçları silinen kullanıcı/müşterileri saymaz.
+- Auth guard ve refresh/login akışları soft-delete edilmiş kullanıcıları veya silinmiş client profiline bağlı hesapları geçersiz oturum kabul eder.
+- Admin panel Employees ve Clients tablolarında destructive delete aksiyonları ayrı onay dialog'larıyla sunulur.
+
+Reason:
+Bu yaklaşım operatöre "silindi" deneyimini verirken audit ve operasyon geçmişini korur. Session invalidation ve assignment deactivation silinen çalışan/müşteri erişim yüzeylerini kapatır; soft-delete ise geçmiş proje, dosya, task, rapor ve CRM ilişkilerini bozmadan kalıcı veri kaybı riskini azaltır.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260614183000_add_user_client_soft_delete/migration.sql`
+- `server/src/audit-log/audit-log.service.ts`
+- `server/src/admin-users/admin-users.controller.ts`
+- `server/src/admin-users/admin-users.service.ts`
+- `server/src/admin-clients/admin-clients.controller.ts`
+- `server/src/admin-clients/admin-clients.service.ts`
+- `server/src/auth/auth.service.ts`
+- `server/src/auth/guards/jwt-auth.guard.ts`
+- `server/src/users/users.service.ts`
+- `server/src/clients/clients.service.ts`
+- `server/src/admin-summary/admin-summary.service.ts`
+- `server/src/admin-assignments/admin-assignments.service.ts`
+- `adminandemployeePanel/src/app/features/adminUsers/adminUsersApi.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsApi.ts`
+- `adminandemployeePanel/src/app/pages/Employees.tsx`
+- `adminandemployeePanel/src/app/pages/Clients.tsx`
+- `adminandemployeePanel/src/app/pages/Employees.create.test.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/Clients.test.tsx`
+- `REPO_MAP.md`
+
+## 2026-06-15 - Employee Designer Live Panel + Final Delivery Folders
+
+Context:
+Çalışan panelinde tasarımcı akışının mock veriden çıkması, task dosyaları ile müşteriye teslim edilecek final dosyalarının ayrışması ve görev içi çalışma notlarının şirket içi kalması gerekiyordu.
+
+Decision:
+- Marka dosyaları canlı `ProjectFileFolder` + `ProjectFile` modeli üzerinden müşteri/proje/klasör ağacı olarak render edilir.
+- Final teslimler için proje bazlı `FINAL-<Firma> - Teslim Dosyaları` klasörü idempotent oluşturulur.
+- Final dosya teslimleri Cloudinary upload akışını kullanır; final link teslimleri ise `ProjectFile` içinde `resourceType = "url"` ve `mimeType = "text/uri-list"` olarak tutulur.
+- `resourceType = "url"` kayıtları silinirken Cloudinary delete çağrısına sokulmaz.
+- Eğer bir çalışanın klasör bazlı dosya ataması varsa, `FINAL-` klasörleri de okunabilir/yüklenebilir kapsamına dahil edilir.
+- `DESIGNER` rolü assigned task üzerinde şirket içi çalışma notu bırakabilir; client response’larında work note verisi gizli kalmaya devam eder.
+
+Reason:
+Yeni tablo veya büyük domain refactor açmadan mevcut proje dosyası modelini final teslimler için genişletir. Müşteri görünürlüğü `CLIENT_VISIBLE` ile korunur, şirket içi notlar task response guard’larıyla müşteriden saklanır ve çalışan panelindeki marka/teslim/takvim/bildirim/ayarlar ekranları canlı kaynaklara bağlanır.
+
+Affected files:
+- `adminandemployeePanel/src/app/employee/pages/MarkaDosyalari.tsx`
+- `adminandemployeePanel/src/app/employee/pages/TeslimDosyalari.tsx`
+- `adminandemployeePanel/src/app/employee/pages/Takvim.tsx`
+- `adminandemployeePanel/src/app/employee/pages/Bildirimler.tsx`
+- `adminandemployeePanel/src/app/employee/pages/Ayarlar.tsx`
+- `adminandemployeePanel/src/app/features/auth/authApi.ts`
+- `adminandemployeePanel/src/app/features/auth/authTypes.ts`
+- `adminandemployeePanel/src/app/pages/TaskDetail.tsx`
+- `server/src/project-files/project-files.service.ts`
+- `server/src/tasks/tasks.service.ts`
+- `ROAD_MAP.md`
+
+## 2026-06-15 - Admin Client Detail Service-Gated Configuration
+
+Context:
+Admin müşteri detay ekranı, müşterinin satın almadığı hizmetlere ait bağlantı ve yönetim alanlarını da gösteriyordu. Bu durum müşteri yapılandırmasını kalabalıklaştırıyor ve hangi entegrasyonun gerçekten gerekli olduğunu belirsizleştiriyordu.
+
+Decision:
+- Müşteri detayındaki aktif yönetim alanlarının kaynağı `client.purchasedServices` olur.
+- Yalnızca `ACTIVE` durumundaki satın alınan hizmetlere ait entegrasyon sorguları çalıştırılır ve ilgili bölümler render edilir.
+- `web-app` ve `mobile-app` hizmetleri için müşteriye bağlı projelerin `repositoryUrl` alanları GitHub proje bağlantıları bölümünde gösterilir.
+- Müşterinin aktif hizmetleri detay ekranında özet olarak listelenir.
+
+Reason:
+Hizmet bazlı koşullu sorgu ve render yaklaşımı, gereksiz API çağrılarını azaltır ve admin detay ekranını yalnızca müşteri sözleşmesiyle ilgili yapılandırma alanlarına indirger. Mevcut satın alınan hizmet ve proje modelleri kullanıldığı için yeni bir paralel yapı oluşturulmaz.
+
+Affected files:
+- `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`
+- `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`
+- `adminandemployeePanel/src/app/pages/ClientDetail.tsx`
+- `adminandemployeePanel/src/app/pages/__tests__/ClientDetail.test.tsx`
+- `ROAD_MAP.md`
+
+## 2026-06-15 - Client Meeting Request Scheduling + Project Manager Response Scope
+
+Context:
+Müşteri portalındaki toplantı talebi butonu otomatik olarak ertesi güne sabit bir saat gönderiyordu. Talep öncesi tarih-saat seçimi ve onay adımı yoktu; ayrıca workspace yönetim yetkisi olan admin ve diğer çalışan rolleri toplantı talebini yanıtlayabiliyordu.
+
+Decision:
+- Müşteri toplantı talebi iki aşamalı olur: TSİ tarih-saat seçimi ve gönderim öncesi özet/onay penceresi.
+- Talep ve planlanan toplantı başlangıçları `Europe/Istanbul` saat diliminde, gelecek bir zamanda ve 09:00-18:00 aralığında olmalıdır; backend aynı kuralları zorunlu olarak doğrular.
+- Toplantı talebini yalnızca ilgili müşteriye aktif `PROJECT` scope ile atanmış `PROJECT_MANAGER` rolü yanıtlayabilir.
+- Proje yöneticisi müşteri talebini doğrudan onaylayabilir veya farklı tarih-saat önerisini zorunlu müşteri notuyla gönderebilir.
+- Admin proje detayında toplantı kayıtlarını okuyabilir ancak talebi yanıtlayamaz.
+
+Reason:
+Tarih-saat kurallarını yalnız arayüzde bırakmamak yanlış veya doğrudan API üzerinden gönderilen talepleri de engeller. Yanıt yetkisinin atanmış proje yöneticisine kapatılması müşteri iletişiminin tek sorumluda kalmasını sağlar.
+
+Affected files:
+- `clientPanel/src/app/pages/meetings.tsx`
+- `clientPanel/src/app/pages/__tests__/meetings.test.tsx`
+- `clientPanel/src/app/components/ui/dialog.tsx`
+- `clientPanel/src/app/components/ui/alert-dialog.tsx`
+- `adminandemployeePanel/src/app/employee/pages/ProjectManagerServiceWorkspace.tsx`
+- `adminandemployeePanel/src/app/employee/pages/__tests__/ProjectManagerServiceWorkspace.test.tsx`
+- `adminandemployeePanel/src/app/pages/ProjectDetail.tsx`
+- `server/src/web-app-workspace/web-app-workspace.service.ts`
+- `server/test/web-app-workspace-revisions-authz.e2e-spec.ts`
+- `ROAD_MAP.md`
