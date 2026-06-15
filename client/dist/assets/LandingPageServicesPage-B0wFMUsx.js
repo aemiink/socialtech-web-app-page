@@ -1,0 +1,1 @@
+import{j as r}from"./index-DtsfaxGw.js";import{L as e}from"./LandingPageServiceHome-DNzPWIUA.js";import"./58f77f624371049002598eeb7cdd1d1f5d7a23d1-B8sewOFy.js";import"./a5987d169558dd87ca74caf7bcc1512b1706b5e7-BwtUlPWG.js";import"./HeroBackdrop-Ui34keXv.js";import"./PaymentLogos-BShSIX9Y.js";function p(){return r.jsx(e,{})}export{p as default};

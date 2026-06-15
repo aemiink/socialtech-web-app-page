@@ -32,6 +32,8 @@ const navItems = [
   { label: "Hakkımızda", to: "/hakkimizda" },
 ];
 
+const CLIENT_PORTAL_URL = import.meta.env.VITE_CLIENT_PORTAL_URL ?? "http://localhost:5175";
+
 const serviceMenuGroups: ServiceMenuGroup[] = [
   {
     id: "growth",
@@ -225,7 +227,7 @@ export default function SiteHeader() {
 
         <div className="hidden items-center gap-3 lg:flex">
           <ActionButton accent="violet" label="İletişime Geç" to="/iletisim#contact-form" />
-          <ActionButton accent="lime" label="Giriş Yap" />
+          <ActionButton accent="lime" href={CLIENT_PORTAL_URL} label="Giriş Yap" />
         </div>
 
         <button
@@ -313,7 +315,7 @@ export default function SiteHeader() {
             })}
             <div className="mt-3 flex flex-col gap-3">
               <ActionButton accent="violet" label="İletişime Geç" to="/iletisim#contact-form" />
-              <ActionButton accent="lime" label="Giriş Yap" />
+              <ActionButton accent="lime" href={CLIENT_PORTAL_URL} label="Giriş Yap" />
             </div>
           </div>
         </div>
