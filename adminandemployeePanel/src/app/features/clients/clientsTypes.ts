@@ -159,6 +159,7 @@ export type ClientSummaryResponse = {
     status: ClientStatus;
     createdAt: string;
     updatedAt: string;
+    purchasedServices: ClientPurchasedService[];
   };
   projects: {
     total: number;

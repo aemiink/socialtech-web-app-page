@@ -81,6 +81,7 @@ type UpdateAdminClientTrigger = (payload: {
 }) => MutationResponse<ClientProfile>;
 
 type StatusClientTrigger = (id: string) => MutationResponse<ClientProfile>;
+type DeleteClientTrigger = (id: string) => MutationResponse<{ success: true }>;
 
 type UpdateAdminClientAmazonAdsConfigTrigger = (payload: {
   clientId: string;
@@ -137,6 +138,9 @@ const mockUseDeactivateAdminClientMutation = vi.fn<
 const mockUseActivateAdminClientMutation = vi.fn<
   () => [StatusClientTrigger, { isLoading: boolean }]
 >();
+const mockUseDeleteAdminClientMutation = vi.fn<
+  () => [DeleteClientTrigger, { isLoading: boolean }]
+>();
 const mockUseCreateOrLinkClientOwnerMutation = vi.fn<
   () => [CreateOrLinkClientOwnerTrigger, { isLoading: boolean }]
 >();
@@ -170,6 +174,7 @@ vi.mock("../../features/clients/clientsApi", () => ({
     mockUseUpdateAdminClientGrowthHubConfigMutation(),
   useDeactivateAdminClientMutation: () => mockUseDeactivateAdminClientMutation(),
   useActivateAdminClientMutation: () => mockUseActivateAdminClientMutation(),
+  useDeleteAdminClientMutation: () => mockUseDeleteAdminClientMutation(),
   useCreateOrLinkClientOwnerMutation: () => mockUseCreateOrLinkClientOwnerMutation(),
 }));
 
@@ -437,6 +442,10 @@ function setupMutationState() {
     }),
   }));
 
+  const deleteAdminClient = vi.fn<DeleteClientTrigger>(() => ({
+    unwrap: async () => ({ success: true }),
+  }));
+
   const createOrLinkClientOwner = vi.fn<CreateOrLinkClientOwnerTrigger>((payload) => ({
     unwrap: async () => ({
       ...client,
@@ -488,6 +497,7 @@ function setupMutationState() {
     { isLoading: false },
   ]);
   mockUseActivateAdminClientMutation.mockReturnValue([activateAdminClient, { isLoading: false }]);
+  mockUseDeleteAdminClientMutation.mockReturnValue([deleteAdminClient, { isLoading: false }]);
   mockUseCreateOrLinkClientOwnerMutation.mockReturnValue([
     createOrLinkClientOwner,
     { isLoading: false },
@@ -505,6 +515,7 @@ function setupMutationState() {
     updateAdminClientGrowthHubConfig,
     deactivateAdminClient,
     activateAdminClient,
+    deleteAdminClient,
     createOrLinkClientOwner,
     createAdminAssignment,
   };

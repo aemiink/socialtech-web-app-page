@@ -10,6 +10,7 @@ import type {
 
 const ADMIN_USERS_LIST_ID = "LIST";
 const AUDIT_LOGS_LIST_ID = "LIST";
+const ADMIN_ASSIGNMENTS_LIST_ID = "LIST";
 
 export const adminUsersApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -82,6 +83,19 @@ export const adminUsersApi = baseApi.injectEndpoints({
         { type: "AuditLogs", id: AUDIT_LOGS_LIST_ID },
       ],
     }),
+    deleteAdminUser: builder.mutation<{ success: true }, string>({
+      query: (id) => ({
+        url: `/admin/users/${id}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: (_result, _error, id) => [
+        { type: "AdminUsers", id: ADMIN_USERS_LIST_ID },
+        { type: "AdminUsers", id },
+        { type: "AdminAssignments", id: ADMIN_ASSIGNMENTS_LIST_ID },
+        { type: "AdminSummary", id: "SUMMARY" },
+        { type: "AuditLogs", id: AUDIT_LOGS_LIST_ID },
+      ],
+    }),
     resetAdminUserPassword: builder.mutation<
       { success?: boolean; updatedAt?: string } | AdminUser,
       { id: string; body: ResetAdminUserPasswordRequest }
@@ -108,6 +122,7 @@ export const {
   useUpdateAdminUserMutation,
   useDeactivateAdminUserMutation,
   useActivateAdminUserMutation,
+  useDeleteAdminUserMutation,
   useResetAdminUserPasswordMutation,
 } = adminUsersApi;
 

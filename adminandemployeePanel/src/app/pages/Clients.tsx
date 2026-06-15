@@ -13,6 +13,7 @@ import {
   PlayCircle,
   RefreshCw,
   Search,
+  Trash2,
   UserCog,
   UserPlus,
   Users,
@@ -22,6 +23,16 @@ import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Checkbox } from "../components/ui/checkbox";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -59,6 +70,7 @@ import {
   useActivateAdminClientMutation,
   useCreateAdminClientMutation,
   useCreateOrLinkClientOwnerMutation,
+  useDeleteAdminClientMutation,
   useDeactivateAdminClientMutation,
   useGetClientsQuery,
   useGetAdminClientGrowthHubConfigQuery,
@@ -270,6 +282,7 @@ export function Clients() {
     action: PendingClientStatusAction;
   } | null>(null);
   const [statusSubmitError, setStatusSubmitError] = useState<string | null>(null);
+  const [deleteTargetClient, setDeleteTargetClient] = useState<ClientProfile | null>(null);
 
   const [assignmentTargetClient, setAssignmentTargetClient] = useState<ClientProfile | null>(null);
   const [assignmentForm, setAssignmentForm] = useState<AssignmentFormState>(initialAssignmentForm);
@@ -326,6 +339,7 @@ export function Clients() {
   const [deactivateAdminClient, { isLoading: isDeactivating }] =
     useDeactivateAdminClientMutation();
   const [activateAdminClient, { isLoading: isActivating }] = useActivateAdminClientMutation();
+  const [deleteAdminClient, { isLoading: isDeleting }] = useDeleteAdminClientMutation();
   const [createOrLinkClientOwner, { isLoading: isLinkingOwner }] =
     useCreateOrLinkClientOwnerMutation();
   const [createAdminAssignment, { isLoading: isCreatingAssignment }] =
@@ -376,6 +390,7 @@ export function Clients() {
     isUpdating ||
     isDeactivating ||
     isActivating ||
+    isDeleting ||
     isLinkingOwner ||
     isUpdatingAmazonAdsConfig ||
     isUpdatingSocialMediaConfig ||
@@ -719,6 +734,16 @@ export function Clients() {
     setStatusSubmitError(null);
   }
 
+  function openDeleteDialog(client: ClientProfile) {
+    setPageError(null);
+    setPageSuccess(null);
+    setDeleteTargetClient(client);
+  }
+
+  function closeDeleteDialog() {
+    setDeleteTargetClient(null);
+  }
+
   function openAssignmentDialog(client: ClientProfile) {
     setPageError(null);
     setPageSuccess(null);
@@ -802,6 +827,26 @@ export function Clients() {
             ? "Pasife alma işlemi başarısız oldu."
             : "Aktifleştirme işlemi başarısız oldu.",
         ),
+      );
+    }
+  }
+
+  async function handleDeleteConfirm() {
+    if (!deleteTargetClient || isDeleting) {
+      return;
+    }
+
+    setPageError(null);
+    setPageSuccess(null);
+
+    try {
+      await deleteAdminClient(deleteTargetClient.id).unwrap();
+      setSelectedClient((prev) => (prev?.id === deleteTargetClient.id ? null : prev));
+      closeDeleteDialog();
+      setPageSuccess("Müşteri silindi.");
+    } catch (error) {
+      setPageError(
+        extractApiErrorMessage(error, "Müşteri silinemedi. Lütfen tekrar deneyin."),
       );
     }
   }
@@ -1128,6 +1173,18 @@ export function Clients() {
                             )}
                             {nextStatusAction === "deactivate" ? "Pasife Al" : "Aktifleştir"}
                           </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="destructive"
+                            className="gap-2"
+                            onClick={() => openDeleteDialog(client)}
+                            disabled={!canManageClients || isMutating}
+                            title={canManageClients ? undefined : "Bu işlem için müşteri yönetim yetkisi gerekir."}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Sil
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -1413,6 +1470,36 @@ export function Clients() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={Boolean(deleteTargetClient)}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeDeleteDialog();
+          }
+        }}
+      >
+        <AlertDialogContent className="border-white/[0.08] bg-[#1A1A1A] text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Müşteriyi Sil</AlertDialogTitle>
+            <AlertDialogDescription className="text-[#A0A0A0]">
+              {deleteTargetClient
+                ? `${deleteTargetClient.companyName} listeden kaldırılacak. Portal kullanıcı oturumları kapatılır ve aktif çalışan atamaları pasife alınır.`
+                : "Seçili müşteri listeden kaldırılacak."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Vazgeç</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 text-white hover:bg-red-700"
+              onClick={() => void handleDeleteConfirm()}
+              disabled={isDeleting}
+            >
+              {isDeleting ? "Siliniyor..." : "Sil"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog
         open={Boolean(assignmentTargetClient)}

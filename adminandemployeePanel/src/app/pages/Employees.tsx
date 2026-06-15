@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Plus, Search, ShieldAlert, UserCheck, UserCog, Users } from "lucide-react";
+import { Plus, Search, ShieldAlert, Trash2, UserCheck, UserCog, Users } from "lucide-react";
 import { Link } from "react-router";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -45,6 +45,7 @@ import type { UserRole } from "../features/auth/authTypes";
 import {
   useActivateAdminUserMutation,
   useCreateAdminUserMutation,
+  useDeleteAdminUserMutation,
   useDeactivateAdminUserMutation,
   useGetAdminUsersQuery,
   useResetAdminUserPasswordMutation,
@@ -144,6 +145,7 @@ export function Employees() {
     user: AdminUser;
     action: PendingStatusAction;
   } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
 
   const query = useMemo(() => {
     const isActive =
@@ -174,6 +176,7 @@ export function Employees() {
   const [updateAdminUser, { isLoading: isUpdating }] = useUpdateAdminUserMutation();
   const [deactivateAdminUser, { isLoading: isDeactivating }] = useDeactivateAdminUserMutation();
   const [activateAdminUser, { isLoading: isActivating }] = useActivateAdminUserMutation();
+  const [deleteAdminUser, { isLoading: isDeleting }] = useDeleteAdminUserMutation();
   const [resetAdminUserPassword, { isLoading: isResettingPassword }] =
     useResetAdminUserPasswordMutation();
 
@@ -191,7 +194,12 @@ export function Employees() {
   const inactiveCount = users.length - activeCount;
 
   const isMutating =
-    isCreating || isUpdating || isDeactivating || isActivating || isResettingPassword;
+    isCreating ||
+    isUpdating ||
+    isDeactivating ||
+    isActivating ||
+    isDeleting ||
+    isResettingPassword;
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -453,6 +461,25 @@ export function Employees() {
             ? "Pasife alma işlemi başarısız oldu."
             : "Aktifleştirme işlemi başarısız oldu.",
         ),
+      );
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget || isDeleting) {
+      return;
+    }
+
+    setPageError(null);
+    setPageSuccess(null);
+
+    try {
+      await deleteAdminUser(deleteTarget.id).unwrap();
+      setDeleteTarget(null);
+      setPageSuccess("Çalışan silindi.");
+    } catch (error) {
+      setPageError(
+        extractApiErrorMessage(error, "Çalışan silinemedi. Lütfen tekrar deneyin."),
       );
     }
   };
@@ -754,6 +781,20 @@ export function Employees() {
                           disabled={isMutating || isCurrentUser || user.accountType !== "EMPLOYEE"}
                         >
                           {isActive ? "Pasife Al" : "Aktifleştir"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          className="gap-2"
+                          onClick={() => {
+                            setPageError(null);
+                            setPageSuccess(null);
+                            setDeleteTarget(user);
+                          }}
+                          disabled={isMutating || isCurrentUser || user.accountType !== "EMPLOYEE"}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Sil
                         </Button>
                       </div>
                     </TableCell>
@@ -1142,6 +1183,36 @@ export function Employees() {
                 : isActivating
                   ? "Aktifleştiriliyor..."
                   : "Aktifleştir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteTarget(null);
+          }
+        }}
+      >
+        <AlertDialogContent className="border-white/[0.08] bg-[#1A1A1A] text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Çalışanı Sil</AlertDialogTitle>
+            <AlertDialogDescription className="text-[#A0A0A0]">
+              {deleteTarget
+                ? `${deleteTarget.displayName ?? deleteTarget.email} listeden kaldırılacak. Aktif oturumları kapatılır ve mevcut müşteri atamaları pasife alınır.`
+                : "Seçili çalışan listeden kaldırılacak."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Vazgeç</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 text-white hover:bg-red-700"
+              onClick={handleDeleteConfirm}
+              disabled={isDeleting}
+            >
+              {isDeleting ? "Siliniyor..." : "Sil"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -21,6 +21,7 @@ const mockUseCreateAdminUserMutation = vi.fn();
 const mockUseUpdateAdminUserMutation = vi.fn();
 const mockUseDeactivateAdminUserMutation = vi.fn();
 const mockUseActivateAdminUserMutation = vi.fn();
+const mockUseDeleteAdminUserMutation = vi.fn();
 const mockUseResetAdminUserPasswordMutation = vi.fn();
 
 let currentUser: AuthUserProfile | null = null;
@@ -39,6 +40,8 @@ vi.mock("../features/adminUsers/adminUsersApi", () => ({
     mockUseDeactivateAdminUserMutation(...args),
   useActivateAdminUserMutation: (...args: unknown[]) =>
     mockUseActivateAdminUserMutation(...args),
+  useDeleteAdminUserMutation: (...args: unknown[]) =>
+    mockUseDeleteAdminUserMutation(...args),
   useResetAdminUserPasswordMutation: (...args: unknown[]) =>
     mockUseResetAdminUserPasswordMutation(...args),
 }));
@@ -87,6 +90,7 @@ function setupDefaultHookMocks() {
     { isLoading: false },
   ]);
   mockUseActivateAdminUserMutation.mockReturnValue([noopMutation, { isLoading: false }]);
+  mockUseDeleteAdminUserMutation.mockReturnValue([noopMutation, { isLoading: false }]);
   mockUseResetAdminUserPasswordMutation.mockReturnValue([
     noopMutation,
     { isLoading: false },

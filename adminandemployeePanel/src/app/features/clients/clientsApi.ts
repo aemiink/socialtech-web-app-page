@@ -100,6 +100,7 @@ const CLIENT_AMAZON_ADS_SYNC_LOGS_LIST_ID = "AMAZON_ADS_SYNC_LOGS_LIST";
 const ADMIN_SUMMARY_ID = "SUMMARY";
 const AUDIT_LOGS_LIST_ID = "LIST";
 const ADMIN_USERS_LIST_ID = "LIST";
+const ADMIN_ASSIGNMENTS_LIST_ID = "LIST";
 
 export const clientsApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -794,6 +795,17 @@ export const clientsApi = baseApi.injectEndpoints({
       transformResponse: (response: unknown) => normalizeClientResponse(response),
       invalidatesTags: (_result, _error, id) => getAdminClientMutationInvalidations(id),
     }),
+    deleteAdminClient: builder.mutation<{ success: true }, string>({
+      query: (id) => ({
+        url: `/admin/clients/${id}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: (_result, _error, id) => [
+        ...getAdminClientMutationInvalidations(id),
+        { type: "AdminUsers", id: ADMIN_USERS_LIST_ID },
+        { type: "AdminAssignments", id: ADMIN_ASSIGNMENTS_LIST_ID },
+      ],
+    }),
     createOrLinkClientOwner: builder.mutation<
       ClientProfile,
       { clientId: string; body: CreateOrLinkClientOwnerRequest }
@@ -876,6 +888,7 @@ export const {
   useUpdateAdminClientMutation,
   useDeactivateAdminClientMutation,
   useActivateAdminClientMutation,
+  useDeleteAdminClientMutation,
   useCreateOrLinkClientOwnerMutation,
   useResetClientOwnerPasswordMutation,
 } = clientsApi;

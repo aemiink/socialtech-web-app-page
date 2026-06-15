@@ -9,6 +9,7 @@ import {
   ExternalLink,
   FileImage,
   FolderKanban,
+  Github,
   ListChecks,
   Megaphone,
   PlugZap,
@@ -43,6 +44,8 @@ import {
   getSocialMediaSummaryStateLabel,
 } from "../features/socialMedia/socialMediaUtils";
 import { GrowthHubClientDetailSection } from "../features/growthHub/components/GrowthHubClientDetailSection";
+import { useGetProjectsQuery } from "../features/projects/projectsApi";
+import type { Project } from "../features/projects/projectsTypes";
 import {
   useConnectAdminClientAmazonAdsManualMutation,
   useConnectAdminClientMetaAdsManualMutation,
@@ -64,6 +67,7 @@ import {
 } from "../features/clients/clientsApi";
 import type {
   AmazonAdsRegion,
+  ClientPurchasedService,
   ClientSummaryRecentProject,
   ClientSummaryRecentTask,
   ConnectManualAmazonAdsRequest,
@@ -86,6 +90,7 @@ import {
   getClientStatusLabel,
   getClientTaskStatusBadgeClass,
   getClientTaskStatusLabel,
+  getServiceLabel,
   isNotFoundError,
   isUuid,
 } from "../features/clients/clientsUtils";
@@ -159,6 +164,26 @@ export function ClientDetail() {
   } = useGetClientSummaryQuery(clientProfileId ?? "", {
     skip: !isValidId,
   });
+  const activeServiceKeys = new Set(
+    (summary?.client.purchasedServices ?? [])
+      .filter((service) => service.status === "ACTIVE")
+      .map((service) => service.serviceKey),
+  );
+  const hasGrowthHubService = activeServiceKeys.has("growth-hub");
+  const hasMetaAdsService = activeServiceKeys.has("meta-ads");
+  const hasTikTokAdsService = activeServiceKeys.has("tiktok-ads");
+  const hasAmazonAdsService = activeServiceKeys.has("amazon-ads");
+  const hasSocialMediaService = activeServiceKeys.has("social-media");
+  const hasRepositoryService =
+    activeServiceKeys.has("web-app") || activeServiceKeys.has("mobile-app");
+  const {
+    data: clientProjectsResponse,
+    isLoading: isClientProjectsLoading,
+    isError: isClientProjectsError,
+  } = useGetProjectsQuery(
+    { clientProfileId: clientProfileId ?? "" },
+    { skip: !isValidId || !hasRepositoryService },
+  );
   const {
     data: assignments = [],
     isLoading: isAssignmentsLoading,
@@ -174,7 +199,7 @@ export function ClientDetail() {
     isLoading: isMetaAdsConnectionLoading,
     refetch: refetchMetaAdsConnection,
   } = useGetAdminClientMetaAdsConnectionQuery(clientProfileId ?? "", {
-    skip: !isValidId,
+    skip: !isValidId || !hasMetaAdsService,
   });
   const {
     data: metaAdsSummary,
@@ -183,7 +208,7 @@ export function ClientDetail() {
     isLoading: isMetaAdsSummaryLoading,
     refetch: refetchMetaAdsSummary,
   } = useGetAdminClientMetaAdsSummaryQuery(clientProfileId ?? "", {
-    skip: !isValidId,
+    skip: !isValidId || !hasMetaAdsService,
   });
   const {
     data: tikTokAdsConnection,
@@ -192,7 +217,7 @@ export function ClientDetail() {
     isLoading: isTikTokAdsConnectionLoading,
     refetch: refetchTikTokAdsConnection,
   } = useGetAdminClientTikTokAdsConnectionQuery(clientProfileId ?? "", {
-    skip: !isValidId,
+    skip: !isValidId || !hasTikTokAdsService,
   });
   const {
     data: tikTokAdsSummary,
@@ -202,7 +227,7 @@ export function ClientDetail() {
     refetch: refetchTikTokAdsSummary,
   } = useGetAdminClientTikTokAdsSummaryQuery(
     { clientId: clientProfileId ?? "" },
-    { skip: !isValidId },
+    { skip: !isValidId || !hasTikTokAdsService },
   );
   const {
     data: amazonAdsConnection,
@@ -211,7 +236,7 @@ export function ClientDetail() {
     isLoading: isAmazonAdsConnectionLoading,
     refetch: refetchAmazonAdsConnection,
   } = useGetAdminClientAmazonAdsConnectionQuery(clientProfileId ?? "", {
-    skip: !isValidId,
+    skip: !isValidId || !hasAmazonAdsService,
   });
   const {
     data: amazonAdsSummary,
@@ -221,7 +246,7 @@ export function ClientDetail() {
     refetch: refetchAmazonAdsSummary,
   } = useGetAdminClientAmazonAdsSummaryQuery(
     { clientId: clientProfileId ?? "" },
-    { skip: !isValidId },
+    { skip: !isValidId || !hasAmazonAdsService },
   );
   const {
     data: socialMediaSummary,
@@ -230,7 +255,7 @@ export function ClientDetail() {
     isLoading: isSocialMediaSummaryLoading,
     refetch: refetchSocialMediaSummary,
   } = useGetClientSocialMediaSummaryQuery(clientProfileId ?? "", {
-    skip: !isValidId,
+    skip: !isValidId || !hasSocialMediaService,
   });
 
   useEffect(() => {
@@ -334,6 +359,9 @@ export function ClientDetail() {
   }
 
   const { client, projects, tasks } = summary;
+  const repositoryProjects = (clientProjectsResponse?.data ?? []).filter(
+    (project) => project.serviceKey === "web-app" || project.serviceKey === "mobile-app",
+  );
   const hasMetaConnectionError = Boolean(metaAdsConnectionError);
   const hasMetaSummaryError = Boolean(metaAdsSummaryError);
   const hasTikTokConnectionError = Boolean(tikTokAdsConnectionError);
@@ -830,8 +858,21 @@ export function ClientDetail() {
         </div>
       </Card>
 
-      <GrowthHubClientDetailSection clientProfileId={clientProfileId} />
+      <PurchasedServicesSection services={client.purchasedServices} />
 
+      {hasRepositoryService ? (
+        <RepositoryProjectsSection
+          projects={repositoryProjects}
+          isError={isClientProjectsError}
+          isLoading={isClientProjectsLoading}
+        />
+      ) : null}
+
+      {hasGrowthHubService ? (
+        <GrowthHubClientDetailSection clientProfileId={clientProfileId} />
+      ) : null}
+
+      {hasMetaAdsService ? (
       <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-white">Meta Ads Bağlantı Yönetimi</h2>
@@ -981,7 +1022,9 @@ export function ClientDetail() {
           <p className="mt-3 text-sm text-[#d8ff8f]">{metaConnectionFeedback}</p>
         ) : null}
       </Card>
+      ) : null}
 
+      {hasTikTokAdsService ? (
       <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-white">TikTok Ads Yapılandırması</h2>
@@ -1136,7 +1179,9 @@ export function ClientDetail() {
           <p className="mt-3 text-sm text-[#d8ff8f]">{tikTokConnectionFeedback}</p>
         ) : null}
       </Card>
+      ) : null}
 
+      {hasAmazonAdsService ? (
       <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-white">Amazon Ads Yapılandırması</h2>
@@ -1463,8 +1508,10 @@ export function ClientDetail() {
           <p className="mt-3 text-sm text-[#d8ff8f]">{amazonConnectionFeedback}</p>
         ) : null}
       </Card>
+      ) : null}
 
-      <SocialMediaDetailSection
+      {hasSocialMediaService ? (
+        <SocialMediaDetailSection
         assignments={assignments}
         error={socialMediaSummaryError}
         hasError={hasSocialMediaSummaryError}
@@ -1473,6 +1520,7 @@ export function ClientDetail() {
         summary={socialMediaSummary}
         onRefresh={() => refetchSocialMediaSummary()}
       />
+      ) : null}
 
       <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
         <h2 className="mb-2 text-lg font-semibold text-white">Müşteri Portal Şifre Sıfırlama</h2>
@@ -1573,6 +1621,104 @@ export function ClientDetail() {
         </div>
       </Card>
     </div>
+  );
+}
+
+function PurchasedServicesSection({ services }: { services: ClientPurchasedService[] }) {
+  const activeServices = services.filter((service) => service.status === "ACTIVE");
+
+  return (
+    <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-white">Aktif Hizmetler</h2>
+          <p className="mt-1 text-sm text-[#A0A0A0]">
+            Aşağıdaki yönetim alanları yalnızca bu hizmetlere göre gösterilir.
+          </p>
+        </div>
+        <Badge variant="outline" className="border-[#AAFF01]/30 text-[#d2ff8a]">
+          {activeServices.length} hizmet
+        </Badge>
+      </div>
+      {activeServices.length === 0 ? (
+        <EmptyState>Bu müşteri için aktif hizmet bulunmuyor.</EmptyState>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {activeServices.map((service) => (
+            <Badge
+              key={service.serviceKey}
+              variant="outline"
+              className="border-[#AAFF01]/30 bg-[#AAFF01]/10 px-3 py-1 text-[#d2ff8a]"
+            >
+              {getServiceLabel(service.serviceKey)}
+            </Badge>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function RepositoryProjectsSection({
+  projects,
+  isError,
+  isLoading,
+}: {
+  projects: Project[];
+  isError: boolean;
+  isLoading: boolean;
+}) {
+  return (
+    <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
+      <SectionHeader
+        icon={<Github className="h-5 w-5 text-[#AAFF01]" />}
+        title="GitHub Proje Bağlantıları"
+      />
+      <p className="mb-4 text-sm text-[#A0A0A0]">
+        Web App ve Mobil App hizmetlerine bağlı proje repository adresleri.
+      </p>
+      {isLoading ? <p className="text-sm text-[#A0A0A0]">Projeler yükleniyor...</p> : null}
+      {isError ? (
+        <p className="text-sm text-red-300">Yazılım projeleri ve repository bağlantıları alınamadı.</p>
+      ) : null}
+      {!isLoading && !isError && projects.length === 0 ? (
+        <EmptyState>Bu hizmet için henüz proje oluşturulmamış.</EmptyState>
+      ) : null}
+      <div className="space-y-3">
+        {projects.map((project) => (
+          <div
+            key={project.id}
+            className="flex flex-col gap-3 rounded-lg border border-white/[0.06] bg-white/[0.03] p-4 md:flex-row md:items-center md:justify-between"
+          >
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="font-medium text-white">{project.name}</p>
+                <Badge variant="outline">{getServiceLabel(project.serviceKey)}</Badge>
+              </div>
+              <p className="mt-1 break-all text-xs text-[#A0A0A0]">
+                {project.repositoryUrl ?? "GitHub repository bağlantısı henüz eklenmedi."}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {project.repositoryUrl ? (
+                <Button type="button" variant="outline" size="sm" asChild>
+                  <a href={project.repositoryUrl} target="_blank" rel="noreferrer">
+                    <Github className="mr-2 h-4 w-4" />
+                    GitHub'ı Aç
+                  </a>
+                </Button>
+              ) : null}
+              <Button type="button" variant="outline" size="sm" asChild>
+                <Link to={`/projeler/${project.id}`}>
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  Projeyi Yönet
+                </Link>
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
 

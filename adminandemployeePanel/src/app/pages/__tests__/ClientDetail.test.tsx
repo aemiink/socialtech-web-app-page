@@ -15,6 +15,7 @@ import type {
   AdminTikTokAdsConnection,
   TikTokAdsSummaryResponse,
 } from "../../features/tiktokAds/tiktokAdsTypes";
+import type { Project } from "../../features/projects/projectsTypes";
 import type { SocialMediaSummary } from "../../features/socialMedia/socialMediaTypes";
 import { ClientDetail } from "../ClientDetail";
 
@@ -113,6 +114,7 @@ const mockUseDisconnectAdminClientTikTokAdsMutation = vi.fn();
 const mockUseGetClientSocialMediaSummaryQuery = vi.fn<
   (id: string, options: QueryOptions) => SocialMediaSummaryQueryResult
 >();
+const mockUseGetProjectsQuery = vi.fn();
 
 vi.mock("../../features/clients/clientsApi", () => ({
   useGetClientSummaryQuery: (id: string, options: QueryOptions) =>
@@ -167,6 +169,9 @@ vi.mock("../../features/socialMedia/socialMediaApi", () => ({
   useGetClientSocialMediaSummaryQuery: (id: string, options: QueryOptions) =>
     mockUseGetClientSocialMediaSummaryQuery(id, options),
 }));
+vi.mock("../../features/projects/projectsApi", () => ({
+  useGetProjectsQuery: (...args: unknown[]) => mockUseGetProjectsQuery(...args),
+}));
 vi.mock("../../features/growthHub/components/GrowthHubClientDetailSection", () => ({
   GrowthHubClientDetailSection: () => <div data-testid="growth-hub-client-detail-section" />,
 }));
@@ -183,6 +188,14 @@ const clientSummary: ClientSummaryResponse = {
     status: "ACTIVE",
     createdAt: "2026-04-01T09:00:00.000Z",
     updatedAt: "2026-04-29T10:00:00.000Z",
+    purchasedServices: [
+      { serviceKey: "growth-hub", status: "ACTIVE" },
+      { serviceKey: "meta-ads", status: "ACTIVE" },
+      { serviceKey: "tiktok-ads", status: "ACTIVE" },
+      { serviceKey: "amazon-ads", status: "ACTIVE" },
+      { serviceKey: "social-media", status: "ACTIVE" },
+      { serviceKey: "web-app", status: "ACTIVE" },
+    ],
   },
   projects: {
     total: 9,
@@ -224,6 +237,24 @@ const clientSummary: ClientSummaryResponse = {
   meta: {
     generatedAt: "2026-04-30T10:00:00.000Z",
   },
+};
+
+const webAppProject: Project = {
+  id: projectId,
+  clientProfileId,
+  serviceKey: "web-app",
+  figmaProjectUrl: null,
+  repositoryUrl: "https://github.com/socialtech-mda/acme-web-app",
+  name: "Acme Web App",
+  slug: "acme-web-app",
+  description: null,
+  status: "IN_PROGRESS",
+  priority: "HIGH",
+  startDate: "2026-04-01T00:00:00.000Z",
+  dueDate: "2026-06-01T00:00:00.000Z",
+  createdAt: "2026-04-01T09:00:00.000Z",
+  updatedAt: "2026-04-29T10:00:00.000Z",
+  clientProfile: null,
 };
 
 const metaAdsConnectionSummary: AdminClientMetaAdsConnection = {
@@ -619,6 +650,21 @@ describe("ClientDetail", () => {
       isLoading: false,
       isError: false,
     });
+    mockUseGetProjectsQuery.mockReturnValue({
+      data: {
+        data: [webAppProject],
+        meta: {
+          page: 1,
+          limit: 20,
+          total: 1,
+          totalPages: 1,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        },
+      },
+      isLoading: false,
+      isError: false,
+    });
   });
 
   it("shows invalid UUID state and skips the summary query", () => {
@@ -675,6 +721,11 @@ describe("ClientDetail", () => {
     expect(screen.getByText("TikTok Ads Yapılandırması")).toBeInTheDocument();
     expect(screen.getByText("Amazon Ads Yapılandırması")).toBeInTheDocument();
     expect(screen.getByText("Social Media Yönetimi")).toBeInTheDocument();
+    expect(screen.getByText("GitHub Proje Bağlantıları")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /GitHub'ı Aç/i })).toHaveAttribute(
+      "href",
+      "https://github.com/socialtech-mda/acme-web-app",
+    );
     expect(screen.getByText("Haziran lansman reels")).toBeInTheDocument();
     expect(screen.getByText("Reels kapak görseli")).toBeInTheDocument();
     expect(screen.getByText("Refresh Token ile Bağla")).toBeInTheDocument();
@@ -683,6 +734,65 @@ describe("ClientDetail", () => {
     expect(screen.getAllByText("Token Durumu").length).toBeGreaterThan(0);
     expect(screen.getByText("Video İzlenme")).toBeInTheDocument();
     expect(screen.getByText("18000")).toBeInTheDocument();
+  });
+
+  it("shows only service-specific management sections for a Web App client", () => {
+    setupSummaryState({
+      data: {
+        ...clientSummary,
+        client: {
+          ...clientSummary.client,
+          purchasedServices: [{ serviceKey: "web-app", status: "ACTIVE" }],
+        },
+      },
+    });
+
+    renderClientDetail();
+
+    expect(screen.getByText("GitHub Proje Bağlantıları")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /GitHub'ı Aç/i })).toHaveAttribute(
+      "href",
+      "https://github.com/socialtech-mda/acme-web-app",
+    );
+    expect(screen.queryByText("Meta Ads Bağlantı Yönetimi")).not.toBeInTheDocument();
+    expect(screen.queryByText("TikTok Ads Yapılandırması")).not.toBeInTheDocument();
+    expect(screen.queryByText("Amazon Ads Yapılandırması")).not.toBeInTheDocument();
+    expect(screen.queryByText("Social Media Yönetimi")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("growth-hub-client-detail-section")).not.toBeInTheDocument();
+    expect(mockUseGetAdminClientMetaAdsConnectionQuery).toHaveBeenCalledWith(clientProfileId, {
+      skip: true,
+    });
+    expect(mockUseGetProjectsQuery).toHaveBeenCalledWith(
+      { clientProfileId },
+      { skip: false },
+    );
+  });
+
+  it("shows Meta Ads management only when Meta Ads is active", () => {
+    setupSummaryState({
+      data: {
+        ...clientSummary,
+        client: {
+          ...clientSummary.client,
+          purchasedServices: [{ serviceKey: "meta-ads", status: "ACTIVE" }],
+        },
+      },
+    });
+
+    renderClientDetail();
+
+    expect(screen.getByText("Meta Ads Bağlantı Yönetimi")).toBeInTheDocument();
+    expect(screen.queryByText("GitHub Proje Bağlantıları")).not.toBeInTheDocument();
+    expect(screen.queryByText("TikTok Ads Yapılandırması")).not.toBeInTheDocument();
+    expect(screen.queryByText("Amazon Ads Yapılandırması")).not.toBeInTheDocument();
+    expect(screen.queryByText("Social Media Yönetimi")).not.toBeInTheDocument();
+    expect(mockUseGetAdminClientMetaAdsConnectionQuery).toHaveBeenCalledWith(clientProfileId, {
+      skip: false,
+    });
+    expect(mockUseGetProjectsQuery).toHaveBeenCalledWith(
+      { clientProfileId },
+      { skip: true },
+    );
   });
 
   it("renders project and task counts", () => {
