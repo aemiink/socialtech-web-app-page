@@ -168,3 +168,50 @@ export type MetaAdsReportsResponse = {
     clientVisible: number;
   };
 };
+
+export type MetaAdsAdSetAudience = {
+  adSetId: string;
+  adSetName: string | null;
+  status: string | null;
+  effectiveStatus: string | null;
+  ageMin: number | null;
+  ageMax: number | null;
+  genders: string[];
+  countries: string[];
+  interests: string[];
+  customAudiences: string[];
+  lookalikeAudiences: string[];
+};
+
+export type MetaAdsAudiencesResponse = {
+  data: MetaAdsAdSetAudience[];
+  lastSyncAt: string | null;
+};
+
+export type MetaAdsAdCreative = {
+  adId: string;
+  adName: string | null;
+  status: string | null;
+  effectiveStatus: string | null;
+  creativeId: string | null;
+  title: string | null;
+  body: string | null;
+  thumbnailUrl: string | null;
+  callToActionType: string | null;
+  imageHash: string | null;
+};
+
+export type MetaAdsAdCreativesResponse = {
+  data: MetaAdsAdCreative[];
+  lastSyncAt: string | null;
+};
+
+export type MetaAdsAiCommentary = {
+  generalAnalysis: string;
+  campaignHighlights: string;
+  audienceInsights: string;
+  creativeInsights: string;
+  recommendations: string[];
+  generatedAt: string;
+  isHeuristic: boolean;
+};

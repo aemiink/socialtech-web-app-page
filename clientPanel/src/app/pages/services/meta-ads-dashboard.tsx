@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { DollarSign, Users, MousePointerClick, TrendingUp, TrendingDown, MessageSquare, AlertCircle, CheckCircle, Clock, Target, Image, ArrowRight, Zap, XCircle, WifiOff } from 'lucide-react';
+import { DollarSign, Users, MousePointerClick, TrendingUp, TrendingDown, MessageSquare, AlertCircle, CheckCircle, Clock, Target, Image, ArrowRight, Zap, XCircle, WifiOff, RefreshCw, Wifi } from 'lucide-react';
 import { Button } from '../../components/button';
 import { AutomationPreview } from '../../components/automation-preview';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -213,6 +213,7 @@ export function MetaAdsDashboard() {
     ? campaignsResponse.data.map((campaign) => ({
         name: campaign.name,
         budget: formatCurrency(campaign.spend),
+        spend: campaign.spend,
         roas: campaign.roas !== null ? `${campaign.roas.toFixed(2)}x` : '—',
         ctr: `${campaign.ctr.toFixed(2)}%`,
         cpa: campaign.results > 0 ? formatCurrency(campaign.spend / campaign.results) : '—',
@@ -270,66 +271,90 @@ export function MetaAdsDashboard() {
     );
   }
 
+  const kpiBorderColors = ['border-l-[#AAFF01]', 'border-l-[#00D4FF]', 'border-l-[#7B61FF]', 'border-l-[#FFA726]'];
+  const kpiIconColors = ['text-[#AAFF01]', 'text-[#00D4FF]', 'text-[#7B61FF]', 'text-[#FFA726]'];
+  const kpiBgColors = ['bg-[#AAFF01]/10', 'bg-[#00D4FF]/10', 'bg-[#7B61FF]/10', 'bg-[#FFA726]/10'];
+
+  const totalSpend = campaignsResponse?.data.reduce((sum, c) => sum + c.spend, 0) ?? 0;
+
   return (
     <div className="p-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl text-white mb-2">Meta Ads</h1>
-          <p className="text-[#A0A0A0]">Facebook ve Instagram reklam performansı</p>
+      {/* Hero section */}
+      <div className="rounded-2xl border border-white/[0.08] bg-gradient-to-br from-[#1A1A1A] to-[#202020] p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#AAFF01]/10">
+              <Wifi className="h-6 w-6 text-[#AAFF01]" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-semibold text-white">Meta Ads</h1>
+              <div className="mt-1 flex items-center gap-2">
+                <span className="flex items-center gap-1 rounded-full bg-[#AAFF01]/10 px-2 py-0.5 text-xs text-[#AAFF01] border border-[#AAFF01]/20">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#AAFF01]" />
+                  Bağlı
+                </span>
+                <span className="text-xs text-[#A0A0A0]">Facebook &amp; Instagram reklam performansı</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <Button
+              variant="secondary"
+              className="flex items-center gap-2 text-sm"
+              onClick={() => void handleSyncRefresh()}
+              disabled={isSyncing}
+            >
+              <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
+              {isSyncing ? 'Güncelleniyor...' : 'Senkron Et'}
+            </Button>
+            <span className="text-xs text-[#A0A0A0]">
+              Son güncelleme:{' '}
+              <span className="text-white">
+                {lastSyncAt ? new Date(lastSyncAt).toLocaleString('tr-TR') : 'Henüz yok'}
+              </span>
+            </span>
+          </div>
         </div>
-        <Button variant="secondary" className="text-sm" onClick={() => void handleSyncRefresh()} disabled={isSyncing}>
-          {isSyncing ? 'Güncelleniyor...' : 'Yenile'}
-        </Button>
-      </div>
-
-      <div className="bg-[#1A1A1A] rounded-2xl p-4 border border-white/[0.08] text-sm text-[#A0A0A0]">
-        Son güncelleme: <span className="text-white">{lastSyncAt ? new Date(lastSyncAt).toLocaleString('tr-TR') : 'Henüz senkron yok'}</span>
       </div>
 
       {syncMessage ? (
-        <div className="bg-[#1A1A1A] rounded-2xl p-4 border border-white/[0.08] text-sm text-[#DADADA]">
+        <div className="rounded-2xl border border-[#AAFF01]/20 bg-[#AAFF01]/5 p-4 text-sm text-[#DADADA]">
           {syncMessage}
         </div>
       ) : null}
 
       {(isSummaryLoading || isCampaignsLoading) ? (
-        <div className="bg-[#1A1A1A] rounded-2xl p-4 border border-white/[0.08] text-sm text-[#A0A0A0]">
+        <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-4 text-sm text-[#A0A0A0]">
           Meta Ads raporu güncelleniyor...
         </div>
       ) : null}
 
       {(isSummaryError || isCampaignsError) ? (
-        <div className="bg-red-500/10 rounded-2xl p-4 border border-red-500/30 text-sm text-red-200">
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
           Rapor verileri alınamadı. Lütfen daha sonra tekrar deneyin.
         </div>
       ) : null}
 
       {!isSummaryLoading && !isSummaryError && !summary ? (
-        <div className="bg-[#1A1A1A] rounded-2xl p-4 border border-white/[0.08] text-sm text-[#A0A0A0]">
+        <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-4 text-sm text-[#A0A0A0]">
           Seçili tarih aralığı için özet rapor verisi bulunamadı.
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* KPI grid */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         {displayKpiData.map((kpi, i) => (
-          <div key={i} className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
-            <div className="flex items-start justify-between mb-4">
-              <span className="text-[#A0A0A0] text-sm">{kpi.title}</span>
-              <div className="w-10 h-10 rounded-xl bg-[#AAFF01]/10 flex items-center justify-center">
-                <kpi.icon className="w-5 h-5 text-[#AAFF01]" />
+          <div
+            key={i}
+            className={`rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-6 border-l-4 ${kpiBorderColors[i] ?? 'border-l-white/20'}`}
+          >
+            <div className="mb-4 flex items-start justify-between">
+              <span className="text-xs font-medium uppercase tracking-wider text-[#A0A0A0]">{kpi.title}</span>
+              <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${kpiBgColors[i] ?? 'bg-white/10'}`}>
+                <kpi.icon className={`h-4 w-4 ${kpiIconColors[i] ?? 'text-white'}`} />
               </div>
             </div>
-            <div className="text-3xl text-white mb-2">{kpi.value}</div>
-            <div className="flex items-center gap-2">
-              {kpi.change >= 0 ? (
-                <TrendingUp className="w-4 h-4 text-[#AAFF01]" />
-              ) : (
-                <TrendingDown className="w-4 h-4 text-[#ff4444]" />
-              )}
-              <span className={kpi.change >= 0 ? 'text-[#AAFF01] text-sm' : 'text-[#ff4444] text-sm'}>
-                {kpi.change >= 0 ? '+' : ''}{kpi.change}%
-              </span>
-            </div>
+            <div className="text-4xl font-semibold text-white">{kpi.value}</div>
           </div>
         ))}
       </div>
@@ -365,56 +390,65 @@ export function MetaAdsDashboard() {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
-          <h2 className="text-xl text-white mb-4">CTR Trendi</h2>
+      {/* Charts section */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-6">
+          <div className="mb-5 flex items-center justify-between">
+            <h2 className="text-base font-semibold text-white">CTR Trendi</h2>
+            <span className="rounded-full bg-[#AAFF01]/10 px-2 py-0.5 text-xs text-[#AAFF01]">Son 14 gün</span>
+          </div>
           {chartData.length > 0 ? (
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                  <XAxis dataKey="date" stroke="#A0A0A0" />
-                  <YAxis stroke="#A0A0A0" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                  <XAxis dataKey="date" stroke="#A0A0A0" tick={{ fontSize: 11 }} />
+                  <YAxis stroke="#A0A0A0" tick={{ fontSize: 11 }} />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: '#202020',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      borderRadius: '8px',
+                      border: '1px solid rgba(255,255,255,0.12)',
+                      borderRadius: '10px',
+                      fontSize: '12px',
                     }}
                   />
-                  <Line type="monotone" dataKey="ctr" stroke="#AAFF01" strokeWidth={2} name="CTR %" />
+                  <Line type="monotone" dataKey="ctr" stroke="#AAFF01" strokeWidth={2} dot={false} name="CTR %" />
                 </LineChart>
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="h-64 flex items-center justify-center text-[#A0A0A0] text-sm">
+            <div className="flex h-64 items-center justify-center text-sm text-[#A0A0A0]">
               Henüz günlük insight verisi yok.
             </div>
           )}
         </div>
 
-        <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
-          <h2 className="text-xl text-white mb-4">CPA Trendi</h2>
+        <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-6">
+          <div className="mb-5 flex items-center justify-between">
+            <h2 className="text-base font-semibold text-white">CPA Trendi</h2>
+            <span className="rounded-full bg-[#7B61FF]/10 px-2 py-0.5 text-xs text-[#7B61FF]">Son 14 gün</span>
+          </div>
           {chartData.length > 0 ? (
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                  <XAxis dataKey="date" stroke="#A0A0A0" />
-                  <YAxis stroke="#A0A0A0" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                  <XAxis dataKey="date" stroke="#A0A0A0" tick={{ fontSize: 11 }} />
+                  <YAxis stroke="#A0A0A0" tick={{ fontSize: 11 }} />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: '#202020',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      borderRadius: '8px',
+                      border: '1px solid rgba(255,255,255,0.12)',
+                      borderRadius: '10px',
+                      fontSize: '12px',
                     }}
                   />
-                  <Line type="monotone" dataKey="cpa" stroke="#7B61FF" strokeWidth={2} name="CPA ₺" />
+                  <Line type="monotone" dataKey="cpa" stroke="#7B61FF" strokeWidth={2} dot={false} name="CPA ₺" />
                 </LineChart>
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="h-64 flex items-center justify-center text-[#A0A0A0] text-sm">
+            <div className="flex h-64 items-center justify-center text-sm text-[#A0A0A0]">
               CPA verisi için yeterli dönüşüm kaydı yok.
             </div>
           )}
@@ -537,81 +571,101 @@ export function MetaAdsDashboard() {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Campaigns + sticky sidebar */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <h2 className="text-2xl text-white mb-4">Kampanyalar</h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {displayCampaigns.map((campaign, i) => (
-              <div key={i} className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <h3 className="text-xl text-white">{campaign.name}</h3>
-                      <span className="text-xs px-2 py-0.5 rounded bg-[#7B61FF]/10 text-[#7B61FF]">
-                        {campaign.objective}
-                      </span>
+          <h2 className="mb-4 text-xl font-semibold text-white">Kampanyalar</h2>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {displayCampaigns.map((campaign, i) => {
+              const spendPct = totalSpend > 0 ? Math.round((campaign.spend / totalSpend) * 100) : 0;
+              return (
+                <div key={i} className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-5">
+                  {/* Header */}
+                  <div className="mb-4 flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="mb-1 flex items-center gap-2">
+                        <span className={`mt-0.5 h-2 w-2 flex-shrink-0 rounded-full ${campaign.statusColor === 'green' ? 'bg-[#AAFF01]' : 'bg-[#00D4FF]'}`} />
+                        <h3 className="truncate text-sm font-medium text-white">{campaign.name}</h3>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded bg-[#7B61FF]/10 px-1.5 py-0.5 text-[11px] text-[#7B61FF]">
+                          {campaign.objective}
+                        </span>
+                        <span className={`rounded border px-1.5 py-0.5 text-[11px] ${
+                          campaign.statusColor === 'green'
+                            ? 'border-[#AAFF01]/20 bg-[#AAFF01]/10 text-[#AAFF01]'
+                            : 'border-[#00D4FF]/20 bg-[#00D4FF]/10 text-[#00D4FF]'
+                        }`}>
+                          {campaign.status}
+                        </span>
+                      </div>
                     </div>
-                    <span className="text-[#A0A0A0] text-sm">Bütçe: {campaign.budget}</span>
+                    <span className="flex-shrink-0 text-sm font-semibold text-white">{campaign.budget}</span>
                   </div>
-                  <span className={`px-3 py-1 rounded-lg text-sm ${
-                    campaign.statusColor === 'green'
-                      ? 'bg-[#AAFF01]/10 text-[#AAFF01] border border-[#AAFF01]/20'
-                      : 'bg-[#00D4FF]/10 text-[#00D4FF] border border-[#00D4FF]/20'
-                  }`}>
-                    {campaign.status}
-                  </span>
+
+                  {/* Spend bar */}
+                  <div className="mb-4">
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.08]">
+                      <div
+                        className="h-full rounded-full bg-[#AAFF01]"
+                        style={{ width: `${Math.min(spendPct, 100)}%` }}
+                      />
+                    </div>
+                    <span className="mt-1 text-[11px] text-[#A0A0A0]">{spendPct}% toplam harcama</span>
+                  </div>
+
+                  {/* Metrics */}
+                  <div className="mb-4 grid grid-cols-3 gap-2">
+                    <div className="rounded-lg bg-[#202020] p-2.5 text-center">
+                      <div className="text-sm font-semibold text-[#AAFF01]">{campaign.roas}</div>
+                      <div className="text-[11px] text-[#A0A0A0]">ROAS</div>
+                    </div>
+                    <div className="rounded-lg bg-[#202020] p-2.5 text-center">
+                      <div className="text-sm font-semibold text-[#00D4FF]">{campaign.ctr}</div>
+                      <div className="text-[11px] text-[#A0A0A0]">CTR</div>
+                    </div>
+                    <div className="rounded-lg bg-[#202020] p-2.5 text-center">
+                      <div className="text-sm font-semibold text-white">{campaign.cpa}</div>
+                      <div className="text-[11px] text-[#A0A0A0]">CPA</div>
+                    </div>
+                  </div>
+
+                  {/* Comment */}
+                  <div className="rounded-xl border border-white/[0.08] bg-[#202020] p-3">
+                    <div className="flex items-start gap-2">
+                      <MessageSquare className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-[#AAFF01]" />
+                      <p className="text-xs text-[#d7d7d7]">{campaign.comment}</p>
+                    </div>
+                  </div>
                 </div>
-                <div className="grid grid-cols-3 gap-3 mb-4">
-                  <div className="bg-[#202020] rounded-lg p-3 text-center">
-                    <div className="text-lg text-white">{campaign.roas}</div>
-                    <div className="text-xs text-[#A0A0A0]">ROAS</div>
-                  </div>
-                  <div className="bg-[#202020] rounded-lg p-3 text-center">
-                    <div className="text-lg text-white">{campaign.ctr}</div>
-                    <div className="text-xs text-[#A0A0A0]">CTR</div>
-                  </div>
-                  <div className="bg-[#202020] rounded-lg p-3 text-center">
-                    <div className="text-lg text-white">{campaign.cpa}</div>
-                    <div className="text-xs text-[#A0A0A0]">CPA</div>
-                  </div>
-                </div>
-                <div className="bg-[#202020] rounded-xl p-4 border border-white/[0.08]">
-                  <div className="flex items-start gap-2">
-                    <MessageSquare className="w-4 h-4 text-[#AAFF01] flex-shrink-0 mt-0.5" />
-                    <p className="text-sm text-white">{campaign.comment}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
             {!isCampaignsLoading && !isCampaignsError && displayCampaigns.length === 0 ? (
-              <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08] text-sm text-[#A0A0A0] lg:col-span-2">
+              <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-6 text-sm text-[#A0A0A0] lg:col-span-2">
                 Kampanya verisi bulunamadı.
               </div>
             ) : null}
           </div>
         </div>
 
-        <div className="space-y-6">
-          <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
-            <h2 className="text-xl text-white mb-4">Sizden Beklenenler</h2>
+        {/* Sticky right sidebar */}
+        <div className="space-y-6 lg:sticky lg:top-6 lg:self-start">
+          <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-6">
+            <h2 className="mb-4 text-base font-semibold text-white">Sizden Beklenenler</h2>
             {pendingApprovalTasks.length > 0 ? (
               <div className="space-y-3">
                 {pendingApprovalTasks.map((task) => {
                   const isApproval = task.approvalType !== null && task.approvalType !== undefined;
                   return (
-                    <div key={task.id} className="bg-[#202020] rounded-xl p-4 border border-white/[0.08]">
-                      <div className="flex items-start justify-between mb-3">
-                        <div>
-                          <span className={`text-xs px-2 py-0.5 rounded ${
-                            isApproval
-                              ? 'bg-[#AAFF01]/10 text-[#AAFF01] border border-[#AAFF01]/20'
-                              : 'bg-[#7B61FF]/10 text-[#7B61FF] border border-[#7B61FF]/20'
-                          }`}>
-                            {isApproval ? 'Onay Gerekli' : 'Geri Bildirim'}
-                          </span>
-                          <p className="text-white text-sm mt-2">{task.title}</p>
-                        </div>
-                      </div>
+                    <div key={task.id} className="rounded-xl border border-white/[0.08] bg-[#202020] p-4">
+                      <span className={`text-xs px-2 py-0.5 rounded border ${
+                        isApproval
+                          ? 'border-[#AAFF01]/20 bg-[#AAFF01]/10 text-[#AAFF01]'
+                          : 'border-[#7B61FF]/20 bg-[#7B61FF]/10 text-[#7B61FF]'
+                      }`}>
+                        {isApproval ? 'Onay Gerekli' : 'Geri Bildirim'}
+                      </span>
+                      <p className="mt-2 text-sm text-white">{task.title}</p>
                     </div>
                   );
                 })}

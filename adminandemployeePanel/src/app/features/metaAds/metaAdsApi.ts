@@ -2,6 +2,11 @@ import { baseApi } from "../../services/baseApi";
 import type {
   AssignedMetaAdsConfigResponse,
   CreateMetaAdsReportRequest,
+  MetaAdsAdCreative,
+  MetaAdsAdCreativesResponse,
+  MetaAdsAdSetAudience,
+  MetaAdsAiCommentary,
+  MetaAdsAudiencesResponse,
   MetaAdsCampaign,
   MetaAdsCampaignsResponse,
   MetaAdsInsightItem,
@@ -146,6 +151,36 @@ export const metaAdsApi = baseApi.injectEndpoints({
       }),
       transformResponse: (response: unknown) => normalizeMetaAdsReportItemResponse(response),
     }),
+    getAssignedClientMetaAdsAdCreatives: builder.query<
+      MetaAdsAdCreativesResponse,
+      { clientId: string }
+    >({
+      query: ({ clientId }) => ({
+        url: `/meta-ads/clients/${clientId}/ad-creatives`,
+        method: "GET",
+      }),
+      transformResponse: (response: unknown) => normalizeMetaAdsAdCreativesResponse(response),
+    }),
+    getAssignedClientMetaAdsAudiences: builder.query<
+      MetaAdsAudiencesResponse,
+      { clientId: string }
+    >({
+      query: ({ clientId }) => ({
+        url: `/meta-ads/clients/${clientId}/audiences`,
+        method: "GET",
+      }),
+      transformResponse: (response: unknown) => normalizeMetaAdsAudiencesResponse(response),
+    }),
+    getAssignedClientMetaAdsAiCommentary: builder.query<
+      MetaAdsAiCommentary,
+      { clientId: string }
+    >({
+      query: ({ clientId }) => ({
+        url: `/meta-ads/clients/${clientId}/ai-commentary`,
+        method: "GET",
+      }),
+      transformResponse: (response: unknown) => normalizeAiCommentaryResponse(response),
+    }),
   }),
 });
 
@@ -160,7 +195,72 @@ export const {
   useGetAssignedClientMetaAdsReportsQuery,
   useCreateAssignedClientMetaAdsReportMutation,
   useUpdateAssignedMetaAdsReportMutation,
+  useGetAssignedClientMetaAdsAdCreativesQuery,
+  useGetAssignedClientMetaAdsAudiencesQuery,
+  useGetAssignedClientMetaAdsAiCommentaryQuery,
 } = metaAdsApi;
+
+function normalizeMetaAdsAudiencesResponse(response: unknown): MetaAdsAudiencesResponse {
+  const candidate = isRecord(response) && isRecord(response.data) ? response.data : response;
+  const rows = isRecord(candidate) && Array.isArray(candidate.data) ? candidate.data : [];
+
+  return {
+    data: rows.map(normalizeAdSetAudienceRow).filter((item): item is MetaAdsAdSetAudience => item !== null),
+    lastSyncAt: isRecord(candidate) && typeof candidate.lastSyncAt === "string" ? candidate.lastSyncAt : null,
+  };
+}
+
+function normalizeAdSetAudienceRow(value: unknown): MetaAdsAdSetAudience | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.adSetId !== "string") return null;
+
+  return {
+    adSetId: value.adSetId,
+    adSetName: typeof value.adSetName === "string" ? value.adSetName : null,
+    status: typeof value.status === "string" ? value.status : null,
+    effectiveStatus: typeof value.effectiveStatus === "string" ? value.effectiveStatus : null,
+    ageMin: typeof value.ageMin === "number" ? value.ageMin : null,
+    ageMax: typeof value.ageMax === "number" ? value.ageMax : null,
+    genders: Array.isArray(value.genders) ? value.genders.filter((g): g is string => typeof g === "string") : [],
+    countries: Array.isArray(value.countries) ? value.countries.filter((c): c is string => typeof c === "string") : [],
+    interests: Array.isArray(value.interests) ? value.interests.filter((i): i is string => typeof i === "string") : [],
+    customAudiences: Array.isArray(value.customAudiences) ? value.customAudiences.filter((a): a is string => typeof a === "string") : [],
+    lookalikeAudiences: Array.isArray(value.lookalikeAudiences) ? value.lookalikeAudiences.filter((a): a is string => typeof a === "string") : [],
+  };
+}
+
+function normalizeMetaAdsAdCreativesResponse(response: unknown): MetaAdsAdCreativesResponse {
+  const candidate = isRecord(response) && isRecord(response.data) ? response.data : response;
+  const rows = isRecord(candidate) && Array.isArray(candidate.data) ? candidate.data : [];
+
+  return {
+    data: rows.map(normalizeAdCreativeRow).filter((item): item is MetaAdsAdCreative => item !== null),
+    lastSyncAt: isRecord(candidate) && typeof candidate.lastSyncAt === "string" ? candidate.lastSyncAt : null,
+  };
+}
+
+function normalizeAdCreativeRow(value: unknown): MetaAdsAdCreative | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (typeof value.adId !== "string") {
+    return null;
+  }
+
+  return {
+    adId: value.adId,
+    adName: typeof value.adName === "string" ? value.adName : null,
+    status: typeof value.status === "string" ? value.status : null,
+    effectiveStatus: typeof value.effectiveStatus === "string" ? value.effectiveStatus : null,
+    creativeId: typeof value.creativeId === "string" ? value.creativeId : null,
+    title: typeof value.title === "string" ? value.title : null,
+    body: typeof value.body === "string" ? value.body : null,
+    thumbnailUrl: typeof value.thumbnailUrl === "string" ? value.thumbnailUrl : null,
+    callToActionType: typeof value.callToActionType === "string" ? value.callToActionType : null,
+    imageHash: typeof value.imageHash === "string" ? value.imageHash : null,
+  };
+}
 
 function normalizeAssignedMetaAdsConfigResponse(response: unknown): AssignedMetaAdsConfigResponse {
   const candidate = isRecord(response) && isRecord(response.data) ? response.data : response;
@@ -549,4 +649,20 @@ function readNullableNumber(source: unknown, key: string): number | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeAiCommentaryResponse(response: unknown): MetaAdsAiCommentary {
+  const candidate = isRecord(response) && isRecord(response.data) ? response.data : response;
+  if (!isRecord(candidate)) {
+    return { generalAnalysis: "", campaignHighlights: "", audienceInsights: "", creativeInsights: "", recommendations: [], generatedAt: new Date().toISOString(), isHeuristic: true };
+  }
+  return {
+    generalAnalysis: typeof candidate.generalAnalysis === "string" ? candidate.generalAnalysis : "",
+    campaignHighlights: typeof candidate.campaignHighlights === "string" ? candidate.campaignHighlights : "",
+    audienceInsights: typeof candidate.audienceInsights === "string" ? candidate.audienceInsights : "",
+    creativeInsights: typeof candidate.creativeInsights === "string" ? candidate.creativeInsights : "",
+    recommendations: Array.isArray(candidate.recommendations) ? candidate.recommendations.filter((r): r is string => typeof r === "string") : [],
+    generatedAt: typeof candidate.generatedAt === "string" ? candidate.generatedAt : new Date().toISOString(),
+    isHeuristic: typeof candidate.isHeuristic === "boolean" ? candidate.isHeuristic : true,
+  };
 }

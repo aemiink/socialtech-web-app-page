@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   type LucideIcon,
   Activity,
@@ -38,8 +38,11 @@ import { Button } from '../components/button';
 import { getServiceTabContent, ServiceTabContent } from '../data/service-pages';
 import { GrowthHubDashboard } from './services/growth-hub-dashboard';
 import {
+  useGetOwnMetaAdsAdCreativesQuery,
   useGetOwnMetaAdsAdSetsQuery,
   useGetOwnMetaAdsAdsQuery,
+  useGetOwnMetaAdsAiCommentaryQuery,
+  useGetOwnMetaAdsAudiencesQuery,
   useGetOwnMetaAdsCampaignsQuery,
   useGetOwnMetaAdsConfigQuery,
   useGetOwnMetaAdsInsightsQuery,
@@ -47,7 +50,7 @@ import {
   useGetOwnMetaAdsReportsQuery,
   useGetOwnMetaAdsSummaryQuery,
 } from '../features/metaAds/metaAdsApi';
-import type { MetaAdsCampaign, MetaAdsInsightItem, MetaAdsReportItem } from '../features/metaAds/metaAdsTypes';
+import type { MetaAdsAdCreative, MetaAdsAdSetAudience, MetaAdsAiCommentary, MetaAdsCampaign, MetaAdsInsightItem, MetaAdsReportItem } from '../features/metaAds/metaAdsTypes';
 import {
   useExportOwnTikTokAdsReportMutation,
   useGetOwnTikTokAdsCampaignsQuery,
@@ -1660,6 +1663,26 @@ function MetaAdsServiceTab({
     { skip: !isConnected || tabId !== "meta-reports" },
   );
   const {
+    data: audiencesResponse,
+    isLoading: isAudiencesLoading,
+    isError: isAudiencesError,
+  } = useGetOwnMetaAdsAudiencesQuery(undefined, {
+    skip: !isConnected || tabId !== "audiences",
+  });
+  const {
+    data: adCreativesResponse,
+    isLoading: isAdCreativesLoading,
+    isError: isAdCreativesError,
+  } = useGetOwnMetaAdsAdCreativesQuery(undefined, {
+    skip: !isConnected || tabId !== "creatives",
+  });
+  const {
+    data: aiCommentary,
+    isLoading: isAiCommentaryLoading,
+  } = useGetOwnMetaAdsAiCommentaryQuery(undefined, {
+    skip: !isConnected,
+  });
+  const {
     data: approvalTasks = [],
     isLoading: isApprovalsLoading,
     isError: isApprovalsError,
@@ -1671,9 +1694,13 @@ function MetaAdsServiceTab({
     useUpdateClientTaskApprovalMutation();
   const [activeApprovalTaskId, setActiveApprovalTaskId] = useState<string | null>(null);
 
-  const campaigns = campaignsResponse?.data ?? [];
-  const adSets = adSetsResponse?.data ?? [];
-  const ads = adsResponse?.data ?? [];
+  const campaigns = [...(campaignsResponse?.data ?? [])].sort((a, b) => {
+    if (a.effectiveStatus === "ACTIVE" && b.effectiveStatus !== "ACTIVE") return -1;
+    if (a.effectiveStatus !== "ACTIVE" && b.effectiveStatus === "ACTIVE") return 1;
+    return b.spend - a.spend;
+  });
+  const adSets = [...(adSetsResponse?.data ?? [])].sort((a, b) => b.spend - a.spend);
+  const ads = [...(adsResponse?.data ?? [])].sort((a, b) => b.spend - a.spend);
   const reports = reportsResponse?.data ?? [];
   const metaAdsApprovalTasks = useMemo(
     () =>
@@ -1805,64 +1832,96 @@ function MetaAdsServiceTab({
         </span>
       </div>
 
-      {tabId === "campaigns" ? (
-        <MetaAdsEntityGrid
-          title="Kampanyalar"
-          loading={isCampaignsLoading || isSummaryLoading}
-          isError={isCampaignsError || isSummaryError}
-          rows={campaigns}
-          emptyMessage="Seçili tarih aralığında kampanya verisi bulunamadı."
-        />
-      ) : null}
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-4">
+        {/* Left: main content — 3 cols */}
+        <div className="col-span-1 space-y-6 xl:col-span-3">
+          {tabId === "campaigns" ? (
+            <MetaAdsEntityGrid
+              title="Kampanyalar"
+              loading={isCampaignsLoading || isSummaryLoading}
+              isError={isCampaignsError || isSummaryError}
+              rows={campaigns}
+              emptyMessage="Seçili tarih aralığında kampanya verisi bulunamadı."
+            />
+          ) : null}
 
-      {tabId === "ad-sets" ? (
-        <MetaAdsInsightGrid
-          title="Reklam Setleri"
-          loading={isAdSetsLoading}
-          isError={isAdSetsError}
-          rows={adSets}
-          emptyMessage="Reklam seti verisi bulunamadı."
-        />
-      ) : null}
+          {tabId === "ad-sets" ? (
+            <MetaAdsInsightGrid
+              title="Reklam Setleri"
+              loading={isAdSetsLoading}
+              isError={isAdSetsError}
+              rows={adSets}
+              emptyMessage="Reklam seti verisi bulunamadı."
+            />
+          ) : null}
 
-      {tabId === "creatives" ? (
-        <MetaAdsInsightGrid
-          title="Reklamlar / Kreatifler"
-          loading={isAdsLoading}
-          isError={isAdsError}
-          rows={ads}
-          emptyMessage="Reklam/kreatif verisi bulunamadı."
-        />
-      ) : null}
+          {tabId === "creatives" ? (
+            <MetaAdsCreativesPanel
+              creatives={adCreativesResponse?.data ?? []}
+              adInsights={ads}
+              loading={isAdCreativesLoading || isAdsLoading}
+              isError={isAdCreativesError}
+            />
+          ) : null}
 
-      {tabId === "audiences" ? (
-        <MetaAdsAudiencePanel rows={adSets} loading={isAdSetsLoading} isError={isAdSetsError} />
-      ) : null}
+          {tabId === "audiences" ? (
+            <MetaAdsAudiencePanel
+              audiences={audiencesResponse?.data ?? []}
+              loading={isAudiencesLoading}
+              isError={isAudiencesError}
+            />
+          ) : null}
 
-      {tabId === "pixel-events" ? (
-        <MetaAdsPixelPanel data={pixelStatus} loading={isPixelLoading} isError={isPixelError} />
-      ) : null}
+          {tabId === "pixel-events" ? (
+            <MetaAdsPixelPanel data={pixelStatus} loading={isPixelLoading} isError={isPixelError} />
+          ) : null}
 
-      {tabId === "meta-reports" ? (
-        <MetaAdsReportPanel rows={reports} loading={isReportsLoading} isError={isReportsError} />
-      ) : null}
+          {tabId === "meta-reports" ? (
+            <MetaAdsReportPanel rows={reports} loading={isReportsLoading} isError={isReportsError} />
+          ) : null}
 
-      {tabId === "agency-notes" ? (
-        <MetaAdsAgencyNotesPanel notes={notes} loading={isCampaignsLoading || isSummaryLoading} />
-      ) : null}
+          {tabId === "agency-notes" ? (
+            <MetaAdsAgencyNotesPanel notes={notes} loading={isCampaignsLoading || isSummaryLoading} />
+          ) : null}
 
-      {tabId === "approvals" ? (
-        <MetaAdsApprovalsPanel
-          tasks={pendingApprovalRows}
-          history={approvalHistoryRows}
-          creativeFiles={pendingApprovalCreativeFiles}
-          loading={isApprovalsLoading || isApprovalCreativeFilesLoading}
-          isError={isApprovalsError || isApprovalCreativeFilesError}
-          isActionLoading={isUpdatingApproval}
-          activeTaskId={activeApprovalTaskId}
-          onDecision={handleMetaAdsApprovalDecision}
-        />
-      ) : null}
+          {tabId === "approvals" ? (
+            <MetaAdsApprovalsPanel
+              tasks={pendingApprovalRows}
+              history={approvalHistoryRows}
+              creativeFiles={pendingApprovalCreativeFiles}
+              loading={isApprovalsLoading || isApprovalCreativeFilesLoading}
+              isError={isApprovalsError || isApprovalCreativeFilesError}
+              isActionLoading={isUpdatingApproval}
+              activeTaskId={activeApprovalTaskId}
+              onDecision={handleMetaAdsApprovalDecision}
+            />
+          ) : null}
+        </div>
+
+        {/* Right: AI Commentary + Agency Notes sidebar — 1 col */}
+        <div className="col-span-1 space-y-4">
+          <MetaAdsAiPanel loading={isAiCommentaryLoading || isCampaignsLoading} commentary={aiCommentary ?? null} tabId={tabId} />
+          <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-5">
+            <h3 className="mb-3 text-sm font-medium text-white">Ajans Notları</h3>
+            {isCampaignsLoading || isSummaryLoading ? (
+              <div className="space-y-2">
+                <div className="h-3 w-full animate-pulse rounded bg-white/[0.08]" />
+                <div className="h-3 w-4/5 animate-pulse rounded bg-white/[0.08]" />
+              </div>
+            ) : notes.length === 0 ? (
+              <p className="text-xs text-[#A0A0A0]">Ajans notu için yeterli veri bulunamadı.</p>
+            ) : (
+              <ul className="space-y-2">
+                {notes.map((note) => (
+                  <li key={note} className="rounded-xl border border-white/[0.08] bg-[#202020] p-3 text-xs text-[#d7d7d7]">
+                    {note}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2966,11 +3025,11 @@ function MetaAdsInsightGrid({
 }
 
 function MetaAdsAudiencePanel({
-  rows,
+  audiences,
   loading,
   isError,
 }: {
-  rows: MetaAdsInsightItem[];
+  audiences: MetaAdsAdSetAudience[];
   loading: boolean;
   isError: boolean;
 }) {
@@ -2982,28 +3041,324 @@ function MetaAdsAudiencePanel({
     return (
       <MetaAdsStatePanel
         title="Kitle verileri alınamadı"
-        description="Ad set kırılımı şu anda ulaşılamıyor."
+        description="Meta API bağlantısı kontrol ediliyor."
         tone="error"
       />
     );
   }
 
-  if (rows.length === 0) {
+  if (audiences.length === 0) {
     return <MetaAdsStatePanel title="Kitle segment verisi bulunamadı." tone="muted" />;
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      {rows.slice(0, 8).map((row) => (
-        <div key={row.id} className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-4">
-          <p className="text-white">{row.entityName ?? "Kitle segmenti"}</p>
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            <MetricPill label="Erişim" value={formatMetaInteger(row.reach)} />
-            <MetricPill label="CTR" value={formatMetaPercent(row.ctr)} />
-            <MetricPill label="Result" value={formatMetaInteger(row.results)} />
+    <div className="space-y-4">
+      {audiences.map((audience) => {
+        const hasTargeting =
+          audience.interests.length > 0 ||
+          audience.customAudiences.length > 0 ||
+          audience.lookalikeAudiences.length > 0;
+        const isActive = audience.effectiveStatus === "ACTIVE" || audience.status === "ACTIVE";
+
+        return (
+          <div key={audience.adSetId} className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] overflow-hidden">
+            <div className="flex min-w-0 items-center gap-3 border-b border-white/[0.06] px-5 py-3">
+              <span className="min-w-0 truncate font-medium text-white">
+                {audience.adSetName ?? audience.adSetId}
+              </span>
+              <span className={`ml-auto shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                isActive ? "bg-[#AAFF01]/20 text-[#AAFF01]" : "bg-white/[0.08] text-[#A0A0A0]"
+              }`}>
+                {audience.effectiveStatus ?? audience.status ?? "—"}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-3">
+              {/* Demographics */}
+              <div>
+                <p className="mb-2 text-[10px] uppercase tracking-wide text-[#606060]">Demografik</p>
+                <div className="space-y-1.5 text-sm text-[#D8D8D8]">
+                  {(audience.ageMin != null || audience.ageMax != null) ? (
+                    <p>Yaş: <span className="text-white">{audience.ageMin ?? "—"} – {audience.ageMax ?? "—"}</span></p>
+                  ) : (
+                    <p className="text-[#505050]">Tüm yaşlar</p>
+                  )}
+                  {audience.genders.length > 0 ? (
+                    <p>Cinsiyet: <span className="text-white">{audience.genders.join(", ")}</span></p>
+                  ) : (
+                    <p className="text-[#505050]">Tüm cinsiyetler</p>
+                  )}
+                  {audience.countries.length > 0 ? (
+                    <div className="flex flex-wrap gap-1 pt-0.5">
+                      {audience.countries.map((c) => (
+                        <span key={c} className="rounded bg-white/[0.08] px-1.5 py-0.5 text-xs text-[#A0A0A0]">{c}</span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[#505050]">Tüm konumlar</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Custom & Lookalike */}
+              <div>
+                <p className="mb-2 text-[10px] uppercase tracking-wide text-[#606060]">Özel Kitleler</p>
+                {audience.customAudiences.length === 0 && audience.lookalikeAudiences.length === 0 ? (
+                  <p className="text-xs text-[#505050]">Özel kitle tanımı yok</p>
+                ) : (
+                  <div className="space-y-1">
+                    {audience.customAudiences.slice(0, 3).map((ca, i) => (
+                      <p key={i} className="truncate text-xs text-[#A0A0A0]">
+                        <span className="mr-1 text-blue-400">●</span>{ca}
+                      </p>
+                    ))}
+                    {audience.lookalikeAudiences.slice(0, 2).map((la, i) => (
+                      <p key={i} className="truncate text-xs text-[#A0A0A0]">
+                        <span className="mr-1 text-purple-400">◆</span>{la}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Interests */}
+              <div>
+                <p className="mb-2 text-[10px] uppercase tracking-wide text-[#606060]">İlgi Alanları</p>
+                {audience.interests.length === 0 ? (
+                  <p className="text-xs text-[#505050]">{hasTargeting ? "" : "İlgi alanı hedeflemesi yok"}</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1">
+                    {audience.interests.slice(0, 6).map((interest, i) => (
+                      <span key={i} className="rounded-full bg-[#AAFF01]/10 px-2 py-0.5 text-[10px] text-[#AAFF01]">
+                        {interest}
+                      </span>
+                    ))}
+                    {audience.interests.length > 6 ? (
+                      <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] text-[#606060]">
+                        +{audience.interests.length - 6}
+                      </span>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function MetaAdsCreativesPanel({
+  creatives,
+  adInsights,
+  loading,
+  isError,
+}: {
+  creatives: MetaAdsAdCreative[];
+  adInsights: MetaAdsInsightItem[];
+  loading: boolean;
+  isError: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {[1, 2, 3, 4, 5, 6].map((i) => (
+          <div key={i} className="h-64 animate-pulse rounded-2xl bg-white/[0.04]" />
+        ))}
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <MetaAdsStatePanel
+        title="Kreatif verileri alınamadı"
+        description="Meta API erişimi kontrol ediliyor."
+        tone="error"
+      />
+    );
+  }
+
+  if (creatives.length === 0) {
+    return <MetaAdsStatePanel title="Kreatif verisi bulunamadı." tone="muted" />;
+  }
+
+  const insightsByAdId = new Map<string, MetaAdsInsightItem>();
+  for (const insight of adInsights) {
+    if (insight.entityId && !insightsByAdId.has(insight.entityId)) {
+      insightsByAdId.set(insight.entityId, insight);
+    }
+  }
+
+  const enriched = creatives.map((c) => ({ creative: c, insight: insightsByAdId.get(c.adId) ?? null }));
+  const ranked = [...enriched].sort((a, b) => (b.insight?.ctr ?? 0) - (a.insight?.ctr ?? 0));
+  const ctrs = ranked.map((r) => r.insight?.ctr ?? 0).filter((c) => c > 0);
+  const avgCtr = ctrs.length > 0 ? ctrs.reduce((a, b) => a + b, 0) / ctrs.length : 0;
+  const topCtr = ranked[0]?.insight?.ctr ?? 0;
+  const hasWinner = topCtr > 0 && avgCtr > 0 && topCtr >= avgCtr * 1.5;
+
+  return (
+    <div className="space-y-5">
+      {/* Comparison panel */}
+      {ranked.length > 1 ? (
+        <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-5">
+          <div className="mb-4 flex items-center gap-2">
+            <span className="text-lg">🏆</span>
+            <h3 className="font-semibold text-white">Kreatif Karşılaştırması</h3>
+            {hasWinner ? (
+              <span className="rounded-full bg-[#AAFF01]/20 px-2 py-0.5 text-xs text-[#AAFF01]">Kazanan var</span>
+            ) : avgCtr > 0 ? (
+              <span className="rounded-full bg-yellow-400/15 px-2 py-0.5 text-xs text-yellow-300">Test devam ediyor</span>
+            ) : null}
+          </div>
+          <div className="space-y-2.5">
+            {ranked.slice(0, 6).map(({ creative, insight }, idx) => {
+              const ctr = insight?.ctr ?? 0;
+              const maxCtr = ranked[0]?.insight?.ctr ?? 1;
+              const barPct = maxCtr > 0 ? (ctr / maxCtr) * 100 : 0;
+              const isTop = idx === 0 && hasWinner;
+              return (
+                <div key={creative.adId} className="flex min-w-0 items-center gap-3">
+                  <span className={`w-5 shrink-0 text-center text-xs font-bold ${isTop ? "text-yellow-400" : "text-[#505050]"}`}>
+                    {idx + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <span className="min-w-0 truncate text-xs text-[#D8D8D8]">
+                        {creative.adName ?? creative.adId}
+                      </span>
+                      <span className="shrink-0 text-xs font-semibold text-white">
+                        {ctr > 0 ? `${ctr.toFixed(2)}%` : "—"}
+                      </span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.08]">
+                      <div
+                        className={`h-full rounded-full transition-all ${isTop ? "bg-[#AAFF01]" : "bg-white/30"}`}
+                        style={{ width: `${barPct}%` }}
+                      />
+                    </div>
+                  </div>
+                  {insight ? (
+                    <span className="w-16 shrink-0 text-right text-[10px] text-[#606060]">
+                      {formatMetaCurrency(insight.spend)}
+                    </span>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+          {avgCtr > 0 ? (
+            <p className="mt-3 text-[10px] text-[#505050]">
+              {hasWinner
+                ? `En iyi kreatif ortalamadan ${((topCtr / avgCtr - 1) * 100).toFixed(0)}% daha yüksek CTR üretiyor.`
+                : `Ort. CTR: ${avgCtr.toFixed(2)}% · Kazanan belirlemek için daha fazla veri bekleniyor.`}
+            </p>
+          ) : null}
         </div>
-      ))}
+      ) : null}
+
+      {/* Creative grid */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {ranked.map(({ creative, insight }, idx) => (
+          <MetaAdsCreativeCard
+            key={creative.adId}
+            creative={creative}
+            insight={insight}
+            rank={idx + 1}
+            isWinner={idx === 0 && hasWinner}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MetaAdsCreativeCard({
+  creative,
+  insight,
+  rank,
+  isWinner,
+}: {
+  creative: MetaAdsAdCreative;
+  insight: MetaAdsInsightItem | null;
+  rank: number;
+  isWinner: boolean;
+}) {
+  const [imgError, setImgError] = React.useState(false);
+  const isActive = creative.effectiveStatus === "ACTIVE";
+
+  return (
+    <div className={`overflow-hidden rounded-2xl border bg-[#1A1A1A] ${
+      isWinner ? "border-[#AAFF01]/40" : isActive ? "border-white/[0.08]" : "border-white/[0.04] opacity-60"
+    }`}>
+      {/* Thumbnail */}
+      <div className="relative aspect-[16/9] w-full overflow-hidden bg-[#222]">
+        {creative.thumbnailUrl && !imgError ? (
+          <img
+            src={creative.thumbnailUrl}
+            alt={creative.adName ?? "Creative"}
+            className="h-full w-full object-cover"
+            onError={() => setImgError(true)}
+            loading="lazy"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-[#303030]">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+              <polyline points="21 15 16 10 5 21"/>
+            </svg>
+          </div>
+        )}
+        <div className="absolute left-2 top-2">
+          {isWinner ? (
+            <span className="rounded-full bg-[#AAFF01]/90 px-2 py-0.5 text-[10px] font-semibold text-[#131313]">
+              🏆 Kazanan
+            </span>
+          ) : (
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+              isActive ? "bg-[#AAFF01]/20 text-[#AAFF01]" : "bg-white/10 text-[#A0A0A0]"
+            }`}>
+              #{rank}
+            </span>
+          )}
+        </div>
+        {insight?.ctr ? (
+          <span className="absolute right-2 top-2 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm">
+            CTR {insight.ctr.toFixed(2)}%
+          </span>
+        ) : null}
+      </div>
+
+      {/* Info */}
+      <div className="p-4">
+        <p className="truncate text-sm font-medium text-white">{creative.adName ?? "—"}</p>
+        {creative.title ? <p className="mt-0.5 truncate text-xs text-[#A0A0A0]">{creative.title}</p> : null}
+        {creative.body ? <p className="mt-1 line-clamp-2 text-xs text-[#606060]">{creative.body}</p> : null}
+
+        {insight ? (
+          <div className="mt-3 grid grid-cols-3 gap-2 border-t border-white/[0.06] pt-3">
+            <div className="text-center">
+              <p className="text-xs font-medium text-white">{formatMetaCurrency(insight.spend)}</p>
+              <p className="text-[10px] text-[#606060]">Harcama</p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs font-medium text-[#AAFF01]">{insight.ctr.toFixed(2)}%</p>
+              <p className="text-[10px] text-[#606060]">CTR</p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs font-medium text-white">{formatMetaInteger(insight.results)}</p>
+              <p className="text-[10px] text-[#606060]">Sonuç</p>
+            </div>
+          </div>
+        ) : null}
+
+        {creative.callToActionType ? (
+          <span className="mt-2 inline-block rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] text-[#A0A0A0]">
+            {creative.callToActionType.replace(/_/g, " ")}
+          </span>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -3395,6 +3750,65 @@ function getAmazonAdsReportAcknowledgementLabel(
     return "Revizyon İstendi";
   }
   return status;
+}
+
+const AI_TAB_SECTION: Record<string, { label: string; key: keyof MetaAdsAiCommentary }> = {
+  campaigns: { label: "Kampanya Yorumu", key: "campaignHighlights" },
+  audiences: { label: "Kitle Yorumu", key: "audienceInsights" },
+  creatives: { label: "Kreatif Yorumu", key: "creativeInsights" },
+};
+
+function MetaAdsAiPanel({ loading, commentary, tabId }: { loading: boolean; commentary: MetaAdsAiCommentary | null; tabId: string }) {
+  const section = AI_TAB_SECTION[tabId];
+
+  return (
+    <div className="rounded-2xl border border-[#AAFF01]/20 bg-[#1A1A1A] p-5">
+      <div className="mb-3 flex items-center gap-2">
+        <Sparkles className="h-4 w-4 text-[#AAFF01]" />
+        <h3 className="text-sm font-medium text-white">SocialTechAgent Yorumu</h3>
+        {commentary?.isHeuristic && (
+          <span className="ml-auto rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px] text-[#A0A0A0]">Heuristik</span>
+        )}
+      </div>
+      {loading ? (
+        <div className="space-y-2">
+          <div className="h-3 w-full animate-pulse rounded bg-white/[0.08]" />
+          <div className="h-3 w-4/5 animate-pulse rounded bg-white/[0.08]" />
+          <div className="h-3 w-3/5 animate-pulse rounded bg-white/[0.08]" />
+          <div className="h-3 w-full animate-pulse rounded bg-white/[0.08]" />
+          <div className="h-3 w-2/3 animate-pulse rounded bg-white/[0.08]" />
+        </div>
+      ) : commentary ? (
+        <div className="space-y-4 text-sm">
+          {section ? (
+            /* Tab-specific section */
+            <div>
+              <p className="mb-1.5 text-xs font-medium uppercase tracking-wider text-[#AAFF01]/70">{section.label}</p>
+              <p className="leading-relaxed text-[#d7d7d7]">{String(commentary[section.key])}</p>
+            </div>
+          ) : (
+            /* Genel Bakış / other tabs → genel analiz + öneriler */
+            <p className="leading-relaxed text-[#d7d7d7]">{commentary.generalAnalysis}</p>
+          )}
+          {commentary.recommendations.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-medium uppercase tracking-wider text-[#AAFF01]/70">Öneriler</p>
+              <ul className="space-y-1.5">
+                {commentary.recommendations.map((rec, i) => (
+                  <li key={i} className="flex items-start gap-2 text-[#A0A0A0]">
+                    <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#AAFF01]" />
+                    {rec}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      ) : (
+        <p className="text-sm text-[#A0A0A0]">Analiz için yeterli veri bekleniyor.</p>
+      )}
+    </div>
+  );
 }
 
 function MetaAdsAgencyNotesPanel({

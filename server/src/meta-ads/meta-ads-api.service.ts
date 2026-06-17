@@ -70,6 +70,33 @@ export type MetaAdsCampaignCatalogItem = {
   effectiveStatus: string | null;
 };
 
+export type MetaAdsAdCreativeItem = {
+  adId: string;
+  adName: string | null;
+  status: string | null;
+  effectiveStatus: string | null;
+  creativeId: string | null;
+  title: string | null;
+  body: string | null;
+  thumbnailUrl: string | null;
+  callToActionType: string | null;
+  imageHash: string | null;
+};
+
+export type MetaAdsAdSetAudienceItem = {
+  adSetId: string;
+  adSetName: string | null;
+  status: string | null;
+  effectiveStatus: string | null;
+  ageMin: number | null;
+  ageMax: number | null;
+  genders: string[];
+  countries: string[];
+  interests: string[];
+  customAudiences: string[];
+  lookalikeAudiences: string[];
+};
+
 export type MetaAdsReportingSnapshotInput = {
   accessToken: string;
   adAccountId: string;
@@ -162,6 +189,38 @@ export class MetaAdsApiService {
       adInsights,
       campaigns,
     };
+  }
+
+  async fetchAdCreatives(params: {
+    adAccountNode: string;
+    accessToken: string;
+  }): Promise<MetaAdsAdCreativeItem[]> {
+    return this.fetchAdCreativeCatalog(params);
+  }
+
+  async fetchAdSetAudiences(params: {
+    adAccountNode: string;
+    accessToken: string;
+  }): Promise<MetaAdsAdSetAudienceItem[]> {
+    const firstPage = await this.requestGraph(`${params.adAccountNode}/adsets`, {
+      access_token: params.accessToken,
+      fields: "id,name,status,effective_status,targeting",
+      limit: "200",
+    });
+
+    const result: MetaAdsAdSetAudienceItem[] = [];
+    this.appendAdSetAudiencesFromPage(firstPage, result);
+
+    let nextUrl = this.readPagingNext(firstPage);
+    let pageGuard = 0;
+    while (nextUrl && pageGuard < 10) {
+      const page = await this.requestGraphAbsolute(nextUrl);
+      this.appendAdSetAudiencesFromPage(page, result);
+      nextUrl = this.readPagingNext(page);
+      pageGuard += 1;
+    }
+
+    return result;
   }
 
   normalizeError(error: unknown): NormalizedMetaAdsApiError {
@@ -262,6 +321,142 @@ export class MetaAdsApiService {
         actionValues: this.readActionMetrics(row.action_values),
         purchaseRoas: this.readActionMetrics(row.purchase_roas),
         raw: row,
+      });
+    }
+  }
+
+  private async fetchAdCreativeCatalog(params: {
+    adAccountNode: string;
+    accessToken: string;
+  }): Promise<MetaAdsAdCreativeItem[]> {
+    const firstPage = await this.requestGraph(`${params.adAccountNode}/ads`, {
+      access_token: params.accessToken,
+      fields: "id,name,status,effective_status,creative{id,title,body,thumbnail_url,call_to_action_type,image_hash}",
+      limit: "100",
+    });
+
+    const result: MetaAdsAdCreativeItem[] = [];
+    this.appendAdCreativesFromPage(firstPage, result);
+
+    let nextUrl = this.readPagingNext(firstPage);
+    let pageGuard = 0;
+    while (nextUrl && pageGuard < 10) {
+      const page = await this.requestGraphAbsolute(nextUrl);
+      this.appendAdCreativesFromPage(page, result);
+      nextUrl = this.readPagingNext(page);
+      pageGuard += 1;
+    }
+
+    return result;
+  }
+
+  private appendAdCreativesFromPage(
+    page: Record<string, unknown>,
+    result: MetaAdsAdCreativeItem[],
+  ): void {
+    const rows = Array.isArray(page.data) ? page.data : [];
+    for (const row of rows) {
+      if (!this.isRecord(row)) {
+        continue;
+      }
+
+      const adId = this.readString(row.id);
+      if (!adId) {
+        continue;
+      }
+
+      const creative = this.isRecord(row.creative) ? row.creative : null;
+
+      result.push({
+        adId,
+        adName: this.readString(row.name),
+        status: this.readString(row.status),
+        effectiveStatus: this.readString(row.effective_status),
+        creativeId: creative ? this.readString(creative.id) : null,
+        title: creative ? this.readString(creative.title) : null,
+        body: creative ? this.readString(creative.body) : null,
+        thumbnailUrl: creative ? this.readString(creative.thumbnail_url) : null,
+        callToActionType: creative ? this.readString(creative.call_to_action_type) : null,
+        imageHash: creative ? this.readString(creative.image_hash) : null,
+      });
+    }
+  }
+
+  private appendAdSetAudiencesFromPage(
+    page: Record<string, unknown>,
+    result: MetaAdsAdSetAudienceItem[],
+  ): void {
+    const rows = Array.isArray(page.data) ? page.data : [];
+    for (const row of rows) {
+      if (!this.isRecord(row)) continue;
+
+      const adSetId = this.readString(row.id);
+      if (!adSetId) continue;
+
+      const targeting = this.isRecord(row.targeting) ? row.targeting : null;
+      const geoLoc = targeting && this.isRecord(targeting.geo_locations) ? targeting.geo_locations : null;
+
+      const genderNums = targeting && Array.isArray(targeting.genders) ? targeting.genders : [];
+      const genders = genderNums.map((g: unknown) => {
+        if (g === 1) return "Erkek";
+        if (g === 2) return "Kadın";
+        return "Tümü";
+      });
+
+      const countries: string[] = geoLoc && Array.isArray(geoLoc.countries)
+        ? (geoLoc.countries as unknown[]).filter((c): c is string => typeof c === "string")
+        : [];
+
+      // Meta API v14+ stores interests in flexible_spec[].interests[], not targeting.interests directly
+      const interests: string[] = [];
+      if (targeting && Array.isArray(targeting.flexible_spec)) {
+        for (const spec of targeting.flexible_spec as unknown[]) {
+          if (!this.isRecord(spec)) continue;
+          for (const key of ["interests", "behaviors", "life_events", "education_majors", "work_employers", "work_positions"] as const) {
+            if (Array.isArray(spec[key])) {
+              for (const item of spec[key] as unknown[]) {
+                if (this.isRecord(item)) {
+                  const name = this.readString(item.name);
+                  if (name && !interests.includes(name)) interests.push(name);
+                }
+              }
+            }
+          }
+        }
+      }
+      // Fallback: some older ad sets may have interests directly on targeting
+      if (interests.length === 0 && targeting && Array.isArray(targeting.interests)) {
+        for (const i of targeting.interests as unknown[]) {
+          if (this.isRecord(i)) {
+            const name = this.readString(i.name);
+            if (name) interests.push(name);
+          }
+        }
+      }
+
+      const allAudiences: string[] = targeting && Array.isArray(targeting.custom_audiences)
+        ? (targeting.custom_audiences as unknown[])
+            .filter((a): a is Record<string, unknown> => this.isRecord(a))
+            .map((a) => this.readString(a.name))
+            .filter((n): n is string => n !== null)
+        : [];
+
+      // Separate lookalike (names typically contain "Lookalike") from custom
+      const customAudiences = allAudiences.filter((n) => !n.toLowerCase().includes("lookalike"));
+      const lookalikeAudiences = allAudiences.filter((n) => n.toLowerCase().includes("lookalike"));
+
+      result.push({
+        adSetId,
+        adSetName: this.readString(row.name),
+        status: this.readString(row.status),
+        effectiveStatus: this.readString(row.effective_status),
+        ageMin: targeting && typeof targeting.age_min === "number" ? targeting.age_min : null,
+        ageMax: targeting && typeof targeting.age_max === "number" ? targeting.age_max : null,
+        genders,
+        countries,
+        interests,
+        customAudiences,
+        lookalikeAudiences,
       });
     }
   }

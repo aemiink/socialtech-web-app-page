@@ -64,6 +64,7 @@ import {
   useTestAdminClientAmazonAdsConnectionMutation,
   useTestAdminClientMetaAdsConnectionMutation,
   useUpdateAdminClientAmazonAdsConfigMutation,
+  useUpdateAdminClientMetaAdsConfigMutation,
 } from "../features/clients/clientsApi";
 import type {
   AmazonAdsRegion,
@@ -104,6 +105,8 @@ export function ClientDetail() {
   const [ownerPasswordFeedback, setOwnerPasswordFeedback] = useState<string | null>(null);
   const [metaAccessToken, setMetaAccessToken] = useState("");
   const [metaAdAccountId, setMetaAdAccountId] = useState("");
+  const [metaPixelId, setMetaPixelId] = useState("");
+  const [metaPixelIdFeedback, setMetaPixelIdFeedback] = useState<string | null>(null);
   const [metaConnectionFeedback, setMetaConnectionFeedback] = useState<string | null>(null);
   const [tikTokAccessToken, setTikTokAccessToken] = useState("");
   const [tikTokAdvertiserId, setTikTokAdvertiserId] = useState("");
@@ -133,6 +136,8 @@ export function ClientDetail() {
   const [syncMetaAds, { isLoading: isMetaSyncing }] = useSyncAdminClientMetaAdsMutation();
   const [disconnectMetaAds, { isLoading: isMetaDisconnecting }] =
     useDisconnectAdminClientMetaAdsMutation();
+  const [updateMetaAdsConfig, { isLoading: isMetaPixelIdSaving }] =
+    useUpdateAdminClientMetaAdsConfigMutation();
   const [connectTikTokAdsManual, { isLoading: isTikTokConnecting }] =
     useConnectAdminClientTikTokAdsManualMutation();
   const [testTikTokAdsConnection, { isLoading: isTikTokTesting }] =
@@ -269,6 +274,10 @@ export function ClientDetail() {
   }, [metaAdsConnection?.ids.adAccountId]);
 
   useEffect(() => {
+    setMetaPixelId(metaAdsConnection?.ids.pixelId ?? "");
+  }, [metaAdsConnection?.ids.pixelId]);
+
+  useEffect(() => {
     if (!tikTokAdsConnection?.ids.advertiserId) {
       return;
     }
@@ -379,6 +388,35 @@ export function ClientDetail() {
     isAmazonTesting ||
     isAmazonSyncing ||
     isAmazonDisconnecting;
+
+  const handleMetaPixelIdSave = async () => {
+    if (!clientProfileId) {
+      return;
+    }
+
+    const trimmed = metaPixelId.trim();
+    if (trimmed.length > 0 && !/^\d+$/.test(trimmed)) {
+      setMetaPixelIdFeedback("Pixel ID yalnızca rakamlardan oluşmalıdır.");
+      return;
+    }
+
+    setMetaPixelIdFeedback(null);
+
+    try {
+      await updateMetaAdsConfig({
+        clientId: clientProfileId,
+        body: {
+          pixelId: trimmed.length > 0 ? trimmed : null,
+        },
+      }).unwrap();
+      setMetaPixelIdFeedback("Pixel ID güncellendi.");
+      await refetchMetaAdsConnection();
+    } catch (mutationError) {
+      setMetaPixelIdFeedback(
+        extractApiErrorMessage(mutationError, "Pixel ID güncellenemedi."),
+      );
+    }
+  };
 
   const handleManualMetaConnect = async () => {
     if (!clientProfileId) {
@@ -923,6 +961,7 @@ export function ClientDetail() {
         {metaAdsConnection ? (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <DetailRow label="Meta Ad Account ID" value={metaAdsConnection.ids.adAccountId ?? "—"} mono />
+            <DetailRow label="Meta Pixel ID" value={metaAdsConnection.ids.pixelId ?? "—"} mono />
             <DetailRow
               label="Aktif Purchased Service"
               value={metaAdsConnection.hasActiveService ? "Evet" : "Hayır"}
@@ -958,6 +997,36 @@ export function ClientDetail() {
             />
           </div>
         ) : null}
+
+        <div className="mt-5">
+          <p className="mb-2 text-sm font-medium text-[#A0A0A0]">Pixel ID Güncelle</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              value={metaPixelId}
+              onChange={(event) => {
+                const value = event.target.value;
+                if (value === "" || /^\d*$/.test(value)) {
+                  setMetaPixelId(value);
+                }
+              }}
+              className="w-60 border-white/[0.12] bg-black/20 text-white placeholder:text-[#7A7A7A]"
+              placeholder="Pixel ID (örn: 1234567890)"
+              inputMode="numeric"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-2"
+              onClick={() => { void handleMetaPixelIdSave(); }}
+              disabled={isMetaPixelIdSaving || isMetaConnecting || isMetaTesting || isMetaSyncing || isMetaDisconnecting}
+            >
+              {isMetaPixelIdSaving ? "Kaydediliyor..." : "Pixel ID Kaydet"}
+            </Button>
+          </div>
+          {metaPixelIdFeedback ? (
+            <p className="mt-2 text-sm text-[#d8ff8f]">{metaPixelIdFeedback}</p>
+          ) : null}
+        </div>
 
         <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
           <Input

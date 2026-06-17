@@ -36,6 +36,8 @@ import { TestMetaAdsConnectionDto } from "./dto/test-meta-ads-connection.dto";
 import { UpdateMetaAdsReportDto } from "./dto/update-meta-ads-report.dto";
 import { UpdateMetaAdsConfigDto } from "./dto/update-meta-ads-config.dto";
 import {
+  MetaAdsAdCreativeItem,
+  MetaAdsAdSetAudienceItem,
   MetaAdsApiActionMetric,
   MetaAdsApiService,
   MetaAdsCampaignCatalogItem,
@@ -44,6 +46,11 @@ import {
   NormalizedMetaAdsApiError,
 } from "./meta-ads-api.service";
 import { MetaAdsTokenService } from "./meta-ads-token.service";
+import {
+  MetaAdsAiService,
+  MetaAdsAiCommentary,
+  MetaAdsAiCommentaryInput,
+} from "./meta-ads-ai.service";
 
 const META_ADS_CONFIG_READ_ANY_PERMISSION = "metaAds.config.read.any";
 const META_ADS_CONFIG_MANAGE_ANY_PERMISSION = "metaAds.config.manage.any";
@@ -506,6 +513,7 @@ export class MetaAdsService {
     private readonly configService: ConfigService,
     private readonly metaAdsTokenService: MetaAdsTokenService,
     private readonly metaAdsApiService: MetaAdsApiService,
+    private readonly metaAdsAiService: MetaAdsAiService,
   ) {}
 
   async getAdminClientConfig(
@@ -1291,6 +1299,46 @@ export class MetaAdsService {
     return this.getInsightsByFixedLevel(clientProfileId, query, MetaAdsInsightLevel.AD);
   }
 
+  async getAssignedClientAdCreatives(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+  ): Promise<{ data: MetaAdsAdCreativeItem[]; lastSyncAt: Date | null }> {
+    this.assertCanReadAssignedConfig(currentUser);
+    await this.assertAssignedClientProfileOrFail(currentUser.id, clientProfileId);
+    await this.assertClientHasActiveMetaAdsService(clientProfileId);
+
+    return this.getAdCreativesByClientProfileId(clientProfileId);
+  }
+
+  async getAdminClientAdCreatives(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+  ): Promise<{ data: MetaAdsAdCreativeItem[]; lastSyncAt: Date | null }> {
+    this.assertCanReadAnyConfig(currentUser);
+
+    return this.getAdCreativesByClientProfileId(clientProfileId);
+  }
+
+  async getAssignedClientAudiences(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+  ): Promise<{ data: MetaAdsAdSetAudienceItem[]; lastSyncAt: Date | null }> {
+    this.assertCanReadAssignedConfig(currentUser);
+    await this.assertAssignedClientProfileOrFail(currentUser.id, clientProfileId);
+    await this.assertClientHasActiveMetaAdsService(clientProfileId);
+
+    return this.getAudiencesByClientProfileId(clientProfileId);
+  }
+
+  async getAdminClientAudiences(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+  ): Promise<{ data: MetaAdsAdSetAudienceItem[]; lastSyncAt: Date | null }> {
+    this.assertCanReadAnyConfig(currentUser);
+
+    return this.getAudiencesByClientProfileId(clientProfileId);
+  }
+
   async getAssignedClientPixelStatus(
     currentUser: AuthenticatedUser,
     clientProfileId: string,
@@ -1390,6 +1438,50 @@ export class MetaAdsService {
     return this.getPixelStatusByClientProfileId(clientProfileId, {
       revealDetailedError: false,
     });
+  }
+
+  async getOwnClientAudiences(
+    currentUser: AuthenticatedUser,
+  ): Promise<{ data: MetaAdsAdSetAudienceItem[]; lastSyncAt: Date | null }> {
+    this.assertCanReadOwnConfig(currentUser);
+    const clientProfileId = this.getClientProfileIdOrFail(currentUser);
+    await this.assertClientProfileExists(clientProfileId);
+    await this.assertClientHasActiveMetaAdsService(clientProfileId);
+
+    return this.getAudiencesByClientProfileId(clientProfileId);
+  }
+
+  async getOwnClientAdCreatives(
+    currentUser: AuthenticatedUser,
+  ): Promise<{ data: MetaAdsAdCreativeItem[]; lastSyncAt: Date | null }> {
+    this.assertCanReadOwnConfig(currentUser);
+    const clientProfileId = this.getClientProfileIdOrFail(currentUser);
+    await this.assertClientProfileExists(clientProfileId);
+    await this.assertClientHasActiveMetaAdsService(clientProfileId);
+
+    return this.getAdCreativesByClientProfileId(clientProfileId);
+  }
+
+  async getOwnClientAiCommentary(
+    currentUser: AuthenticatedUser,
+  ): Promise<MetaAdsAiCommentary> {
+    this.assertCanReadOwnConfig(currentUser);
+    const clientProfileId = this.getClientProfileIdOrFail(currentUser);
+    await this.assertClientProfileExists(clientProfileId);
+    await this.assertClientHasActiveMetaAdsService(clientProfileId);
+
+    return this.getAiCommentaryByClientProfileId(clientProfileId);
+  }
+
+  async getAssignedClientAiCommentary(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+  ): Promise<MetaAdsAiCommentary> {
+    this.assertCanReadAssignedConfig(currentUser);
+    await this.assertAssignedClientProfileOrFail(currentUser.id, clientProfileId);
+    await this.assertClientHasActiveMetaAdsService(clientProfileId);
+
+    return this.getAiCommentaryByClientProfileId(clientProfileId);
   }
 
   async syncOwnClientInsights(
@@ -1508,6 +1600,186 @@ export class MetaAdsService {
     return this.getReportsByClientProfileId(clientProfileId, query, {
       onlyClientVisible: true,
     });
+  }
+
+  private async getAiCommentaryByClientProfileId(
+    clientProfileId: string,
+  ): Promise<MetaAdsAiCommentary> {
+    const defaultQuery: MetaAdsDateRangeQueryDto = {};
+    const dateRange = this.resolveReportDateRange(defaultQuery);
+
+    const [summaryInsights, campaignInsights, adSetInsights] = await this.prisma.$transaction([
+      this.prisma.metaAdsDailyInsight.findMany({
+        where: {
+          clientProfileId,
+          level: MetaAdsInsightLevel.ACCOUNT,
+          date: { gte: dateRange.since, lte: dateRange.until },
+        },
+        select: metaAdsDailyInsightSelect,
+      }),
+      this.prisma.metaAdsDailyInsight.findMany({
+        where: {
+          clientProfileId,
+          level: MetaAdsInsightLevel.CAMPAIGN,
+          date: { gte: dateRange.since, lte: dateRange.until },
+        },
+        select: metaAdsDailyInsightSelect,
+      }),
+      this.prisma.metaAdsDailyInsight.findMany({
+        where: {
+          clientProfileId,
+          level: MetaAdsInsightLevel.ADSET,
+          date: { gte: dateRange.since, lte: dateRange.until },
+        },
+        select: metaAdsDailyInsightSelect,
+        orderBy: [{ date: "desc" }],
+        take: 8,
+      }),
+    ]);
+
+    const summaryTotals = this.aggregateInsightRows(summaryInsights);
+    const hasSummary = summaryInsights.length > 0;
+
+    // Aggregate campaigns
+    const campaignMap = new Map<string, { name: string; spend: number; clicks: number; impressions: number; results: number; purchaseValue: number; effectiveStatus: string }>();
+    for (const insight of campaignInsights) {
+      const entityId = insight.entityId ?? "";
+      if (!entityId) continue;
+      const spend = this.readDecimalAsNumber(insight.spend);
+      const purchaseValue = this.readDecimalAsNumber(insight.purchaseValue);
+      const rawMeta = this.extractCampaignMetaFromRaw(insight.raw);
+      const existing = campaignMap.get(entityId);
+      if (!existing) {
+        campaignMap.set(entityId, {
+          name: insight.entityName ?? entityId,
+          spend,
+          clicks: insight.clicks ?? 0,
+          impressions: insight.impressions ?? 0,
+          results: insight.results ?? 0,
+          purchaseValue,
+          effectiveStatus: rawMeta.effectiveStatus ?? "UNKNOWN",
+        });
+      } else {
+        existing.spend += spend;
+        existing.clicks += insight.clicks ?? 0;
+        existing.impressions += insight.impressions ?? 0;
+        existing.results += insight.results ?? 0;
+        existing.purchaseValue += purchaseValue;
+        if (rawMeta.effectiveStatus) existing.effectiveStatus = rawMeta.effectiveStatus;
+        existing.name = insight.entityName ?? existing.name;
+      }
+    }
+
+    const campaigns = Array.from(campaignMap.values())
+      .sort((a, b) => b.spend - a.spend)
+      .slice(0, 5)
+      .map((c) => ({
+        name: c.name,
+        spend: this.round(c.spend),
+        ctr: this.roundPercentageByCounts(c.clicks, c.impressions),
+        roas: this.roundNullableDivision(c.purchaseValue, c.spend),
+        results: c.results,
+        effectiveStatus: c.effectiveStatus,
+      }));
+
+    // Aggregate adsets
+    const adSetMap = new Map<string, { name: string | null; spend: number; clicks: number; impressions: number; costPerResult: number }>();
+    for (const insight of adSetInsights) {
+      const entityId = insight.entityId ?? insight.id;
+      const spend = this.readDecimalAsNumber(insight.spend);
+      const existing = adSetMap.get(entityId);
+      if (!existing) {
+        adSetMap.set(entityId, {
+          name: insight.entityName,
+          spend,
+          clicks: insight.clicks ?? 0,
+          impressions: insight.impressions ?? 0,
+          costPerResult: this.readDecimalAsNumber(insight.costPerResult),
+        });
+      } else {
+        existing.spend += spend;
+        existing.clicks += insight.clicks ?? 0;
+        existing.impressions += insight.impressions ?? 0;
+        existing.name = insight.entityName ?? existing.name;
+      }
+    }
+
+    const adSets = Array.from(adSetMap.values())
+      .sort((a, b) => b.spend - a.spend)
+      .slice(0, 8)
+      .map((a) => ({
+        name: a.name,
+        spend: this.round(a.spend),
+        ctr: this.roundPercentageByCounts(a.clicks, a.impressions),
+        cpm: this.roundMille(a.spend, a.impressions),
+        costPerResult: this.round(a.costPerResult),
+      }));
+
+    // Creatives: use AD level insights
+    const adInsights = await this.prisma.metaAdsDailyInsight.findMany({
+      where: {
+        clientProfileId,
+        level: MetaAdsInsightLevel.AD,
+        date: { gte: dateRange.since, lte: dateRange.until },
+      },
+      select: metaAdsDailyInsightSelect,
+      orderBy: [{ date: "desc" }],
+      take: 8,
+    });
+
+    const adMap = new Map<string, { adName: string | null; ctr: number; spend: number; clicks: number; impressions: number; results: number; effectiveStatus: string }>();
+    for (const insight of adInsights) {
+      const entityId = insight.entityId ?? insight.id;
+      const spend = this.readDecimalAsNumber(insight.spend);
+      const ctr = this.readDecimalAsNumber(insight.ctr);
+      const existing = adMap.get(entityId);
+      if (!existing) {
+        adMap.set(entityId, {
+          adName: insight.entityName,
+          ctr,
+          spend,
+          clicks: insight.clicks ?? 0,
+          impressions: insight.impressions ?? 0,
+          results: insight.results ?? 0,
+          effectiveStatus: "UNKNOWN",
+        });
+      } else {
+        existing.spend += spend;
+        existing.clicks += insight.clicks ?? 0;
+        existing.impressions += insight.impressions ?? 0;
+        existing.results += insight.results ?? 0;
+        existing.adName = insight.entityName ?? existing.adName;
+      }
+    }
+
+    const creatives = Array.from(adMap.values())
+      .sort((a, b) => b.spend - a.spend)
+      .slice(0, 8)
+      .map((c) => ({
+        adName: c.adName ?? null,
+        ctr: this.roundPercentageByCounts(c.clicks, c.impressions),
+        spend: this.round(c.spend),
+        results: c.results,
+        effectiveStatus: c.effectiveStatus,
+      })) as MetaAdsAiCommentaryInput["creatives"];
+
+    const aiInput: MetaAdsAiCommentaryInput = {
+      summary: hasSummary
+        ? {
+            spend: summaryTotals.spend,
+            impressions: summaryTotals.impressions,
+            clicks: summaryTotals.clicks,
+            ctr: summaryTotals.ctr,
+            results: summaryTotals.results,
+            roas: summaryTotals.roas,
+          }
+        : null,
+      campaigns,
+      adSets,
+      creatives,
+    };
+
+    return this.metaAdsAiService.generateCommentary(clientProfileId, aiInput);
   }
 
   private async getSummaryByClientProfileId(
@@ -2453,6 +2725,38 @@ export class MetaAdsService {
     ) {
       throw new BadRequestException("Provide at least one report field to update.");
     }
+  }
+
+  private async getAudiencesByClientProfileId(
+    clientProfileId: string,
+  ): Promise<{ data: MetaAdsAdSetAudienceItem[]; lastSyncAt: Date | null }> {
+    const connection = await this.resolveReportingConnection(clientProfileId);
+    const adAccountNode = connection.adAccountId.startsWith("act_")
+      ? connection.adAccountId
+      : `act_${connection.adAccountId}`;
+
+    const data = await this.metaAdsApiService.fetchAdSetAudiences({
+      adAccountNode,
+      accessToken: connection.accessToken,
+    });
+
+    return { data, lastSyncAt: connection.lastSyncAt };
+  }
+
+  private async getAdCreativesByClientProfileId(
+    clientProfileId: string,
+  ): Promise<{ data: MetaAdsAdCreativeItem[]; lastSyncAt: Date | null }> {
+    const connection = await this.resolveReportingConnection(clientProfileId);
+    const adAccountNode = connection.adAccountId.startsWith("act_")
+      ? connection.adAccountId
+      : `act_${connection.adAccountId}`;
+
+    const data = await this.metaAdsApiService.fetchAdCreatives({
+      adAccountNode,
+      accessToken: connection.accessToken,
+    });
+
+    return { data, lastSyncAt: connection.lastSyncAt };
   }
 
   private async resolveReportingConnection(clientProfileId: string): Promise<{

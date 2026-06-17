@@ -146,6 +146,24 @@ export class MetaAdsController {
     return this.metaAdsService.getAdminClientAds(currentUser, clientId, query);
   }
 
+  @Get("admin/clients/:clientId/meta-ads/audiences")
+  @RequirePermissions("metaAds.config.read.any")
+  getAdminClientMetaAdsAudiences(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+  ) {
+    return this.metaAdsService.getAdminClientAudiences(currentUser, clientId);
+  }
+
+  @Get("admin/clients/:clientId/meta-ads/ad-creatives")
+  @RequirePermissions("metaAds.config.read.any")
+  getAdminClientMetaAdsAdCreatives(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+  ) {
+    return this.metaAdsService.getAdminClientAdCreatives(currentUser, clientId);
+  }
+
   @Get("admin/clients/:clientId/meta-ads/pixel-status")
   @RequirePermissions("metaAds.config.read.any")
   getAdminClientMetaAdsPixelStatus(
@@ -262,6 +280,24 @@ export class MetaAdsController {
     @Query() query: MetaAdsCampaignsQueryDto,
   ) {
     return this.metaAdsService.getAssignedClientAds(currentUser, clientId, query);
+  }
+
+  @Get("meta-ads/clients/:clientId/audiences")
+  @RequirePermissions("metaAds.config.read.assigned")
+  getAssignedClientMetaAdsAudiences(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+  ) {
+    return this.metaAdsService.getAssignedClientAudiences(currentUser, clientId);
+  }
+
+  @Get("meta-ads/clients/:clientId/ad-creatives")
+  @RequirePermissions("metaAds.config.read.assigned")
+  getAssignedClientMetaAdsAdCreatives(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+  ) {
+    return this.metaAdsService.getAssignedClientAdCreatives(currentUser, clientId);
   }
 
   @Get("meta-ads/clients/:clientId/pixel-status")
@@ -396,5 +432,32 @@ export class MetaAdsController {
     @Query() query: MetaAdsReportsQueryDto,
   ) {
     return this.metaAdsService.getOwnClientReports(currentUser, query);
+  }
+
+  @Get("clients/me/meta-ads/audiences")
+  @RequirePermissions("metaAds.config.read.own")
+  getOwnClientMetaAdsAudiences(@CurrentUser() currentUser: AuthenticatedUser) {
+    return this.metaAdsService.getOwnClientAudiences(currentUser);
+  }
+
+  @Get("clients/me/meta-ads/ad-creatives")
+  @RequirePermissions("metaAds.config.read.own")
+  getOwnClientMetaAdsAdCreatives(@CurrentUser() currentUser: AuthenticatedUser) {
+    return this.metaAdsService.getOwnClientAdCreatives(currentUser);
+  }
+
+  @Get("clients/me/meta-ads/ai-commentary")
+  @RequirePermissions("metaAds.config.read.own")
+  getOwnClientMetaAdsAiCommentary(@CurrentUser() currentUser: AuthenticatedUser) {
+    return this.metaAdsService.getOwnClientAiCommentary(currentUser);
+  }
+
+  @Get("meta-ads/clients/:clientId/ai-commentary")
+  @RequirePermissions("metaAds.config.read.assigned")
+  getAssignedClientMetaAdsAiCommentary(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+  ) {
+    return this.metaAdsService.getAssignedClientAiCommentary(currentUser, clientId);
   }
 }
