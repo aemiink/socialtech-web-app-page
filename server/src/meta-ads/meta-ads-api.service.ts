@@ -223,6 +223,73 @@ export class MetaAdsApiService {
     return result;
   }
 
+  async fetchPixelDetails(
+    pixelId: string,
+    accessToken: string,
+  ): Promise<{
+    id: string | null;
+    name: string | null;
+    lastFiredTime: number | null;
+    creationTime: number | null;
+  }> {
+    try {
+      const response = await this.requestGraph(pixelId, {
+        fields: "id,name,last_fired_time,creation_time",
+        access_token: accessToken,
+      });
+      return {
+        id: this.readString(response.id),
+        name: this.readString(response.name),
+        lastFiredTime:
+          typeof response.last_fired_time === "number"
+            ? response.last_fired_time
+            : null,
+        creationTime:
+          typeof response.creation_time === "number"
+            ? response.creation_time
+            : null,
+      };
+    } catch {
+      return { id: null, name: null, lastFiredTime: null, creationTime: null };
+    }
+  }
+
+  async fetchPixelEventStats(
+    pixelId: string,
+    accessToken: string,
+    sinceUnix: number,
+    untilUnix: number,
+  ): Promise<Array<{ eventName: string; count: number }>> {
+    try {
+      const response = await this.requestGraph(`${pixelId}/stats`, {
+        event_name: "ALL",
+        start_time: String(sinceUnix),
+        end_time: String(untilUnix),
+        access_token: accessToken,
+      });
+      const rows = Array.isArray(response.data) ? response.data : [];
+      const aggregated = new Map<string, number>();
+      for (const row of rows) {
+        if (!this.isRecord(row)) continue;
+        const eventName = this.readString(row.event_name);
+        const count =
+          typeof row.count === "number"
+            ? row.count
+            : typeof row.count === "string"
+              ? Number.parseInt(row.count, 10) || 0
+              : 0;
+        if (!eventName) continue;
+        aggregated.set(eventName, (aggregated.get(eventName) ?? 0) + count);
+      }
+      return Array.from(aggregated.entries())
+        .map(([eventName, count]) => ({ eventName, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10);
+    } catch {
+      return [];
+    }
+  }
+
   normalizeError(error: unknown): NormalizedMetaAdsApiError {
     if (this.isGraphErrorPayload(error)) {
       return this.normalizeGraphError(error.error);

@@ -191,6 +191,26 @@ export type MetaAdsAiCommentary = {
   isHeuristic: boolean;
 };
 
+export type MetaAdsPixelEvent = { name: string; count: number };
+
+export type MetaAdsPixelChecklistItem = {
+  key: string;
+  label: string;
+  status: "ok" | "warning" | "error";
+  detail: string | null;
+};
+
+export type MetaAdsPixelStatsResponse = {
+  pixelId: string | null;
+  pixelName: string | null;
+  createdAt: string | null;
+  lastFiredAt: string | null;
+  events: MetaAdsPixelEvent[];
+  healthScore: number;
+  healthLevel: "good" | "warning" | "critical";
+  checklist: MetaAdsPixelChecklistItem[];
+};
+
 export type MetaAdsReportsQuery = {
   status?: MetaAdsReportStatus;
   type?: MetaAdsReportType;

@@ -41,6 +41,7 @@ import {
   useGetAssignedClientMetaAdsAudiencesQuery,
   useGetAssignedClientMetaAdsCampaignsQuery,
   useGetAssignedClientMetaAdsPixelStatusQuery,
+  useGetAssignedClientMetaAdsPixelStatsQuery,
   useGetAssignedClientMetaAdsReportsQuery,
   useGetAssignedClientMetaAdsSummaryQuery,
   useUpdateAssignedMetaAdsReportMutation,
@@ -50,6 +51,8 @@ import type {
   MetaAdsAdSetAudience,
   MetaAdsAiCommentary,
   MetaAdsInsightItem,
+  MetaAdsPixelChecklistItem,
+  MetaAdsPixelStatsResponse,
   MetaAdsReportItem,
   MetaAdsReportStatus,
   MetaAdsReportType,
@@ -795,7 +798,7 @@ export function MetaAdsWorkspace({ initialView = "overview" }: MetaAdsWorkspaceP
             ) : null}
 
             {currentView === "pixel" ? (
-              <PixelSection pixelStatus={pixelStatus} isLoading={isPixelLoading} />
+              <PixelSection pixelStatus={pixelStatus} isLoading={isPixelLoading} clientId={selectedClientId} />
             ) : null}
           </Card>
 
@@ -1942,29 +1945,137 @@ function ApprovalsSection({
 }
 
 /* ──────────────── Pixel Section ──────────────── */
+function PixelChecklistRow({ item }: { item: MetaAdsPixelChecklistItem }) {
+  return (
+    <div className="flex items-start gap-3 py-2.5">
+      <span className="mt-0.5 shrink-0">
+        {item.status === "ok" ? (
+          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#AAFF01]/20 text-[#AAFF01]">✓</span>
+        ) : item.status === "warning" ? (
+          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#FFA726]/20 text-[10px] text-[#FFA726]">!</span>
+        ) : (
+          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#ff8e8e]/20 text-[10px] text-[#ff8e8e]">✕</span>
+        )}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm text-white">{item.label}</p>
+        {item.detail && <p className="mt-0.5 text-xs text-[#A0A0A0]">{item.detail}</p>}
+      </div>
+    </div>
+  );
+}
+
 function PixelSection({
-  pixelStatus, isLoading,
+  pixelStatus,
+  isLoading,
+  clientId,
 }: {
   pixelStatus: { connectionStatus: string; adAccountId: string | null; pixelId: string | null; lastInsightAt: string | null; eventStatus: string; setupWarning: string | null; syncError: string | null } | undefined;
   isLoading: boolean;
+  clientId: string;
 }) {
+  const { data: stats, isLoading: isStatsLoading } = useGetAssignedClientMetaAdsPixelStatsQuery(
+    { clientId },
+    { skip: !clientId || isLoading },
+  );
+
   if (isLoading) return <p className="text-sm text-[#A0A0A0]">Pixel durumu yükleniyor...</p>;
   if (!pixelStatus) return <p className="text-sm text-[#A0A0A0]">Pixel durumu bulunamadı.</p>;
 
+  const healthColor = !stats ? "#A0A0A0" : stats.healthLevel === "good" ? "#AAFF01" : stats.healthLevel === "warning" ? "#FFA726" : "#ff8e8e";
+  const maxCount = stats ? Math.max(...stats.events.map((e) => e.count), 1) : 1;
+
   return (
     <div className="space-y-4">
-      <h3 className="text-sm font-semibold text-white">Pixel Durumu</h3>
-      <div className="flex flex-wrap gap-2">
-        <Badge variant="outline">Bağlantı: {pixelStatus.connectionStatus}</Badge>
-        <Badge variant="outline">Olay: {pixelStatus.eventStatus}</Badge>
+      {/* Health header */}
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-white/[0.06] bg-white/[0.03] p-4">
+        <div className="flex items-center gap-4">
+          {isStatsLoading ? (
+            <div className="h-14 w-14 animate-pulse rounded-full bg-white/[0.08]" />
+          ) : stats ? (
+            <div className="relative flex h-14 w-14 shrink-0 items-center justify-center">
+              <svg className="absolute inset-0 -rotate-90" viewBox="0 0 56 56">
+                <circle cx="28" cy="28" r="22" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="6" />
+                <circle cx="28" cy="28" r="22" fill="none" stroke={healthColor} strokeWidth="6"
+                  strokeDasharray={`${(stats.healthScore / 100) * 138.2} 138.2`} strokeLinecap="round" />
+              </svg>
+              <span className="text-sm font-bold" style={{ color: healthColor }}>{stats.healthScore}</span>
+            </div>
+          ) : null}
+          <div>
+            <p className="text-sm font-semibold text-white">
+              {stats ? (stats.pixelName ?? pixelStatus.pixelId ?? "—") : (pixelStatus.pixelId ?? "—")}
+            </p>
+            <p className="text-xs text-[#606060]">Pixel ID</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-4 text-xs">
+          <div><p className="text-[#606060]">Bağlantı</p><Badge variant="outline" className="mt-1">{pixelStatus.connectionStatus}</Badge></div>
+          <div><p className="text-[#606060]">Ad Account</p><p className="mt-1 font-mono text-[#A0A0A0]">{pixelStatus.adAccountId ?? "—"}</p></div>
+          <div><p className="text-[#606060]">Son Ateşleme</p><p className="mt-1 text-[#A0A0A0]">{stats?.lastFiredAt ? new Date(stats.lastFiredAt).toLocaleDateString("tr-TR") : "—"}</p></div>
+        </div>
       </div>
-      <div className="space-y-2 text-sm">
-        <div className="flex min-w-0 gap-3"><span className="shrink-0 text-xs text-[#606060] w-24">Ad Account</span><span className="min-w-0 truncate text-[#D8D8D8]">{pixelStatus.adAccountId ?? "—"}</span></div>
-        <div className="flex min-w-0 gap-3"><span className="shrink-0 text-xs text-[#606060] w-24">Pixel ID</span><span className="min-w-0 truncate text-[#D8D8D8]">{pixelStatus.pixelId ?? "—"}</span></div>
-        <div className="flex min-w-0 gap-3"><span className="shrink-0 text-xs text-[#606060] w-24">Son Olay</span><span className="min-w-0 truncate text-[#D8D8D8]">{pixelStatus.lastInsightAt ?? "—"}</span></div>
+
+      {/* Checklist + Events */}
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#606060]">Kurulum Kontrol Listesi</p>
+          {isStatsLoading ? (
+            <div className="space-y-3 pt-1">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="h-4 w-4 animate-pulse rounded-full bg-white/[0.08]" />
+                  <div className="h-3 w-36 animate-pulse rounded bg-white/[0.06]" />
+                </div>
+              ))}
+            </div>
+          ) : stats && stats.checklist.length > 0 ? (
+            <div className="divide-y divide-white/[0.06]">
+              {stats.checklist.map((item) => <PixelChecklistRow key={item.key} item={item} />)}
+            </div>
+          ) : (
+            <>
+              {pixelStatus.setupWarning && <p className="text-xs text-[#FFA726]">{pixelStatus.setupWarning}</p>}
+              {pixelStatus.syncError && <p className="text-xs text-[#ff8e8e]">{pixelStatus.syncError}</p>}
+              {!pixelStatus.setupWarning && !pixelStatus.syncError && (
+                <p className="text-xs text-[#AAFF01]">Konfigürasyon sağlıklı görünüyor.</p>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#606060]">Son 7 Gün — Eventler</p>
+          {isStatsLoading ? (
+            <div className="space-y-3 pt-1">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="space-y-1">
+                  <div className="h-3 w-24 animate-pulse rounded bg-white/[0.06]" />
+                  <div className="h-1.5 animate-pulse rounded-full bg-white/[0.04]" style={{ width: `${70 - i * 15}%` }} />
+                </div>
+              ))}
+            </div>
+          ) : stats && stats.events.length > 0 ? (
+            <div className="space-y-3">
+              {stats.events.map((ev) => (
+                <div key={ev.name}>
+                  <div className="mb-1 flex justify-between text-xs">
+                    <span className="text-[#d7d7d7]">{ev.name}</span>
+                    <span className="tabular-nums text-[#606060]">{ev.count.toLocaleString("tr-TR")}</span>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-white/[0.06]">
+                    <div className="h-1.5 rounded-full bg-[#AAFF01]" style={{ width: `${(ev.count / maxCount) * 100}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-[#A0A0A0]">
+              {pixelStatus.eventStatus === "NOT_CONFIGURED" ? "Pixel ID tanımlı değil." : "Son 7 günde event bulunamadı."}
+            </p>
+          )}
+        </div>
       </div>
-      {pixelStatus.setupWarning ? <p className="text-xs text-orange-300">⚠ {pixelStatus.setupWarning}</p> : null}
-      {pixelStatus.syncError ? <p className="text-xs text-red-300">✕ {pixelStatus.syncError}</p> : null}
     </div>
   );
 }

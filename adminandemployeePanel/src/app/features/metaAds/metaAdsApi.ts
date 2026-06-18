@@ -12,7 +12,10 @@ import type {
   MetaAdsInsightItem,
   MetaAdsInsightLevel,
   MetaAdsInsightsResponse,
+  MetaAdsPixelChecklistItem,
+  MetaAdsPixelEvent,
   MetaAdsPixelStatusResponse,
+  MetaAdsPixelStatsResponse,
   MetaAdsReportItem,
   MetaAdsReportsQuery,
   MetaAdsReportsResponse,
@@ -181,6 +184,16 @@ export const metaAdsApi = baseApi.injectEndpoints({
       }),
       transformResponse: (response: unknown) => normalizeAiCommentaryResponse(response),
     }),
+    getAssignedClientMetaAdsPixelStats: builder.query<
+      MetaAdsPixelStatsResponse,
+      { clientId: string }
+    >({
+      query: ({ clientId }) => ({
+        url: `/meta-ads/clients/${clientId}/pixel-stats`,
+        method: "GET",
+      }),
+      transformResponse: (response: unknown) => normalizePixelStatsResponse(response),
+    }),
   }),
 });
 
@@ -198,6 +211,7 @@ export const {
   useGetAssignedClientMetaAdsAdCreativesQuery,
   useGetAssignedClientMetaAdsAudiencesQuery,
   useGetAssignedClientMetaAdsAiCommentaryQuery,
+  useGetAssignedClientMetaAdsPixelStatsQuery,
 } = metaAdsApi;
 
 function normalizeMetaAdsAudiencesResponse(response: unknown): MetaAdsAudiencesResponse {
@@ -664,5 +678,68 @@ function normalizeAiCommentaryResponse(response: unknown): MetaAdsAiCommentary {
     recommendations: Array.isArray(candidate.recommendations) ? candidate.recommendations.filter((r): r is string => typeof r === "string") : [],
     generatedAt: typeof candidate.generatedAt === "string" ? candidate.generatedAt : new Date().toISOString(),
     isHeuristic: typeof candidate.isHeuristic === "boolean" ? candidate.isHeuristic : true,
+  };
+}
+
+export function normalizePixelStatsResponse(response: unknown): MetaAdsPixelStatsResponse {
+  const candidate = isRecord(response) && isRecord(response.data) ? response.data : response;
+
+  if (!isRecord(candidate)) {
+    return {
+      pixelId: null,
+      pixelName: null,
+      createdAt: null,
+      lastFiredAt: null,
+      events: [],
+      healthScore: 0,
+      healthLevel: "critical",
+      checklist: [],
+    };
+  }
+
+  const rawEvents = Array.isArray(candidate.events) ? candidate.events : [];
+  const events: MetaAdsPixelEvent[] = rawEvents
+    .map((e): MetaAdsPixelEvent | null => {
+      if (!isRecord(e)) return null;
+      if (typeof e.name !== "string") return null;
+      return { name: e.name, count: readNumber(e, "count", 0, true) };
+    })
+    .filter((e): e is MetaAdsPixelEvent => e !== null);
+
+  const rawChecklist = Array.isArray(candidate.checklist) ? candidate.checklist : [];
+  const checklist: MetaAdsPixelChecklistItem[] = rawChecklist
+    .map((item): MetaAdsPixelChecklistItem | null => {
+      if (!isRecord(item)) return null;
+      if (typeof item.key !== "string" || typeof item.label !== "string") return null;
+      const status = item.status === "ok" || item.status === "warning" || item.status === "error"
+        ? item.status
+        : "error";
+      return {
+        key: item.key,
+        label: item.label,
+        status,
+        detail: typeof item.detail === "string" ? item.detail : null,
+      };
+    })
+    .filter((item): item is MetaAdsPixelChecklistItem => item !== null);
+
+  const rawScore = readNumber(candidate, "healthScore", 0);
+  const healthScore = Math.min(100, Math.max(0, Math.trunc(rawScore)));
+
+  const rawLevel = candidate.healthLevel;
+  const healthLevel: MetaAdsPixelStatsResponse["healthLevel"] =
+    rawLevel === "good" || rawLevel === "warning" || rawLevel === "critical"
+      ? rawLevel
+      : "critical";
+
+  return {
+    pixelId: typeof candidate.pixelId === "string" ? candidate.pixelId : null,
+    pixelName: typeof candidate.pixelName === "string" ? candidate.pixelName : null,
+    createdAt: typeof candidate.createdAt === "string" ? candidate.createdAt : null,
+    lastFiredAt: typeof candidate.lastFiredAt === "string" ? candidate.lastFiredAt : null,
+    events,
+    healthScore,
+    healthLevel,
+    checklist,
   };
 }

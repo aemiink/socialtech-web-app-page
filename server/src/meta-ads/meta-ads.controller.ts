@@ -309,6 +309,15 @@ export class MetaAdsController {
     return this.metaAdsService.getAssignedClientPixelStatus(currentUser, clientId);
   }
 
+  @Get("meta-ads/clients/:clientId/pixel-stats")
+  @RequirePermissions("metaAds.config.read.assigned")
+  getAssignedClientMetaAdsPixelStats(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+  ) {
+    return this.metaAdsService.getAssignedClientPixelStats(currentUser, clientId);
+  }
+
   @Get("meta-ads/clients/:clientId/insights")
   @RequirePermissions("metaAds.config.read.assigned")
   getAssignedClientMetaAdsInsights(
@@ -432,6 +441,12 @@ export class MetaAdsController {
     @Query() query: MetaAdsReportsQueryDto,
   ) {
     return this.metaAdsService.getOwnClientReports(currentUser, query);
+  }
+
+  @Get("clients/me/meta-ads/pixel-stats")
+  @RequirePermissions("metaAds.config.read.own")
+  getOwnClientMetaAdsPixelStats(@CurrentUser() currentUser: AuthenticatedUser) {
+    return this.metaAdsService.getOwnClientPixelStats(currentUser);
   }
 
   @Get("clients/me/meta-ads/audiences")

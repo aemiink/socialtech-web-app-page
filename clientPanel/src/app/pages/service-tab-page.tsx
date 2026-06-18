@@ -3,6 +3,7 @@ import {
   type LucideIcon,
   Activity,
   AlertCircle,
+  AlertTriangle,
   ArrowRight,
   BarChart3,
   Bell,
@@ -32,6 +33,7 @@ import {
   Users,
   Wrench,
   X,
+  XCircle,
   Zap,
 } from 'lucide-react';
 import { Button } from '../components/button';
@@ -47,10 +49,11 @@ import {
   useGetOwnMetaAdsConfigQuery,
   useGetOwnMetaAdsInsightsQuery,
   useGetOwnMetaAdsPixelStatusQuery,
+  useGetOwnMetaAdsPixelStatsQuery,
   useGetOwnMetaAdsReportsQuery,
   useGetOwnMetaAdsSummaryQuery,
 } from '../features/metaAds/metaAdsApi';
-import type { MetaAdsAdCreative, MetaAdsAdSetAudience, MetaAdsAiCommentary, MetaAdsCampaign, MetaAdsInsightItem, MetaAdsReportItem } from '../features/metaAds/metaAdsTypes';
+import type { MetaAdsAdCreative, MetaAdsAdSetAudience, MetaAdsAiCommentary, MetaAdsCampaign, MetaAdsInsightItem, MetaAdsPixelChecklistItem, MetaAdsPixelStatsResponse, MetaAdsReportItem } from '../features/metaAds/metaAdsTypes';
 import {
   useExportOwnTikTokAdsReportMutation,
   useGetOwnTikTokAdsCampaignsQuery,
@@ -1683,6 +1686,12 @@ function MetaAdsServiceTab({
     skip: !isConnected,
   });
   const {
+    data: pixelStats,
+    isLoading: isPixelStatsLoading,
+  } = useGetOwnMetaAdsPixelStatsQuery(undefined, {
+    skip: !isConnected || tabId !== "pixel-events",
+  });
+  const {
     data: approvalTasks = [],
     isLoading: isApprovalsLoading,
     isError: isApprovalsError,
@@ -1873,7 +1882,7 @@ function MetaAdsServiceTab({
           ) : null}
 
           {tabId === "pixel-events" ? (
-            <MetaAdsPixelPanel data={pixelStatus} loading={isPixelLoading} isError={isPixelError} />
+            <MetaAdsPixelPanel data={pixelStatus} loading={isPixelLoading} isError={isPixelError} stats={pixelStats ?? null} statsLoading={isPixelStatsLoading} />
           ) : null}
 
           {tabId === "meta-reports" ? (
@@ -3363,10 +3372,54 @@ function MetaAdsCreativeCard({
   );
 }
 
+function PixelHealthScore({ score, level }: { score: number; level: "good" | "warning" | "critical" }) {
+  const color = level === "good" ? "#AAFF01" : level === "warning" ? "#FFA726" : "#ff8e8e";
+  const label = level === "good" ? "Sağlıklı" : level === "warning" ? "Dikkat" : "Kritik";
+  return (
+    <div className="flex items-center gap-4">
+      <div className="relative flex h-20 w-20 shrink-0 items-center justify-center">
+        <svg className="absolute inset-0 -rotate-90" viewBox="0 0 80 80">
+          <circle cx="40" cy="40" r="34" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="8" />
+          <circle
+            cx="40" cy="40" r="34" fill="none"
+            stroke={color} strokeWidth="8"
+            strokeDasharray={`${(score / 100) * 213.6} 213.6`}
+            strokeLinecap="round"
+          />
+        </svg>
+        <span className="text-xl font-bold" style={{ color }}>{score}</span>
+      </div>
+      <div>
+        <span className="rounded-full px-2.5 py-1 text-xs font-semibold" style={{ backgroundColor: `${color}20`, color }}>{label}</span>
+        <p className="mt-1.5 text-xs text-[#A0A0A0]">Pixel Sağlık Skoru</p>
+      </div>
+    </div>
+  );
+}
+
+function PixelChecklistRow({ item }: { item: MetaAdsPixelChecklistItem }) {
+  const icon = item.status === "ok"
+    ? <CheckCircle className="h-4 w-4 text-[#AAFF01]" />
+    : item.status === "warning"
+    ? <AlertTriangle className="h-4 w-4 text-[#FFA726]" />
+    : <XCircle className="h-4 w-4 text-[#ff8e8e]" />;
+  return (
+    <div className="flex items-start gap-3 py-2.5">
+      <span className="mt-0.5 shrink-0">{icon}</span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm text-white">{item.label}</p>
+        {item.detail && <p className="mt-0.5 text-xs text-[#A0A0A0]">{item.detail}</p>}
+      </div>
+    </div>
+  );
+}
+
 function MetaAdsPixelPanel({
   data,
   loading,
   isError,
+  stats,
+  statsLoading,
 }: {
   data: {
     adAccountId: string | null;
@@ -3378,6 +3431,8 @@ function MetaAdsPixelPanel({
   } | undefined;
   loading: boolean;
   isError: boolean;
+  stats: MetaAdsPixelStatsResponse | null;
+  statsLoading: boolean;
 }) {
   if (loading) {
     return <MetaAdsStatePanel title="Pixel/Event durumu yükleniyor..." />;
@@ -3393,29 +3448,119 @@ function MetaAdsPixelPanel({
     );
   }
 
+  const maxEventCount = stats ? Math.max(...stats.events.map((e) => e.count), 1) : 1;
+
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+    <div className="space-y-4">
+      {/* Health score header */}
       <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-5">
-        <h3 className="mb-3 text-white">Kurulum</h3>
-        <div className="space-y-2 text-sm">
-          <p className="text-[#A0A0A0]">Ad Account: <span className="text-white">{data.adAccountId ?? "—"}</span></p>
-          <p className="text-[#A0A0A0]">Pixel ID: <span className="text-white">{data.pixelId ?? "—"}</span></p>
-          <p className="text-[#A0A0A0]">Event Durumu: <span className="text-white">{data.eventStatus}</span></p>
-          <p className="text-[#A0A0A0]">
-            Son Event Verisi:{" "}
-            <span className="text-white">
-              {data.lastInsightAt ? new Date(data.lastInsightAt).toLocaleString("tr-TR") : "Yok"}
-            </span>
-          </p>
-        </div>
+        {statsLoading ? (
+          <div className="flex items-center gap-4">
+            <div className="h-20 w-20 animate-pulse rounded-full bg-white/[0.08]" />
+            <div className="space-y-2">
+              <div className="h-6 w-24 animate-pulse rounded bg-white/[0.08]" />
+              <div className="h-3 w-32 animate-pulse rounded bg-white/[0.06]" />
+            </div>
+          </div>
+        ) : stats ? (
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <PixelHealthScore score={stats.healthScore} level={stats.healthLevel} />
+            <div className="flex flex-wrap gap-4 text-sm">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-[#606060]">Pixel ID</p>
+                <p className="font-mono text-white">{stats.pixelId ?? data.pixelId ?? "—"}</p>
+              </div>
+              {stats.pixelName && (
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-[#606060]">Pixel Adı</p>
+                  <p className="text-white">{stats.pixelName}</p>
+                </div>
+              )}
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-[#606060]">Son Ateşleme</p>
+                <p className="text-white">{stats.lastFiredAt ? new Date(stats.lastFiredAt).toLocaleString("tr-TR") : "—"}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-[#606060]">Ad Account</p>
+                <p className="font-mono text-[#A0A0A0]">{data.adAccountId ?? "—"}</p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-4 text-sm">
+            <div><p className="text-[10px] uppercase tracking-wider text-[#606060]">Pixel ID</p><p className="font-mono text-white">{data.pixelId ?? "—"}</p></div>
+            <div><p className="text-[10px] uppercase tracking-wider text-[#606060]">Ad Account</p><p className="font-mono text-[#A0A0A0]">{data.adAccountId ?? "—"}</p></div>
+            <div><p className="text-[10px] uppercase tracking-wider text-[#606060]">Event Durumu</p><p className="text-white">{data.eventStatus}</p></div>
+          </div>
+        )}
       </div>
-      <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-5">
-        <h3 className="mb-3 text-white">Uyarılar</h3>
-        {data.setupWarning ? <p className="text-sm text-[#FFA726]">{data.setupWarning}</p> : null}
-        {data.syncError ? <p className="mt-2 text-sm text-[#ff8e8e]">{data.syncError}</p> : null}
-        {!data.setupWarning && !data.syncError ? (
-          <p className="text-sm text-[#AAFF01]">Konfigürasyon ve event akışı sağlıklı görünüyor.</p>
-        ) : null}
+
+      {/* Checklist + Events grid */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {/* Setup Checklist */}
+        <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-5">
+          <h3 className="mb-1 text-sm font-semibold text-white">Kurulum Kontrol Listesi</h3>
+          {statsLoading ? (
+            <div className="mt-3 space-y-3">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="h-4 w-4 animate-pulse rounded-full bg-white/[0.08]" />
+                  <div className="h-3 w-40 animate-pulse rounded bg-white/[0.06]" />
+                </div>
+              ))}
+            </div>
+          ) : stats && stats.checklist.length > 0 ? (
+            <div className="divide-y divide-white/[0.06]">
+              {stats.checklist.map((item) => (
+                <PixelChecklistRow key={item.key} item={item} />
+              ))}
+            </div>
+          ) : (
+            <>
+              {data.setupWarning && <p className="mt-2 text-sm text-[#FFA726]">{data.setupWarning}</p>}
+              {data.syncError && <p className="mt-2 text-sm text-[#ff8e8e]">{data.syncError}</p>}
+              {!data.setupWarning && !data.syncError && (
+                <p className="mt-2 text-sm text-[#AAFF01]">Konfigürasyon ve event akışı sağlıklı görünüyor.</p>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Event Breakdown */}
+        <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-5">
+          <h3 className="mb-1 text-sm font-semibold text-white">Son 7 Gün — Event Dağılımı</h3>
+          {statsLoading ? (
+            <div className="mt-3 space-y-3">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="space-y-1">
+                  <div className="h-3 w-28 animate-pulse rounded bg-white/[0.06]" />
+                  <div className="h-2 animate-pulse rounded bg-white/[0.04]" style={{ width: `${60 - i * 10}%` }} />
+                </div>
+              ))}
+            </div>
+          ) : stats && stats.events.length > 0 ? (
+            <div className="mt-3 space-y-3">
+              {stats.events.map((ev) => (
+                <div key={ev.name}>
+                  <div className="mb-1 flex items-center justify-between text-xs">
+                    <span className="text-[#d7d7d7]">{ev.name}</span>
+                    <span className="tabular-nums text-[#A0A0A0]">{ev.count.toLocaleString("tr-TR")}</span>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-white/[0.06]">
+                    <div
+                      className="h-1.5 rounded-full bg-[#AAFF01]"
+                      style={{ width: `${(ev.count / maxEventCount) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-[#A0A0A0]">
+              {data.eventStatus === "NOT_CONFIGURED" ? "Pixel ID tanımlı değil, event verisi alınamıyor." : "Son 7 günde event verisi bulunamadı."}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );

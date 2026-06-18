@@ -345,6 +345,22 @@ type MetaAdsPixelStatusResponse = {
   syncError: string | null;
 };
 
+type MetaAdsPixelStatsResponse = {
+  pixelId: string | null;
+  pixelName: string | null;
+  createdAt: string | null;
+  lastFiredAt: string | null;
+  events: Array<{ name: string; count: number }>;
+  healthScore: number;
+  healthLevel: "good" | "warning" | "critical";
+  checklist: Array<{
+    key: string;
+    label: string;
+    status: "ok" | "warning" | "error";
+    detail: string | null;
+  }>;
+};
+
 type MetaAdsSyncResponse = {
   success: true;
   syncedAt: Date;
@@ -1451,6 +1467,28 @@ export class MetaAdsService {
     return this.getAudiencesByClientProfileId(clientProfileId);
   }
 
+  async getOwnClientPixelStats(
+    currentUser: AuthenticatedUser,
+  ): Promise<MetaAdsPixelStatsResponse> {
+    this.assertCanReadOwnConfig(currentUser);
+    const clientProfileId = this.getClientProfileIdOrFail(currentUser);
+    await this.assertClientProfileExists(clientProfileId);
+    await this.assertClientHasActiveMetaAdsService(clientProfileId);
+
+    return this.getPixelStatsByClientProfileId(clientProfileId);
+  }
+
+  async getAssignedClientPixelStats(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+  ): Promise<MetaAdsPixelStatsResponse> {
+    this.assertCanReadAssignedConfig(currentUser);
+    await this.assertAssignedClientProfileOrFail(currentUser.id, clientProfileId);
+    await this.assertClientHasActiveMetaAdsService(clientProfileId);
+
+    return this.getPixelStatsByClientProfileId(clientProfileId);
+  }
+
   async getOwnClientAdCreatives(
     currentUser: AuthenticatedUser,
   ): Promise<{ data: MetaAdsAdCreativeItem[]; lastSyncAt: Date | null }> {
@@ -2037,6 +2075,196 @@ export class MetaAdsService {
           ? config.syncError
           : CLIENT_SAFE_SYNC_ERROR_MESSAGE
         : null,
+    };
+  }
+
+  private async getPixelStatsByClientProfileId(
+    clientProfileId: string,
+  ): Promise<MetaAdsPixelStatsResponse> {
+    const [config, latestAccountInsight] = await this.prisma.$transaction([
+      this.prisma.clientMetaAdsConfig.findUnique({
+        where: { clientProfileId },
+        select: {
+          connectionStatus: true,
+          adAccountId: true,
+          pixelId: true,
+          lastSyncAt: true,
+          syncError: true,
+        },
+      }),
+      this.prisma.metaAdsDailyInsight.findFirst({
+        where: {
+          clientProfileId,
+          level: MetaAdsInsightLevel.ACCOUNT,
+        },
+        select: {
+          date: true,
+        },
+        orderBy: [{ date: "desc" }],
+      }),
+    ]);
+
+    const connectionStatus =
+      config?.connectionStatus ?? MetaAdsConnectionStatus.NOT_CONNECTED;
+    const pixelId = config?.pixelId?.trim() || null;
+
+    const emptyChecklist: MetaAdsPixelStatsResponse["checklist"] = [
+      {
+        key: "connection",
+        label: "Meta Ads hesabı bağlı",
+        status: connectionStatus === MetaAdsConnectionStatus.CONNECTED ? "ok" : "error",
+        detail:
+          connectionStatus === MetaAdsConnectionStatus.CONNECTED
+            ? null
+            : config?.syncError ?? "Bağlantı kurulmamış",
+      },
+      {
+        key: "pixel_id",
+        label: "Pixel ID tanımlı",
+        status: pixelId ? "ok" : "error",
+        detail: pixelId ? `ID: ${pixelId}` : "Admin panelinden Pixel ID girin",
+      },
+      {
+        key: "events_active",
+        label: "Event akışı aktif",
+        status: "error",
+        detail: "Son 7 günde event algılanmadı",
+      },
+      {
+        key: "page_view",
+        label: "PageView kurulu",
+        status: "warning",
+        detail: null,
+      },
+      {
+        key: "purchase",
+        label: "Purchase / Conversion eventi",
+        status: "warning",
+        detail: "Dönüşüm optimizasyonu için gerekli",
+      },
+      {
+        key: "last_fired",
+        label: "Son 24 saatte event geldi",
+        status: "error",
+        detail: null,
+      },
+    ];
+
+    if (!pixelId || connectionStatus !== MetaAdsConnectionStatus.CONNECTED) {
+      return {
+        pixelId,
+        pixelName: null,
+        createdAt: null,
+        lastFiredAt: null,
+        events: [],
+        healthScore: 0,
+        healthLevel: "critical",
+        checklist: emptyChecklist,
+      };
+    }
+
+    const { accessToken } = await this.resolveReportingConnection(clientProfileId);
+    const nowUnix = Math.floor(Date.now() / 1000);
+    const sinceUnix = nowUnix - 7 * 24 * 60 * 60;
+
+    const [pixelDetails, rawEventStats] = await Promise.all([
+      this.metaAdsApiService.fetchPixelDetails(pixelId, accessToken),
+      this.metaAdsApiService.fetchPixelEventStats(pixelId, accessToken, sinceUnix, nowUnix),
+    ]);
+
+    const events = rawEventStats.map((e) => ({ name: e.eventName, count: e.count }));
+
+    const latestInsightDate = latestAccountInsight?.date ?? null;
+    const sevenDaysAgoMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const latestInsightWithin7Days =
+      latestInsightDate !== null && latestInsightDate.getTime() >= sevenDaysAgoMs;
+
+    let healthScore = 0;
+    if (connectionStatus === MetaAdsConnectionStatus.CONNECTED) healthScore += 25;
+    if (pixelId) healthScore += 25;
+    if (events.length > 0 || latestInsightWithin7Days) healthScore += 25;
+    if (
+      pixelDetails.lastFiredTime !== null &&
+      nowUnix - pixelDetails.lastFiredTime < 86400
+    )
+      healthScore += 25;
+
+    const healthLevel: MetaAdsPixelStatsResponse["healthLevel"] =
+      healthScore >= 75 ? "good" : healthScore >= 50 ? "warning" : "critical";
+
+    const totalEvents = events.reduce((s, e) => s + e.count, 0);
+
+    const checklist: MetaAdsPixelStatsResponse["checklist"] = [
+      {
+        key: "connection",
+        label: "Meta Ads hesabı bağlı",
+        status: connectionStatus === MetaAdsConnectionStatus.CONNECTED ? "ok" : "error",
+        detail:
+          connectionStatus === MetaAdsConnectionStatus.CONNECTED
+            ? null
+            : config?.syncError ?? "Bağlantı kurulmamış",
+      },
+      {
+        key: "pixel_id",
+        label: "Pixel ID tanımlı",
+        status: pixelId ? "ok" : "error",
+        detail: pixelId ? `ID: ${pixelId}` : "Admin panelinden Pixel ID girin",
+      },
+      {
+        key: "events_active",
+        label: "Event akışı aktif",
+        status:
+          events.length > 0 ? "ok" : latestInsightDate ? "warning" : "error",
+        detail:
+          events.length > 0
+            ? `Son 7 günde ${totalEvents.toLocaleString()} event`
+            : "Son 7 günde event algılanmadı",
+      },
+      {
+        key: "page_view",
+        label: "PageView kurulu",
+        status: events.some((e) => e.name === "PageView") ? "ok" : "warning",
+        detail: null,
+      },
+      {
+        key: "purchase",
+        label: "Purchase / Conversion eventi",
+        status: events.some((e) =>
+          ["Purchase", "Lead", "CompleteRegistration"].includes(e.name),
+        )
+          ? "ok"
+          : "warning",
+        detail: "Dönüşüm optimizasyonu için gerekli",
+      },
+      {
+        key: "last_fired",
+        label: "Son 24 saatte event geldi",
+        status:
+          pixelDetails.lastFiredTime !== null &&
+          nowUnix - pixelDetails.lastFiredTime < 86400
+            ? "ok"
+            : events.length > 0
+              ? "warning"
+              : "error",
+        detail: pixelDetails.lastFiredTime
+          ? new Date(pixelDetails.lastFiredTime * 1000).toLocaleString("tr-TR")
+          : null,
+      },
+    ];
+
+    return {
+      pixelId,
+      pixelName: pixelDetails.name,
+      createdAt: pixelDetails.creationTime
+        ? new Date(pixelDetails.creationTime * 1000).toISOString()
+        : null,
+      lastFiredAt: pixelDetails.lastFiredTime
+        ? new Date(pixelDetails.lastFiredTime * 1000).toISOString()
+        : null,
+      events,
+      healthScore,
+      healthLevel,
+      checklist,
     };
   }
 
