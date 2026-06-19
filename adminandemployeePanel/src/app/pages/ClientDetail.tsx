@@ -59,6 +59,8 @@ import {
   useGetAdminClientMetaAdsSummaryQuery,
   useGetAdminClientWebMobileDesignConfigQuery,
   useGetAdminClientWebMobileDesignSummaryQuery,
+  useGetAdminClientTechnicalSupportSummaryQuery,
+  useGetAdminClientSeoAuditSummaryQuery,
   useGetClientSummaryQuery,
   useResetClientOwnerPasswordMutation,
   useSyncAdminClientAmazonAdsMutation,
@@ -71,6 +73,8 @@ import {
 import type {
   AdminClientWebMobileDesignConfig,
   AdminWebMobileDesignSummary,
+  AdminTechnicalSupportSummary,
+  AdminSeoAuditSummary,
   AmazonAdsRegion,
   ClientPurchasedService,
   ClientSummaryRecentProject,
@@ -184,6 +188,8 @@ export function ClientDetail() {
   const hasAmazonAdsService = activeServiceKeys.has("amazon-ads");
   const hasSocialMediaService = activeServiceKeys.has("social-media");
   const hasWebMobileDesignService = activeServiceKeys.has("web-mobile-design");
+  const hasTechnicalSupportService = activeServiceKeys.has("technical-support");
+  const hasSeoAuditService = activeServiceKeys.has("seo-audit");
   const hasRepositoryService =
     activeServiceKeys.has("web-app") || activeServiceKeys.has("mobile-app");
   const {
@@ -278,6 +284,20 @@ export function ClientDetail() {
     isLoading: isWebMobileDesignSummaryLoading,
   } = useGetAdminClientWebMobileDesignSummaryQuery(clientProfileId ?? "", {
     skip: !isValidId || !hasWebMobileDesignService,
+  });
+
+  const {
+    data: technicalSupportSummary,
+    isLoading: isTechnicalSupportSummaryLoading,
+  } = useGetAdminClientTechnicalSupportSummaryQuery(clientProfileId ?? "", {
+    skip: !isValidId || !hasTechnicalSupportService,
+  });
+
+  const {
+    data: seoAuditSummary,
+    isLoading: isSeoAuditSummaryLoading,
+  } = useGetAdminClientSeoAuditSummaryQuery(clientProfileId ?? "", {
+    skip: !isValidId || !hasSeoAuditService,
   });
 
   useEffect(() => {
@@ -933,6 +953,20 @@ export function ClientDetail() {
           summary={webMobileDesignSummary ?? null}
           isError={isClientProjectsError}
           isLoading={isClientProjectsLoading || isWebMobileDesignConfigLoading || isWebMobileDesignSummaryLoading}
+        />
+      ) : null}
+
+      {hasTechnicalSupportService ? (
+        <TechnicalSupportSection
+          summary={technicalSupportSummary ?? null}
+          isLoading={isTechnicalSupportSummaryLoading}
+        />
+      ) : null}
+
+      {hasSeoAuditService ? (
+        <SeoAuditSection
+          summary={seoAuditSummary ?? null}
+          isLoading={isSeoAuditSummaryLoading}
         />
       ) : null}
 
@@ -2483,5 +2517,229 @@ function EmptyState({ children }: { children: ReactNode }) {
     <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] p-4 text-sm text-[#A0A0A0]">
       {children}
     </div>
+  );
+}
+
+function TechnicalSupportSection({
+  summary,
+  isLoading,
+}: {
+  summary: AdminTechnicalSupportSummary | null;
+  isLoading: boolean;
+}) {
+  return (
+    <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
+      <SectionHeader
+        icon={<ListChecks className="h-5 w-5 text-[#AAFF01]" />}
+        title="Teknik Destek"
+      />
+
+      {isLoading ? <p className="text-sm text-[#A0A0A0]">Yükleniyor...</p> : null}
+
+      {!isLoading && !summary ? (
+        <EmptyState>Teknik destek verileri bulunamadı.</EmptyState>
+      ) : null}
+
+      {summary ? (
+        <>
+          {/* Config summary */}
+          {summary.config ? (
+            <div className="mb-5 flex flex-wrap gap-4 text-sm">
+              {summary.config.slaLevel ? (
+                <div className="flex items-center gap-1.5 text-[#A0A0A0]">
+                  <span>SLA:</span>
+                  <span className="font-medium text-white">{summary.config.slaLevel}</span>
+                </div>
+              ) : null}
+              <div className="flex items-center gap-1.5 text-[#A0A0A0]">
+                <span>İzleme:</span>
+                <span className={`font-medium ${summary.config.monitoringEnabled ? "text-[#AAFF01]" : "text-[#A0A0A0]"}`}>
+                  {summary.config.monitoringEnabled ? "Aktif" : "Pasif"}
+                </span>
+              </div>
+              {summary.config.backupFrequency ? (
+                <div className="flex items-center gap-1.5 text-[#A0A0A0]">
+                  <span>Yedek:</span>
+                  <span className="font-medium text-white">{summary.config.backupFrequency}</span>
+                </div>
+              ) : null}
+              {summary.config.uptimeTarget !== null ? (
+                <div className="flex items-center gap-1.5 text-[#A0A0A0]">
+                  <span>Uptime Hedef:</span>
+                  <span className="font-medium text-white">%{summary.config.uptimeTarget}</span>
+                </div>
+              ) : null}
+              {summary.config.supportPortalUrl ? (
+                <a
+                  href={summary.config.supportPortalUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-1.5 text-[#AAFF01] hover:underline"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  <span>Destek Portalı</span>
+                </a>
+              ) : null}
+            </div>
+          ) : null}
+
+          {/* Stats */}
+          <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-center">
+              <p className="text-xl font-bold text-amber-400">{summary.openTicketCount}</p>
+              <p className="text-xs text-[#A0A0A0]">Açık Talep</p>
+            </div>
+            <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-center">
+              <p className="text-xl font-bold text-[#AAFF01]">{summary.resolvedTicketCount}</p>
+              <p className="text-xs text-[#A0A0A0]">Çözülen</p>
+            </div>
+            <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-center">
+              <p className="text-xl font-bold text-white">{summary.taskStats.total}</p>
+              <p className="text-xs text-[#A0A0A0]">Toplam Görev</p>
+            </div>
+            <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-center">
+              <p className="text-xl font-bold text-blue-400">%{summary.progressPercent}</p>
+              <p className="text-xs text-[#A0A0A0]">İlerleme</p>
+            </div>
+          </div>
+
+          {/* Recent tasks */}
+          {summary.recentTasks.length > 0 ? (
+            <div>
+              <p className="mb-2 text-xs font-medium uppercase tracking-wider text-[#A0A0A0]">
+                Son Görevler
+              </p>
+              <div className="space-y-2">
+                {summary.recentTasks.slice(0, 4).map((task) => (
+                  <div
+                    key={task.id}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2"
+                  >
+                    <p className="truncate text-sm text-white">{task.title}</p>
+                    <Badge className={getClientTaskStatusBadgeClass(task.status as "TODO" | "IN_PROGRESS" | "REVIEW" | "DONE" | "BLOCKED")}>
+                      {getClientTaskStatusLabel(task.status as "TODO" | "IN_PROGRESS" | "REVIEW" | "DONE" | "BLOCKED")}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <EmptyState>Bu müşteri için henüz teknik destek görevi atanmamış.</EmptyState>
+          )}
+        </>
+      ) : null}
+    </Card>
+  );
+}
+
+function SeoAuditSection({
+  summary,
+  isLoading,
+}: {
+  summary: AdminSeoAuditSummary | null;
+  isLoading: boolean;
+}) {
+  return (
+    <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
+      <SectionHeader
+        icon={<FolderKanban className="h-5 w-5 text-[#AAFF01]" />}
+        title="SEO Audit"
+      />
+
+      {isLoading ? <p className="text-sm text-[#A0A0A0]">Yükleniyor...</p> : null}
+
+      {!isLoading && !summary ? (
+        <EmptyState>SEO audit verileri bulunamadı.</EmptyState>
+      ) : null}
+
+      {summary ? (
+        <>
+          {/* Config summary */}
+          {summary.config ? (
+            <div className="mb-5 flex flex-wrap gap-4 text-sm">
+              {summary.config.siteUrl ? (
+                <a
+                  href={summary.config.siteUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-1.5 text-[#AAFF01] hover:underline"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  <span>{summary.config.siteUrl}</span>
+                </a>
+              ) : null}
+              {summary.config.lastAuditScore !== null ? (
+                <div className="flex items-center gap-1.5 text-[#A0A0A0]">
+                  <span>Son Skor:</span>
+                  <span className="font-medium text-white">{summary.config.lastAuditScore}/100</span>
+                </div>
+              ) : null}
+              {summary.config.auditFrequency ? (
+                <div className="flex items-center gap-1.5 text-[#A0A0A0]">
+                  <span>Frekans:</span>
+                  <span className="font-medium text-white">{summary.config.auditFrequency}</span>
+                </div>
+              ) : null}
+              {summary.config.targetKeywords.length > 0 ? (
+                <div className="flex items-center gap-1.5 text-[#A0A0A0]">
+                  <span>Anahtar Kelime:</span>
+                  <span className="font-medium text-white">{summary.config.targetKeywords.length} adet</span>
+                </div>
+              ) : null}
+              {summary.config.gaPropertyId ? (
+                <div className="flex items-center gap-1.5 text-[#A0A0A0]">
+                  <span>GA Property:</span>
+                  <span className="font-medium text-white">{summary.config.gaPropertyId}</span>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {/* Stats */}
+          <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-center">
+              <p className="text-xl font-bold text-white">{summary.taskStats.total}</p>
+              <p className="text-xs text-[#A0A0A0]">Toplam Görev</p>
+            </div>
+            <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-center">
+              <p className="text-xl font-bold text-amber-400">{summary.taskStats.inProgress}</p>
+              <p className="text-xs text-[#A0A0A0]">Devam Eden</p>
+            </div>
+            <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-center">
+              <p className="text-xl font-bold text-[#AAFF01]">{summary.taskStats.done}</p>
+              <p className="text-xs text-[#A0A0A0]">Tamamlanan</p>
+            </div>
+            <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-center">
+              <p className="text-xl font-bold text-blue-400">%{summary.progressPercent}</p>
+              <p className="text-xs text-[#A0A0A0]">İlerleme</p>
+            </div>
+          </div>
+
+          {/* Recent tasks */}
+          {summary.recentTasks.length > 0 ? (
+            <div>
+              <p className="mb-2 text-xs font-medium uppercase tracking-wider text-[#A0A0A0]">
+                Son Görevler
+              </p>
+              <div className="space-y-2">
+                {summary.recentTasks.slice(0, 4).map((task) => (
+                  <div
+                    key={task.id}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2"
+                  >
+                    <p className="truncate text-sm text-white">{task.title}</p>
+                    <Badge className={getClientTaskStatusBadgeClass(task.status as "TODO" | "IN_PROGRESS" | "REVIEW" | "DONE" | "BLOCKED")}>
+                      {getClientTaskStatusLabel(task.status as "TODO" | "IN_PROGRESS" | "REVIEW" | "DONE" | "BLOCKED")}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <EmptyState>Bu müşteri için henüz SEO audit görevi atanmamış.</EmptyState>
+          )}
+        </>
+      ) : null}
+    </Card>
   );
 }

@@ -59,6 +59,12 @@ import type {
   AdminClientWebMobileDesignConfig,
   AdminWebMobileDesignSummary,
   UpdateAdminClientWebMobileDesignConfigRequest,
+  AdminClientTechnicalSupportConfig,
+  AdminTechnicalSupportSummary,
+  UpdateAdminClientTechnicalSupportConfigRequest,
+  AdminClientSeoAuditConfig,
+  AdminSeoAuditSummary,
+  UpdateAdminClientSeoAuditConfigRequest,
 } from "./clientsTypes";
 import {
   normalizeAmazonAdsCampaignsResponse,
@@ -90,6 +96,12 @@ import {
   normalizeTestMetaAdsConnectionResponse,
   normalizeAdminWebMobileDesignConfigResponse,
   normalizeAdminWebMobileDesignSummaryResponse,
+  normalizeAdminTechnicalSupportConfigResponse,
+  normalizeAdminTechnicalSupportSummaryResponse,
+  normalizeAssignedTechnicalSupportConfigResponse,
+  normalizeAdminSeoAuditConfigResponse,
+  normalizeAdminSeoAuditSummaryResponse,
+  normalizeAssignedSeoAuditConfigResponse,
   toBackendServiceKey,
 } from "./clientsUtils";
 
@@ -100,6 +112,8 @@ const CLIENT_AMAZON_ADS_CONNECTION_ID_PREFIX = "AMAZON_ADS_CONNECTION";
 const CLIENT_SOCIAL_MEDIA_CONFIG_ID_PREFIX = "SOCIAL_MEDIA_CONFIG";
 const CLIENT_GROWTH_HUB_CONFIG_ID_PREFIX = "GROWTH_HUB_CONFIG";
 const CLIENT_WEB_MOBILE_DESIGN_CONFIG_ID_PREFIX = "WEB_MOBILE_DESIGN_CONFIG";
+const CLIENT_TECHNICAL_SUPPORT_CONFIG_ID_PREFIX = "TECHNICAL_SUPPORT_CONFIG";
+const CLIENT_SEO_AUDIT_CONFIG_ID_PREFIX = "SEO_AUDIT_CONFIG";
 const CLIENT_META_ADS_GLOBAL_LIST_ID = "META_ADS_GLOBAL_LIST";
 const CLIENT_GROWTH_HUB_GLOBAL_LIST_ID = "GROWTH_HUB_GLOBAL_LIST";
 const CLIENT_AMAZON_ADS_GLOBAL_LIST_ID = "AMAZON_ADS_GLOBAL_LIST";
@@ -497,6 +511,164 @@ export const clientsApi = baseApi.injectEndpoints({
         normalizeAdminWebMobileDesignSummaryResponse(response),
       providesTags: (_result, _error, clientId) => [
         { type: "WebMobileDesignSummary", id: `assigned:${clientId}` },
+      ],
+    }),
+
+    // Technical Support endpoints
+
+    getAdminClientTechnicalSupportConfig: builder.query<
+      AdminClientTechnicalSupportConfig,
+      string
+    >({
+      query: (clientId) => ({
+        url: `/admin/clients/${clientId}/technical-support/config`,
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeAdminTechnicalSupportConfigResponse(response),
+      providesTags: (_result, _error, clientId) => [
+        { type: "TechnicalSupportConfig", id: clientId },
+      ],
+    }),
+
+    updateAdminClientTechnicalSupportConfig: builder.mutation<
+      AdminClientTechnicalSupportConfig,
+      { clientId: string; body: UpdateAdminClientTechnicalSupportConfigRequest }
+    >({
+      query: ({ clientId, body }) => ({
+        url: `/admin/clients/${clientId}/technical-support/config`,
+        method: "PATCH",
+        body,
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeAdminTechnicalSupportConfigResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        ...getAdminClientMutationInvalidations(clientId),
+        { type: "TechnicalSupportConfig", id: clientId },
+        { type: "TechnicalSupportSummary", id: clientId },
+      ],
+    }),
+
+    getAdminClientTechnicalSupportSummary: builder.query<
+      AdminTechnicalSupportSummary,
+      string
+    >({
+      query: (clientId) => ({
+        url: `/admin/clients/${clientId}/technical-support/summary`,
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeAdminTechnicalSupportSummaryResponse(response),
+      providesTags: (_result, _error, clientId) => [
+        { type: "TechnicalSupportSummary", id: clientId },
+      ],
+    }),
+
+    getAssignedClientTechnicalSupportConfig: builder.query<
+      AdminClientTechnicalSupportConfig,
+      string
+    >({
+      query: (clientId) => ({
+        url: `/technical-support/clients/${clientId}/config`,
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeAssignedTechnicalSupportConfigResponse(response),
+      providesTags: (_result, _error, clientId) => [
+        {
+          type: "TechnicalSupportConfig",
+          id: getClientTechnicalSupportConfigTagId(`assigned:${clientId}`),
+        },
+      ],
+    }),
+
+    getAssignedClientTechnicalSupportSummary: builder.query<
+      AdminTechnicalSupportSummary,
+      string
+    >({
+      query: (clientId) => ({
+        url: `/technical-support/clients/${clientId}/summary`,
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeAdminTechnicalSupportSummaryResponse(response),
+      providesTags: (_result, _error, clientId) => [
+        { type: "TechnicalSupportSummary", id: `assigned:${clientId}` },
+      ],
+    }),
+
+    // SEO Audit endpoints
+
+    getAdminClientSeoAuditConfig: builder.query<
+      AdminClientSeoAuditConfig,
+      string
+    >({
+      query: (clientId) => ({
+        url: `/admin/clients/${clientId}/seo-audit/config`,
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeAdminSeoAuditConfigResponse(response),
+      providesTags: (_result, _error, clientId) => [
+        { type: "SeoAuditConfig", id: clientId },
+      ],
+    }),
+
+    updateAdminClientSeoAuditConfig: builder.mutation<
+      AdminClientSeoAuditConfig,
+      { clientId: string; body: UpdateAdminClientSeoAuditConfigRequest }
+    >({
+      query: ({ clientId, body }) => ({
+        url: `/admin/clients/${clientId}/seo-audit/config`,
+        method: "PATCH",
+        body,
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeAdminSeoAuditConfigResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        ...getAdminClientMutationInvalidations(clientId),
+        { type: "SeoAuditConfig", id: clientId },
+        { type: "SeoAuditSummary", id: clientId },
+      ],
+    }),
+
+    getAdminClientSeoAuditSummary: builder.query<
+      AdminSeoAuditSummary,
+      string
+    >({
+      query: (clientId) => ({
+        url: `/admin/clients/${clientId}/seo-audit/summary`,
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeAdminSeoAuditSummaryResponse(response),
+      providesTags: (_result, _error, clientId) => [
+        { type: "SeoAuditSummary", id: clientId },
+      ],
+    }),
+
+    getAssignedClientSeoAuditConfig: builder.query<
+      AdminClientSeoAuditConfig,
+      string
+    >({
+      query: (clientId) => ({
+        url: `/seo-audit/clients/${clientId}/config`,
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeAssignedSeoAuditConfigResponse(response),
+      providesTags: (_result, _error, clientId) => [
+        {
+          type: "SeoAuditConfig",
+          id: getClientSeoAuditConfigTagId(`assigned:${clientId}`),
+        },
+      ],
+    }),
+
+    getAssignedClientSeoAuditSummary: builder.query<
+      AdminSeoAuditSummary,
+      string
+    >({
+      query: (clientId) => ({
+        url: `/seo-audit/clients/${clientId}/summary`,
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeAdminSeoAuditSummaryResponse(response),
+      providesTags: (_result, _error, clientId) => [
+        { type: "SeoAuditSummary", id: `assigned:${clientId}` },
       ],
     }),
 
@@ -992,6 +1164,16 @@ export const {
   useGetAdminClientWebMobileDesignSummaryQuery,
   useGetAssignedClientWebMobileDesignConfigQuery,
   useGetAssignedClientWebMobileDesignSummaryQuery,
+  useGetAdminClientTechnicalSupportConfigQuery,
+  useUpdateAdminClientTechnicalSupportConfigMutation,
+  useGetAdminClientTechnicalSupportSummaryQuery,
+  useGetAssignedClientTechnicalSupportConfigQuery,
+  useGetAssignedClientTechnicalSupportSummaryQuery,
+  useGetAdminClientSeoAuditConfigQuery,
+  useUpdateAdminClientSeoAuditConfigMutation,
+  useGetAdminClientSeoAuditSummaryQuery,
+  useGetAssignedClientSeoAuditConfigQuery,
+  useGetAssignedClientSeoAuditSummaryQuery,
 } = clientsApi;
 
 function getClientSummaryTagId(id: string): string {
@@ -1016,6 +1198,14 @@ function getClientGrowthHubConfigTagId(id: string): string {
 
 function getClientWebMobileDesignConfigTagId(id: string): string {
   return `${CLIENT_WEB_MOBILE_DESIGN_CONFIG_ID_PREFIX}:${id}`;
+}
+
+function getClientTechnicalSupportConfigTagId(id: string): string {
+  return `${CLIENT_TECHNICAL_SUPPORT_CONFIG_ID_PREFIX}:${id}`;
+}
+
+function getClientSeoAuditConfigTagId(id: string): string {
+  return `${CLIENT_SEO_AUDIT_CONFIG_ID_PREFIX}:${id}`;
 }
 
 function getAdminClientMutationInvalidations(id: string) {

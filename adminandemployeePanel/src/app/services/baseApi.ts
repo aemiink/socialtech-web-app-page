@@ -98,6 +98,10 @@ export const baseApi = createApi({
     "TikTokAdsConfig",
     "WebMobileDesignConfig",
     "WebMobileDesignSummary",
+    "TechnicalSupportConfig",
+    "TechnicalSupportSummary",
+    "SeoAuditConfig",
+    "SeoAuditSummary",
   ],
   endpoints: () => ({}),
 });

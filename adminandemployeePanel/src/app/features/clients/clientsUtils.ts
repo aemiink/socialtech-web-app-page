@@ -62,6 +62,10 @@ import type {
   AdminClientWebMobileDesignConfig,
   AdminWebMobileDesignSummary,
   DesignSystemStatus,
+  AdminClientTechnicalSupportConfig,
+  AdminTechnicalSupportSummary,
+  AdminClientSeoAuditConfig,
+  AdminSeoAuditSummary,
 } from "./clientsTypes";
 
 export { extractApiErrorMessage };
@@ -2481,4 +2485,195 @@ export function normalizeAdminWebMobileDesignSummaryResponse(
         : new Date().toISOString(),
     },
   };
+}
+
+// Technical Support normalizers
+
+export function normalizeAdminTechnicalSupportConfigResponse(
+  response: unknown,
+): AdminClientTechnicalSupportConfig {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  if (!isRecord(candidate)) {
+    throw new Error("Technical Support config response could not be parsed.");
+  }
+  return {
+    id: typeof candidate.id === "string" ? candidate.id : "",
+    clientProfileId: typeof candidate.clientProfileId === "string" ? candidate.clientProfileId : "",
+    slaLevel: isStringOrNull(candidate.slaLevel) ? candidate.slaLevel : null,
+    supportPortalUrl: isStringOrNull(candidate.supportPortalUrl) ? candidate.supportPortalUrl : null,
+    maintenanceWindowDay: isStringOrNull(candidate.maintenanceWindowDay) ? candidate.maintenanceWindowDay : null,
+    maintenanceWindowTime: isStringOrNull(candidate.maintenanceWindowTime) ? candidate.maintenanceWindowTime : null,
+    monitoringEnabled: readBoolean(candidate.monitoringEnabled, false),
+    backupFrequency: isStringOrNull(candidate.backupFrequency) ? candidate.backupFrequency : null,
+    uptimeTarget: typeof candidate.uptimeTarget === "number" ? candidate.uptimeTarget : null,
+    notes: isStringOrNull(candidate.notes) ? candidate.notes : null,
+    updatedAt: isStringOrNull(candidate.updatedAt) ? candidate.updatedAt : null,
+  };
+}
+
+export function normalizeAdminTechnicalSupportSummaryResponse(
+  response: unknown,
+): AdminTechnicalSupportSummary {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  if (!isRecord(candidate)) {
+    throw new Error("Technical Support summary response could not be parsed.");
+  }
+  const taskStats = isRecord(candidate.taskStats) ? candidate.taskStats : {};
+  return {
+    hasActiveService: readBoolean(candidate.hasActiveService, false),
+    config: isRecord(candidate.config) ? normalizeAdminTechnicalSupportConfigResponse(candidate.config) : null,
+    projects: Array.isArray(candidate.projects)
+      ? (candidate.projects as unknown[]).filter(isRecord).map((p) => ({
+          id: typeof p.id === "string" ? p.id : "",
+          name: typeof p.name === "string" ? p.name : "",
+          status: typeof p.status === "string" ? p.status : "PLANNED",
+          priority: typeof p.priority === "string" ? p.priority : "MEDIUM",
+          taskCount: readNumber(p.taskCount, 0),
+          fileCount: readNumber(p.fileCount, 0),
+          startDate: isStringOrNull(p.startDate) ? p.startDate : null,
+          dueDate: isStringOrNull(p.dueDate) ? p.dueDate : null,
+        }))
+      : [],
+    taskStats: {
+      total: readNumber(taskStats.total, 0),
+      todo: readNumber(taskStats.todo, 0),
+      inProgress: readNumber(taskStats.inProgress, 0),
+      review: readNumber(taskStats.review, 0),
+      done: readNumber(taskStats.done, 0),
+      blocked: readNumber(taskStats.blocked, 0),
+    },
+    openTicketCount: readNumber(candidate.openTicketCount, 0),
+    resolvedTicketCount: readNumber(candidate.resolvedTicketCount, 0),
+    progressPercent: readNumber(candidate.progressPercent, 0),
+    recentTasks: Array.isArray(candidate.recentTasks)
+      ? (candidate.recentTasks as unknown[]).filter(isRecord).map((t) => ({
+          id: typeof t.id === "string" ? t.id : "",
+          title: typeof t.title === "string" ? t.title : "",
+          status: typeof t.status === "string" ? t.status : "TODO",
+          priority: typeof t.priority === "string" ? t.priority : "MEDIUM",
+          type: typeof t.type === "string" ? t.type : "TASK",
+          approvalStatus: isStringOrNull(t.approvalStatus) ? t.approvalStatus : null,
+          approvalRequired: readBoolean(t.approvalRequired, false),
+          dueDate: isStringOrNull(t.dueDate) ? t.dueDate : null,
+        }))
+      : [],
+    recentFiles: Array.isArray(candidate.recentFiles)
+      ? (candidate.recentFiles as unknown[]).filter(isRecord).map((f) => ({
+          id: typeof f.id === "string" ? f.id : "",
+          title: typeof f.title === "string" ? f.title : "",
+          originalFileName: typeof f.originalFileName === "string" ? f.originalFileName : "",
+          secureUrl: typeof f.secureUrl === "string" ? f.secureUrl : "",
+          visibility: typeof f.visibility === "string" ? f.visibility : "INTERNAL",
+          mimeType: typeof f.mimeType === "string" ? f.mimeType : "",
+          approvalStatus: isStringOrNull(f.approvalStatus) ? f.approvalStatus : null,
+          createdAt: typeof f.createdAt === "string" ? f.createdAt : new Date().toISOString(),
+        }))
+      : [],
+    meta: {
+      generatedAt: isRecord(candidate.meta) && typeof candidate.meta.generatedAt === "string"
+        ? candidate.meta.generatedAt
+        : new Date().toISOString(),
+    },
+  };
+}
+
+export function normalizeAssignedTechnicalSupportConfigResponse(
+  response: unknown,
+): AdminClientTechnicalSupportConfig {
+  return normalizeAdminTechnicalSupportConfigResponse(response);
+}
+
+// SEO Audit normalizers
+
+export function normalizeAdminSeoAuditConfigResponse(
+  response: unknown,
+): AdminClientSeoAuditConfig {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  if (!isRecord(candidate)) {
+    throw new Error("SEO Audit config response could not be parsed.");
+  }
+  return {
+    id: typeof candidate.id === "string" ? candidate.id : "",
+    clientProfileId: typeof candidate.clientProfileId === "string" ? candidate.clientProfileId : "",
+    siteUrl: isStringOrNull(candidate.siteUrl) ? candidate.siteUrl : null,
+    gaPropertyId: isStringOrNull(candidate.gaPropertyId) ? candidate.gaPropertyId : null,
+    searchConsolePropertyUrl: isStringOrNull(candidate.searchConsolePropertyUrl) ? candidate.searchConsolePropertyUrl : null,
+    targetKeywords: Array.isArray(candidate.targetKeywords)
+      ? (candidate.targetKeywords as unknown[]).filter((k): k is string => typeof k === "string")
+      : [],
+    auditFrequency: isStringOrNull(candidate.auditFrequency) ? candidate.auditFrequency : null,
+    lastAuditScore: typeof candidate.lastAuditScore === "number" ? candidate.lastAuditScore : null,
+    notes: isStringOrNull(candidate.notes) ? candidate.notes : null,
+    updatedAt: isStringOrNull(candidate.updatedAt) ? candidate.updatedAt : null,
+  };
+}
+
+export function normalizeAdminSeoAuditSummaryResponse(
+  response: unknown,
+): AdminSeoAuditSummary {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  if (!isRecord(candidate)) {
+    throw new Error("SEO Audit summary response could not be parsed.");
+  }
+  const taskStats = isRecord(candidate.taskStats) ? candidate.taskStats : {};
+  return {
+    hasActiveService: readBoolean(candidate.hasActiveService, false),
+    config: isRecord(candidate.config) ? normalizeAdminSeoAuditConfigResponse(candidate.config) : null,
+    projects: Array.isArray(candidate.projects)
+      ? (candidate.projects as unknown[]).filter(isRecord).map((p) => ({
+          id: typeof p.id === "string" ? p.id : "",
+          name: typeof p.name === "string" ? p.name : "",
+          status: typeof p.status === "string" ? p.status : "PLANNED",
+          priority: typeof p.priority === "string" ? p.priority : "MEDIUM",
+          taskCount: readNumber(p.taskCount, 0),
+          fileCount: readNumber(p.fileCount, 0),
+          startDate: isStringOrNull(p.startDate) ? p.startDate : null,
+          dueDate: isStringOrNull(p.dueDate) ? p.dueDate : null,
+        }))
+      : [],
+    taskStats: {
+      total: readNumber(taskStats.total, 0),
+      todo: readNumber(taskStats.todo, 0),
+      inProgress: readNumber(taskStats.inProgress, 0),
+      review: readNumber(taskStats.review, 0),
+      done: readNumber(taskStats.done, 0),
+      blocked: readNumber(taskStats.blocked, 0),
+    },
+    progressPercent: readNumber(candidate.progressPercent, 0),
+    recentTasks: Array.isArray(candidate.recentTasks)
+      ? (candidate.recentTasks as unknown[]).filter(isRecord).map((t) => ({
+          id: typeof t.id === "string" ? t.id : "",
+          title: typeof t.title === "string" ? t.title : "",
+          status: typeof t.status === "string" ? t.status : "TODO",
+          priority: typeof t.priority === "string" ? t.priority : "MEDIUM",
+          type: typeof t.type === "string" ? t.type : "TASK",
+          approvalStatus: isStringOrNull(t.approvalStatus) ? t.approvalStatus : null,
+          approvalRequired: readBoolean(t.approvalRequired, false),
+          dueDate: isStringOrNull(t.dueDate) ? t.dueDate : null,
+        }))
+      : [],
+    recentFiles: Array.isArray(candidate.recentFiles)
+      ? (candidate.recentFiles as unknown[]).filter(isRecord).map((f) => ({
+          id: typeof f.id === "string" ? f.id : "",
+          title: typeof f.title === "string" ? f.title : "",
+          originalFileName: typeof f.originalFileName === "string" ? f.originalFileName : "",
+          secureUrl: typeof f.secureUrl === "string" ? f.secureUrl : "",
+          visibility: typeof f.visibility === "string" ? f.visibility : "INTERNAL",
+          mimeType: typeof f.mimeType === "string" ? f.mimeType : "",
+          approvalStatus: isStringOrNull(f.approvalStatus) ? f.approvalStatus : null,
+          createdAt: typeof f.createdAt === "string" ? f.createdAt : new Date().toISOString(),
+        }))
+      : [],
+    meta: {
+      generatedAt: isRecord(candidate.meta) && typeof candidate.meta.generatedAt === "string"
+        ? candidate.meta.generatedAt
+        : new Date().toISOString(),
+    },
+  };
+}
+
+export function normalizeAssignedSeoAuditConfigResponse(
+  response: unknown,
+): AdminClientSeoAuditConfig {
+  return normalizeAdminSeoAuditConfigResponse(response);
 }

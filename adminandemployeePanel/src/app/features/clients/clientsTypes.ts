@@ -1130,3 +1130,147 @@ export type UpdateMetaAdsReportRequest = {
   clientVisible?: boolean;
   requestAcknowledgement?: boolean;
 };
+
+// Technical Support types
+
+export type AdminClientTechnicalSupportConfig = {
+  id: string;
+  clientProfileId: string;
+  slaLevel: string | null;
+  supportPortalUrl: string | null;
+  maintenanceWindowDay: string | null;
+  maintenanceWindowTime: string | null;
+  monitoringEnabled: boolean;
+  backupFrequency: string | null;
+  uptimeTarget: number | null;
+  notes: string | null;
+  updatedAt: string | null;
+};
+
+export type AdminTechnicalSupportSummary = {
+  hasActiveService: boolean;
+  config: AdminClientTechnicalSupportConfig | null;
+  projects: Array<{
+    id: string;
+    name: string;
+    status: string;
+    priority: string;
+    taskCount: number;
+    fileCount: number;
+    startDate: string | null;
+    dueDate: string | null;
+  }>;
+  taskStats: {
+    total: number;
+    todo: number;
+    inProgress: number;
+    review: number;
+    done: number;
+    blocked: number;
+  };
+  openTicketCount: number;
+  resolvedTicketCount: number;
+  progressPercent: number;
+  recentTasks: Array<{
+    id: string;
+    title: string;
+    status: string;
+    priority: string;
+    type: string;
+    approvalStatus: string | null;
+    approvalRequired: boolean;
+    dueDate: string | null;
+  }>;
+  recentFiles: Array<{
+    id: string;
+    title: string;
+    originalFileName: string;
+    secureUrl: string;
+    visibility: string;
+    mimeType: string;
+    approvalStatus: string | null;
+    createdAt: string;
+  }>;
+  meta: { generatedAt: string };
+};
+
+export type UpdateAdminClientTechnicalSupportConfigRequest = {
+  slaLevel?: string | null;
+  supportPortalUrl?: string | null;
+  maintenanceWindowDay?: string | null;
+  maintenanceWindowTime?: string | null;
+  monitoringEnabled?: boolean;
+  backupFrequency?: string | null;
+  uptimeTarget?: number | null;
+  notes?: string | null;
+};
+
+// SEO Audit types
+
+export type AdminClientSeoAuditConfig = {
+  id: string;
+  clientProfileId: string;
+  siteUrl: string | null;
+  gaPropertyId: string | null;
+  searchConsolePropertyUrl: string | null;
+  targetKeywords: string[];
+  auditFrequency: string | null;
+  lastAuditScore: number | null;
+  notes: string | null;
+  updatedAt: string | null;
+};
+
+export type AdminSeoAuditSummary = {
+  hasActiveService: boolean;
+  config: AdminClientSeoAuditConfig | null;
+  projects: Array<{
+    id: string;
+    name: string;
+    status: string;
+    priority: string;
+    taskCount: number;
+    fileCount: number;
+    startDate: string | null;
+    dueDate: string | null;
+  }>;
+  taskStats: {
+    total: number;
+    todo: number;
+    inProgress: number;
+    review: number;
+    done: number;
+    blocked: number;
+  };
+  progressPercent: number;
+  recentTasks: Array<{
+    id: string;
+    title: string;
+    status: string;
+    priority: string;
+    type: string;
+    approvalStatus: string | null;
+    approvalRequired: boolean;
+    dueDate: string | null;
+  }>;
+  recentFiles: Array<{
+    id: string;
+    title: string;
+    originalFileName: string;
+    secureUrl: string;
+    visibility: string;
+    mimeType: string;
+    approvalStatus: string | null;
+    createdAt: string;
+  }>;
+  meta: { generatedAt: string };
+};
+
+export type UpdateAdminClientSeoAuditConfigRequest = {
+  siteUrl?: string | null;
+  gaPropertyId?: string | null;
+  searchConsolePropertyUrl?: string | null;
+  targetKeywords?: string[];
+  auditFrequency?: string | null;
+  lastAuditScore?: number | null;
+  notes?: string | null;
+};
