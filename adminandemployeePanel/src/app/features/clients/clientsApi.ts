@@ -28,6 +28,7 @@ import type {
   AmazonAdsRegion,
   AmazonAdsSummaryResponse,
   AmazonAdsSyncResponse,
+  SocialMediaMetaOAuthStartResponse,
   ConnectManualAmazonAdsRequest,
   ConnectManualMetaAdsRequest,
   ClientProfile,
@@ -55,6 +56,9 @@ import type {
   UpdateAdminClientMetaAdsConfigRequest,
   UpdateAdminClientSocialMediaConfigRequest,
   UpdateAdminClientRequest,
+  AdminClientWebMobileDesignConfig,
+  AdminWebMobileDesignSummary,
+  UpdateAdminClientWebMobileDesignConfigRequest,
 } from "./clientsTypes";
 import {
   normalizeAmazonAdsCampaignsResponse,
@@ -78,11 +82,14 @@ import {
   normalizeMetaAdsSyncResponse,
   normalizeAmazonAdsReportsResponse,
   normalizeAmazonAdsReportItemResponse,
+  normalizeSocialMediaMetaOAuthStartResponse,
   normalizeMetaAdsReportsResponse,
   normalizeMetaAdsReportItemResponse,
   normalizeMetaAdsSummaryResponse,
   normalizeTestAmazonAdsConnectionResponse,
   normalizeTestMetaAdsConnectionResponse,
+  normalizeAdminWebMobileDesignConfigResponse,
+  normalizeAdminWebMobileDesignSummaryResponse,
   toBackendServiceKey,
 } from "./clientsUtils";
 
@@ -92,6 +99,7 @@ const CLIENT_META_ADS_CONNECTION_ID_PREFIX = "META_ADS_CONNECTION";
 const CLIENT_AMAZON_ADS_CONNECTION_ID_PREFIX = "AMAZON_ADS_CONNECTION";
 const CLIENT_SOCIAL_MEDIA_CONFIG_ID_PREFIX = "SOCIAL_MEDIA_CONFIG";
 const CLIENT_GROWTH_HUB_CONFIG_ID_PREFIX = "GROWTH_HUB_CONFIG";
+const CLIENT_WEB_MOBILE_DESIGN_CONFIG_ID_PREFIX = "WEB_MOBILE_DESIGN_CONFIG";
 const CLIENT_META_ADS_GLOBAL_LIST_ID = "META_ADS_GLOBAL_LIST";
 const CLIENT_GROWTH_HUB_GLOBAL_LIST_ID = "GROWTH_HUB_GLOBAL_LIST";
 const CLIENT_AMAZON_ADS_GLOBAL_LIST_ID = "AMAZON_ADS_GLOBAL_LIST";
@@ -385,6 +393,16 @@ export const clientsApi = baseApi.injectEndpoints({
         { type: "SocialMediaSummary", id: "ADMIN_CLIENTS_LIST" },
       ],
     }),
+    createAdminClientSocialMediaMetaOAuthUrl: builder.mutation<
+      SocialMediaMetaOAuthStartResponse,
+      string
+    >({
+      query: (clientId) => ({
+        url: `/social-media/clients/${clientId}/meta-oauth/start`,
+        method: "GET",
+      }),
+      transformResponse: (response: unknown) => normalizeSocialMediaMetaOAuthStartResponse(response),
+    }),
     updateAdminClientGrowthHubConfig: builder.mutation<
       AdminClientGrowthHubConfig,
       { clientId: string; body: UpdateAdminClientGrowthHubConfigRequest }
@@ -405,6 +423,83 @@ export const clientsApi = baseApi.injectEndpoints({
         { type: "GrowthHubSummary", id: "ASSIGNED_LIST" },
       ],
     }),
+    getAdminClientWebMobileDesignConfig: builder.query<
+      AdminClientWebMobileDesignConfig,
+      string
+    >({
+      query: (clientId) => ({
+        url: `/admin/clients/${clientId}/web-mobile-design/config`,
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeAdminWebMobileDesignConfigResponse(response),
+      providesTags: (_result, _error, clientId) => [
+        { type: "Clients", id: getClientWebMobileDesignConfigTagId(clientId) },
+      ],
+    }),
+
+    updateAdminClientWebMobileDesignConfig: builder.mutation<
+      AdminClientWebMobileDesignConfig,
+      { clientId: string; body: UpdateAdminClientWebMobileDesignConfigRequest }
+    >({
+      query: ({ clientId, body }) => ({
+        url: `/admin/clients/${clientId}/web-mobile-design/config`,
+        method: "PATCH",
+        body,
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeAdminWebMobileDesignConfigResponse(response),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        ...getAdminClientMutationInvalidations(clientId),
+        { type: "Clients", id: getClientWebMobileDesignConfigTagId(clientId) },
+        { type: "WebMobileDesignSummary", id: clientId },
+      ],
+    }),
+
+    getAdminClientWebMobileDesignSummary: builder.query<
+      AdminWebMobileDesignSummary,
+      string
+    >({
+      query: (clientId) => ({
+        url: `/admin/clients/${clientId}/web-mobile-design/summary`,
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeAdminWebMobileDesignSummaryResponse(response),
+      providesTags: (_result, _error, clientId) => [
+        { type: "WebMobileDesignSummary", id: clientId },
+      ],
+    }),
+
+    getAssignedClientWebMobileDesignConfig: builder.query<
+      AdminClientWebMobileDesignConfig,
+      string
+    >({
+      query: (clientId) => ({
+        url: `/web-mobile-design/clients/${clientId}/config`,
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeAdminWebMobileDesignConfigResponse(response),
+      providesTags: (_result, _error, clientId) => [
+        {
+          type: "Clients",
+          id: getClientWebMobileDesignConfigTagId(`assigned:${clientId}`),
+        },
+      ],
+    }),
+
+    getAssignedClientWebMobileDesignSummary: builder.query<
+      AdminWebMobileDesignSummary,
+      string
+    >({
+      query: (clientId) => ({
+        url: `/web-mobile-design/clients/${clientId}/summary`,
+      }),
+      transformResponse: (response: unknown) =>
+        normalizeAdminWebMobileDesignSummaryResponse(response),
+      providesTags: (_result, _error, clientId) => [
+        { type: "WebMobileDesignSummary", id: `assigned:${clientId}` },
+      ],
+    }),
+
     createAdminClientAmazonAdsOAuthUrl: builder.mutation<
       AmazonAdsOAuthStartResponse,
       { clientId: string; region?: AmazonAdsRegion }
@@ -860,6 +955,7 @@ export const {
   useUpdateAdminClientMetaAdsConfigMutation,
   useUpdateAdminClientAmazonAdsConfigMutation,
   useUpdateAdminClientSocialMediaConfigMutation,
+  useCreateAdminClientSocialMediaMetaOAuthUrlMutation,
   useUpdateAdminClientGrowthHubConfigMutation,
   useCreateAdminClientAmazonAdsOAuthUrlMutation,
   useExchangeAdminClientAmazonAdsOAuthCodeMutation,
@@ -891,6 +987,11 @@ export const {
   useDeleteAdminClientMutation,
   useCreateOrLinkClientOwnerMutation,
   useResetClientOwnerPasswordMutation,
+  useGetAdminClientWebMobileDesignConfigQuery,
+  useUpdateAdminClientWebMobileDesignConfigMutation,
+  useGetAdminClientWebMobileDesignSummaryQuery,
+  useGetAssignedClientWebMobileDesignConfigQuery,
+  useGetAssignedClientWebMobileDesignSummaryQuery,
 } = clientsApi;
 
 function getClientSummaryTagId(id: string): string {
@@ -911,6 +1012,10 @@ function getClientSocialMediaConfigTagId(id: string): string {
 
 function getClientGrowthHubConfigTagId(id: string): string {
   return `${CLIENT_GROWTH_HUB_CONFIG_ID_PREFIX}:${id}`;
+}
+
+function getClientWebMobileDesignConfigTagId(id: string): string {
+  return `${CLIENT_WEB_MOBILE_DESIGN_CONFIG_ID_PREFIX}:${id}`;
 }
 
 function getAdminClientMutationInvalidations(id: string) {

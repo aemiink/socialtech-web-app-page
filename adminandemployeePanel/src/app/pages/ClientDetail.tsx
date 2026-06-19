@@ -57,6 +57,8 @@ import {
   useGetAdminClientAmazonAdsSummaryQuery,
   useGetAdminClientMetaAdsConnectionQuery,
   useGetAdminClientMetaAdsSummaryQuery,
+  useGetAdminClientWebMobileDesignConfigQuery,
+  useGetAdminClientWebMobileDesignSummaryQuery,
   useGetClientSummaryQuery,
   useResetClientOwnerPasswordMutation,
   useSyncAdminClientAmazonAdsMutation,
@@ -67,6 +69,8 @@ import {
   useUpdateAdminClientMetaAdsConfigMutation,
 } from "../features/clients/clientsApi";
 import type {
+  AdminClientWebMobileDesignConfig,
+  AdminWebMobileDesignSummary,
   AmazonAdsRegion,
   ClientPurchasedService,
   ClientSummaryRecentProject,
@@ -179,6 +183,7 @@ export function ClientDetail() {
   const hasTikTokAdsService = activeServiceKeys.has("tiktok-ads");
   const hasAmazonAdsService = activeServiceKeys.has("amazon-ads");
   const hasSocialMediaService = activeServiceKeys.has("social-media");
+  const hasWebMobileDesignService = activeServiceKeys.has("web-mobile-design");
   const hasRepositoryService =
     activeServiceKeys.has("web-app") || activeServiceKeys.has("mobile-app");
   const {
@@ -187,7 +192,7 @@ export function ClientDetail() {
     isError: isClientProjectsError,
   } = useGetProjectsQuery(
     { clientProfileId: clientProfileId ?? "" },
-    { skip: !isValidId || !hasRepositoryService },
+    { skip: !isValidId || (!hasRepositoryService && !hasWebMobileDesignService) },
   );
   const {
     data: assignments = [],
@@ -261,6 +266,18 @@ export function ClientDetail() {
     refetch: refetchSocialMediaSummary,
   } = useGetClientSocialMediaSummaryQuery(clientProfileId ?? "", {
     skip: !isValidId || !hasSocialMediaService,
+  });
+  const {
+    data: webMobileDesignConfig,
+    isLoading: isWebMobileDesignConfigLoading,
+  } = useGetAdminClientWebMobileDesignConfigQuery(clientProfileId ?? "", {
+    skip: !isValidId || !hasWebMobileDesignService,
+  });
+  const {
+    data: webMobileDesignSummary,
+    isLoading: isWebMobileDesignSummaryLoading,
+  } = useGetAdminClientWebMobileDesignSummaryQuery(clientProfileId ?? "", {
+    skip: !isValidId || !hasWebMobileDesignService,
   });
 
   useEffect(() => {
@@ -370,6 +387,9 @@ export function ClientDetail() {
   const { client, projects, tasks } = summary;
   const repositoryProjects = (clientProjectsResponse?.data ?? []).filter(
     (project) => project.serviceKey === "web-app" || project.serviceKey === "mobile-app",
+  );
+  const webMobileDesignProjects = (clientProjectsResponse?.data ?? []).filter(
+    (project) => project.serviceKey === "web-mobile-design",
   );
   const hasMetaConnectionError = Boolean(metaAdsConnectionError);
   const hasMetaSummaryError = Boolean(metaAdsSummaryError);
@@ -903,6 +923,16 @@ export function ClientDetail() {
           projects={repositoryProjects}
           isError={isClientProjectsError}
           isLoading={isClientProjectsLoading}
+        />
+      ) : null}
+
+      {hasWebMobileDesignService ? (
+        <WebMobileDesignProjectsSection
+          projects={webMobileDesignProjects}
+          config={webMobileDesignConfig ?? null}
+          summary={webMobileDesignSummary ?? null}
+          isError={isClientProjectsError}
+          isLoading={isClientProjectsLoading || isWebMobileDesignConfigLoading || isWebMobileDesignSummaryLoading}
         />
       ) : null}
 
@@ -1780,6 +1810,174 @@ function RepositoryProjectsSection({
               <Button type="button" variant="outline" size="sm" asChild>
                 <Link to={`/projeler/${project.id}`}>
                   <ExternalLink className="mr-2 h-4 w-4" />
+                  Projeyi Yönet
+                </Link>
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function WebMobileDesignProjectsSection({
+  projects,
+  config,
+  summary,
+  isError,
+  isLoading,
+}: {
+  projects: Project[];
+  config: AdminClientWebMobileDesignConfig | null;
+  summary: AdminWebMobileDesignSummary | null;
+  isError: boolean;
+  isLoading: boolean;
+}) {
+  return (
+    <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
+      <SectionHeader
+        icon={<FileImage className="h-5 w-5 text-[#AAFF01]" />}
+        title="Web & Mobil Tasarım"
+      />
+
+      {isLoading ? <p className="text-sm text-[#A0A0A0]">Yükleniyor...</p> : null}
+      {isError ? (
+        <p className="text-sm text-red-300">Tasarım verileri alınamadı.</p>
+      ) : null}
+
+      {/* Design Config */}
+      {config ? (
+        <div className="mb-6">
+          <p className="mb-3 text-xs font-medium uppercase tracking-wider text-[#A0A0A0]">
+            Konfigürasyon
+          </p>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">
+            {config.figmaFileUrl ? (
+              <a
+                href={config.figmaFileUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 rounded-lg border border-[#AAFF01]/20 bg-[#AAFF01]/5 px-3 py-2.5 text-sm text-[#AAFF01] hover:bg-[#AAFF01]/10 transition-colors"
+              >
+                <ExternalLink className="h-4 w-4 shrink-0" />
+                <span className="truncate">Figma Design File</span>
+              </a>
+            ) : null}
+            {config.prototypeUrl ? (
+              <a
+                href={config.prototypeUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2.5 text-sm text-blue-400 hover:bg-blue-500/10 transition-colors"
+              >
+                <ExternalLink className="h-4 w-4 shrink-0" />
+                <span className="truncate">Prototype</span>
+              </a>
+            ) : null}
+            {config.styleGuideUrl ? (
+              <a
+                href={config.styleGuideUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 rounded-lg border border-violet-500/20 bg-violet-500/5 px-3 py-2.5 text-sm text-violet-400 hover:bg-violet-500/10 transition-colors"
+              >
+                <ExternalLink className="h-4 w-4 shrink-0" />
+                <span className="truncate">Style Guide</span>
+              </a>
+            ) : null}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-4">
+            <div className="flex items-center gap-1.5 text-xs text-[#A0A0A0]">
+              <span>Design System:</span>
+              <span className={`font-medium ${config.designSystemStatus === "COMPLETED" ? "text-[#AAFF01]" : config.designSystemStatus === "IN_PROGRESS" ? "text-amber-400" : "text-white"}`}>
+                {config.designSystemStatus === "COMPLETED" ? "Tamamlandı" : config.designSystemStatus === "IN_PROGRESS" ? "Devam ediyor" : "Başlamadı"}
+              </span>
+            </div>
+            {config.fontFamily ? (
+              <div className="flex items-center gap-1.5 text-xs text-[#A0A0A0]">
+                <span>Yazı:</span><span className="text-white">{config.fontFamily}</span>
+              </div>
+            ) : null}
+            {config.targetPlatforms.length > 0 ? (
+              <div className="flex items-center gap-1.5 text-xs text-[#A0A0A0]">
+                <span>Platform:</span><span className="text-white">{config.targetPlatforms.join(", ")}</span>
+              </div>
+            ) : null}
+            {config.primaryColor ? (
+              <div className="flex items-center gap-1.5">
+                <div className="h-4 w-4 rounded-full border border-white/10" style={{ backgroundColor: config.primaryColor }} />
+                <span className="text-xs text-[#A0A0A0]">{config.primaryColor}</span>
+              </div>
+            ) : null}
+            {config.secondaryColor ? (
+              <div className="flex items-center gap-1.5">
+                <div className="h-4 w-4 rounded-full border border-white/10" style={{ backgroundColor: config.secondaryColor }} />
+                <span className="text-xs text-[#A0A0A0]">{config.secondaryColor}</span>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Stats from summary */}
+      {summary ? (
+        <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-center">
+            <p className="text-xl font-bold text-white">{summary.taskStats.total}</p>
+            <p className="text-xs text-[#A0A0A0]">Görev</p>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-center">
+            <p className="text-xl font-bold text-[#AAFF01]">{summary.taskStats.done}</p>
+            <p className="text-xs text-[#A0A0A0]">Tamamlanan</p>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-center">
+            <p className="text-xl font-bold text-amber-400">{summary.approvalStats.pending}</p>
+            <p className="text-xs text-[#A0A0A0]">Onay Bekleyen</p>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-center">
+            <p className="text-xl font-bold text-violet-400">{summary.revisionCount}</p>
+            <p className="text-xs text-[#A0A0A0]">Revizyon</p>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Projects */}
+      <p className="mb-3 text-xs font-medium uppercase tracking-wider text-[#A0A0A0]">
+        Projeler
+      </p>
+      {!isLoading && !isError && projects.length === 0 ? (
+        <EmptyState>Bu hizmet için henüz tasarım projesi oluşturulmamış.</EmptyState>
+      ) : null}
+      <div className="space-y-3">
+        {projects.map((project) => (
+          <div
+            key={project.id}
+            className="flex flex-col gap-3 rounded-lg border border-white/[0.06] bg-white/[0.03] p-4 md:flex-row md:items-center md:justify-between"
+          >
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="font-medium text-white">{project.name}</p>
+                <Badge className={getClientProjectStatusBadgeClass(project.status)}>
+                  {getClientProjectStatusLabel(project.status)}
+                </Badge>
+              </div>
+              <p className="mt-1 break-all text-xs text-[#A0A0A0]">
+                {project.figmaProjectUrl ?? "Figma/prototip linki henüz eklenmedi."}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {project.figmaProjectUrl ? (
+                <Button type="button" variant="outline" size="sm" asChild>
+                  <a href={project.figmaProjectUrl} target="_blank" rel="noreferrer">
+                    <ExternalLink className="mr-2 h-4 w-4" />
+                    Figma'yı Aç
+                  </a>
+                </Button>
+              ) : null}
+              <Button type="button" variant="outline" size="sm" asChild>
+                <Link to={`/projeler/${project.id}`}>
+                  <FolderKanban className="mr-2 h-4 w-4" />
                   Projeyi Yönet
                 </Link>
               </Button>

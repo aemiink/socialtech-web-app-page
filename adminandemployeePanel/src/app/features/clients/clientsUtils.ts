@@ -56,8 +56,12 @@ import type {
   ServiceKey,
   SocialMediaConnectionStatus,
   SocialMediaGoal,
+  SocialMediaMetaOAuthStartResponse,
   TestAmazonAdsConnectionResponse,
   TestMetaAdsConnectionResponse,
+  AdminClientWebMobileDesignConfig,
+  AdminWebMobileDesignSummary,
+  DesignSystemStatus,
 } from "./clientsTypes";
 
 export { extractApiErrorMessage };
@@ -583,6 +587,7 @@ export function normalizeAdminSocialMediaConfigResponse(
     clientProfileId: typeof candidate.clientProfileId === "string" ? candidate.clientProfileId : "",
     hasActiveService:
       typeof candidate.hasActiveService === "boolean" ? candidate.hasActiveService : false,
+    activePlatforms: normalizeSocialMediaPlatforms(candidate.activePlatforms),
     instagramUsername: isStringOrNull(candidate.instagramUsername)
       ? candidate.instagramUsername
       : null,
@@ -607,6 +612,16 @@ export function normalizeAdminSocialMediaConfigResponse(
     createdAt: isStringOrNull(candidate.createdAt) ? candidate.createdAt : null,
     updatedAt: isStringOrNull(candidate.updatedAt) ? candidate.updatedAt : null,
   };
+}
+
+function normalizeSocialMediaPlatforms(value: unknown) {
+  const validPlatforms = new Set(["INSTAGRAM", "FACEBOOK", "TIKTOK", "LINKEDIN", "X", "PINTEREST"]);
+  return Array.isArray(value)
+    ? value.filter(
+        (item): item is "INSTAGRAM" | "FACEBOOK" | "TIKTOK" | "LINKEDIN" | "X" | "PINTEREST" =>
+          typeof item === "string" && validPlatforms.has(item),
+      )
+    : [];
 }
 
 export function normalizeAdminGrowthHubConfigResponse(
@@ -714,6 +729,26 @@ export function normalizeAmazonAdsOAuthStartResponse(
     scopes: Array.isArray(candidate.scopes)
       ? candidate.scopes.filter((item): item is string => typeof item === "string")
       : [],
+  };
+}
+
+export function normalizeSocialMediaMetaOAuthStartResponse(
+  response: unknown,
+): SocialMediaMetaOAuthStartResponse {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  if (!isRecord(candidate)) {
+    throw new Error("Social Media Meta OAuth start response could not be parsed.");
+  }
+
+  return {
+    authorizationUrl:
+      typeof candidate.authorizationUrl === "string" ? candidate.authorizationUrl : "",
+    state: typeof candidate.state === "string" ? candidate.state : "",
+    redirectUri: typeof candidate.redirectUri === "string" ? candidate.redirectUri : "",
+    scopes: Array.isArray(candidate.scopes)
+      ? candidate.scopes.filter((item): item is string => typeof item === "string")
+      : [],
+    generatedAt: isStringOrNull(candidate.generatedAt) ? candidate.generatedAt : null,
   };
 }
 
@@ -2338,4 +2373,112 @@ function isFetchBaseQueryError(error: unknown): error is FetchBaseQueryError {
     "status" in error &&
     typeof (error as { status?: unknown }).status !== "undefined"
   );
+}
+
+function normalizeDesignSystemStatus(value: unknown): DesignSystemStatus {
+  if (value === "IN_PROGRESS" || value === "COMPLETED") return value;
+  return "NONE";
+}
+
+export function normalizeAdminWebMobileDesignConfigResponse(
+  response: unknown,
+): AdminClientWebMobileDesignConfig {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  if (!isRecord(candidate)) {
+    throw new Error("Web Mobile Design config response could not be parsed.");
+  }
+
+  return {
+    id: typeof candidate.id === "string" ? candidate.id : "",
+    clientProfileId: typeof candidate.clientProfileId === "string" ? candidate.clientProfileId : "",
+    figmaFileUrl: isStringOrNull(candidate.figmaFileUrl) ? candidate.figmaFileUrl : null,
+    prototypeUrl: isStringOrNull(candidate.prototypeUrl) ? candidate.prototypeUrl : null,
+    styleGuideUrl: isStringOrNull(candidate.styleGuideUrl) ? candidate.styleGuideUrl : null,
+    designSystemStatus: normalizeDesignSystemStatus(candidate.designSystemStatus),
+    primaryColor: isStringOrNull(candidate.primaryColor) ? candidate.primaryColor : null,
+    secondaryColor: isStringOrNull(candidate.secondaryColor) ? candidate.secondaryColor : null,
+    fontFamily: isStringOrNull(candidate.fontFamily) ? candidate.fontFamily : null,
+    targetPlatforms: Array.isArray(candidate.targetPlatforms)
+      ? (candidate.targetPlatforms as unknown[]).filter((p): p is string => typeof p === "string")
+      : [],
+    gridSystem: isStringOrNull(candidate.gridSystem) ? candidate.gridSystem : null,
+    notes: isStringOrNull(candidate.notes) ? candidate.notes : null,
+    updatedAt: isStringOrNull(candidate.updatedAt) ? candidate.updatedAt : null,
+  };
+}
+
+export function normalizeAdminWebMobileDesignSummaryResponse(
+  response: unknown,
+): AdminWebMobileDesignSummary {
+  const candidate = isRecord(response) && "data" in response ? response.data : response;
+  if (!isRecord(candidate)) {
+    throw new Error("Web Mobile Design summary response could not be parsed.");
+  }
+
+  const taskStats = isRecord(candidate.taskStats) ? candidate.taskStats : {};
+  const approvalStats = isRecord(candidate.approvalStats) ? candidate.approvalStats : {};
+
+  return {
+    hasActiveService: readBoolean(candidate.hasActiveService, false),
+    config: isRecord(candidate.config)
+      ? normalizeAdminWebMobileDesignConfigResponse(candidate.config)
+      : null,
+    projects: Array.isArray(candidate.projects)
+      ? (candidate.projects as unknown[]).filter(isRecord).map((p) => ({
+          id: typeof p.id === "string" ? p.id : "",
+          name: typeof p.name === "string" ? p.name : "",
+          status: typeof p.status === "string" ? p.status : "PLANNED",
+          priority: typeof p.priority === "string" ? p.priority : "MEDIUM",
+          figmaProjectUrl: isStringOrNull(p.figmaProjectUrl) ? p.figmaProjectUrl : null,
+          startDate: isStringOrNull(p.startDate) ? p.startDate : null,
+          dueDate: isStringOrNull(p.dueDate) ? p.dueDate : null,
+          taskCount: readNumber(p.taskCount, 0),
+          fileCount: readNumber(p.fileCount, 0),
+        }))
+      : [],
+    taskStats: {
+      total: readNumber(taskStats.total, 0),
+      todo: readNumber(taskStats.todo, 0),
+      inProgress: readNumber(taskStats.inProgress, 0),
+      review: readNumber(taskStats.review, 0),
+      done: readNumber(taskStats.done, 0),
+      blocked: readNumber(taskStats.blocked, 0),
+    },
+    approvalStats: {
+      total: readNumber(approvalStats.total, 0),
+      pending: readNumber(approvalStats.pending, 0),
+      approved: readNumber(approvalStats.approved, 0),
+    },
+    revisionCount: readNumber(candidate.revisionCount, 0),
+    progressPercent: readNumber(candidate.progressPercent, 0),
+    recentTasks: Array.isArray(candidate.recentTasks)
+      ? (candidate.recentTasks as unknown[]).filter(isRecord).map((t) => ({
+          id: typeof t.id === "string" ? t.id : "",
+          title: typeof t.title === "string" ? t.title : "",
+          status: typeof t.status === "string" ? t.status : "TODO",
+          priority: typeof t.priority === "string" ? t.priority : "MEDIUM",
+          type: typeof t.type === "string" ? t.type : "FEATURE",
+          approvalStatus: isStringOrNull(t.approvalStatus) ? t.approvalStatus : null,
+          approvalRequired: readBoolean(t.approvalRequired, false),
+          dueDate: isStringOrNull(t.dueDate) ? t.dueDate : null,
+        }))
+      : [],
+    recentFiles: Array.isArray(candidate.recentFiles)
+      ? (candidate.recentFiles as unknown[]).filter(isRecord).map((f) => ({
+          id: typeof f.id === "string" ? f.id : "",
+          title: typeof f.title === "string" ? f.title : "",
+          originalFileName: typeof f.originalFileName === "string" ? f.originalFileName : "",
+          secureUrl: typeof f.secureUrl === "string" ? f.secureUrl : "",
+          visibility: typeof f.visibility === "string" ? f.visibility : "INTERNAL",
+          mimeType: typeof f.mimeType === "string" ? f.mimeType : "",
+          approvalStatus: isStringOrNull(f.approvalStatus) ? f.approvalStatus : null,
+          createdAt: typeof f.createdAt === "string" ? f.createdAt : new Date().toISOString(),
+        }))
+      : [],
+    meta: {
+      generatedAt: isRecord(candidate.meta) && typeof candidate.meta.generatedAt === "string"
+        ? candidate.meta.generatedAt
+        : new Date().toISOString(),
+    },
+  };
 }

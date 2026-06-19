@@ -91,6 +91,7 @@ const mockUseConnectAdminClientMetaAdsManualMutation = vi.fn();
 const mockUseTestAdminClientMetaAdsConnectionMutation = vi.fn();
 const mockUseSyncAdminClientMetaAdsMutation = vi.fn();
 const mockUseDisconnectAdminClientMetaAdsMutation = vi.fn();
+const mockUseUpdateAdminClientMetaAdsConfigMutation = vi.fn();
 const mockUseGetAdminClientAmazonAdsConnectionQuery = vi.fn<
   (id: string, options: QueryOptions) => AmazonAdsConnectionQueryResult
 >();
@@ -147,6 +148,8 @@ vi.mock("../../features/clients/clientsApi", () => ({
   useSyncAdminClientMetaAdsMutation: () => mockUseSyncAdminClientMetaAdsMutation(),
   useDisconnectAdminClientMetaAdsMutation: () =>
     mockUseDisconnectAdminClientMetaAdsMutation(),
+  useUpdateAdminClientMetaAdsConfigMutation: () =>
+    mockUseUpdateAdminClientMetaAdsConfigMutation(),
   useResetClientOwnerPasswordMutation: () => mockUseResetClientOwnerPasswordMutation(),
 }));
 vi.mock("../../features/adminAssignments/adminAssignmentsApi", () => ({
@@ -416,6 +419,7 @@ const socialMediaSummary: SocialMediaSummary = {
     updatedAt: "2026-05-28T10:00:00.000Z",
   },
   config: {
+    activePlatforms: ["INSTAGRAM", "FACEBOOK", "TIKTOK", "LINKEDIN"],
     instagramUsername: "@acme",
     instagramAccountId: "ig-1",
     facebookPageId: "fb-1",
@@ -633,6 +637,7 @@ describe("ClientDetail", () => {
     mockUseTestAdminClientMetaAdsConnectionMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseSyncAdminClientMetaAdsMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseDisconnectAdminClientMetaAdsMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
+    mockUseUpdateAdminClientMetaAdsConfigMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseUpdateAdminClientAmazonAdsConfigMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseCreateAdminClientAmazonAdsOAuthUrlMutation.mockReturnValue([vi.fn(), { isLoading: false }]);
     mockUseExchangeAdminClientAmazonAdsOAuthCodeMutation.mockReturnValue([vi.fn(), { isLoading: false }]);

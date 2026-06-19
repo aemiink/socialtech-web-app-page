@@ -96,6 +96,8 @@ export const baseApi = createApi({
     "SocialMediaInsights",
     "SocialMediaReports",
     "TikTokAdsConfig",
+    "WebMobileDesignConfig",
+    "WebMobileDesignSummary",
   ],
   endpoints: () => ({}),
 });
