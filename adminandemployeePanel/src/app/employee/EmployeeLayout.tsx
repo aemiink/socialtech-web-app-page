@@ -118,6 +118,7 @@ const roleMenus: Record<EmployeePanelRole, SidebarItem[]> = {
   ],
   "support-specialist": [
     { path: "/employee/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { path: "/employee/teknik-destek", label: "Teknik Destek Workspace", icon: Headphones },
     { path: "/employee/gorevlerim", label: "Görevlerim", icon: CheckSquare },
     { path: "/employee/destek-talepleri", label: "Destek Talepleri", icon: Headphones },
     { path: "/employee/acik-isler", label: "Açık İşler", icon: FileText },
@@ -134,6 +135,7 @@ const roleMenus: Record<EmployeePanelRole, SidebarItem[]> = {
   ],
   "seo-specialist": [
     { path: "/employee/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { path: "/employee/seo-audit-calisma", label: "SEO Audit Workspace", icon: SearchIcon },
     { path: "/employee/gorevlerim", label: "Görevlerim", icon: CheckSquare },
     { path: "/employee/seo-audit", label: "SEO Audit", icon: SearchIcon },
     { path: "/employee/teknik-hatalar", label: "Teknik Hatalar", icon: Bug },
