@@ -180,6 +180,7 @@ import {
   getGrowthHubStatusTone,
   getGrowthHubSummaryStateLabel,
 } from '../features/growthHub/growthHubUtils';
+import { useGetOwnWebMobileDesignSummaryQuery } from '../features/webMobileDesign/webMobileDesignApi';
 
 interface ServiceTabPageProps {
   serviceId: string;
@@ -5911,18 +5912,113 @@ function WebMobileDesignClientWorkspace({
     isError: filesError,
   } = useGetClientProjectFilesQuery({ projectId: projectId ?? "" }, { skip: !projectId });
   const files = filesResponse?.data ?? [];
+  const { data: designSummary } = useGetOwnWebMobileDesignSummaryQuery();
+  const designConfig = designSummary?.config ?? null;
+  const [updateApproval, { isLoading: isUpdatingApproval }] = useUpdateClientTaskApprovalMutation();
+
   const tabTasks = useMemo(() => filterWebMobileDesignTasksByTab(tabId, tasks), [tabId, tasks]);
   const tabFiles = useMemo(() => filterWebMobileDesignFilesByTab(tabId, files), [tabId, files]);
   const isLoading = tasksLoading || filesLoading;
   const isError = tasksError || filesError;
 
+  const allVisibleTasks = useMemo(
+    () => tasks.filter((t) => t.visibility === "CLIENT_VISIBLE" || t.approvalRequired),
+    [tasks],
+  );
+
+  const realKpis = useMemo(() => {
+    const screenCount = Math.max(
+      allVisibleTasks.filter((t) =>
+        matchesDesignTaskKeywords(t, ["screen", "ekran", "ui", "wireframe", "responsive"]),
+      ).length,
+      files.filter((f) =>
+        matchesDesignFileKeywords(f, ["screen", "ekran", "ui", "figma", "wireframe"]),
+      ).length,
+    );
+    const progressPercent =
+      allVisibleTasks.length > 0
+        ? Math.round(
+            allVisibleTasks.reduce((sum, t) => sum + t.progressPercent, 0) / allVisibleTasks.length,
+          )
+        : 0;
+    const revisionCount = allVisibleTasks.filter(
+      (t) => t.type === "REVISION" && t.status !== "DONE",
+    ).length;
+    const approvalTasks = allVisibleTasks.filter((t) => t.approvalRequired);
+    const approvedCount = approvalTasks.filter(
+      (t) => t.approvalStatus === "APPROVED" || t.approvalStatus === "ACKNOWLEDGED",
+    ).length;
+    return [
+      {
+        label: "Tasarlanan Ekran",
+        value: projectId ? String(screenCount) : "-",
+        note: projectId
+          ? screenCount > 0
+            ? "task ve dosyalardan"
+            : "henüz görünür ekran yok"
+          : "proje bekleniyor",
+      },
+      {
+        label: "İlerleme",
+        value: projectId ? `%${progressPercent}` : "-",
+        note: projectId
+          ? allVisibleTasks.length > 0
+            ? "canlı task ilerlemesi"
+            : "görev bekleniyor"
+          : "proje bekleniyor",
+      },
+      {
+        label: "Revizyon",
+        value: projectId ? String(revisionCount) : "-",
+        note: projectId
+          ? revisionCount > 0
+            ? "aktif revizyon"
+            : "revizyon yok"
+          : "proje bekleniyor",
+      },
+      {
+        label: "Onay Durumu",
+        value:
+          projectId && approvalTasks.length > 0
+            ? `${approvedCount}/${approvalTasks.length}`
+            : designConfig?.designSystemStatus === "COMPLETED"
+              ? "Tamamlandı"
+              : "-",
+        note: projectId
+          ? approvalTasks.length > 0
+            ? "ekran onaylı"
+            : "onay görevi yok"
+          : "proje bekleniyor",
+      },
+    ];
+  }, [allVisibleTasks, files, designConfig, projectId]);
+
+  const contentWithRealKpis = useMemo(
+    () => ({ ...content, kpis: realKpis }),
+    [content, realKpis],
+  );
+
+  const handleApprove = async (taskId: string) => {
+    await updateApproval({ taskId, body: { approvalStatus: "APPROVED" } });
+  };
+  const handleRequestChanges = async (taskId: string) => {
+    await updateApproval({ taskId, body: { approvalStatus: "CHANGES_REQUESTED" } });
+  };
+
   if (tabId === "wireframe") {
     return (
       <div className="p-8 space-y-6">
         <PageHero content={content} tabId={tabId} />
-        <SmartKpis content={content} tabId={tabId} />
+        <SmartKpis content={contentWithRealKpis} tabId={tabId} />
         <ApprovalWorkspace content={content} tabId={tabId} serviceId={serviceId} projectId={projectId} />
-        <ActionFooter content={content} />
+        <WebMobileDesignActionFooter
+          tasks={allVisibleTasks}
+          files={files}
+          isLoading={isLoading}
+          isUpdating={isUpdatingApproval}
+          onApprove={(id) => void handleApprove(id)}
+          onRequestChanges={(id) => void handleRequestChanges(id)}
+        />
       </div>
     );
   }
@@ -5932,14 +6028,21 @@ function WebMobileDesignClientWorkspace({
     return (
       <div className="p-8 space-y-6">
         <PageHero content={content} tabId={tabId} />
-        <SmartKpis content={content} tabId={tabId} />
+        <SmartKpis content={contentWithRealKpis} tabId={tabId} />
         <TaskBasedRevisionPanel
           serviceId={serviceId}
           projectId={projectId}
           tasks={revisionTasks}
           isLoading={tasksLoading}
         />
-        <ActionFooter content={content} />
+        <WebMobileDesignActionFooter
+          tasks={allVisibleTasks}
+          files={files}
+          isLoading={isLoading}
+          isUpdating={isUpdatingApproval}
+          onApprove={(id) => void handleApprove(id)}
+          onRequestChanges={(id) => void handleRequestChanges(id)}
+        />
       </div>
     );
   }
@@ -5948,9 +6051,16 @@ function WebMobileDesignClientWorkspace({
     return (
       <div className="p-8 space-y-6">
         <PageHero content={content} tabId={tabId} />
-        <SmartKpis content={content} tabId={tabId} />
+        <SmartKpis content={contentWithRealKpis} tabId={tabId} />
         <DeliveryWorkspace content={content} projectId={projectId} />
-        <ActionFooter content={content} />
+        <WebMobileDesignActionFooter
+          tasks={allVisibleTasks}
+          files={files}
+          isLoading={isLoading}
+          isUpdating={isUpdatingApproval}
+          onApprove={(id) => void handleApprove(id)}
+          onRequestChanges={(id) => void handleRequestChanges(id)}
+        />
       </div>
     );
   }
@@ -5958,7 +6068,7 @@ function WebMobileDesignClientWorkspace({
   return (
     <div className="p-8 space-y-6">
       <PageHero content={content} tabId={tabId} />
-      <SmartKpis content={content} tabId={tabId} />
+      <SmartKpis content={contentWithRealKpis} tabId={tabId} />
       <WebMobileDesignLivePanel
         content={content}
         tabId={tabId}
@@ -5968,7 +6078,14 @@ function WebMobileDesignClientWorkspace({
         isLoading={isLoading}
         isError={isError}
       />
-      <ActionFooter content={content} />
+      <WebMobileDesignActionFooter
+        tasks={allVisibleTasks}
+        files={files}
+        isLoading={isLoading}
+        isUpdating={isUpdatingApproval}
+        onApprove={(id) => void handleApprove(id)}
+        onRequestChanges={(id) => void handleRequestChanges(id)}
+      />
     </div>
   );
 }
@@ -6076,6 +6193,155 @@ function WebMobileDesignLivePanel({
                   >
                     <Link className="h-4 w-4" />
                   </a>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+type DesignActivityItem = { label: string; meta: string };
+
+function buildWebMobileDesignActivity(tasks: ClientTask[], files: ProjectFile[]): DesignActivityItem[] {
+  const taskItems: DesignActivityItem[] = [...tasks]
+    .filter((t) => t.updatedAt)
+    .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
+    .slice(0, 3)
+    .map((t) => ({
+      label: `${t.title} güncellendi`,
+      meta: t.updatedAt ? formatWebMobileDesignDate(t.updatedAt) : "Tarih yok",
+    }));
+  const fileItems: DesignActivityItem[] = [...files]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, Math.max(0, 4 - taskItems.length))
+    .map((f) => ({
+      label: `${f.title} yüklendi`,
+      meta: formatWebMobileDesignDate(f.createdAt),
+    }));
+  return [...taskItems, ...fileItems].slice(0, 4);
+}
+
+function formatWebMobileDesignDate(value: string): string {
+  const date = new Date(value);
+  const diffDays = Math.floor((Date.now() - date.getTime()) / 86_400_000);
+  if (diffDays === 0) return "Bugün";
+  if (diffDays === 1) return "Dün";
+  if (diffDays < 7) return `${diffDays} gün önce`;
+  return new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "short" }).format(date);
+}
+
+function WebMobileDesignActionFooter({
+  tasks,
+  files,
+  isLoading,
+  isUpdating,
+  onApprove,
+  onRequestChanges,
+}: {
+  tasks: ClientTask[];
+  files: ProjectFile[];
+  isLoading: boolean;
+  isUpdating: boolean;
+  onApprove: (taskId: string) => void;
+  onRequestChanges: (taskId: string) => void;
+}) {
+  const pendingTasks = tasks.filter(
+    (t) => t.approvalRequired && t.approvalStatus === "PENDING",
+  );
+  const recentActivity = useMemo(() => buildWebMobileDesignActivity(tasks, files), [tasks, files]);
+
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <div className={cardClass}>
+        <h2 className="text-xl text-white mb-4">Son Aktiviteler</h2>
+        {isLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-12 animate-pulse rounded-xl bg-white/[0.04]" />
+            ))}
+          </div>
+        ) : recentActivity.length === 0 ? (
+          <p className="text-sm text-[#A0A0A0]">
+            Henüz görünür aktivite yok. Proje yöneticisi görev yükledikçe burada görünecek.
+          </p>
+        ) : (
+          <div className="space-y-4">
+            {recentActivity.map((item, index) => (
+              <div key={index} className="flex gap-3">
+                <div className="flex flex-col items-center">
+                  <div className="w-3 h-3 rounded-full bg-[#AAFF01]" />
+                  {index < recentActivity.length - 1 && (
+                    <div className="w-px h-10 bg-white/[0.08] mt-2" />
+                  )}
+                </div>
+                <div>
+                  <p className="text-white text-sm">{item.label}</p>
+                  <p className="text-xs text-[#A0A0A0] mt-1">{item.meta}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className={cardClass}>
+        <h2 className="text-xl text-white mb-4">Sizden Beklenenler</h2>
+        {isLoading ? (
+          <div className="space-y-3">
+            {[1, 2].map((i) => (
+              <div key={i} className="h-24 animate-pulse rounded-xl bg-white/[0.04]" />
+            ))}
+          </div>
+        ) : pendingTasks.length === 0 ? (
+          <p className="text-sm text-[#A0A0A0]">
+            Şu anda bekleyen onay veya revizyon görevi yok.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {pendingTasks.slice(0, 3).map((task, index) => (
+              <div key={task.id} className={innerClass}>
+                <div className="flex items-center justify-between mb-3">
+                  <span
+                    className={`text-xs px-2 py-1 rounded border ${
+                      index === 0 ? statusTone.good : statusTone.violet
+                    }`}
+                  >
+                    {index === 0 ? "Öncelikli" : "Takip"}
+                  </span>
+                  {task.dueDate ? (
+                    <span className="text-xs text-[#A0A0A0] flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      {new Intl.DateTimeFormat("tr-TR", {
+                        day: "numeric",
+                        month: "short",
+                      }).format(new Date(task.dueDate))}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="text-white text-sm mb-1">{task.title}</p>
+                {task.description ? (
+                  <p className="text-xs text-[#A0A0A0] mb-3 line-clamp-2">{task.description}</p>
+                ) : (
+                  <div className="mb-3" />
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="secondary"
+                    className={`text-xs px-3 py-2 ${isUpdating ? "pointer-events-none opacity-60" : ""}`}
+                    onClick={() => onApprove(task.id)}
+                  >
+                    Onayla
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className={`text-xs px-3 py-2 ${isUpdating ? "pointer-events-none opacity-60" : ""}`}
+                    onClick={() => onRequestChanges(task.id)}
+                  >
+                    Revizyon İste
+                  </Button>
                 </div>
               </div>
             ))}
