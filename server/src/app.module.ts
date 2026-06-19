@@ -16,6 +16,7 @@ import { CrmModule } from "./crm/crm.module";
 import { GrowthHubModule } from "./growth-hub/growth-hub.module";
 import { HealthModule } from "./health/health.module";
 import { GithubModule } from "./integrations/github/github.module";
+import { LegalModule } from "./legal/legal.module";
 import { MetaAdsModule } from "./meta-ads/meta-ads.module";
 import { TikTokAdsModule } from "./tiktok-ads/tiktok-ads.module";
 import { ProjectFilesModule } from "./project-files/project-files.module";
@@ -24,6 +25,7 @@ import { SocialMediaModule } from "./social-media/social-media.module";
 import { TasksModule } from "./tasks/tasks.module";
 import { UsersModule } from "./users/users.module";
 import { WebAppWorkspaceModule } from "./web-app-workspace/web-app-workspace.module";
+import { WebMobileDesignModule } from "./web-mobile-design/web-mobile-design.module";
 
 @Module({
   imports: [
@@ -39,6 +41,7 @@ import { WebAppWorkspaceModule } from "./web-app-workspace/web-app-workspace.mod
     ScheduleModule.forRoot(),
     DatabaseModule,
     HealthModule,
+    LegalModule,
     AuthModule,
     UsersModule,
     ClientsModule,
@@ -59,6 +62,7 @@ import { WebAppWorkspaceModule } from "./web-app-workspace/web-app-workspace.mod
     ProjectsModule,
     TasksModule,
     WebAppWorkspaceModule,
+    WebMobileDesignModule,
   ],
 })
 export class AppModule {}
