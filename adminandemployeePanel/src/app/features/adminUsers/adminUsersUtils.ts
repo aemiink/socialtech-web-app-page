@@ -190,13 +190,35 @@ function extractMessageFromData(data: unknown): string | null {
     return null;
   }
 
-  const candidate = data as { message?: unknown };
-  if (typeof candidate.message === "string" && candidate.message.length > 0) {
-    return candidate.message;
+  const candidate = data as { message?: unknown; error?: unknown };
+  const topLevelMessage = normalizeApiMessage(candidate.message);
+  if (topLevelMessage) {
+    return topLevelMessage;
   }
 
-  if (Array.isArray(candidate.message)) {
-    const messages = candidate.message.filter(
+  if (typeof candidate.error === "object" && candidate.error !== null) {
+    const nestedError = candidate.error as { message?: unknown; details?: unknown };
+    const nestedMessage = normalizeApiMessage(nestedError.message);
+    if (nestedMessage) {
+      return nestedMessage;
+    }
+
+    const detailsMessage = normalizeApiMessage(nestedError.details);
+    if (detailsMessage) {
+      return detailsMessage;
+    }
+  }
+
+  return null;
+}
+
+function normalizeApiMessage(message: unknown): string | null {
+  if (typeof message === "string" && message.length > 0) {
+    return message;
+  }
+
+  if (Array.isArray(message)) {
+    const messages = message.filter(
       (value): value is string => typeof value === "string" && value.length > 0,
     );
     if (messages.length > 0) {

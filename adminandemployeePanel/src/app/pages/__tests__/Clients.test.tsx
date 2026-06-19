@@ -129,6 +129,9 @@ const mockUseUpdateAdminClientAmazonAdsConfigMutation = vi.fn<
 const mockUseUpdateAdminClientSocialMediaConfigMutation = vi.fn<
   () => [UpdateAdminClientSocialMediaConfigTrigger, { isLoading: boolean }]
 >();
+const mockUseCreateAdminClientSocialMediaMetaOAuthUrlMutation = vi.fn<
+  () => [() => MutationResponse<unknown>, { isLoading: boolean }]
+>();
 const mockUseUpdateAdminClientGrowthHubConfigMutation = vi.fn<
   () => [UpdateAdminClientGrowthHubConfigTrigger, { isLoading: boolean }]
 >();
@@ -170,6 +173,8 @@ vi.mock("../../features/clients/clientsApi", () => ({
     mockUseUpdateAdminClientAmazonAdsConfigMutation(),
   useUpdateAdminClientSocialMediaConfigMutation: () =>
     mockUseUpdateAdminClientSocialMediaConfigMutation(),
+  useCreateAdminClientSocialMediaMetaOAuthUrlMutation: () =>
+    mockUseCreateAdminClientSocialMediaMetaOAuthUrlMutation(),
   useUpdateAdminClientGrowthHubConfigMutation: () =>
     mockUseUpdateAdminClientGrowthHubConfigMutation(),
   useDeactivateAdminClientMutation: () => mockUseDeactivateAdminClientMutation(),
@@ -268,6 +273,7 @@ const defaultAdminUsersResponse: AdminUsersListResponse = {
 const defaultSocialMediaConfig: AdminClientSocialMediaConfig = {
   clientProfileId: client.id,
   hasActiveService: true,
+  activePlatforms: ["INSTAGRAM", "FACEBOOK", "TIKTOK", "LINKEDIN"],
   instagramUsername: "@acme",
   instagramAccountId: "ig-123",
   facebookPageId: "fb-123",
@@ -395,6 +401,7 @@ function setupMutationState() {
       unwrap: async () => ({
         ...defaultSocialMediaConfig,
         clientProfileId: clientId,
+        activePlatforms: body.activePlatforms ?? defaultSocialMediaConfig.activePlatforms,
         instagramUsername: body.instagramUsername ?? null,
         instagramAccountId: body.instagramAccountId ?? null,
         facebookPageId: body.facebookPageId ?? null,
@@ -486,6 +493,10 @@ function setupMutationState() {
   ]);
   mockUseUpdateAdminClientSocialMediaConfigMutation.mockReturnValue([
     updateAdminClientSocialMediaConfig,
+    { isLoading: false },
+  ]);
+  mockUseCreateAdminClientSocialMediaMetaOAuthUrlMutation.mockReturnValue([
+    vi.fn(() => ({ unwrap: async () => ({}) })),
     { isLoading: false },
   ]);
   mockUseUpdateAdminClientGrowthHubConfigMutation.mockReturnValue([
@@ -1123,6 +1134,7 @@ describe("Clients", () => {
       target: { value: "Sosyal Marka" },
     });
     fireEvent.click(within(dialog).getByLabelText("Social Media"));
+    fireEvent.click(within(dialog).getByLabelText("Meta (Instagram/Facebook) platformu"));
     fireEvent.change(within(dialog).getByLabelText("Instagram Username"), {
       target: { value: " @sosyalmarka " },
     });
@@ -1150,6 +1162,7 @@ describe("Clients", () => {
     expect(updateAdminClientSocialMediaConfig).toHaveBeenCalledWith({
       clientId: "33333333-3333-4333-8333-333333333333",
       body: {
+        activePlatforms: ["INSTAGRAM", "FACEBOOK"],
         instagramUsername: "@sosyalmarka",
         instagramAccountId: null,
         facebookPageId: null,

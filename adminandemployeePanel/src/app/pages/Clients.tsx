@@ -75,6 +75,7 @@ import {
   useGetClientsQuery,
   useGetAdminClientGrowthHubConfigQuery,
   useGetAdminClientSocialMediaConfigQuery,
+  useCreateAdminClientSocialMediaMetaOAuthUrlMutation,
   useUpdateAdminClientAmazonAdsConfigMutation,
   useUpdateAdminClientGrowthHubConfigMutation,
   useUpdateAdminClientSocialMediaConfigMutation,
@@ -92,6 +93,7 @@ import type {
   CreateAdminClientRequest,
   CreateOrLinkClientOwnerRequest,
   GrowthHubGoal,
+  ClientSocialMediaPlatform,
   ServiceKey,
   SocialMediaGoal,
   UpdateAdminClientAmazonAdsConfigRequest,
@@ -164,6 +166,7 @@ type ClientFormState = {
   amazonAccountType: string;
   amazonAccountName: string;
   amazonValidPaymentMethod: AmazonAdsPaymentMethodState;
+  socialActivePlatforms: ClientSocialMediaPlatform[];
   socialInstagramUsername: string;
   socialInstagramAccountId: string;
   socialFacebookPageId: string;
@@ -206,6 +209,7 @@ const initialClientForm: ClientFormState = {
   amazonAccountType: "",
   amazonAccountName: "",
   amazonValidPaymentMethod: "",
+  socialActivePlatforms: [],
   socialInstagramUsername: "",
   socialInstagramAccountId: "",
   socialFacebookPageId: "",
@@ -238,6 +242,28 @@ const SOCIAL_MEDIA_GOAL_OPTIONS: Array<{ value: SocialMediaGoal; label: string }
   { value: "SALES_SUPPORT", label: "Sales Support" },
   { value: "REPUTATION", label: "Reputation" },
   { value: "MIXED", label: "Mixed" },
+];
+
+const SOCIAL_MEDIA_CHANNEL_OPTIONS: Array<{
+  key: "META" | "TIKTOK" | "LINKEDIN";
+  label: string;
+  platforms: ClientSocialMediaPlatform[];
+}> = [
+  {
+    key: "META",
+    label: "Meta (Instagram/Facebook)",
+    platforms: ["INSTAGRAM", "FACEBOOK"],
+  },
+  {
+    key: "TIKTOK",
+    label: "TikTok",
+    platforms: ["TIKTOK"],
+  },
+  {
+    key: "LINKEDIN",
+    label: "LinkedIn",
+    platforms: ["LINKEDIN"],
+  },
 ];
 
 const GROWTH_HUB_GOAL_OPTIONS: Array<{ value: GrowthHubGoal; label: string }> = [
@@ -276,6 +302,9 @@ export function Clients() {
   const [editTarget, setEditTarget] = useState<ClientProfile | null>(null);
   const [editForm, setEditForm] = useState<ClientFormState | null>(null);
   const [editSubmitError, setEditSubmitError] = useState<string | null>(null);
+  const [editSocialMediaMetaOAuthUrl, setEditSocialMediaMetaOAuthUrl] = useState("");
+  const [editSocialMediaMetaOAuthFeedback, setEditSocialMediaMetaOAuthFeedback] =
+    useState<string | null>(null);
 
   const [statusActionTarget, setStatusActionTarget] = useState<{
     client: ClientProfile;
@@ -334,6 +363,8 @@ export function Clients() {
     useUpdateAdminClientAmazonAdsConfigMutation();
   const [updateAdminClientSocialMediaConfig, { isLoading: isUpdatingSocialMediaConfig }] =
     useUpdateAdminClientSocialMediaConfigMutation();
+  const [createSocialMediaMetaOAuthUrl, { isLoading: isCreatingSocialMediaMetaOAuthUrl }] =
+    useCreateAdminClientSocialMediaMetaOAuthUrlMutation();
   const [updateAdminClientGrowthHubConfig, { isLoading: isUpdatingGrowthHubConfig }] =
     useUpdateAdminClientGrowthHubConfigMutation();
   const [deactivateAdminClient, { isLoading: isDeactivating }] =
@@ -465,6 +496,8 @@ export function Clients() {
     setPageError(null);
     setPageSuccess(null);
     setEditSubmitError(null);
+    setEditSocialMediaMetaOAuthUrl("");
+    setEditSocialMediaMetaOAuthFeedback(null);
     setEditTarget(client);
     setEditForm(clientToForm(client));
   }
@@ -473,6 +506,8 @@ export function Clients() {
     setEditTarget(null);
     setEditForm(null);
     setEditSubmitError(null);
+    setEditSocialMediaMetaOAuthUrl("");
+    setEditSocialMediaMetaOAuthFeedback(null);
   }
 
   function updateEditForm(field: ClientFormField, value: ClientFormValue) {
@@ -715,6 +750,27 @@ export function Clients() {
     } catch (error) {
       setEditSubmitError(
         extractApiErrorMessage(error, "Müşteri güncellenemedi. Lütfen tekrar deneyin."),
+      );
+    }
+  }
+
+  async function handleCreateSocialMediaMetaOAuthUrl() {
+    if (!editTarget) {
+      return;
+    }
+
+    setEditSocialMediaMetaOAuthFeedback(null);
+    setEditSocialMediaMetaOAuthUrl("");
+
+    try {
+      const result = await createSocialMediaMetaOAuthUrl(editTarget.id).unwrap();
+      setEditSocialMediaMetaOAuthUrl(result.authorizationUrl);
+      setEditSocialMediaMetaOAuthFeedback(
+        "Meta bağlantı linki oluşturuldu. Bağlantı tamamlanınca Facebook Page ID ve Instagram Account ID otomatik kaydedilir; ardından config'i yeniden açarak güncel alanları görebilirsin.",
+      );
+    } catch (error) {
+      setEditSocialMediaMetaOAuthFeedback(
+        extractApiErrorMessage(error, "Meta bağlantı linki oluşturulamadı."),
       );
     }
   }
@@ -1375,6 +1431,10 @@ export function Clients() {
                   isFetchingEditSocialMediaConfig ||
                   isFetchingEditGrowthHubConfig
                 }
+                socialMediaMetaOAuthUrl={editSocialMediaMetaOAuthUrl}
+                socialMediaMetaOAuthFeedback={editSocialMediaMetaOAuthFeedback}
+                isCreatingSocialMediaMetaOAuthUrl={isCreatingSocialMediaMetaOAuthUrl}
+                onCreateSocialMediaMetaOAuthUrl={handleCreateSocialMediaMetaOAuthUrl}
               />
               <DialogFooter>
                 <Button
@@ -1605,6 +1665,10 @@ function ClientFormFields({
   existingOwnerError = null,
   onExistingOwnerSelect,
   onExistingOwnerClear,
+  socialMediaMetaOAuthUrl = "",
+  socialMediaMetaOAuthFeedback = null,
+  isCreatingSocialMediaMetaOAuthUrl = false,
+  onCreateSocialMediaMetaOAuthUrl,
 }: {
   idPrefix: string;
   form: ClientFormState;
@@ -1616,6 +1680,10 @@ function ClientFormFields({
   existingOwnerError?: string | null;
   onExistingOwnerSelect?: (owner: AdminUser) => void;
   onExistingOwnerClear?: () => void;
+  socialMediaMetaOAuthUrl?: string;
+  socialMediaMetaOAuthFeedback?: string | null;
+  isCreatingSocialMediaMetaOAuthUrl?: boolean;
+  onCreateSocialMediaMetaOAuthUrl?: () => void;
 }) {
   const handleExistingOwnerSelect =
     onExistingOwnerSelect ?? ((owner: AdminUser) => onChange("existingOwnerUserId", owner.id));
@@ -1700,6 +1768,10 @@ function ClientFormFields({
           form={form}
           disabled={disabled}
           onChange={onChange}
+          metaOAuthUrl={socialMediaMetaOAuthUrl}
+          metaOAuthFeedback={socialMediaMetaOAuthFeedback}
+          isCreatingMetaOAuthUrl={isCreatingSocialMediaMetaOAuthUrl}
+          onCreateMetaOAuthUrl={onCreateSocialMediaMetaOAuthUrl}
         />
       )}
 
@@ -2094,78 +2166,164 @@ function SocialMediaConfigFields({
   form,
   disabled,
   onChange,
+  metaOAuthUrl,
+  metaOAuthFeedback,
+  isCreatingMetaOAuthUrl,
+  onCreateMetaOAuthUrl,
 }: {
   idPrefix: string;
   form: ClientFormState;
   disabled: boolean;
   onChange: (field: ClientFormField, value: ClientFormValue) => void;
+  metaOAuthUrl: string;
+  metaOAuthFeedback: string | null;
+  isCreatingMetaOAuthUrl: boolean;
+  onCreateMetaOAuthUrl?: () => void;
 }) {
+  const hasMetaSelected = hasAnySocialMediaPlatform(form.socialActivePlatforms, [
+    "INSTAGRAM",
+    "FACEBOOK",
+  ]);
+  const hasTikTokSelected = form.socialActivePlatforms.includes("TIKTOK");
+  const hasLinkedInSelected = form.socialActivePlatforms.includes("LINKEDIN");
+
+  function toggleChannel(platforms: ClientSocialMediaPlatform[]) {
+    onChange("socialActivePlatforms", toggleSocialMediaPlatforms(form.socialActivePlatforms, platforms));
+  }
+
   return (
     <fieldset className="space-y-3 rounded-lg border border-[#AAFF01]/20 bg-[#202020]/60 p-3">
       <legend className="px-1 text-sm font-medium text-white">Social Media Yapılandırması</legend>
+      <div className="space-y-2">
+        <Label>Aktif Platformlar</Label>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {SOCIAL_MEDIA_CHANNEL_OPTIONS.map((channel) => {
+            const checkboxId = `${idPrefix}-social-channel-${channel.key.toLowerCase()}`;
+            const checked = hasAnySocialMediaPlatform(form.socialActivePlatforms, channel.platforms);
+
+            return (
+              <label
+                key={channel.key}
+                htmlFor={checkboxId}
+                className="flex min-h-10 items-center gap-3 rounded-md border border-white/[0.06] bg-[#1A1A1A] px-3 py-2 text-sm text-white"
+              >
+                <Checkbox
+                  id={checkboxId}
+                  aria-label={`${channel.label} platformu`}
+                  checked={checked}
+                  onCheckedChange={() => toggleChannel(channel.platforms)}
+                  disabled={disabled}
+                  className="border-white/[0.18] data-[state=checked]:border-[#AAFF01] data-[state=checked]:bg-[#AAFF01] data-[state=checked]:text-[#131313]"
+                />
+                <span>{channel.label}</span>
+              </label>
+            );
+          })}
+        </div>
+      </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor={`${idPrefix}-social-instagram-username`}>Instagram Username</Label>
-          <Input
-            id={`${idPrefix}-social-instagram-username`}
-            value={form.socialInstagramUsername}
-            onChange={(event) => onChange("socialInstagramUsername", event.target.value)}
-            className="border-white/[0.08] bg-[#1A1A1A]"
-            placeholder="@socialtech"
-            maxLength={120}
-            disabled={disabled}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor={`${idPrefix}-social-instagram-account-id`}>
-            Instagram Account ID
-          </Label>
-          <Input
-            id={`${idPrefix}-social-instagram-account-id`}
-            value={form.socialInstagramAccountId}
-            onChange={(event) => onChange("socialInstagramAccountId", event.target.value)}
-            className="border-white/[0.08] bg-[#1A1A1A]"
-            placeholder="Instagram account ID"
-            maxLength={120}
-            disabled={disabled}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor={`${idPrefix}-social-facebook-page-id`}>Facebook Page ID</Label>
-          <Input
-            id={`${idPrefix}-social-facebook-page-id`}
-            value={form.socialFacebookPageId}
-            onChange={(event) => onChange("socialFacebookPageId", event.target.value)}
-            className="border-white/[0.08] bg-[#1A1A1A]"
-            placeholder="Facebook page ID"
-            maxLength={120}
-            disabled={disabled}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor={`${idPrefix}-social-tiktok-username`}>TikTok Username</Label>
-          <Input
-            id={`${idPrefix}-social-tiktok-username`}
-            value={form.socialTiktokUsername}
-            onChange={(event) => onChange("socialTiktokUsername", event.target.value)}
-            className="border-white/[0.08] bg-[#1A1A1A]"
-            placeholder="@socialtech"
-            maxLength={120}
-            disabled={disabled}
-          />
-        </div>
-        <div className="space-y-2 sm:col-span-2">
-          <Label htmlFor={`${idPrefix}-social-linkedin-page-url`}>LinkedIn Page URL</Label>
-          <Input
-            id={`${idPrefix}-social-linkedin-page-url`}
-            value={form.socialLinkedinPageUrl}
-            onChange={(event) => onChange("socialLinkedinPageUrl", event.target.value)}
-            className="border-white/[0.08] bg-[#1A1A1A]"
-            placeholder="https://www.linkedin.com/company/socialtech"
-            maxLength={240}
-            disabled={disabled}
-          />
-        </div>
+        {hasMetaSelected ? (
+          <>
+            {onCreateMetaOAuthUrl ? (
+              <div className="space-y-2 sm:col-span-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={onCreateMetaOAuthUrl}
+                    disabled={disabled || isCreatingMetaOAuthUrl}
+                  >
+                    {isCreatingMetaOAuthUrl ? "Link Hazırlanıyor..." : "Meta Bağlantı Linki Oluştur"}
+                  </Button>
+                  {metaOAuthUrl ? (
+                    <a
+                      href={metaOAuthUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm text-[#AAFF01] underline-offset-4 hover:underline"
+                    >
+                      Linki Aç
+                    </a>
+                  ) : null}
+                </div>
+                {metaOAuthFeedback ? (
+                  <p className="text-xs text-[#A0A0A0]">{metaOAuthFeedback}</p>
+                ) : null}
+                {metaOAuthUrl ? (
+                  <p className="break-all rounded-md border border-white/[0.06] bg-[#111] p-2 text-xs text-[#A0A0A0]">
+                    {metaOAuthUrl}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+            <div className="space-y-2">
+              <Label htmlFor={`${idPrefix}-social-instagram-username`}>Instagram Username</Label>
+              <Input
+                id={`${idPrefix}-social-instagram-username`}
+                value={form.socialInstagramUsername}
+                onChange={(event) => onChange("socialInstagramUsername", event.target.value)}
+                className="border-white/[0.08] bg-[#1A1A1A]"
+                placeholder="@socialtech"
+                maxLength={120}
+                disabled={disabled}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`${idPrefix}-social-instagram-account-id`}>
+                Instagram Account ID
+              </Label>
+              <Input
+                id={`${idPrefix}-social-instagram-account-id`}
+                value={form.socialInstagramAccountId}
+                onChange={(event) => onChange("socialInstagramAccountId", event.target.value)}
+                className="border-white/[0.08] bg-[#1A1A1A]"
+                placeholder="Instagram account ID"
+                maxLength={120}
+                disabled={disabled}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`${idPrefix}-social-facebook-page-id`}>Facebook Page ID</Label>
+              <Input
+                id={`${idPrefix}-social-facebook-page-id`}
+                value={form.socialFacebookPageId}
+                onChange={(event) => onChange("socialFacebookPageId", event.target.value)}
+                className="border-white/[0.08] bg-[#1A1A1A]"
+                placeholder="Facebook page ID"
+                maxLength={120}
+                disabled={disabled}
+              />
+            </div>
+          </>
+        ) : null}
+        {hasTikTokSelected ? (
+          <div className="space-y-2">
+            <Label htmlFor={`${idPrefix}-social-tiktok-username`}>TikTok Username</Label>
+            <Input
+              id={`${idPrefix}-social-tiktok-username`}
+              value={form.socialTiktokUsername}
+              onChange={(event) => onChange("socialTiktokUsername", event.target.value)}
+              className="border-white/[0.08] bg-[#1A1A1A]"
+              placeholder="@socialtech"
+              maxLength={120}
+              disabled={disabled}
+            />
+          </div>
+        ) : null}
+        {hasLinkedInSelected ? (
+          <div className="space-y-2 sm:col-span-2">
+            <Label htmlFor={`${idPrefix}-social-linkedin-page-url`}>LinkedIn Page URL</Label>
+            <Input
+              id={`${idPrefix}-social-linkedin-page-url`}
+              value={form.socialLinkedinPageUrl}
+              onChange={(event) => onChange("socialLinkedinPageUrl", event.target.value)}
+              className="border-white/[0.08] bg-[#1A1A1A]"
+              placeholder="https://www.linkedin.com/company/socialtech"
+              maxLength={240}
+              disabled={disabled}
+            />
+          </div>
+        ) : null}
         <div className="space-y-2">
           <Label htmlFor={`${idPrefix}-social-content-frequency`}>Content Frequency</Label>
           <Input
@@ -2732,6 +2890,10 @@ function validateClientForm(
     }
   }
 
+  if (isSocialMediaSelected(form.purchasedServices) && form.socialActivePlatforms.length === 0) {
+    return "Social Media için en az bir aktif platform seçin.";
+  }
+
   if (!includeOwnerFields || form.ownerMode === "NONE") {
     return null;
   }
@@ -2820,12 +2982,20 @@ function buildSocialMediaConfigPayload(
     return null;
   }
 
+  const hasMetaSelected = hasAnySocialMediaPlatform(form.socialActivePlatforms, [
+    "INSTAGRAM",
+    "FACEBOOK",
+  ]);
+  const hasTikTokSelected = form.socialActivePlatforms.includes("TIKTOK");
+  const hasLinkedInSelected = form.socialActivePlatforms.includes("LINKEDIN");
+
   return {
-    instagramUsername: normalizeNullableText(form.socialInstagramUsername),
-    instagramAccountId: normalizeNullableText(form.socialInstagramAccountId),
-    facebookPageId: normalizeNullableText(form.socialFacebookPageId),
-    tiktokUsername: normalizeNullableText(form.socialTiktokUsername),
-    linkedinPageUrl: normalizeNullableText(form.socialLinkedinPageUrl),
+    activePlatforms: form.socialActivePlatforms,
+    instagramUsername: hasMetaSelected ? normalizeNullableText(form.socialInstagramUsername) : null,
+    instagramAccountId: hasMetaSelected ? normalizeNullableText(form.socialInstagramAccountId) : null,
+    facebookPageId: hasMetaSelected ? normalizeNullableText(form.socialFacebookPageId) : null,
+    tiktokUsername: hasTikTokSelected ? normalizeNullableText(form.socialTiktokUsername) : null,
+    linkedinPageUrl: hasLinkedInSelected ? normalizeNullableText(form.socialLinkedinPageUrl) : null,
     contentFrequency: normalizeNullableText(form.socialContentFrequency),
     primaryGoal: form.socialPrimaryGoal || null,
     toneOfVoice: normalizeNullableText(form.socialToneOfVoice),
@@ -2969,10 +3139,31 @@ function normalizeSocialMediaHashtags(value: string): string[] {
     .slice(0, 30);
 }
 
+function hasAnySocialMediaPlatform(
+  selectedPlatforms: ClientSocialMediaPlatform[],
+  platforms: ClientSocialMediaPlatform[],
+): boolean {
+  return platforms.some((platform) => selectedPlatforms.includes(platform));
+}
+
+function toggleSocialMediaPlatforms(
+  selectedPlatforms: ClientSocialMediaPlatform[],
+  platforms: ClientSocialMediaPlatform[],
+): ClientSocialMediaPlatform[] {
+  const shouldRemove = hasAnySocialMediaPlatform(selectedPlatforms, platforms);
+
+  if (shouldRemove) {
+    return selectedPlatforms.filter((platform) => !platforms.includes(platform));
+  }
+
+  return [...selectedPlatforms, ...platforms.filter((platform) => !selectedPlatforms.includes(platform))];
+}
+
 function socialMediaConfigToFormFields(
   config: AdminClientSocialMediaConfig,
 ): Partial<ClientFormState> {
   return {
+    socialActivePlatforms: resolveSocialMediaActivePlatforms(config),
     socialInstagramUsername: config.instagramUsername ?? "",
     socialInstagramAccountId: config.instagramAccountId ?? "",
     socialFacebookPageId: config.facebookPageId ?? "",
@@ -2984,6 +3175,27 @@ function socialMediaConfigToFormFields(
     socialHashtags: config.hashtags.join(", "),
     socialNotes: config.notes ?? "",
   };
+}
+
+function resolveSocialMediaActivePlatforms(
+  config: AdminClientSocialMediaConfig,
+): ClientSocialMediaPlatform[] {
+  if (config.activePlatforms.length > 0) {
+    return config.activePlatforms;
+  }
+
+  const inferredPlatforms: ClientSocialMediaPlatform[] = [];
+  if (config.instagramUsername || config.instagramAccountId || config.facebookPageId) {
+    inferredPlatforms.push("INSTAGRAM", "FACEBOOK");
+  }
+  if (config.tiktokUsername) {
+    inferredPlatforms.push("TIKTOK");
+  }
+  if (config.linkedinPageUrl) {
+    inferredPlatforms.push("LINKEDIN");
+  }
+
+  return inferredPlatforms;
 }
 
 function growthHubConfigToFormFields(
