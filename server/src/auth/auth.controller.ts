@@ -1,15 +1,17 @@
-import { Body, Controller, Get, Req, Res, Post, UnauthorizedException, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Patch, Req, Res, Post, UnauthorizedException, UseGuards } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { CookieOptions, Request, Response } from "express";
 import { AccountType } from "@prisma/client";
 import { AuthService } from "./auth.service";
 import { CurrentUser } from "./decorators/current-user.decorator";
+import { ChangePasswordDto } from "./dto/change-password.dto";
 import { LoginDto } from "./dto/login.dto";
 import { LogoutDto } from "./dto/logout.dto";
 import { RefreshTokenDto } from "./dto/refresh-token.dto";
+import { UpdateMeDto } from "./dto/update-me.dto";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { AuthenticatedUser } from "./types/authenticated-user.type";
-import { AuthServiceResponse, PublicAuthResponse } from "./types/auth-response.type";
+import { AuthServiceResponse, AuthUserProfile, PublicAuthResponse } from "./types/auth-response.type";
 
 type AuthScope = "WORKFORCE" | "CLIENT";
 
@@ -77,6 +79,24 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   me(@CurrentUser() currentUser: AuthenticatedUser) {
     return this.authService.me(currentUser);
+  }
+
+  @Patch("me")
+  @UseGuards(JwtAuthGuard)
+  updateMe(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Body() dto: UpdateMeDto,
+  ): Promise<AuthUserProfile> {
+    return this.authService.updateMe(currentUser.id, dto);
+  }
+
+  @Patch("me/password")
+  @UseGuards(JwtAuthGuard)
+  changePassword(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Body() dto: ChangePasswordDto,
+  ): Promise<{ success: true }> {
+    return this.authService.changePassword(currentUser.id, dto);
   }
 
   private extractRefreshToken(request: Request, bodyToken?: string): string | null {

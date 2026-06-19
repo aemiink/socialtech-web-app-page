@@ -1,5 +1,6 @@
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   InternalServerErrorException,
@@ -11,7 +12,9 @@ import { Prisma, UserStatus } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 import { PrismaService } from "../database/prisma.service";
 import { AuthorizationService } from "./authorization.service";
+import { ChangePasswordDto } from "./dto/change-password.dto";
 import { LoginDto } from "./dto/login.dto";
+import { UpdateMeDto } from "./dto/update-me.dto";
 import { AuthenticatedUser } from "./types/authenticated-user.type";
 import { AuthServiceResponse, AuthUserProfile } from "./types/auth-response.type";
 import { AccessTokenPayload, RefreshTokenPayload } from "./types/token-payload.type";
@@ -181,6 +184,53 @@ export class AuthService {
 
   async me(currentUser: AuthenticatedUser): Promise<AuthUserProfile> {
     return this.buildUserProfile(currentUser.id);
+  }
+
+  async updateMe(userId: string, dto: UpdateMeDto): Promise<AuthUserProfile> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(dto.displayName !== undefined ? { displayName: dto.displayName || null } : {}),
+      },
+    });
+
+    return this.buildUserProfile(userId);
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto): Promise<{ success: true }> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException("User not found.");
+    }
+
+    if (dto.currentPassword === dto.newPassword) {
+      throw new BadRequestException("New password must differ from current password.");
+    }
+
+    const verification = await this.verifyPassword(user.email, dto.currentPassword, user.passwordHash);
+    if (!verification.isValid) {
+      throw new UnauthorizedException("Current password is incorrect.");
+    }
+
+    const newHash = await this.hashPassword(dto.newPassword);
+    const now = new Date();
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          passwordHash: newHash,
+          sessionInvalidatedAt: now,
+        },
+      });
+
+      await tx.refreshToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: now },
+      });
+    });
+
+    return { success: true };
   }
 
   async hashUserPassword(plainPassword: string): Promise<string> {
