@@ -95,7 +95,10 @@ import {
 } from '../features/socialMedia/socialMediaApi';
 import type {
   SocialMediaCreativeAsset,
+  SocialMediaInsightItem,
+  SocialMediaInsightPostSummary,
   SocialMediaInsightsResponse,
+  SocialMediaPlatform,
   SocialMediaPost,
   SocialMediaReportsResponse,
   SocialMediaSummary,
@@ -437,6 +440,17 @@ export function ServiceTabPage({ serviceId, tabId, projectId }: ServiceTabPagePr
     );
   }
 
+  if (serviceId === "web-mobile-design" && tabId !== "service-dashboard") {
+    return (
+      <WebMobileDesignClientWorkspace
+        content={content}
+        tabId={tabId}
+        projectId={projectId}
+        serviceId={serviceId}
+      />
+    );
+  }
+
   if (serviceId === "growth-hub" && tabId === "service-dashboard") {
     return (
       <div className="p-8 space-y-6">
@@ -554,11 +568,22 @@ function WebAppWorkspaceTab({
   return (
     <div className="p-8 space-y-6">
       <div className="relative overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br from-[#1A1A1A] via-[#151515] to-[#101010] p-8">
-        <h1 className="text-3xl text-white">Web APP Çalışma Alanı</h1>
-        <p className="mt-2 text-[#A0A0A0]">Sekme: {tabId}</p>
-        {projectSummary?.name ? (
-          <p className="mt-1 text-sm text-[#d7d7d7]">Proje: {projectSummary.name}</p>
-        ) : null}
+        <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-[#AAFF01]/[0.04] blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-12 left-10 h-40 w-40 rounded-full bg-[#7B61FF]/[0.06] blur-3xl" />
+        <div className="relative">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#AAFF01]/30 bg-[#AAFF01]/10 px-3 py-1 text-xs font-medium text-[#AAFF01]">
+              <Sparkles className="w-3 h-3" />
+              Web Uygulama
+            </span>
+            {projectSummary?.name && (
+              <span className="rounded-full border border-white/[0.12] bg-white/[0.04] px-3 py-1 text-xs text-[#A0A0A0]">
+                {projectSummary.name}
+              </span>
+            )}
+          </div>
+          <h1 className="text-3xl font-bold text-white">{getWebAppTabLabel(tabId)}</h1>
+        </div>
       </div>
       {!projectId ? (
         <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-6 text-sm text-[#A0A0A0]">
@@ -800,6 +825,11 @@ function TaskSourcePanel({
             </div>
           </div>
         ))}
+        {tasks.length > 12 ? (
+          <p className="pt-1 text-center text-xs text-[#A0A0A0]">
+            +{tasks.length - 12} görev daha — proje yöneticinizle iletişime geçin
+          </p>
+        ) : null}
       </div>
     </div>
   );
@@ -2965,10 +2995,12 @@ function MetaAdsEntityGrid({
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       {rows.map((campaign) => (
         <div key={campaign.id} className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-5">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h3 className="text-white">{campaign.name}</h3>
-            <span className="rounded border border-[#AAFF01]/20 bg-[#AAFF01]/10 px-2 py-1 text-xs text-[#AAFF01]">
-              {campaign.objective}
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-white">
+              {formatMetaCampaignName(campaign.name)}
+            </h3>
+            <span className="flex-shrink-0 whitespace-nowrap rounded border border-[#AAFF01]/20 bg-[#AAFF01]/10 px-2 py-0.5 text-xs text-[#AAFF01]">
+              {formatMetaObjective(campaign.objective)}
             </span>
           </div>
           <div className="grid grid-cols-3 gap-2">
@@ -4975,6 +5007,34 @@ function formatMetaPercent(value: number): string {
   return `${value.toFixed(2)}%`;
 }
 
+function formatMetaCampaignName(name: string): string {
+  return name.replace(/_/g, " ");
+}
+
+const META_OBJECTIVE_LABELS: Record<string, string> = {
+  OUTCOME_TRAFFIC: "Trafik",
+  OUTCOME_ENGAGEMENT: "Etkileşim",
+  OUTCOME_AWARENESS: "Farkındalık",
+  OUTCOME_LEADS: "Lead",
+  OUTCOME_SALES: "Satış",
+  OUTCOME_APP_PROMOTION: "Uygulama",
+  LINK_CLICKS: "Link Tıklamaları",
+  POST_ENGAGEMENT: "Gönderi Etkileşimi",
+  REACH: "Erişim",
+  BRAND_AWARENESS: "Marka Bilinirliği",
+  VIDEO_VIEWS: "Video Görüntüleme",
+  CONVERSIONS: "Dönüşüm",
+  APP_INSTALLS: "Uygulama Yükleme",
+  LEAD_GENERATION: "Lead Üretimi",
+  MESSAGES: "Mesajlar",
+  CATALOG_SALES: "Katalog Satışı",
+  STORE_VISITS: "Mağaza Ziyareti",
+};
+
+function formatMetaObjective(objective: string): string {
+  return META_OBJECTIVE_LABELS[objective] ?? objective.replace(/^OUTCOME_/, "").replace(/_/g, " ");
+}
+
 function formatAmazonCurrency(value: number, currencyCode: string): string {
   try {
     return new Intl.NumberFormat("tr-TR", {
@@ -5317,6 +5377,35 @@ function getRevisionStatusTone(status: WorkspaceRevisionStatus): string {
   return statusTone.warn;
 }
 
+function getWebAppTabLabel(tabId: string): string {
+  const LABELS: Record<string, string> = {
+    "overview": "Genel Bakış",
+    "project-roadmap": "Proje Yol Haritası",
+    "sprint-status": "Sprint Durumu",
+    "frontend": "Frontend Geliştirme",
+    "backend-api": "Backend / API",
+    "admin-panel": "Yönetim Paneli",
+    "ui-ux": "UI/UX Tasarım",
+    "test-deploy": "Test & Yayın",
+    "delivery-files": "Teslim Dosyaları",
+    "files": "Dosyalar",
+    "messages": "Mesajlar",
+    "soru-cevap": "Soru & Cevap",
+    "revisions": "Revizyonlar",
+    "revision-requests": "Revizyon Talepleri",
+    "reports": "Raporlar",
+    "meetings": "Toplantılar",
+    "content": "İçerik",
+    "design": "Tasarım",
+    "copywriting": "Metin & Kopya",
+  };
+  if (LABELS[tabId]) return LABELS[tabId];
+  // Fallback: humanize the tabId
+  return tabId
+    .replace(/-/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function mapTabIdToWorkspaceTabKey(tabId: string): WorkspaceTabKey {
   if (tabId === 'messages' || tabId === 'soru-cevap' || tabId.includes('question') || tabId.includes('message')) {
     return 'MESSAGES';
@@ -5377,6 +5466,86 @@ function includesText(value: string | null | undefined, keyword: string): boolea
     return false;
   }
   return value.toLowerCase().includes(keyword.toLowerCase());
+}
+
+function MiniMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-white/[0.08] bg-[#202020] p-4">
+      <p className="text-xs text-[#A0A0A0]">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
+    </div>
+  );
+}
+
+const WEB_MOBILE_DESIGN_TAB_KEYWORDS: Record<string, string[]> = {
+  "ux-flow": ["ux", "flow", "akış", "journey", "entry", "conversion"],
+  wireframe: ["wireframe", "taslak"],
+  "ui-screens": ["ui", "screen", "ekran", "arayüz"],
+  "design-system": ["design system", "component", "token", "style guide", "renk", "tipografi"],
+  "responsive-design": ["responsive", "mobil", "tablet", "breakpoint"],
+  prototype: ["prototype", "prototip", "figma"],
+};
+
+function filterWebMobileDesignTasksByTab(tabId: string, tasks: ClientTask[]): ClientTask[] {
+  const keywords = WEB_MOBILE_DESIGN_TAB_KEYWORDS[tabId] ?? [];
+  const visibleTasks = tasks.filter((task) => task.visibility === "CLIENT_VISIBLE" || task.approvalRequired);
+
+  if (keywords.length === 0) {
+    return visibleTasks;
+  }
+
+  const matched = visibleTasks.filter((task) => matchesDesignTaskKeywords(task, keywords));
+  return matched.length > 0 ? matched : visibleTasks.filter((task) => task.workstream === "UI_INTEGRATION");
+}
+
+function filterWebMobileDesignFilesByTab(tabId: string, files: ProjectFile[]): ProjectFile[] {
+  const keywords = WEB_MOBILE_DESIGN_TAB_KEYWORDS[tabId] ?? [];
+
+  if (keywords.length === 0) {
+    return files;
+  }
+
+  const matched = files.filter((file) => matchesDesignFileKeywords(file, keywords));
+  return matched.length > 0 ? matched : files;
+}
+
+function matchesDesignTaskKeywords(task: ClientTask, keywords: string[]): boolean {
+  const haystack = [
+    task.title,
+    task.description,
+    task.campaignRef,
+    task.adSetRef,
+    task.adRef,
+    task.type,
+    task.workstream,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLocaleLowerCase("tr-TR");
+
+  return keywords.some((keyword) => haystack.includes(keyword.toLocaleLowerCase("tr-TR")));
+}
+
+function matchesDesignFileKeywords(file: ProjectFile, keywords: string[]): boolean {
+  const haystack = [file.title, file.description, file.originalFileName, file.category, file.mimeType]
+    .filter(Boolean)
+    .join(" ")
+    .toLocaleLowerCase("tr-TR");
+
+  return keywords.some((keyword) => haystack.includes(keyword.toLocaleLowerCase("tr-TR")));
+}
+
+function getWebMobileDesignTabTitle(tabId: string): string {
+  const labels: Record<string, string> = {
+    "ux-flow": "UX Akışı",
+    wireframe: "Wireframe",
+    "ui-screens": "UI Ekranları",
+    "design-system": "Tasarım Sistemi",
+    "responsive-design": "Responsive Tasarım",
+    prototype: "Prototip",
+  };
+
+  return labels[tabId] ?? getWebAppTabLabel(tabId);
 }
 
 function getSprintTaskStats(tasks: WorkspaceSourceTask[]) {
@@ -5615,39 +5784,49 @@ function getViewKind(serviceId: string, tabId: string): ViewKind {
 function PageHero({ content, tabId }: { content: ServiceTabContent; tabId: string }) {
   return (
     <div className="relative overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br from-[#1A1A1A] via-[#151515] to-[#101010] p-8">
-      <div className="absolute -right-20 -top-20 h-56 w-56 rounded-full bg-[#AAFF01]/10 blur-3xl" />
-      <div className="absolute -bottom-24 left-1/3 h-48 w-48 rounded-full bg-[#7B61FF]/10 blur-3xl" />
+      <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-[#AAFF01]/[0.04] blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-12 left-10 h-40 w-40 rounded-full bg-[#7B61FF]/[0.06] blur-3xl" />
       <div className="relative max-w-4xl">
-        <div className="inline-flex items-center gap-2 rounded-full border border-[#AAFF01]/20 bg-[#AAFF01]/10 px-3 py-1 text-xs text-[#AAFF01] mb-4">
-          <Sparkles className="w-3.5 h-3.5" />
-          {content.serviceName}
-          <span className="text-[#A0A0A0]">/</span>
-          <span className="text-white/80">{tabId}</span>
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#AAFF01]/30 bg-[#AAFF01]/10 px-3 py-1 text-xs font-medium text-[#AAFF01]">
+            <Sparkles className="w-3 h-3" />
+            {content.serviceName}
+          </span>
+          <span className="rounded-full border border-white/[0.12] bg-white/[0.04] px-3 py-1 text-xs text-[#A0A0A0]">
+            {tabId}
+          </span>
         </div>
-        <h1 className="text-3xl text-white mb-3">{content.title}</h1>
+        <h1 className="text-3xl font-bold text-white mb-3">{content.title}</h1>
         <p className="text-[#A0A0A0] leading-relaxed max-w-3xl">{content.description}</p>
       </div>
     </div>
   );
 }
 
-function SmartKpis({ content, tabId }: { content: ServiceTabContent; tabId: string }) {
-  const icons = [BarChart3, Target, Activity, CheckCircle];
+const KPI_ACCENTS = [
+  { border: "border-l-[#00D4FF]", color: "#00D4FF", icon: BarChart3 },
+  { border: "border-l-[#AAFF01]", color: "#AAFF01", icon: Target },
+  { border: "border-l-[#7B61FF]", color: "#7B61FF", icon: Activity },
+  { border: "border-l-[#FFA726]", color: "#FFA726", icon: CheckCircle },
+];
 
+function SmartKpis({ content, tabId }: { content: ServiceTabContent; tabId: string }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
       {content.kpis.map((kpi, index) => {
-        const Icon = icons[index % icons.length];
+        const accent = KPI_ACCENTS[index % KPI_ACCENTS.length];
+        const Icon = accent.icon;
 
         return (
-          <div key={`${tabId}-${kpi.label}`} className={`${cardClass} hover:border-[#AAFF01]/20 transition-all`}>
-            <div className="flex items-center justify-between mb-4">
+          <div
+            key={`${tabId}-${kpi.label}`}
+            className={`${cardClass} border-l-4 ${accent.border} hover:border-[#AAFF01]/20 transition-all`}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <Icon className="h-4 w-4 flex-shrink-0" style={{ color: accent.color }} />
               <span className="text-[#A0A0A0] text-sm">{kpi.label}</span>
-              <div className="w-10 h-10 rounded-xl bg-[#AAFF01]/10 border border-[#AAFF01]/20 flex items-center justify-center">
-                <Icon className="w-5 h-5 text-[#AAFF01]" />
-              </div>
             </div>
-            <div className="text-3xl text-white mb-1">{kpi.value}</div>
+            <div className="text-3xl font-bold text-white mt-3 mb-1">{kpi.value}</div>
             <p className="text-sm text-[#A0A0A0]">{kpi.note}</p>
           </div>
         );
@@ -5710,12 +5889,210 @@ function renderWorkspace(
   }
 }
 
+function WebMobileDesignClientWorkspace({
+  content,
+  tabId,
+  projectId,
+  serviceId,
+}: {
+  content: ServiceTabContent;
+  tabId: string;
+  projectId?: string | null;
+  serviceId: string;
+}) {
+  const {
+    data: tasks = [],
+    isLoading: tasksLoading,
+    isError: tasksError,
+  } = useGetClientTasksQuery(projectId ? { projectId } : undefined, { skip: !projectId });
+  const {
+    data: filesResponse,
+    isLoading: filesLoading,
+    isError: filesError,
+  } = useGetClientProjectFilesQuery({ projectId: projectId ?? "" }, { skip: !projectId });
+  const files = filesResponse?.data ?? [];
+  const tabTasks = useMemo(() => filterWebMobileDesignTasksByTab(tabId, tasks), [tabId, tasks]);
+  const tabFiles = useMemo(() => filterWebMobileDesignFilesByTab(tabId, files), [tabId, files]);
+  const isLoading = tasksLoading || filesLoading;
+  const isError = tasksError || filesError;
+
+  if (tabId === "wireframe") {
+    return (
+      <div className="p-8 space-y-6">
+        <PageHero content={content} tabId={tabId} />
+        <SmartKpis content={content} tabId={tabId} />
+        <ApprovalWorkspace content={content} tabId={tabId} serviceId={serviceId} projectId={projectId} />
+        <ActionFooter content={content} />
+      </div>
+    );
+  }
+
+  if (tabId === "revisions") {
+    const revisionTasks = tasks.filter((task) => task.type === "REVISION");
+    return (
+      <div className="p-8 space-y-6">
+        <PageHero content={content} tabId={tabId} />
+        <SmartKpis content={content} tabId={tabId} />
+        <TaskBasedRevisionPanel
+          serviceId={serviceId}
+          projectId={projectId}
+          tasks={revisionTasks}
+          isLoading={tasksLoading}
+        />
+        <ActionFooter content={content} />
+      </div>
+    );
+  }
+
+  if (tabId === "delivery-files") {
+    return (
+      <div className="p-8 space-y-6">
+        <PageHero content={content} tabId={tabId} />
+        <SmartKpis content={content} tabId={tabId} />
+        <DeliveryWorkspace content={content} projectId={projectId} />
+        <ActionFooter content={content} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-8 space-y-6">
+      <PageHero content={content} tabId={tabId} />
+      <SmartKpis content={content} tabId={tabId} />
+      <WebMobileDesignLivePanel
+        content={content}
+        tabId={tabId}
+        projectId={projectId}
+        tasks={tabTasks}
+        files={tabFiles}
+        isLoading={isLoading}
+        isError={isError}
+      />
+      <ActionFooter content={content} />
+    </div>
+  );
+}
+
+function WebMobileDesignLivePanel({
+  content,
+  tabId,
+  projectId,
+  tasks,
+  files,
+  isLoading,
+  isError,
+}: {
+  content: ServiceTabContent;
+  tabId: string;
+  projectId?: string | null;
+  tasks: ClientTask[];
+  files: ProjectFile[];
+  isLoading: boolean;
+  isError: boolean;
+}) {
+  if (!projectId) {
+    return (
+      <div className={cardClass}>
+        <h2 className="text-xl text-white mb-2">{content.title}</h2>
+        <p className="text-sm text-[#A0A0A0]">
+          Bu hizmet için proje oluşturulduğunda canlı görevler, prototipler ve teslim dosyaları burada görünecek.
+        </p>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return <div className={cardClass}><p className="text-sm text-[#A0A0A0]">Tasarım verileri yükleniyor...</p></div>;
+  }
+
+  if (isError) {
+    return <div className={cardClass}><p className="text-sm text-red-300">Tasarım verileri alınamadı.</p></div>;
+  }
+
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className={`${cardClass} xl:col-span-2`}>
+        <div className="mb-5 flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-xl text-white mb-1">{getWebMobileDesignTabTitle(tabId)}</h2>
+            <p className="text-sm text-[#A0A0A0]">
+              Bu sekme canlı proje görevleri ve müşteri görünür dosyalardan beslenir.
+            </p>
+          </div>
+          <span className={`rounded border px-2 py-1 text-xs ${statusTone.info}`}>
+            {tasks.length} görev · {files.length} dosya
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
+          <MiniMetric label="Açık Görev" value={String(tasks.filter((task) => task.status !== "DONE").length)} />
+          <MiniMetric label="Tamamlanan" value={String(tasks.filter((task) => task.status === "DONE").length)} />
+          <MiniMetric label="Onayda" value={String(tasks.filter((task) => task.approvalStatus === "PENDING").length)} />
+        </div>
+
+        {tasks.length === 0 ? (
+          <p className="text-sm text-[#A0A0A0]">Bu sekme için müşteri görünür görev bulunmuyor.</p>
+        ) : (
+          <div className="space-y-3">
+            {tasks.slice(0, 8).map((task) => (
+              <div key={task.id} className={innerClass}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-white">{task.title}</p>
+                    {task.description ? <p className="mt-1 text-xs text-[#A0A0A0]">{task.description}</p> : null}
+                    <p className="mt-2 text-xs text-[#A0A0A0]">
+                      {task.projectName ?? "Tasarım projesi"} · %{task.progressPercent} ilerleme
+                    </p>
+                  </div>
+                  <span className={`rounded border px-2 py-1 text-xs ${getClientTaskStatusTone(task.status)}`}>
+                    {getClientTaskStatusLabel(task.status)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className={cardClass}>
+        <h2 className="text-xl text-white mb-4">Görünür Dosyalar</h2>
+        {files.length === 0 ? (
+          <p className="text-sm text-[#A0A0A0]">Bu sekmeye bağlı müşteri görünür dosya yok.</p>
+        ) : (
+          <div className="space-y-3">
+            {files.slice(0, 6).map((file) => (
+              <div key={file.id} className={innerClass}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm text-white">{file.title}</p>
+                    <p className="mt-1 truncate text-xs text-[#A0A0A0]">{file.originalFileName}</p>
+                  </div>
+                  <a
+                    href={file.secureUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[#AAFF01] hover:underline"
+                    aria-label={`${file.title} dosyasını aç`}
+                  >
+                    <Link className="h-4 w-4" />
+                  </a>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SocialMediaClientWorkspace({ tabId }: { tabId: string }) {
   const isCalendarTab = tabId === 'content-calendar';
   const isPostListTab = tabId === 'pending-approvals' || tabId === 'published-content';
   const isApprovalTab = tabId === 'pending-approvals' || tabId === 'approvals';
   const isPerformanceTab = tabId === 'performance';
   const isReportsTab = tabId === 'reports';
+  const isDMTab = tabId === 'dm-comments';
   const [activeApprovalTaskId, setActiveApprovalTaskId] = useState<string | null>(null);
   const {
     data: summary,
@@ -5736,12 +6113,15 @@ function SocialMediaClientWorkspace({ tabId }: { tabId: string }) {
     data: listPosts = [],
     isLoading: postsLoading,
     isError: postsError,
-  } = useGetOwnSocialMediaPostsQuery({ limit: 80 }, { skip: !isPostListTab });
+  } = useGetOwnSocialMediaPostsQuery({ limit: 80 }, { skip: !isPostListTab && !isDMTab });
   const {
     data: insightsResponse,
     isLoading: insightsLoading,
     isError: insightsError,
-  } = useGetOwnSocialMediaInsightsQuery({ limit: 50 }, { skip: !isPerformanceTab });
+  } = useGetOwnSocialMediaInsightsQuery(
+    { limit: isDMTab ? 200 : 50 },
+    { skip: !isPerformanceTab && !isDMTab },
+  );
   const {
     data: reportsResponse,
     isLoading: socialReportsLoading,
@@ -5968,7 +6348,17 @@ function SocialMediaClientWorkspace({ tabId }: { tabId: string }) {
     return <SocialMediaReportsWorkspace reportsResponse={reportsResponse ?? null} />;
   }
 
-  if (tabId === 'dm-comments' || tabId === 'competitor-analysis') {
+  if (isDMTab) {
+    return (
+      <SocialMediaDMWorkspace
+        summary={summary}
+        insights={insightsResponse?.data ?? []}
+        isLoading={insightsLoading}
+      />
+    );
+  }
+
+  if (tabId === 'competitor-analysis') {
     return <SocialMediaUnavailableWorkspace tabId={tabId} summary={summary} />;
   }
 
@@ -6561,6 +6951,142 @@ function SocialMediaReportsWorkspace({
             <span className="text-sm text-white">{reportsResponse?.meta.clientVisible ?? 0}</span>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function SocialMediaDMWorkspace({
+  summary,
+  insights,
+  isLoading,
+}: {
+  summary: SocialMediaSummary | null | undefined;
+  insights: SocialMediaInsightItem[];
+  isLoading: boolean;
+}) {
+  type PostStats = {
+    postId: string;
+    post: SocialMediaInsightPostSummary;
+    platform: SocialMediaPlatform;
+    comments: number;
+    likes: number;
+    shares: number;
+  };
+
+  const postStats = useMemo<PostStats[]>(() => {
+    const map = new Map<string, PostStats>();
+    for (const item of insights) {
+      if (!map.has(item.postId)) {
+        map.set(item.postId, {
+          postId: item.postId,
+          post: item.post,
+          platform: item.platform,
+          comments: 0,
+          likes: 0,
+          shares: 0,
+        });
+      }
+      const entry = map.get(item.postId)!;
+      entry.comments += item.comments;
+      entry.likes += item.likes;
+      entry.shares += item.shares;
+    }
+    return Array.from(map.values())
+      .filter((s) => s.comments > 0 || s.likes > 0)
+      .sort((a, b) => b.comments - a.comments);
+  }, [insights]);
+
+  const totalComments = postStats.reduce((sum, s) => sum + s.comments, 0);
+  const totalLikes = postStats.reduce((sum, s) => sum + s.likes, 0);
+
+  const platformBg = (platform: SocialMediaPlatform) => {
+    if (platform === 'INSTAGRAM') return 'linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)';
+    if (platform === 'FACEBOOK') return '#1877F2';
+    return '#444';
+  };
+
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className={`${cardClass} xl:col-span-2`}>
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h2 className="text-xl text-white">Yorum & Etkileşim</h2>
+            <p className="text-sm text-[#A0A0A0] mt-1">Yayınlanan içeriklere gelen etkileşimler.</p>
+          </div>
+          <span className={`text-xs px-2 py-1 rounded border ${statusTone.good}`}>{totalComments.toLocaleString('tr-TR')} yorum</span>
+        </div>
+        {isLoading ? (
+          <div className="rounded-xl bg-[#202020] p-6 border border-white/[0.08] text-center text-[#A0A0A0] text-sm">
+            Yükleniyor…
+          </div>
+        ) : postStats.length > 0 ? (
+          <div className="space-y-3">
+            {postStats.slice(0, 15).map((stat) => (
+              <div key={stat.postId} className="flex gap-3 rounded-xl bg-[#202020] p-4 border border-white/[0.08]">
+                <div
+                  className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-semibold text-white"
+                  style={{ background: platformBg(stat.platform) }}
+                >
+                  {stat.platform === 'INSTAGRAM' ? 'IG' : stat.platform === 'FACEBOOK' ? 'FB' : stat.platform.slice(0, 2)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <p className="text-white text-sm font-medium truncate">{stat.post.title}</p>
+                    <span className="text-xs text-[#A0A0A0] flex-shrink-0">
+                      {stat.post.publishedAt ? new Date(stat.post.publishedAt).toLocaleDateString('tr-TR') : '—'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs text-[#A0A0A0] mt-2">
+                    <span className="text-[#AAFF01] font-medium flex items-center gap-1">
+                      <MessageSquare className="w-3 h-3" />{stat.comments.toLocaleString('tr-TR')}
+                    </span>
+                    <span>{stat.likes.toLocaleString('tr-TR')} beğeni</span>
+                    <span>{stat.shares.toLocaleString('tr-TR')} paylaşım</span>
+                    {stat.post.externalPostUrl && (
+                      <a
+                        href={stat.post.externalPostUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="ml-auto text-[#7B61FF] hover:text-[#9f8fff] flex items-center gap-1"
+                      >
+                        <Link className="w-3 h-3" /> Gör
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-xl bg-[#202020] p-6 border border-white/[0.08] text-center text-[#A0A0A0] text-sm">
+            Henüz etkileşim verisi yok.
+          </div>
+        )}
+      </div>
+      <div className={cardClass}>
+        <h2 className="text-xl text-white mb-4">Etkileşim Özeti</h2>
+        <div className="space-y-3 text-sm">
+          <div className="flex items-center justify-between rounded-xl bg-[#202020] p-3 border border-white/[0.08]">
+            <span className="text-[#A0A0A0]">Toplam Yorum</span>
+            <span className="text-white font-medium">{totalComments.toLocaleString('tr-TR')}</span>
+          </div>
+          <div className="flex items-center justify-between rounded-xl bg-[#202020] p-3 border border-white/[0.08]">
+            <span className="text-[#A0A0A0]">Toplam Beğeni</span>
+            <span className="text-white font-medium">{totalLikes.toLocaleString('tr-TR')}</span>
+          </div>
+          <div className="flex items-center justify-between rounded-xl bg-[#202020] p-3 border border-white/[0.08]">
+            <span className="text-[#A0A0A0]">Etkileşimli Post</span>
+            <span className="text-white font-medium">{postStats.length}</span>
+          </div>
+          <div className="flex items-center justify-between rounded-xl bg-[#202020] p-3 border border-white/[0.08]">
+            <span className="text-[#A0A0A0]">Durum</span>
+            <span className="text-white">{summary ? getSocialMediaSummaryStateLabel(summary.state) : 'Hazırlanıyor'}</span>
+          </div>
+        </div>
+        <p className="text-xs text-[#A0A0A0] mt-4">
+          Yorum metinleri Meta Business API üzerinden görüntülenebilir. Bu ekran etkileşim sayılarını göstermektedir.
+        </p>
       </div>
     </div>
   );

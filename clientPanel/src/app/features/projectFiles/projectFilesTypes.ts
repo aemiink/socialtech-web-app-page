@@ -29,6 +29,7 @@ export type ProjectFile = {
     | "AMAZON_ADS_CREATIVE_APPROVAL"
     | "AMAZON_ADS_PRODUCT_PROMOTION_APPROVAL"
     | "AMAZON_ADS_SEARCH_TERM_ACTION_APPROVAL"
+    | "DESIGN_CREATIVE_APPROVAL"
     | null;
   approvalStatus?:
     | "PENDING"

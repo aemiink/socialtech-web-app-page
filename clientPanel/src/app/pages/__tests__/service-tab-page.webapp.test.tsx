@@ -274,7 +274,7 @@ describe("ServiceTabPage workspace and revision flows", () => {
 
     render(<ServiceTabPage serviceId="web-app" tabId="sprint-status" projectId="p1" />);
 
-    expect(screen.getByText("Sprint Durumu")).toBeInTheDocument();
+    expect(screen.getAllByText("Sprint Durumu").length).toBeGreaterThan(0);
     expect(screen.getByText("%50 tamamlandı")).toBeInTheDocument();
     expect(screen.getByText("Seçili sprint kontrol listesi tamamlanma oranı: %50")).toBeInTheDocument();
     expect(screen.getByText("Arayüz analizi")).toBeInTheDocument();

@@ -114,6 +114,7 @@ export type SocialMediaPost = {
   publishedAt: string | null;
   clientVisible: boolean;
   externalPostUrl: string | null;
+  externalMediaUrl: string | null;
   createdAt: string;
   updatedAt: string;
   project: SocialMediaProjectSummary | null;
@@ -280,15 +281,23 @@ export type SocialMediaReportsQuery = {
 
 export type SocialMediaConfig = {
   clientProfileId: string;
+  activePlatforms: SocialMediaPlatform[];
   instagramUsername: string | null;
   instagramAccountId: string | null;
+  instagramProfilePictureUrl: string | null;
   facebookPageId: string | null;
+  facebookPageName: string | null;
+  facebookProfilePictureUrl: string | null;
   tiktokUsername: string | null;
   linkedinPageUrl: string | null;
   contentFrequency: string | null;
   primaryGoal: SocialMediaGoal | null;
   toneOfVoice: string | null;
   hashtags: string[];
+  igFollowerCount: number | null;
+  igImpressions: number | null;
+  igProfileViews: number | null;
+  igWebsiteClicks: number | null;
   connectionStatus: SocialMediaConnectionStatus;
   lastSyncAt: string | null;
   notes: string | null;

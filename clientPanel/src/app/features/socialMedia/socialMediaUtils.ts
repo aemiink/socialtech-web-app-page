@@ -526,6 +526,7 @@ function normalizeSocialMediaPost(value: unknown): SocialMediaPost | null {
     publishedAt: value.publishedAt,
     clientVisible: value.clientVisible,
     externalPostUrl: value.externalPostUrl,
+    externalMediaUrl: readNullableString(value.externalMediaUrl),
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
     project: normalizeProjectSummary(value.project),
@@ -554,20 +555,36 @@ function normalizeSocialMediaSummaryConfig(value: unknown): SocialMediaSummaryCo
 
 function normalizeConfigFields(record: Record<string, unknown>): SocialMediaSummaryConfig {
   return {
+    activePlatforms: readSocialMediaPlatforms(record.activePlatforms),
     instagramUsername: readNullableString(record.instagramUsername),
     instagramAccountId: readNullableString(record.instagramAccountId),
+    instagramProfilePictureUrl: readNullableString(record.instagramProfilePictureUrl),
     facebookPageId: readNullableString(record.facebookPageId),
+    facebookPageName: readNullableString(record.facebookPageName),
+    facebookProfilePictureUrl: readNullableString(record.facebookProfilePictureUrl),
     tiktokUsername: readNullableString(record.tiktokUsername),
     linkedinPageUrl: readNullableString(record.linkedinPageUrl),
     contentFrequency: readNullableString(record.contentFrequency),
     primaryGoal: readEnumValue(record.primaryGoal, SOCIAL_MEDIA_GOAL_OPTIONS),
     toneOfVoice: readNullableString(record.toneOfVoice),
     hashtags: readStringArray(record.hashtags),
+    igFollowerCount: readNullableNumber(record.igFollowerCount),
+    igImpressions: readNullableNumber(record.igImpressions),
+    igProfileViews: readNullableNumber(record.igProfileViews),
+    igWebsiteClicks: readNullableNumber(record.igWebsiteClicks),
     connectionStatus:
       readEnumValue(record.connectionStatus, SOCIAL_MEDIA_CONNECTION_STATUS_OPTIONS) ?? "NOT_CONNECTED",
     lastSyncAt: readNullableString(record.lastSyncAt),
     notes: readNullableString(record.notes),
   };
+}
+
+function readSocialMediaPlatforms(value: unknown): SocialMediaPlatform[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is SocialMediaPlatform =>
+        typeof item === "string" && SOCIAL_MEDIA_PLATFORM_OPTIONS.includes(item as SocialMediaPlatform),
+      )
+    : [];
 }
 
 function normalizeSummaryPost(value: unknown): SocialMediaSummaryPost | null {
@@ -844,6 +861,10 @@ function isSocialMediaPostStatus(value: unknown): value is SocialMediaPostStatus
 
 function readNullableString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
+}
+
+function readNullableNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function readString(value: unknown): string {

@@ -30,6 +30,7 @@ describe("SocialMediaDashboard", () => {
     mockUseGetOwnSocialMediaConfigQuery.mockReturnValue({
       data: {
         clientProfileId: "client-1",
+        activePlatforms: ["INSTAGRAM", "FACEBOOK"],
         instagramUsername: "@acme",
         instagramAccountId: null,
         facebookPageId: null,
@@ -206,6 +207,7 @@ function buildSummary() {
       updatedAt: "2026-05-28T00:00:00.000Z",
     },
     config: {
+      activePlatforms: ["INSTAGRAM", "FACEBOOK"],
       instagramUsername: "@acme",
       instagramAccountId: null,
       facebookPageId: null,
