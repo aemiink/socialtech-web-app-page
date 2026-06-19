@@ -116,6 +116,7 @@ export type SocialMediaPost = {
   assignedToUserId: string | null;
   externalPostId: string | null;
   externalPostUrl: string | null;
+  externalMediaUrl: string | null;
   createdAt: string;
   updatedAt: string;
   project: Project | null;
@@ -350,6 +351,7 @@ export type CreateSocialMediaPostAssetRequest = {
 };
 
 export type SocialMediaSummaryConfig = {
+  activePlatforms: SocialMediaPlatform[];
   instagramUsername: string | null;
   instagramAccountId: string | null;
   facebookPageId: string | null;

@@ -16,6 +16,7 @@ import { SocialMediaContentCalendar } from "../employee/components/SocialMediaCo
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import { Checkbox } from "../components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -28,13 +29,30 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
 import { hasAdminPermission, selectCurrentUser } from "../features/auth/authSelectors";
-import { useUpdateAdminClientSocialMediaConfigMutation } from "../features/clients/clientsApi";
-import type { UpdateAdminClientSocialMediaConfigRequest } from "../features/clients/clientsTypes";
-import { extractApiErrorMessage, formatClientDateTime } from "../features/clients/clientsUtils";
-import { useGetAdminSocialMediaClientsQuery } from "../features/socialMedia/socialMediaApi";
+import {
+  useCreateAdminClientSocialMediaMetaOAuthUrlMutation,
+  useUpdateAdminClientSocialMediaConfigMutation,
+} from "../features/clients/clientsApi";
+import type {
+  ClientSocialMediaPlatform,
+  UpdateAdminClientSocialMediaConfigRequest,
+} from "../features/clients/clientsTypes";
+import { extractApiErrorMessage } from "../features/clients/clientsUtils";
+import {
+  SocialMediaActionQueue,
+  SocialMediaConnectionHealth,
+  SocialMediaProfileCards,
+} from "../features/socialMedia/components/SocialMediaAccountPanels";
+import {
+  useGetAdminSocialMediaClientsQuery,
+  useGetClientSocialMediaInsightsQuery,
+  useTriggerClientSocialMediaSyncMutation,
+} from "../features/socialMedia/socialMediaApi";
+import { cn } from "../components/ui/utils";
 import type {
   AdminSocialMediaAssignedEmployee,
   AdminSocialMediaClientListItem,
+  SocialMediaInsightsResponse,
   SocialMediaGoal,
 } from "../features/socialMedia/socialMediaTypes";
 import {
@@ -47,6 +65,7 @@ import {
 import { useAppSelector } from "../store/hooks";
 
 type ConfigFormState = {
+  activePlatforms: ClientSocialMediaPlatform[];
   instagramUsername: string;
   instagramAccountId: string;
   facebookPageId: string;
@@ -60,6 +79,7 @@ type ConfigFormState = {
 };
 
 const initialConfigForm: ConfigFormState = {
+  activePlatforms: [],
   instagramUsername: "",
   instagramAccountId: "",
   facebookPageId: "",
@@ -82,11 +102,37 @@ const socialMediaGoalOptions: Array<{ value: SocialMediaGoal; label: string }> =
   { value: "MIXED", label: "Karma" },
 ];
 
+const socialMediaChannelOptions: Array<{
+  key: "META" | "TIKTOK" | "LINKEDIN";
+  label: string;
+  platforms: ClientSocialMediaPlatform[];
+}> = [
+  {
+    key: "META",
+    label: "Meta (Instagram/Facebook)",
+    platforms: ["INSTAGRAM", "FACEBOOK"],
+  },
+  {
+    key: "TIKTOK",
+    label: "TikTok",
+    platforms: ["TIKTOK"],
+  },
+  {
+    key: "LINKEDIN",
+    label: "LinkedIn",
+    platforms: ["LINKEDIN"],
+  },
+];
+
 export function SocialMediaAdmin() {
   const currentUser = useAppSelector(selectCurrentUser);
   const canReadOverview = hasAdminPermission(currentUser, [
     "socialMedia.summary.read.any",
     "socialMedia.config.read.any",
+  ]);
+  const canReadInsights = hasAdminPermission(currentUser, [
+    "socialMedia.posts.read.any",
+    "reports.read",
   ]);
   const canManageConfig = hasAdminPermission(currentUser, ["socialMedia.config.manage.any"]);
   const canManagePosts = hasAdminPermission(currentUser, ["socialMedia.posts.manage.any"]);
@@ -103,9 +149,14 @@ export function SocialMediaAdmin() {
   });
   const [updateSocialMediaConfig, { isLoading: isUpdatingConfig }] =
     useUpdateAdminClientSocialMediaConfigMutation();
+  const [createMetaOAuthUrl, { isLoading: isCreatingMetaOAuthUrl }] =
+    useCreateAdminClientSocialMediaMetaOAuthUrlMutation();
+  const [triggerMetaSync, { isLoading: isSyncing }] = useTriggerClientSocialMediaSyncMutation();
   const [selectedClientId, setSelectedClientId] = useState("");
   const [configTarget, setConfigTarget] = useState<AdminSocialMediaClientListItem | null>(null);
   const [configForm, setConfigForm] = useState<ConfigFormState>(initialConfigForm);
+  const [metaOAuthUrl, setMetaOAuthUrl] = useState("");
+  const [metaOAuthFeedback, setMetaOAuthFeedback] = useState<string | null>(null);
   const [pageMessage, setPageMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const listItems = response?.data ?? [];
@@ -113,6 +164,10 @@ export function SocialMediaAdmin() {
   const selectedClient = useMemo(
     () => listItems.find((item) => item.client.id === selectedClientId) ?? listItems[0] ?? null,
     [listItems, selectedClientId],
+  );
+  const selectedInsightsQuery = useGetClientSocialMediaInsightsQuery(
+    { clientId: selectedClient?.client.id ?? "", query: { limit: 25 } },
+    { skip: !selectedClient || !canReadInsights },
   );
   const pendingClients = useMemo(
     () =>
@@ -140,8 +195,11 @@ export function SocialMediaAdmin() {
 
   function openConfigDialog(client: AdminSocialMediaClientListItem) {
     setPageMessage(null);
+    setMetaOAuthUrl("");
+    setMetaOAuthFeedback(null);
     setConfigTarget(client);
     setConfigForm({
+      activePlatforms: resolveSocialMediaActivePlatforms(client.config),
       instagramUsername: client.config?.instagramUsername ?? "",
       instagramAccountId: client.config?.instagramAccountId ?? "",
       facebookPageId: client.config?.facebookPageId ?? "",
@@ -162,9 +220,11 @@ export function SocialMediaAdmin() {
 
     setConfigTarget(null);
     setConfigForm(initialConfigForm);
+    setMetaOAuthUrl("");
+    setMetaOAuthFeedback(null);
   }
 
-  function updateConfigField(field: keyof ConfigFormState, value: string) {
+  function updateConfigField<K extends keyof ConfigFormState>(field: K, value: ConfigFormState[K]) {
     setConfigForm((prev) => ({ ...prev, [field]: value }));
   }
 
@@ -177,6 +237,10 @@ export function SocialMediaAdmin() {
     const payload = buildSocialMediaConfigPayload(configForm);
     if (!payload) {
       setPageMessage({ type: "error", text: "En az bir Social Media config alanı girin." });
+      return;
+    }
+    if (configForm.activePlatforms.length === 0) {
+      setPageMessage({ type: "error", text: "En az bir aktif platform seçin." });
       return;
     }
 
@@ -197,8 +261,46 @@ export function SocialMediaAdmin() {
     }
   }
 
+  async function handleMetaOAuthUrlCreate() {
+    if (!configTarget) {
+      return;
+    }
+
+    setMetaOAuthUrl("");
+    setMetaOAuthFeedback(null);
+
+    try {
+      const result = await createMetaOAuthUrl(configTarget.client.id).unwrap();
+      setMetaOAuthUrl(result.authorizationUrl);
+      setMetaOAuthFeedback(
+        "Meta bağlantı linki oluşturuldu. Bağlantı tamamlanınca Facebook Page ID ve Instagram Account ID otomatik kaydedilir; ardından config'i yeniden açarak güncel alanları görebilirsin.",
+      );
+    } catch (mutationError) {
+      setMetaOAuthFeedback(
+        extractApiErrorMessage(mutationError, "Meta bağlantı linki oluşturulamadı."),
+      );
+    }
+  }
+
   function scrollToCalendar() {
     document.getElementById("social-media-content-calendar")?.scrollIntoView({ behavior: "smooth" });
+  }
+
+  async function handleMetaSync() {
+    if (!selectedClient || isSyncing) return;
+    setPageMessage(null);
+    try {
+      const result = await triggerMetaSync({ clientId: selectedClient.client.id }).unwrap();
+      setPageMessage({
+        type: "success",
+        text: `Meta sync tamamlandı — ${result.synced} platform: ${result.platforms.join(", ")}`,
+      });
+    } catch (err) {
+      setPageMessage({
+        type: "error",
+        text: extractApiErrorMessage(err, "Meta sync başlatılamadı."),
+      });
+    }
   }
 
   if (!canReadOverview) {
@@ -341,9 +443,20 @@ export function SocialMediaAdmin() {
             <SelectedClientPanel
               canManageConfig={canManageConfig}
               canManagePosts={canManagePosts}
+              canReadInsights={canReadInsights}
+              insights={selectedInsightsQuery.currentData ?? null}
+              insightsErrorMessage={
+                selectedInsightsQuery.isError
+                  ? extractApiErrorMessage(selectedInsightsQuery.error, "Performans snapshot verisi alınamadı.")
+                  : null
+              }
+              isInsightsError={selectedInsightsQuery.isError}
+              isInsightsLoading={selectedInsightsQuery.isFetching}
+              isSyncing={isSyncing}
               item={selectedClient}
               onCalendarOpen={scrollToCalendar}
               onConfigOpen={openConfigDialog}
+              onMetaSync={() => void handleMetaSync()}
             />
           ) : (
             <StatusPanel compact title="Müşteri seçilmedi" description="Detay için listeden bir müşteri seçin." />
@@ -362,22 +475,95 @@ export function SocialMediaAdmin() {
             <DialogDescription>{configTarget?.client.companyName ?? "Müşteri"} için organik kanal ayarları.</DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={handleConfigSubmit}>
+            <div className="space-y-2">
+              <Label>Aktif Platformlar</Label>
+              <div className="grid gap-2 md:grid-cols-3">
+                {socialMediaChannelOptions.map((channel) => {
+                  const checkboxId = `social-media-config-channel-${channel.key.toLowerCase()}`;
+                  const checked = hasAnySocialMediaPlatform(
+                    configForm.activePlatforms,
+                    channel.platforms,
+                  );
+
+                  return (
+                    <label
+                      key={channel.key}
+                      htmlFor={checkboxId}
+                      className="flex min-h-10 items-center gap-3 rounded-md border border-white/[0.08] bg-[#111] px-3 py-2 text-sm text-white"
+                    >
+                      <Checkbox
+                        id={checkboxId}
+                        aria-label={`${channel.label} platformu`}
+                        checked={checked}
+                        onCheckedChange={() =>
+                          updateConfigField(
+                            "activePlatforms",
+                            toggleSocialMediaPlatforms(configForm.activePlatforms, channel.platforms),
+                          )
+                        }
+                        disabled={isUpdatingConfig || !canManageConfig}
+                        className="border-white/[0.18] data-[state=checked]:border-[#AAFF01] data-[state=checked]:bg-[#AAFF01] data-[state=checked]:text-[#131313]"
+                      />
+                      <span>{channel.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
             <div className="grid gap-3 md:grid-cols-2">
-              <Field label="Instagram Username">
-                <Input value={configForm.instagramUsername} onChange={(event) => updateConfigField("instagramUsername", event.target.value)} />
-              </Field>
-              <Field label="Instagram Account ID">
-                <Input value={configForm.instagramAccountId} onChange={(event) => updateConfigField("instagramAccountId", event.target.value)} />
-              </Field>
-              <Field label="Facebook Page ID">
-                <Input value={configForm.facebookPageId} onChange={(event) => updateConfigField("facebookPageId", event.target.value)} />
-              </Field>
-              <Field label="TikTok Username">
-                <Input value={configForm.tiktokUsername} onChange={(event) => updateConfigField("tiktokUsername", event.target.value)} />
-              </Field>
-              <Field label="LinkedIn Page URL">
-                <Input value={configForm.linkedinPageUrl} onChange={(event) => updateConfigField("linkedinPageUrl", event.target.value)} />
-              </Field>
+              {hasAnySocialMediaPlatform(configForm.activePlatforms, ["INSTAGRAM", "FACEBOOK"]) ? (
+                <>
+                  <div className="space-y-2 md:col-span-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleMetaOAuthUrlCreate}
+                        disabled={!canManageConfig || isUpdatingConfig || isCreatingMetaOAuthUrl}
+                      >
+                        {isCreatingMetaOAuthUrl ? "Link Hazırlanıyor..." : "Meta Bağlantı Linki Oluştur"}
+                      </Button>
+                      {metaOAuthUrl ? (
+                        <a
+                          href={metaOAuthUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-sm text-[#AAFF01] underline-offset-4 hover:underline"
+                        >
+                          Linki Aç
+                        </a>
+                      ) : null}
+                    </div>
+                    {metaOAuthFeedback ? (
+                      <p className="text-xs text-[#A0A0A0]">{metaOAuthFeedback}</p>
+                    ) : null}
+                    {metaOAuthUrl ? (
+                      <p className="break-all rounded-md border border-white/[0.06] bg-[#111] p-2 text-xs text-[#A0A0A0]">
+                        {metaOAuthUrl}
+                      </p>
+                    ) : null}
+                  </div>
+                  <Field label="Instagram Username">
+                    <Input value={configForm.instagramUsername} onChange={(event) => updateConfigField("instagramUsername", event.target.value)} />
+                  </Field>
+                  <Field label="Instagram Account ID">
+                    <Input value={configForm.instagramAccountId} onChange={(event) => updateConfigField("instagramAccountId", event.target.value)} />
+                  </Field>
+                  <Field label="Facebook Page ID">
+                    <Input value={configForm.facebookPageId} onChange={(event) => updateConfigField("facebookPageId", event.target.value)} />
+                  </Field>
+                </>
+              ) : null}
+              {configForm.activePlatforms.includes("TIKTOK") ? (
+                <Field label="TikTok Username">
+                  <Input value={configForm.tiktokUsername} onChange={(event) => updateConfigField("tiktokUsername", event.target.value)} />
+                </Field>
+              ) : null}
+              {configForm.activePlatforms.includes("LINKEDIN") ? (
+                <Field label="LinkedIn Page URL">
+                  <Input value={configForm.linkedinPageUrl} onChange={(event) => updateConfigField("linkedinPageUrl", event.target.value)} />
+                </Field>
+              ) : null}
               <Field label="Content Frequency">
                 <Input value={configForm.contentFrequency} onChange={(event) => updateConfigField("contentFrequency", event.target.value)} />
               </Field>
@@ -385,7 +571,9 @@ export function SocialMediaAdmin() {
                 <select
                   className="h-10 rounded-md border border-white/[0.12] bg-[#111] px-3 text-sm text-white outline-none focus:border-[#AAFF01]/60"
                   value={configForm.primaryGoal}
-                  onChange={(event) => updateConfigField("primaryGoal", event.target.value)}
+                  onChange={(event) =>
+                    updateConfigField("primaryGoal", event.target.value as ConfigFormState["primaryGoal"])
+                  }
                 >
                   <option value="">Hedef seçilmedi</option>
                   {socialMediaGoalOptions.map((option) => (
@@ -433,14 +621,28 @@ function SelectedClientPanel({
   item,
   canManageConfig,
   canManagePosts,
+  canReadInsights,
+  insights,
+  insightsErrorMessage,
+  isInsightsError,
+  isInsightsLoading,
+  isSyncing,
   onConfigOpen,
   onCalendarOpen,
+  onMetaSync,
 }: {
   item: AdminSocialMediaClientListItem;
   canManageConfig: boolean;
   canManagePosts: boolean;
+  canReadInsights: boolean;
+  insights: SocialMediaInsightsResponse | null;
+  insightsErrorMessage: string | null;
+  isInsightsError: boolean;
+  isInsightsLoading: boolean;
+  isSyncing: boolean;
   onConfigOpen: (item: AdminSocialMediaClientListItem) => void;
   onCalendarOpen: () => void;
+  onMetaSync: () => void;
 }) {
   return (
     <div className="space-y-5">
@@ -463,6 +665,10 @@ function SelectedClientPanel({
             <CalendarDays className="h-4 w-4" />
             Post Oluştur
           </Button>
+          <Button disabled={isSyncing} size="sm" type="button" variant="outline" onClick={onMetaSync}>
+            <RefreshCw className={cn("h-4 w-4", isSyncing && "animate-spin")} aria-hidden="true" />
+            Meta Sync
+          </Button>
           <Link to={`/musteriler/${item.client.id}`}>
             <Button size="sm" type="button" variant="outline">
               <ExternalLink className="h-4 w-4" />
@@ -479,15 +685,39 @@ function SelectedClientPanel({
         <DetailPill label="Geciken" value={formatNumber(item.metrics.overdueScheduledPosts)} />
       </div>
 
+      <SocialMediaConnectionHealth config={item.config} lastUpdatedAt={item.meta.lastUpdatedAt} />
+
+      <SocialMediaProfileCards config={item.config} />
+
+      <InsightSnapshotPanel
+        canRead={canReadInsights}
+        errorMessage={insightsErrorMessage}
+        insights={insights}
+        isError={isInsightsError}
+        isLoading={isInsightsLoading}
+      />
+
       <div className="rounded-md border border-white/[0.08] bg-[#111] p-4">
-        <h3 className="text-sm font-medium">Config</h3>
-        <div className="mt-3 space-y-2 text-sm text-[#A0A0A0]">
-          <p>Instagram: <span className="text-white">{item.config?.instagramUsername ?? "—"}</span></p>
+        <h3 className="text-sm font-medium">Ajans Parametreleri</h3>
+        <div className="mt-3 grid gap-3 text-sm text-[#A0A0A0] md:grid-cols-2">
           <p>Hedef: <span className="text-white">{getSocialMediaGoalLabel(item.config?.primaryGoal ?? null)}</span></p>
           <p>Frekans: <span className="text-white">{item.config?.contentFrequency ?? "—"}</span></p>
-          <p>Son güncelleme: <span className="text-white">{formatClientDateTime(item.meta.lastUpdatedAt)}</span></p>
+          <p>Ton: <span className="text-white">{item.config?.toneOfVoice ?? "—"}</span></p>
+          <p>Hashtag: <span className="text-white">{item.config?.hashtags.slice(0, 3).join(", ") || "—"}</span></p>
         </div>
       </div>
+
+      <SocialMediaActionQueue
+        config={item.config}
+        metrics={{
+          plannedPosts: item.metrics.plannedPosts,
+          publishedPosts: item.metrics.publishedPosts,
+          pendingApprovals: item.metrics.pendingApprovals,
+          overdueScheduledPosts: item.metrics.overdueScheduledPosts,
+          creativeAssets: item.creativeAssets.length,
+        }}
+        riskReasons={item.risk.reasons}
+      />
 
       <div className="rounded-md border border-white/[0.08] bg-[#111] p-4">
         <h3 className="text-sm font-medium">Risk Notları</h3>
@@ -538,6 +768,74 @@ function SelectedClientPanel({
         <h3 className="text-sm font-medium">Son Rapor</h3>
         <p className="mt-3 text-sm text-[#A0A0A0]">Social Media rapor modeli Faz 8 kapsamında açılacak.</p>
       </div>
+    </div>
+  );
+}
+
+function InsightSnapshotPanel({
+  canRead,
+  errorMessage,
+  insights,
+  isError,
+  isLoading,
+}: {
+  canRead: boolean;
+  errorMessage: string | null;
+  insights: SocialMediaInsightsResponse | null;
+  isError: boolean;
+  isLoading: boolean;
+}) {
+  const totals = insights?.meta.totals ?? null;
+  const topPost = insights?.meta.topPosts[0] ?? null;
+  const badgeLabel = !canRead
+    ? "Yetki yok"
+    : isError
+      ? "Hata"
+      : isLoading
+        ? "Yükleniyor"
+        : `${formatNumber(insights?.meta.total ?? 0)} kayıt`;
+
+  return (
+    <div className="rounded-md border border-white/[0.08] bg-[#111] p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-medium">Performans Snapshot</h3>
+          <p className="mt-1 text-xs text-[#A0A0A0]">Kayıtlı post insight verilerinden özet.</p>
+        </div>
+        <Badge className="border-white/[0.12] bg-white/[0.06] text-[#E5E5E5]" variant="outline">
+          {badgeLabel}
+        </Badge>
+      </div>
+
+      {!canRead ? (
+        <p className="mt-3 text-sm text-[#A0A0A0]">
+          Snapshot insightlarını görmek için Social Media post veya rapor okuma yetkisi gerekiyor.
+        </p>
+      ) : isError ? (
+        <p className="mt-3 text-sm text-[#FFB0B0]">
+          {errorMessage ?? "Performans snapshot verisi alınamadı."}
+        </p>
+      ) : isLoading && !totals ? (
+        <p className="mt-3 text-sm text-[#A0A0A0]">Performans snapshot verisi yükleniyor.</p>
+      ) : totals ? (
+        <>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <DetailPill label="Impression" value={formatNumber(totals.impressions)} />
+            <DetailPill label="Reach" value={formatNumber(totals.reach)} />
+            <DetailPill label="Engagement" value={formatPercentage(totals.engagementRate)} />
+            <DetailPill label="Profil Ziyareti" value={formatNumber(totals.profileVisits)} />
+          </div>
+          {topPost ? (
+            <p className="mt-3 text-xs text-[#A0A0A0]">
+              En iyi post: <span className="text-white">{topPost.title}</span> · {formatPercentage(topPost.engagementRate)}
+            </p>
+          ) : null}
+        </>
+      ) : (
+        <p className="mt-3 text-sm text-[#A0A0A0]">
+          Henüz snapshot insight kaydı yok. Yayınlanan postlardan manuel snapshot girildiğinde burada görünür.
+        </p>
+      )}
     </div>
   );
 }
@@ -608,12 +906,18 @@ function buildSocialMediaConfigPayload(
   form: ConfigFormState,
 ): UpdateAdminClientSocialMediaConfigRequest | null {
   const payload: UpdateAdminClientSocialMediaConfigRequest = {};
+  const hasMetaSelected = hasAnySocialMediaPlatform(form.activePlatforms, ["INSTAGRAM", "FACEBOOK"]);
 
-  addOptionalText(payload, "instagramUsername", form.instagramUsername);
-  addOptionalText(payload, "instagramAccountId", form.instagramAccountId);
-  addOptionalText(payload, "facebookPageId", form.facebookPageId);
-  addOptionalText(payload, "tiktokUsername", form.tiktokUsername);
-  addOptionalText(payload, "linkedinPageUrl", form.linkedinPageUrl);
+  payload.activePlatforms = form.activePlatforms;
+  payload.instagramUsername = hasMetaSelected ? normalizeNullableText(form.instagramUsername) : null;
+  payload.instagramAccountId = hasMetaSelected ? normalizeNullableText(form.instagramAccountId) : null;
+  payload.facebookPageId = hasMetaSelected ? normalizeNullableText(form.facebookPageId) : null;
+  payload.tiktokUsername = form.activePlatforms.includes("TIKTOK")
+    ? normalizeNullableText(form.tiktokUsername)
+    : null;
+  payload.linkedinPageUrl = form.activePlatforms.includes("LINKEDIN")
+    ? normalizeNullableText(form.linkedinPageUrl)
+    : null;
   addOptionalText(payload, "contentFrequency", form.contentFrequency);
   addOptionalText(payload, "toneOfVoice", form.toneOfVoice);
   addOptionalText(payload, "notes", form.notes);
@@ -631,6 +935,54 @@ function buildSocialMediaConfigPayload(
   }
 
   return Object.keys(payload).length > 0 ? payload : null;
+}
+
+function hasAnySocialMediaPlatform(
+  selectedPlatforms: ClientSocialMediaPlatform[],
+  platforms: ClientSocialMediaPlatform[],
+): boolean {
+  return platforms.some((platform) => selectedPlatforms.includes(platform));
+}
+
+function toggleSocialMediaPlatforms(
+  selectedPlatforms: ClientSocialMediaPlatform[],
+  platforms: ClientSocialMediaPlatform[],
+): ClientSocialMediaPlatform[] {
+  if (hasAnySocialMediaPlatform(selectedPlatforms, platforms)) {
+    return selectedPlatforms.filter((platform) => !platforms.includes(platform));
+  }
+
+  return [...selectedPlatforms, ...platforms.filter((platform) => !selectedPlatforms.includes(platform))];
+}
+
+function normalizeNullableText(value: string): string | null {
+  const normalizedValue = value.trim();
+  return normalizedValue.length > 0 ? normalizedValue : null;
+}
+
+function resolveSocialMediaActivePlatforms(
+  config: AdminSocialMediaClientListItem["config"],
+): ClientSocialMediaPlatform[] {
+  if (!config) {
+    return [];
+  }
+
+  if (config.activePlatforms.length > 0) {
+    return config.activePlatforms;
+  }
+
+  const inferredPlatforms: ClientSocialMediaPlatform[] = [];
+  if (config.instagramUsername || config.instagramAccountId || config.facebookPageId) {
+    inferredPlatforms.push("INSTAGRAM", "FACEBOOK");
+  }
+  if (config.tiktokUsername) {
+    inferredPlatforms.push("TIKTOK");
+  }
+  if (config.linkedinPageUrl) {
+    inferredPlatforms.push("LINKEDIN");
+  }
+
+  return inferredPlatforms;
 }
 
 function addOptionalText<K extends keyof UpdateAdminClientSocialMediaConfigRequest>(
@@ -664,4 +1016,8 @@ function formatAssignments(assignments: AdminSocialMediaAssignedEmployee[]): str
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("tr-TR").format(value);
+}
+
+function formatPercentage(value: number): string {
+  return `${new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 }).format(value)}%`;
 }

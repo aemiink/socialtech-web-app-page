@@ -562,6 +562,7 @@ function normalizeSocialMediaSummaryConfig(value: unknown): SocialMediaSummaryCo
   }
 
   return {
+    activePlatforms: readSocialMediaPlatforms(value.activePlatforms),
     instagramUsername: readNullableString(value.instagramUsername),
     instagramAccountId: readNullableString(value.instagramAccountId),
     facebookPageId: readNullableString(value.facebookPageId),
@@ -576,6 +577,12 @@ function normalizeSocialMediaSummaryConfig(value: unknown): SocialMediaSummaryCo
     lastSyncAt: readNullableString(value.lastSyncAt),
     notes: readNullableString(value.notes),
   };
+}
+
+function readSocialMediaPlatforms(value: unknown): SocialMediaPlatform[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is SocialMediaPlatform => isSocialMediaPlatform(item))
+    : [];
 }
 
 function normalizeSummaryPost(value: unknown): SocialMediaSummaryPost | null {
@@ -831,6 +838,7 @@ function normalizeSocialMediaPost(value: unknown): SocialMediaPost | null {
     assignedToUserId: value.assignedToUserId,
     externalPostId: value.externalPostId,
     externalPostUrl: value.externalPostUrl,
+    externalMediaUrl: readNullableString(value.externalMediaUrl),
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
     project: normalizeProjectSummary(value.project),

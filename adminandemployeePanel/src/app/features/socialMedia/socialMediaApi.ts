@@ -340,6 +340,17 @@ export const socialMediaApi = baseApi.injectEndpoints({
         { type: "SocialMediaSummary", id: clientId },
       ],
     }),
+    triggerClientSocialMediaSync: builder.mutation<{ synced: number; platforms: string[] }, { clientId: string }>({
+      query: ({ clientId }) => ({
+        url: `/social-media/clients/${clientId}/sync-meta`,
+        method: "POST",
+      }),
+      invalidatesTags: (_result, _error, { clientId }) => [
+        { type: "SocialMediaSummary", id: clientId },
+        { type: "SocialMediaPosts", id: `${SOCIAL_MEDIA_POSTS_LIST_ID}:${clientId}` },
+        { type: "SocialMediaInsights", id: `${SOCIAL_MEDIA_INSIGHTS_LIST_ID}:${clientId}` },
+      ],
+    }),
   }),
 });
 
@@ -362,6 +373,7 @@ export const {
   useDeleteSocialMediaPostMutation,
   useCreateSocialMediaPostAssetMutation,
   useDeleteSocialMediaPostAssetMutation,
+  useTriggerClientSocialMediaSyncMutation,
 } = socialMediaApi;
 
 function serializeSocialMediaPostsQuery(

@@ -34,6 +34,7 @@ type UpdateConfigTrigger = (payload: {
 const mockUseGetAdminSocialMediaClientsQuery = vi.fn<
   (arg?: void, options?: QueryOptions) => SocialMediaClientsQueryResult
 >();
+const mockUseGetClientSocialMediaInsightsQuery = vi.fn();
 const mockUseUpdateAdminClientSocialMediaConfigMutation = vi.fn<
   () => [UpdateConfigTrigger, { isLoading: boolean }]
 >();
@@ -48,9 +49,15 @@ vi.mock("../../store/hooks", () => ({
 vi.mock("../../features/socialMedia/socialMediaApi", () => ({
   useGetAdminSocialMediaClientsQuery: (arg?: void, options?: QueryOptions) =>
     mockUseGetAdminSocialMediaClientsQuery(arg, options),
+  useGetClientSocialMediaInsightsQuery: (...args: unknown[]) =>
+    mockUseGetClientSocialMediaInsightsQuery(...args),
 }));
 
 vi.mock("../../features/clients/clientsApi", () => ({
+  useCreateAdminClientSocialMediaMetaOAuthUrlMutation: () => [
+    vi.fn(() => ({ unwrap: async () => ({}) })),
+    { isLoading: false },
+  ],
   useUpdateAdminClientSocialMediaConfigMutation: () =>
     mockUseUpdateAdminClientSocialMediaConfigMutation(),
 }));
@@ -71,6 +78,7 @@ const adminUser: AuthUserProfile = {
   permissions: [
     "socialMedia.summary.read.any",
     "socialMedia.config.read.any",
+    "socialMedia.posts.read.any",
     "socialMedia.config.manage.any",
     "socialMedia.posts.manage.any",
   ],
@@ -99,6 +107,7 @@ const socialMediaClientsResponse: AdminSocialMediaClientsResponse = {
         updatedAt: "2026-05-28T10:00:00.000Z",
       },
       config: {
+        activePlatforms: ["INSTAGRAM", "FACEBOOK", "TIKTOK", "LINKEDIN"],
         instagramUsername: "@acme",
         instagramAccountId: "ig-1",
         facebookPageId: "fb-1",
@@ -225,9 +234,92 @@ function renderSocialMediaAdmin() {
 
 describe("SocialMediaAdmin", () => {
   beforeEach(() => {
+    vi.stubGlobal(
+      "ResizeObserver",
+      class ResizeObserver {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
     vi.clearAllMocks();
     currentUser = adminUser;
     setupListState();
+    mockUseGetClientSocialMediaInsightsQuery.mockReturnValue({
+      data: {
+        data: [],
+        meta: {
+          page: 1,
+          limit: 25,
+          total: 1,
+          totalPages: 1,
+          generatedAt: "2026-05-28T10:00:00.000Z",
+          totals: {
+            impressions: 1200,
+            reach: 900,
+            likes: 100,
+            comments: 12,
+            shares: 6,
+            saves: 8,
+            profileVisits: 44,
+            follows: 5,
+            clicks: 20,
+            engagementRate: 20.56,
+          },
+          topPosts: [
+            {
+              postId: "post-1",
+              title: "Haziran lansman reels",
+              platform: "INSTAGRAM",
+              type: "REEL",
+              engagementRate: 20.56,
+              engagementScore: 126,
+            },
+          ],
+          platformBreakdown: [],
+          typeBreakdown: [],
+          trend: [],
+        },
+      },
+      currentData: {
+        data: [],
+        meta: {
+          page: 1,
+          limit: 25,
+          total: 1,
+          totalPages: 1,
+          generatedAt: "2026-05-28T10:00:00.000Z",
+          totals: {
+            impressions: 1200,
+            reach: 900,
+            likes: 100,
+            comments: 12,
+            shares: 6,
+            saves: 8,
+            profileVisits: 44,
+            follows: 5,
+            clicks: 20,
+            engagementRate: 20.56,
+          },
+          topPosts: [
+            {
+              postId: "post-1",
+              title: "Haziran lansman reels",
+              platform: "INSTAGRAM",
+              type: "REEL",
+              engagementRate: 20.56,
+              engagementScore: 126,
+            },
+          ],
+          platformBreakdown: [],
+          typeBreakdown: [],
+          trend: [],
+        },
+      },
+      isFetching: false,
+      isError: false,
+      error: undefined,
+    });
     mockUpdateConfig.mockReturnValue({ unwrap: async () => ({}) });
     mockUseUpdateAdminClientSocialMediaConfigMutation.mockReturnValue([
       mockUpdateConfig,
@@ -294,7 +386,18 @@ describe("SocialMediaAdmin", () => {
     expect(screen.getByText("1 müşteride onay, revizyon veya geciken plan aksiyonu var.")).toBeInTheDocument();
     expect(screen.getByText("Specialist: Social Specialist")).toBeInTheDocument();
     expect(screen.getByText("Designer: Designer User")).toBeInTheDocument();
-    expect(screen.getByText("Haziran lansman reels")).toBeInTheDocument();
+    expect(screen.getByText("Meta ID Eşleşmesi")).toBeInTheDocument();
+    expect(screen.getByText("Instagram Profili")).toBeInTheDocument();
+    expect(screen.getByText("@acme")).toBeInTheDocument();
+    expect(screen.getByText("ig-1")).toBeInTheDocument();
+    expect(screen.getByText("Facebook Sayfası")).toBeInTheDocument();
+    expect(screen.getByText("Page ID fb-1")).toBeInTheDocument();
+    expect(screen.getByText("Performans Snapshot")).toBeInTheDocument();
+    expect(screen.getByText("1.200")).toBeInTheDocument();
+    expect(screen.getByText("900")).toBeInTheDocument();
+    expect(screen.getAllByText("20,56%").length).toBeGreaterThan(0);
+    expect(screen.getByText("Aksiyon Kuyruğu")).toBeInTheDocument();
+    expect(screen.getAllByText("Haziran lansman reels").length).toBeGreaterThan(0);
     expect(screen.getByText("1 son kreatif asset görünüyor.")).toBeInTheDocument();
     expect(screen.getByTestId("content-calendar")).toHaveTextContent("Calendar scope: admin");
   });
@@ -312,6 +415,7 @@ describe("SocialMediaAdmin", () => {
       expect(mockUpdateConfig).toHaveBeenCalledWith({
         clientId: "11111111-1111-4111-8111-111111111111",
         body: expect.objectContaining({
+          activePlatforms: ["INSTAGRAM", "FACEBOOK", "TIKTOK", "LINKEDIN"],
           contentFrequency: "Haftada 5 post",
           instagramUsername: "@acme",
           hashtags: ["#acme", "#growth"],
@@ -327,5 +431,8 @@ describe("SocialMediaAdmin", () => {
 
     expect(screen.getByRole("button", { name: /Config Düzenle/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Post Oluştur/i })).toBeDisabled();
+    expect(
+      screen.getByText("Snapshot insightlarını görmek için Social Media post veya rapor okuma yetkisi gerekiyor."),
+    ).toBeInTheDocument();
   });
 });

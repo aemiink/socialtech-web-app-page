@@ -79,6 +79,7 @@ export const router = createBrowserRouter([
       { path: "tiktok-ads", lazy: lazyComponent(() => import("./employee/pages/TikTokAdsCalismaAlani"), "TikTokAdsCalismaAlani") },
       { path: "amazon-ads", lazy: lazyComponent(() => import("./employee/pages/AmazonAdsCalismaAlani"), "AmazonAdsCalismaAlani") },
       { path: "social-media", lazy: lazyComponent(() => import("./employee/pages/SocialMediaCalismaAlani"), "SocialMediaCalismaAlani") },
+      { path: "web-mobile-design", lazy: lazyComponent(() => import("./employee/pages/WebMobileDesignCalismaAlani"), "WebMobileDesignCalismaAlani") },
       { path: "growth-hub", lazy: lazyComponent(() => import("./employee/pages/GrowthHubCalismaAlani"), "GrowthHubCalismaAlani") },
       { path: "gorevlerim/:id", lazy: lazyComponent(() => import("./pages/TaskDetail"), "TaskDetail") },
       { path: "musterilerim", lazy: lazyComponent(() => import("./employee/pages/Musterilerim"), "Musterilerim") },
