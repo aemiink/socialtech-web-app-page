@@ -181,6 +181,8 @@ import {
   getGrowthHubSummaryStateLabel,
 } from '../features/growthHub/growthHubUtils';
 import { useGetOwnWebMobileDesignSummaryQuery } from '../features/webMobileDesign/webMobileDesignApi';
+import { useGetOwnTechnicalSupportConfigQuery, useGetOwnTechnicalSupportSummaryQuery } from '../features/technicalSupport/technicalSupportApi';
+import { useGetOwnSeoAuditConfigQuery, useGetOwnSeoAuditSummaryQuery } from '../features/seoAudit/seoAuditApi';
 
 interface ServiceTabPageProps {
   serviceId: string;
@@ -444,6 +446,28 @@ export function ServiceTabPage({ serviceId, tabId, projectId }: ServiceTabPagePr
   if (serviceId === "web-mobile-design" && tabId !== "service-dashboard") {
     return (
       <WebMobileDesignClientWorkspace
+        content={content}
+        tabId={tabId}
+        projectId={projectId}
+        serviceId={serviceId}
+      />
+    );
+  }
+
+  if (serviceId === "technical-support" && tabId !== "service-dashboard") {
+    return (
+      <TechnicalSupportClientWorkspace
+        content={content}
+        tabId={tabId}
+        projectId={projectId}
+        serviceId={serviceId}
+      />
+    );
+  }
+
+  if (serviceId === "seo-audit" && tabId !== "service-dashboard") {
+    return (
+      <SeoAuditClientWorkspace
         content={content}
         tabId={tabId}
         projectId={projectId}
@@ -8732,6 +8756,275 @@ function MetricPill({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg bg-[#131313] p-2">
       <div className="text-xs text-[#A0A0A0]">{label}</div>
       <div className="text-sm text-white mt-1">{value}</div>
+    </div>
+  );
+}
+
+function TechnicalSupportClientWorkspace({
+  content,
+  tabId,
+  projectId,
+  serviceId: _serviceId,
+}: {
+  content: ServiceTabContent;
+  tabId: string;
+  projectId?: string | null;
+  serviceId: string;
+}) {
+  const {
+    data: tasks = [],
+    isLoading: tasksLoading,
+  } = useGetClientTasksQuery(projectId ? { projectId } : undefined, { skip: !projectId });
+  const { data: summary, isLoading: summaryLoading } = useGetOwnTechnicalSupportSummaryQuery();
+  const { data: config } = useGetOwnTechnicalSupportConfigQuery();
+
+  const isLoading = tasksLoading || summaryLoading;
+
+  const openTickets = tasks.filter((t) => t.status !== "DONE").length;
+  const resolvedTickets = tasks.filter((t) => t.status === "DONE").length;
+  const progressPercent =
+    tasks.length > 0 ? Math.round((resolvedTickets / tasks.length) * 100) : 0;
+
+  const realKpis = useMemo(
+    () => [
+      {
+        label: "Açık Talep",
+        value: isLoading ? "-" : String(summary?.openTicketCount ?? openTickets),
+        note: "aktif destek talebi",
+      },
+      {
+        label: "Çözülen",
+        value: isLoading ? "-" : String(summary?.resolvedTicketCount ?? resolvedTickets),
+        note: "çözülen talep",
+      },
+      {
+        label: "SLA",
+        value: config?.slaLevel ?? "-",
+        note: "hizmet seviye anlaşması",
+      },
+      {
+        label: "Uptime",
+        value:
+          config?.uptimeTarget !== null && config?.uptimeTarget !== undefined
+            ? `%${config.uptimeTarget}`
+            : "-",
+        note: "hedef kesintisizlik",
+      },
+    ],
+    [isLoading, summary, config, openTickets, resolvedTickets],
+  );
+
+  const contentWithRealKpis = useMemo(
+    () => ({ ...content, kpis: realKpis }),
+    [content, realKpis],
+  );
+
+  return (
+    <div className="p-8 space-y-6">
+      <PageHero content={content} tabId={tabId} />
+      <SmartKpis content={contentWithRealKpis} tabId={tabId} />
+      {config?.supportPortalUrl ? (
+        <div className={cardClass}>
+          <a
+            href={config.supportPortalUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 rounded-lg border border-[#AAFF01]/20 bg-[#AAFF01]/5 px-4 py-3 text-sm text-[#AAFF01] hover:bg-[#AAFF01]/10 transition-colors"
+          >
+            Destek Portalına Git
+          </a>
+        </div>
+      ) : null}
+      {tasks.length > 0 ? (
+        <div className={cardClass}>
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-base font-semibold text-white">Destek Talepleri</h3>
+            <span className="text-sm text-[#A0A0A0]">%{progressPercent} çözüldü</span>
+          </div>
+          <div className="space-y-2">
+            {tasks.slice(0, 8).map((task) => (
+              <div
+                key={task.id}
+                className="flex items-center justify-between gap-3 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2.5"
+              >
+                <p className="truncate text-sm text-white">{task.title}</p>
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${
+                    task.status === "DONE"
+                      ? "bg-[#AAFF01]/10 text-[#AAFF01]"
+                      : task.status === "IN_PROGRESS"
+                        ? "bg-blue-500/10 text-blue-400"
+                        : "bg-white/[0.06] text-[#A0A0A0]"
+                  }`}
+                >
+                  {task.status === "DONE"
+                    ? "Çözüldü"
+                    : task.status === "IN_PROGRESS"
+                      ? "İnceleniyor"
+                      : "Bekliyor"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : !isLoading && !projectId ? (
+        <div className={cardClass}>
+          <p className="text-center text-sm text-[#A0A0A0]">
+            Destek talepleri proje bağlantısı gerektirir.
+          </p>
+        </div>
+      ) : null}
+      <ActionFooter content={content} />
+    </div>
+  );
+}
+
+function SeoAuditClientWorkspace({
+  content,
+  tabId,
+  projectId,
+  serviceId: _serviceId,
+}: {
+  content: ServiceTabContent;
+  tabId: string;
+  projectId?: string | null;
+  serviceId: string;
+}) {
+  const {
+    data: tasks = [],
+    isLoading: tasksLoading,
+  } = useGetClientTasksQuery(projectId ? { projectId } : undefined, { skip: !projectId });
+  const { data: summary, isLoading: summaryLoading } = useGetOwnSeoAuditSummaryQuery();
+  const { data: config } = useGetOwnSeoAuditConfigQuery();
+
+  const isLoading = tasksLoading || summaryLoading;
+
+  const doneTasks = tasks.filter((t) => t.status === "DONE").length;
+  const progressPercent =
+    tasks.length > 0 ? Math.round((doneTasks / tasks.length) * 100) : 0;
+
+  const realKpis = useMemo(
+    () => [
+      {
+        label: "SEO Skoru",
+        value:
+          config?.lastAuditScore !== null && config?.lastAuditScore !== undefined
+            ? String(config.lastAuditScore)
+            : "-",
+        note: "son audit skoru",
+      },
+      {
+        label: "Hedef Kelime",
+        value: isLoading ? "-" : String(config?.targetKeywords?.length ?? 0),
+        note: "takip edilen kelime",
+      },
+      {
+        label: "Görev İlerlemesi",
+        value: isLoading ? "-" : `%${summary?.progressPercent ?? progressPercent}`,
+        note: "canlı görev ilerlemesi",
+      },
+      {
+        label: "Açık Görev",
+        value: isLoading ? "-" : String(summary?.taskStats.total ? summary.taskStats.total - summary.taskStats.done : tasks.length - doneTasks),
+        note: "tamamlanmayı bekliyor",
+      },
+    ],
+    [isLoading, summary, config, progressPercent, doneTasks, tasks.length],
+  );
+
+  const contentWithRealKpis = useMemo(
+    () => ({ ...content, kpis: realKpis }),
+    [content, realKpis],
+  );
+
+  return (
+    <div className="p-8 space-y-6">
+      <PageHero content={content} tabId={tabId} />
+      <SmartKpis content={contentWithRealKpis} tabId={tabId} />
+      {(config?.siteUrl || config?.searchConsolePropertyUrl) ? (
+        <div className={`${cardClass} flex flex-wrap gap-3`}>
+          {config.siteUrl ? (
+            <a
+              href={config.siteUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 rounded-lg border border-[#AAFF01]/20 bg-[#AAFF01]/5 px-4 py-3 text-sm text-[#AAFF01] hover:bg-[#AAFF01]/10 transition-colors"
+            >
+              Siteyi Aç
+            </a>
+          ) : null}
+          {config.searchConsolePropertyUrl ? (
+            <a
+              href={config.searchConsolePropertyUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-blue-400 hover:bg-blue-500/10 transition-colors"
+            >
+              Search Console
+            </a>
+          ) : null}
+        </div>
+      ) : null}
+      {config?.targetKeywords && config.targetKeywords.length > 0 ? (
+        <div className={cardClass}>
+          <h3 className="mb-3 text-sm font-semibold text-white">Hedef Anahtar Kelimeler</h3>
+          <div className="flex flex-wrap gap-2">
+            {config.targetKeywords.slice(0, 15).map((kw) => (
+              <span
+                key={kw}
+                className="rounded border border-white/[0.08] bg-white/[0.04] px-2 py-1 text-xs text-[#A0A0A0]"
+              >
+                {kw}
+              </span>
+            ))}
+            {config.targetKeywords.length > 15 ? (
+              <span className="rounded border border-white/[0.08] bg-white/[0.04] px-2 py-1 text-xs text-[#A0A0A0]">
+                +{config.targetKeywords.length - 15} daha
+              </span>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+      {tasks.length > 0 ? (
+        <div className={cardClass}>
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-base font-semibold text-white">Audit Görevleri</h3>
+            <span className="text-sm text-[#A0A0A0]">%{progressPercent} tamamlandı</span>
+          </div>
+          <div className="space-y-2">
+            {tasks.slice(0, 8).map((task) => (
+              <div
+                key={task.id}
+                className="flex items-center justify-between gap-3 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2.5"
+              >
+                <p className="truncate text-sm text-white">{task.title}</p>
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${
+                    task.status === "DONE"
+                      ? "bg-[#AAFF01]/10 text-[#AAFF01]"
+                      : task.status === "IN_PROGRESS"
+                        ? "bg-blue-500/10 text-blue-400"
+                        : "bg-white/[0.06] text-[#A0A0A0]"
+                  }`}
+                >
+                  {task.status === "DONE"
+                    ? "Tamamlandı"
+                    : task.status === "IN_PROGRESS"
+                      ? "Devam Ediyor"
+                      : "Bekliyor"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : !isLoading && !projectId ? (
+        <div className={cardClass}>
+          <p className="text-center text-sm text-[#A0A0A0]">
+            SEO audit görevleri proje bağlantısı gerektirir.
+          </p>
+        </div>
+      ) : null}
+      <ActionFooter content={content} />
     </div>
   );
 }

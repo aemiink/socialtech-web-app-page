@@ -90,6 +90,10 @@ export const baseApi = createApi({
     "GrowthHubActivity",
     "WebMobileDesignConfig",
     "WebMobileDesignSummary",
+    "TechnicalSupportConfig",
+    "TechnicalSupportSummary",
+    "SeoAuditConfig",
+    "SeoAuditSummary",
   ],
   endpoints: () => ({}),
 });
