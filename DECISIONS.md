@@ -1,5 +1,78 @@
 # Architecture Decisions
 
+## 2026-06-18 - Social Media Active Platform Configuration
+
+Social Media hizmeti müşteriye tanımlanırken her müşteride tüm kanalların bulunmadığı netleşti. Admin create/edit ve Social Media global config akışında kanal seçimi config contract'ının parçası yapıldı.
+
+Karar:
+- `ClientSocialMediaConfig` üzerine `activePlatforms: SocialMediaPlatform[]` alanı eklendi.
+- Admin UI'da platform seçimi operasyonel gruplarla yapılır: Meta (`INSTAGRAM`, `FACEBOOK`), TikTok (`TIKTOK`) ve LinkedIn (`LINKEDIN`).
+- Seçilmeyen platformların hesap alanları kayıtta `null` gönderilir; eski değerler pasif kanal gibi kalmaz.
+- Eski config kayıtları için frontend, `activePlatforms` boş olsa bile mevcut account alanlarından platformları infer eder; böylece eski kayıtlar düzenleme ekranında kaybolmuş görünmez.
+- Social Media content calendar backend'i `activePlatforms` doluysa post create/update platformunu bu listeye göre doğrular. Liste boşsa eski kayıtları kırmamak için backward-compatible davranır.
+- Meta Marketing API app/use case entegrasyonu V2 publishing/insight aşamasında bu platform seçimi üstünden ilerleyecek; manuel ID alanları şimdilik operasyonel config olarak kalır.
+
+Reason:
+Bu karar müşteri bazlı kanal kapsamını açık hale getirir, sadece Meta veya sadece TikTok gibi hizmetleri güvenli yönetir ve ileride Meta Graph/Marketing API bağlantısına hazırlanırken Social Media post akışını seçili platformlarla hizalar.
+
+## 2026-06-18 - Social Media Meta OAuth Start Link Foundation
+
+Social Media Meta bağlantısı için admin panelde manuel ID alanlarının yanında müşteri bağlantı linki üretme ihtiyacı doğdu.
+
+Karar:
+- Backend `GET /api/v1/social-media/clients/:clientId/meta-oauth/start` endpointi eklendi.
+- Endpoint admin Social Media config manage yetkisi, aktif `SOCIAL_MEDIA` hizmeti ve Meta platform seçimiyle çalışır.
+- URL üretimi `META_APP_ID`, `META_REDIRECT_URI`, `META_GRAPH_API_VERSION` ve opsiyonel `SOCIAL_MEDIA_META_OAUTH_SCOPES` env değerlerini kullanır.
+- `SOCIAL_MEDIA_META_BUSINESS_LOGIN_CONFIG_ID` tanımlıysa OAuth URL'i Facebook Login for Business `config_id` ile üretilir ve manuel `scope` parametresi gönderilmez.
+- Admin Clients edit modalı ve Social Media global config modalı Meta seçiliyken bağlantı linki oluşturabilir ve oluşan URL'i gösterebilir.
+- Bu adım sadece OAuth start URL foundation'ıdır; authorization code exchange/callback ve Page/Instagram ID otomatik kaydı ayrı follow-up olarak kalır.
+
+Reason:
+Müşteri tarafında izin verme akışını başlatmadan önce admin panelin güvenli ve tekrar üretilebilir bir OAuth URL oluşturabilmesi gerekir. Callback/exchange'i ayrı tutmak, mevcut manuel config akışını bozmadan Meta bağlantısına kontrollü geçiş sağlar.
+
+## 2026-06-18 - Social Media Meta OAuth Callback and ID Discovery
+
+Meta bağlantı linki üretildikten sonra authorization code callback'inin Social Media config'e gerçek Page/Instagram ID yazması gerekiyordu.
+
+Karar:
+- Public `GET /api/v1/social-media/meta-oauth/callback` endpoint'i eklendi; Meta redirect JWT taşımadığı için admin guard altında değildir.
+- Callback güvenliği için OAuth `state` HMAC imzalı, akış tipi/client id içeren ve 30 dakika geçerli bir payload'a çevrildi.
+- Callback `code` değerini Meta Graph OAuth token endpointinde access token'a çevirir, `/me/accounts` üzerinden Facebook Page listesini ve bağlı `instagram_business_account` bilgisini okur.
+- Seçilecek Page, mevcut config'teki `facebookPageId`, `instagramAccountId` veya `instagramUsername` ile eşleştirilmeye çalışılır; eşleşme yoksa Instagram bağlı ilk Page, o da yoksa ilk Page kullanılır.
+- Başarılı callback `facebookPageId`, gerekiyorsa `instagramAccountId`/`instagramUsername`, `connectionStatus=CONNECTED`, `lastSyncAt` ve `syncError=null` yazar.
+- Meta hata dönerse, yönetilebilir Page yoksa veya Instagram aktifken bağlı IG hesabı bulunamazsa config `ERROR` durumuna alınır ve `syncError` alanı doldurulur.
+- Bu adım token'ı kalıcı saklamaz; publish/insight için ileride ayrı encrypted credential modeli gerekir.
+
+Reason:
+OAuth callback browser redirect'i olarak geldiği için JWT'ye bağlı admin endpointi olamaz. İmzalı state + aktif hizmet/platform kontrolleri yanlış müşteri bağlantısı riskini azaltır; token saklamadan ID discovery yapmak mevcut manuel Social Media config yüzeyini güvenle otomasyona taşır.
+
+## 2026-06-18 - Social Media Meta Webhook Verification Endpoint
+
+Meta Instagram Business API setup adımı webhook callback URL ve verify token doğrulaması istedi.
+
+Karar:
+- OAuth redirect endpoint'i webhook doğrulaması için kullanılmaz; ayrı `GET /api/v1/social-media/meta-webhooks` endpoint'i eklendi.
+- Endpoint Meta'nın `hub.mode=subscribe`, `hub.verify_token` ve `hub.challenge` verification request'ini karşılar.
+- `hub.verify_token`, `META_WEBHOOK_VERIFY_TOKEN` env değeriyle timing-safe karşılaştırılır.
+- Doğrulama başarılıysa response body olarak `hub.challenge` plain text döner.
+- Aynı path için `POST /api/v1/social-media/meta-webhooks` şimdilik ack-only davranır; event processing ve signature verification ayrı fazda ele alınacaktır.
+
+Reason:
+Meta Webhooks doğrulaması OAuth callback'ten farklı bir protokoldür. Ayrı public endpoint, Meta Developer panelindeki webhook setup'ını tamamlar ve ileride yorum/DM/event processing için güvenli bir yüzey bırakır.
+
+## 2026-06-18 - Public Privacy Policy Endpoint for Meta App Setup
+
+Meta app setup/app review icin public HTTPS Privacy Policy URL ihtiyaci dogdu.
+
+Karar:
+- Backend'e auth istemeyen `GET /api/v1/legal/privacy-policy` endpoint'i eklendi.
+- Endpoint statik HTML Privacy Policy dondurur ve `Content-Type: text/html; charset=utf-8` header'i kullanir.
+- Metin Social Tech'in dijital buyume, social media, advertising, reporting ve Meta/Instagram Business entegrasyonu kapsaminda isleyebilecegi veri kategorilerini, kullanim amaclarini, paylasim/retention/security/deletion/contact basliklarini aciklar.
+- Bu endpoint Meta Developer Dashboard'daki Privacy Policy URL alanina verilebilir; canli ortamda HTTPS public backend domain veya ngrok domain uzerinden erisilebilir olmalidir.
+
+Reason:
+Meta app yayina alma ve permission review surecleri public ve kolay erisilebilir privacy policy linki bekler. Backend'de statik public endpoint tutmak, frontend deploy'una bagli kalmadan Meta setup URL'ini hizli ve tekrar kullanilabilir hale getirir.
+
 ## 2026-05-29 - Growth Hub Faz 0 Discovery Contract (Strategic Orchestration Layer)
 
 Context:
@@ -3772,3 +3845,69 @@ Affected files:
 - `server/src/web-app-workspace/web-app-workspace.service.ts`
 - `server/test/web-app-workspace-revisions-authz.e2e-spec.ts`
 - `ROAD_MAP.md`
+
+## 2026-06-18 - Instagram & Facebook Graph API Integration (Token Storage + Sync)
+
+Social Media müşteri panelindeki "Sosyal Hesaplar" tab'ında KPI kartları ve içerik grid'inin boş göründüğü tespit edildi. Kök neden: Meta OAuth callback'te alınan page access token'ın persist edilmemesi, dolayısıyla Graph API'den gerçek zamanlı veri çekilememesi.
+
+Karar:
+- `ClientSocialMediaMetaCredential` modeli eklendi — page access token'ı AES-256-GCM ile şifrelenmiş olarak saklar (META_TOKEN_ENCRYPTION_KEY kullanır).
+- `SocialMediaPost.externalMediaUrl` alanı eklendi — Instagram/Facebook CDN URL'ini assets tablosu bypass edilerek saklar.
+- `SocialMediaPost` üzerine `@@unique([externalPostId, platform])` ve `SocialMediaPostInsight` üzerine `@@unique([postId, date])` eklendi — upsert idempotency için.
+- `SocialMediaMetaTokenService` — token şifreleme/çözme servisi, MetaAdsTokenService aynı pattern.
+- `SocialMediaMetaSyncService` — Instagram ve Facebook Graph API'den medya/post çekip `SocialMediaPost` olarak upsert eder. Her 12 saatte bir cron ile çalışır.
+- OAuth callback `completeClientMetaOAuthCallback` güncellendi: page access token şifrelenir, kaydedilir, ardından sync fire-and-forget olarak tetiklenir.
+- `POST /api/v1/social-media/clients/:clientId/sync-meta` manuel sync endpointi eklendi.
+- `clientPanel`: `SocialMediaPost.externalMediaUrl` type ve normalize desteği eklendi. `firstImageUrl()` helper önce `externalMediaUrl`'u kontrol eder.
+- `adminandemployeePanel`: aynı type güncelleme.
+- `instagram_manage_insights` scope'u yoksa post-level insight sync sessizce skip edilir — graceful degradation.
+
+Reason:
+Token'ın OAuth callback'ten sonra persist edilmemesi veri boşluğunun temel nedeni. Ayrı credential tablosu Amazon Ads pattern'ı ile tutarlı. Cron + on-demand sync, client panel açıldığında her seferinde Meta API çağrısı yapmak yerine fresh ama cached veri sunar.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/src/social-media/social-media-meta-token.service.ts` (new)
+- `server/src/social-media/social-media-meta-sync.service.ts` (new)
+- `server/src/social-media/social-media.service.ts`
+- `server/src/social-media/social-media.module.ts`
+- `server/src/social-media/admin-social-media.controller.ts`
+- `clientPanel/src/app/features/socialMedia/socialMediaTypes.ts`
+- `clientPanel/src/app/features/socialMedia/socialMediaUtils.ts`
+- `clientPanel/src/app/pages/services/social-accounts-dashboard.tsx`
+- `adminandemployeePanel/src/app/features/socialMedia/socialMediaTypes.ts`
+- `adminandemployeePanel/src/app/features/socialMedia/socialMediaUtils.ts`
+
+---
+
+## 2026-06-19 — Web & Mobile Design: Full Backend Module + Frontend Integration
+
+Decision:
+Created a dedicated backend NestJS module for Web & Mobile Design service (equivalent to Social Media, Meta Ads, Amazon Ads modules). All three panels now connected to the real backend via RTK Query.
+
+Changes:
+- `server/prisma/schema.prisma`: Added `DesignSystemStatus` enum and `ClientWebMobileDesignConfig` model
+- `server/prisma/migrations/20260619100000_add_web_mobile_design_config/`: Applied migration
+- `server/src/web-mobile-design/`: Created full NestJS module (service, 3 controllers, DTO, module file)
+- `server/src/app.module.ts`: Registered `WebMobileDesignModule`
+- `adminandemployeePanel/src/app/features/clients/clientsTypes.ts`: Added `AdminClientWebMobileDesignConfig`, `AdminWebMobileDesignSummary`, `DesignSystemStatus`, `UpdateAdminClientWebMobileDesignConfigRequest` types
+- `adminandemployeePanel/src/app/features/clients/clientsUtils.ts`: Added `normalizeAdminWebMobileDesignConfigResponse`, `normalizeAdminWebMobileDesignSummaryResponse`
+- `adminandemployeePanel/src/app/features/clients/clientsApi.ts`: Added 5 RTK Query endpoints + exported hooks
+- `adminandemployeePanel/src/app/services/baseApi.ts`: Added `WebMobileDesignConfig`, `WebMobileDesignSummary` tagTypes
+- `adminandemployeePanel/src/app/pages/ClientDetail.tsx`: Enhanced `WebMobileDesignProjectsSection` with config/summary data (design links, stats, color swatches)
+- `adminandemployeePanel/src/app/employee/pages/WebMobileDesignCalismaAlani.tsx`: Full redesign — tab-based workspace (Overview, Görevler, Onaylar, Dosyalar, Revizyonlar) + KPI cards + design config panel
+- `clientPanel/src/app/features/webMobileDesign/`: Created new feature folder (types, utils, API)
+- `clientPanel/src/app/services/baseApi.ts`: Added `WebMobileDesignConfig`, `WebMobileDesignSummary` tagTypes
+- `clientPanel/src/app/pages/services/web-mobile-design-dashboard.tsx`: Connected to summary endpoint, added Figma/prototype/style guide quick links, enhanced Design System KPI
+
+Reason:
+The existing implementation only used generic Projects/Tasks/Files endpoints with no service-specific data (design system status, Figma URLs, brand colors, prototype links). A dedicated module provides proper UX and enables future per-service customization.
+
+API endpoints:
+- `GET /api/v1/admin/clients/:clientId/web-mobile-design/config`
+- `PATCH /api/v1/admin/clients/:clientId/web-mobile-design/config`
+- `GET /api/v1/admin/clients/:clientId/web-mobile-design/summary`
+- `GET /api/v1/web-mobile-design/clients/:clientId/config` (employee)
+- `GET /api/v1/web-mobile-design/clients/:clientId/summary` (employee)
+- `GET /api/v1/clients/me/web-mobile-design/config` (client)
+- `GET /api/v1/clients/me/web-mobile-design/summary` (client)
