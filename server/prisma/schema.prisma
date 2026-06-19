@@ -692,6 +692,8 @@ model ClientProfile {
   metaAdsSyncLogs         MetaAdsSyncLog[]
   metaAdsReports          MetaAdsReport[]
   webMobileDesignConfig         ClientWebMobileDesignConfig?
+  technicalSupportConfig        ClientTechnicalSupportConfig?
+  seoAuditConfig                ClientSeoAuditConfig?
   socialMediaConfig             ClientSocialMediaConfig?
   socialMediaMetaCredential     ClientSocialMediaMetaCredential?
   tikTokAdsConfig         ClientTikTokAdsConfig?
@@ -2107,4 +2109,41 @@ model EmployeeClientAssignment {
   @@index([employeeUserId, isActive])
   @@index([clientProfileId, isActive])
   @@index([scope, isActive])
+}
+
+model ClientTechnicalSupportConfig {
+  id                     String   @id @default(uuid()) @db.Uuid
+  clientProfileId        String   @unique @db.Uuid
+  slaLevel               String?
+  supportPortalUrl       String?
+  maintenanceWindowDay   String?
+  maintenanceWindowTime  String?
+  monitoringEnabled      Boolean  @default(true)
+  backupFrequency        String?
+  uptimeTarget           Float?
+  notes                  String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@index([updatedAt])
+}
+
+model ClientSeoAuditConfig {
+  id                       String   @id @default(uuid()) @db.Uuid
+  clientProfileId          String   @unique @db.Uuid
+  siteUrl                  String?
+  gaPropertyId             String?
+  searchConsolePropertyUrl String?
+  targetKeywords           String[] @default([])
+  auditFrequency           String?
+  lastAuditScore           Int?
+  notes                    String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@index([updatedAt])
 }

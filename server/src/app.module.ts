@@ -26,6 +26,8 @@ import { TasksModule } from "./tasks/tasks.module";
 import { UsersModule } from "./users/users.module";
 import { WebAppWorkspaceModule } from "./web-app-workspace/web-app-workspace.module";
 import { WebMobileDesignModule } from "./web-mobile-design/web-mobile-design.module";
+import { TechnicalSupportModule } from "./technical-support/technical-support.module";
+import { SeoAuditModule } from "./seo-audit/seo-audit.module";
 
 @Module({
   imports: [
@@ -63,6 +65,8 @@ import { WebMobileDesignModule } from "./web-mobile-design/web-mobile-design.mod
     TasksModule,
     WebAppWorkspaceModule,
     WebMobileDesignModule,
+    TechnicalSupportModule,
+    SeoAuditModule,
   ],
 })
 export class AppModule {}
