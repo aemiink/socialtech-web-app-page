@@ -12,6 +12,7 @@ import {
   PurchasedServiceKey,
   PurchasedServiceStatus,
   SocialMediaGoal,
+  SocialMediaPlatform,
   SocialMediaPostStatus,
   TaskStatus,
   TaskType,
@@ -139,12 +140,24 @@ describe("Social Media Config and Summary Authz (e2e)", () => {
     await prisma.clientSocialMediaConfig.upsert({
       where: { clientProfileId },
       update: {
+        activePlatforms: [
+          SocialMediaPlatform.INSTAGRAM,
+          SocialMediaPlatform.FACEBOOK,
+          SocialMediaPlatform.TIKTOK,
+          SocialMediaPlatform.LINKEDIN,
+        ],
         instagramUsername: "@acme",
         primaryGoal: SocialMediaGoal.ENGAGEMENT,
         hashtags: ["#acme"],
       },
       create: {
         clientProfileId,
+        activePlatforms: [
+          SocialMediaPlatform.INSTAGRAM,
+          SocialMediaPlatform.FACEBOOK,
+          SocialMediaPlatform.TIKTOK,
+          SocialMediaPlatform.LINKEDIN,
+        ],
         instagramUsername: "@acme",
         primaryGoal: SocialMediaGoal.ENGAGEMENT,
         hashtags: ["#acme"],
@@ -162,6 +175,7 @@ describe("Social Media Config and Summary Authz (e2e)", () => {
       .patch(`/api/v1/social-media/clients/${socialClientId}/config`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({
+        activePlatforms: ["INSTAGRAM", "FACEBOOK", "TIKTOK", "LINKEDIN"],
         instagramUsername: " @mavisosyal ",
         contentFrequency: "Haftada 3 post",
         primaryGoal: "COMMUNITY_GROWTH",
@@ -171,6 +185,7 @@ describe("Social Media Config and Summary Authz (e2e)", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.clientProfileId).toBe(socialClientId);
+    expect(res.body.activePlatforms).toEqual(["INSTAGRAM", "FACEBOOK", "TIKTOK", "LINKEDIN"]);
     expect(res.body.instagramUsername).toBe("@mavisosyal");
     expect(res.body.primaryGoal).toBe("COMMUNITY_GROWTH");
     expect(res.body.hashtags).toEqual(["#mavi", "#sosyal"]);
@@ -318,6 +333,39 @@ describe("Social Media Config and Summary Authz (e2e)", () => {
     expect(updateRes.status).toBe(200);
     expect(updateRes.body.status).toBe(SocialMediaPostStatus.DRAFT);
     expect(updateRes.body.clientVisible).toBe(true);
+  });
+
+  it("rejects content calendar posts for disabled Social Media platforms", async () => {
+    await prisma.clientSocialMediaConfig.update({
+      where: { clientProfileId: socialClientId },
+      data: { activePlatforms: [SocialMediaPlatform.INSTAGRAM, SocialMediaPlatform.FACEBOOK] },
+    });
+
+    try {
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/social-media/clients/${socialClientId}/posts`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({
+          projectId: socialProjectId,
+          platform: "TIKTOK",
+          type: "SHORT_VIDEO",
+          title: "TikTok aktif olmayan içerik",
+        });
+
+      expect(res.status).toBe(400);
+    } finally {
+      await prisma.clientSocialMediaConfig.update({
+        where: { clientProfileId: socialClientId },
+        data: {
+          activePlatforms: [
+            SocialMediaPlatform.INSTAGRAM,
+            SocialMediaPlatform.FACEBOOK,
+            SocialMediaPlatform.TIKTOK,
+            SocialMediaPlatform.LINKEDIN,
+          ],
+        },
+      });
+    }
   });
 
   it("assigned Social Media specialist can manage assigned client posts", async () => {

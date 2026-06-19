@@ -54,6 +54,12 @@ enum PurchasedServiceKey {
   SEO_AUDIT
 }
 
+enum DesignSystemStatus {
+  NONE
+  IN_PROGRESS
+  COMPLETED
+}
+
 enum PurchasedServiceStatus {
   ACTIVE
   PAUSED
@@ -685,7 +691,9 @@ model ClientProfile {
   metaAdsInsights         MetaAdsDailyInsight[]
   metaAdsSyncLogs         MetaAdsSyncLog[]
   metaAdsReports          MetaAdsReport[]
-  socialMediaConfig       ClientSocialMediaConfig?
+  webMobileDesignConfig         ClientWebMobileDesignConfig?
+  socialMediaConfig             ClientSocialMediaConfig?
+  socialMediaMetaCredential     ClientSocialMediaMetaCredential?
   tikTokAdsConfig         ClientTikTokAdsConfig?
   tikTokAdsCredential     ClientTikTokAdsCredential?
   tikTokAdsInsights       TikTokAdsDailyInsight[]
@@ -864,6 +872,7 @@ model ClientMetaAdsCredential {
 model ClientSocialMediaConfig {
   id                 String                      @id @default(uuid()) @db.Uuid
   clientProfileId    String                      @unique @db.Uuid
+  activePlatforms    SocialMediaPlatform[]       @default([])
   instagramUsername  String?
   instagramAccountId String?
   facebookPageId     String?
@@ -873,18 +882,40 @@ model ClientSocialMediaConfig {
   primaryGoal        SocialMediaGoal?
   toneOfVoice        String?
   hashtags           String[]                    @default([])
-  connectionStatus   SocialMediaConnectionStatus @default(NOT_CONNECTED)
-  lastSyncAt         DateTime?
-  syncError          String?
-  notes              String?
-  createdAt          DateTime                    @default(now())
-  updatedAt          DateTime                    @updatedAt
+  instagramProfilePictureUrl String?
+  facebookProfilePictureUrl  String?
+  facebookPageName           String?
+  igFollowerCount            Int?
+  igImpressions              Int?
+  igProfileViews             Int?
+  igWebsiteClicks            Int?
+  connectionStatus           SocialMediaConnectionStatus @default(NOT_CONNECTED)
+  lastSyncAt                 DateTime?
+  syncError                  String?
+  notes                      String?
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
 
   clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
 
   @@index([connectionStatus])
   @@index([primaryGoal])
   @@index([updatedAt])
+}
+
+model ClientSocialMediaMetaCredential {
+  id                 String   @id @default(uuid()) @db.Uuid
+  clientProfileId    String   @unique @db.Uuid
+  pageAccessTokenEnc String?
+  facebookPageId     String?
+  instagramAccountId String?
+  grantedScopes      String[] @default([])
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@index([clientProfileId])
 }
 
 model SocialMediaPost {
@@ -904,6 +935,7 @@ model SocialMediaPost {
   assignedToUserId String?               @db.Uuid
   externalPostId   String?
   externalPostUrl  String?
+  externalMediaUrl String?
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
 
@@ -965,7 +997,6 @@ model SocialMediaPostInsight {
   clientProfile ClientProfile   @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
 
   @@index([clientProfileId, date])
-  @@index([postId, date])
   @@index([platform, date])
   @@index([createdAt])
 }
@@ -2036,6 +2067,28 @@ model AuditLog {
   @@index([actorUserId])
   @@index([entityType, entityId])
   @@index([createdAt])
+}
+
+model ClientWebMobileDesignConfig {
+  id                  String              @id @default(uuid()) @db.Uuid
+  clientProfileId     String              @unique @db.Uuid
+  figmaFileUrl        String?
+  prototypeUrl        String?
+  styleGuideUrl       String?
+  designSystemStatus  DesignSystemStatus  @default(NONE)
+  primaryColor        String?
+  secondaryColor      String?
+  fontFamily          String?
+  targetPlatforms     String[]            @default([])
+  gridSystem          String?
+  notes               String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@index([designSystemStatus])
+  @@index([updatedAt])
 }
 
 model EmployeeClientAssignment {

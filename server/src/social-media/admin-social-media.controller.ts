@@ -38,6 +38,14 @@ export class AdminSocialMediaController {
     return this.socialMediaService.updateClientConfig(currentUser, clientId, dto);
   }
 
+  @Get(":clientId/meta-oauth/start")
+  createClientMetaOAuthStartUrl(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+  ) {
+    return this.socialMediaService.createClientMetaOAuthStartUrl(currentUser, clientId);
+  }
+
   @Get(":clientId/summary")
   getClientSummary(
     @CurrentUser() currentUser: AuthenticatedUser,
@@ -89,5 +97,13 @@ export class AdminSocialMediaController {
     @Body() dto: CreateSocialMediaReportDto,
   ) {
     return this.socialMediaService.createClientReport(currentUser, clientId, dto);
+  }
+
+  @Post(":clientId/sync-meta")
+  triggerMetaSync(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("clientId", ParseUUIDPipe) clientId: string,
+  ) {
+    return this.socialMediaService.triggerClientMetaSync(currentUser, clientId);
   }
 }

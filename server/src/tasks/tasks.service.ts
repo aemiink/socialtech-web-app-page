@@ -211,6 +211,7 @@ const META_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION = "metaAds.approvals.create.
 const TIKTOK_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION = "tiktokAds.approvals.create.assigned";
 const AMAZON_ADS_APPROVALS_CREATE_ASSIGNED_PERMISSION = "amazonAds.approvals.create.assigned";
 const SOCIAL_MEDIA_APPROVALS_CREATE_ASSIGNED_PERMISSION = "socialMedia.approvals.create.assigned";
+const DESIGN_APPROVALS_CREATE_ASSIGNED_PERMISSION = "design.approvals.create.assigned";
 
 const SOCIAL_MEDIA_POST_LINKED_APPROVAL_TYPES = new Set<MetaAdsApprovalType>([
   MetaAdsApprovalType.SOCIAL_MEDIA_POST_APPROVAL,
@@ -1565,6 +1566,10 @@ export class TasksService {
 
     if (projectServiceKey === PurchasedServiceKey.GROWTH_HUB) {
       return SOCIAL_MEDIA_APPROVALS_CREATE_ASSIGNED_PERMISSION;
+    }
+
+    if (projectServiceKey === PurchasedServiceKey.WEB_MOBILE_DESIGN) {
+      return DESIGN_APPROVALS_CREATE_ASSIGNED_PERMISSION;
     }
 
     return null;

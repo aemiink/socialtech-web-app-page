@@ -10,7 +10,7 @@ import {
   MaxLength,
   ValidateIf,
 } from "class-validator";
-import { SocialMediaConnectionStatus, SocialMediaGoal } from "@prisma/client";
+import { SocialMediaConnectionStatus, SocialMediaGoal, SocialMediaPlatform } from "@prisma/client";
 
 function normalizeNullableText(value: unknown): unknown {
   if (typeof value !== "string") {
@@ -33,6 +33,14 @@ function normalizeOptionalHashtags(value: unknown): unknown {
 }
 
 export class UpdateSocialMediaConfigDto {
+  @Transform(({ value }) => normalizeOptionalHashtags(value))
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(6)
+  @ArrayUnique()
+  @IsEnum(SocialMediaPlatform, { each: true })
+  activePlatforms?: SocialMediaPlatform[];
+
   @Transform(({ value }) => normalizeNullableText(value))
   @ValidateIf((_, value: unknown) => value !== undefined && value !== null)
   @IsString()

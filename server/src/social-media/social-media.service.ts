@@ -1,9 +1,12 @@
 import {
+  BadGatewayException,
   BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import {
   AccountType,
   EmployeeClientAssignmentScope,
@@ -43,6 +46,8 @@ import {
   SocialMediaSummaryResponse,
   SocialMediaSummaryService,
 } from "./social-media-summary.service";
+import { SocialMediaMetaTokenService } from "./social-media-meta-token.service";
+import { SocialMediaMetaSyncService } from "./social-media-meta-sync.service";
 
 const SOCIAL_MEDIA_CONFIG_READ_ANY_PERMISSION = "socialMedia.config.read.any";
 const SOCIAL_MEDIA_CONFIG_MANAGE_ANY_PERMISSION = "socialMedia.config.manage.any";
@@ -69,6 +74,14 @@ const SOCIAL_MEDIA_ADMIN_RELEVANT_ASSIGNMENT_SCOPES = [
   EmployeeClientAssignmentScope.SOCIAL_MEDIA,
   EmployeeClientAssignmentScope.DESIGN,
 ] as const;
+const DEFAULT_SOCIAL_MEDIA_META_OAUTH_SCOPES = [
+  "pages_show_list",
+  "pages_read_engagement",
+  "instagram_basic",
+  "instagram_manage_insights",
+] as const;
+const SOCIAL_MEDIA_META_OAUTH_STATE_MAX_AGE_MS = 30 * 60 * 1000;
+const SOCIAL_MEDIA_META_GRAPH_PAGE_SCAN_LIMIT = 200;
 
 const allowedPostStatusTransitions: Record<
   SocialMediaPostStatus,
@@ -108,15 +121,23 @@ const allowedPostStatusTransitions: Record<
 };
 
 const socialMediaConfigSelect = {
+  activePlatforms: true,
   instagramUsername: true,
   instagramAccountId: true,
+  instagramProfilePictureUrl: true,
   facebookPageId: true,
+  facebookPageName: true,
+  facebookProfilePictureUrl: true,
   tiktokUsername: true,
   linkedinPageUrl: true,
   contentFrequency: true,
   primaryGoal: true,
   toneOfVoice: true,
   hashtags: true,
+  igFollowerCount: true,
+  igImpressions: true,
+  igProfileViews: true,
+  igWebsiteClicks: true,
   connectionStatus: true,
   lastSyncAt: true,
   syncError: true,
@@ -148,6 +169,7 @@ const socialMediaPostSelect = {
   assignedToUserId: true,
   externalPostId: true,
   externalPostUrl: true,
+  externalMediaUrl: true,
   createdAt: true,
   updatedAt: true,
   project: {
@@ -331,6 +353,7 @@ type AdminSocialMediaClientModel = Prisma.ClientProfileGetPayload<{
 }>;
 
 type SocialMediaConfigPatchData = {
+  activePlatforms?: SocialMediaPlatform[];
   instagramUsername?: string | null;
   instagramAccountId?: string | null;
   facebookPageId?: string | null;
@@ -360,6 +383,7 @@ type NormalizedCreatePostPayload = {
   assignedToUserId: string | null;
   externalPostId: string | null;
   externalPostUrl: string | null;
+  externalMediaUrl: string | null;
 };
 
 type NormalizedUpdatePostPayload = {
@@ -381,21 +405,88 @@ type NormalizedUpdatePostPayload = {
 type AdminSocialMediaConfigResponse = {
   clientProfileId: string;
   hasActiveService: boolean;
+  activePlatforms: SocialMediaPlatform[];
   instagramUsername: string | null;
   instagramAccountId: string | null;
+  instagramProfilePictureUrl: string | null;
   facebookPageId: string | null;
+  facebookPageName: string | null;
+  facebookProfilePictureUrl: string | null;
   tiktokUsername: string | null;
   linkedinPageUrl: string | null;
   contentFrequency: string | null;
   primaryGoal: UpdateSocialMediaConfigDto["primaryGoal"] | null;
   toneOfVoice: string | null;
   hashtags: string[];
+  igFollowerCount: number | null;
+  igImpressions: number | null;
+  igProfileViews: number | null;
+  igWebsiteClicks: number | null;
   connectionStatus: SocialMediaConnectionStatus;
   lastSyncAt: Date | null;
   syncError: string | null;
   notes: string | null;
   createdAt: Date | null;
   updatedAt: Date | null;
+};
+
+type SocialMediaMetaOAuthStartResponse = {
+  authorizationUrl: string;
+  state: string;
+  redirectUri: string;
+  scopes: string[];
+  generatedAt: Date;
+};
+
+type SocialMediaMetaOAuthCallbackInput = {
+  code?: string;
+  state?: string;
+  error?: string;
+  errorDescription?: string;
+};
+
+type SocialMediaMetaOAuthCallbackResponse = {
+  clientProfileId: string;
+  connectionStatus: SocialMediaConnectionStatus;
+  facebookPage: {
+    id: string;
+    name: string | null;
+  };
+  instagramAccount: {
+    id: string;
+    username: string | null;
+  } | null;
+  config: AdminSocialMediaConfigResponse;
+  connectedAt: Date;
+};
+
+type SocialMediaMetaOAuthStatePayload = {
+  clientProfileId: string;
+  flow: "SOCIAL_MEDIA_META";
+  nonce: string;
+  createdAt: string;
+};
+
+type SocialMediaMetaOAuthCredentials = {
+  appId: string;
+  appSecret: string;
+  redirectUri: string;
+  graphApiVersion: string;
+};
+
+type SocialMediaMetaOAuthTokenResult = {
+  accessToken: string;
+  expiresAt: Date | null;
+};
+
+type SocialMediaMetaPageCandidate = {
+  id: string;
+  name: string | null;
+  accessToken: string | null;
+  instagramBusinessAccount: {
+    id: string;
+    username: string | null;
+  } | null;
 };
 
 type OwnSocialMediaConfigResponse = Omit<
@@ -465,6 +556,9 @@ export class SocialMediaService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly summaryService: SocialMediaSummaryService,
+    private readonly configService: ConfigService,
+    private readonly metaTokenService: SocialMediaMetaTokenService,
+    private readonly metaSyncService: SocialMediaMetaSyncService,
   ) {}
 
   async getAdminClients(
@@ -593,12 +687,204 @@ export class SocialMediaService {
     return this.toAdminConfigResponse(clientProfileId, config, true);
   }
 
+  async createClientMetaOAuthStartUrl(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+  ): Promise<SocialMediaMetaOAuthStartResponse> {
+    this.assertCanManageConfig(currentUser);
+    await this.assertClientProfileExists(clientProfileId);
+    await this.assertClientHasActiveSocialMediaService(clientProfileId);
+    await this.assertClientHasMetaPlatformEnabled(clientProfileId);
+
+    const appId = this.configService.get<string>("META_APP_ID")?.trim();
+    const redirectUri = this.configService.get<string>("META_REDIRECT_URI")?.trim();
+
+    if (!appId || !redirectUri) {
+      throw new BadRequestException(
+        "META_APP_ID and META_REDIRECT_URI must be configured to create a Meta connection link.",
+      );
+    }
+
+    const graphApiVersion =
+      this.configService.get<string>("META_GRAPH_API_VERSION")?.trim() || "v22.0";
+    const businessLoginConfigId = this.getSocialMediaMetaBusinessLoginConfigId();
+    const scopes = businessLoginConfigId ? [] : this.getSocialMediaMetaOAuthScopes();
+    const state = this.createMetaOAuthState(clientProfileId);
+    const authorizationUrl = new URL(`https://www.facebook.com/${graphApiVersion}/dialog/oauth`);
+    authorizationUrl.searchParams.set("client_id", appId);
+    authorizationUrl.searchParams.set("redirect_uri", redirectUri);
+    authorizationUrl.searchParams.set("state", state);
+    authorizationUrl.searchParams.set("response_type", "code");
+    authorizationUrl.searchParams.set("auth_type", "rerequest");
+    if (businessLoginConfigId) {
+      authorizationUrl.searchParams.set("config_id", businessLoginConfigId);
+      authorizationUrl.searchParams.set("override_default_response_type", "true");
+    } else {
+      authorizationUrl.searchParams.set("scope", scopes.join(","));
+    }
+
+    return {
+      authorizationUrl: authorizationUrl.toString(),
+      state,
+      redirectUri,
+      scopes,
+      generatedAt: new Date(),
+    };
+  }
+
+  async completeClientMetaOAuthCallback(
+    input: SocialMediaMetaOAuthCallbackInput,
+  ): Promise<SocialMediaMetaOAuthCallbackResponse> {
+    const state = this.parseMetaOAuthState(input.state);
+    const clientProfileId = state.clientProfileId;
+
+    await this.assertClientProfileExists(clientProfileId);
+    await this.assertClientHasActiveSocialMediaService(clientProfileId);
+    await this.assertClientHasMetaPlatformEnabled(clientProfileId);
+
+    if (input.error) {
+      const errorMessage = this.normalizeMetaOAuthCallbackError(input.error, input.errorDescription);
+      await this.markSocialMediaMetaConnectionError(clientProfileId, errorMessage);
+      throw new BadRequestException(errorMessage);
+    }
+
+    const code = input.code?.trim();
+    if (!code) {
+      const errorMessage = "Meta OAuth callback is missing an authorization code.";
+      await this.markSocialMediaMetaConnectionError(clientProfileId, errorMessage);
+      throw new BadRequestException(errorMessage);
+    }
+
+    const credentials = this.getSocialMediaMetaOAuthCredentials();
+    const [tokenResult, existingConfig] = await Promise.all([
+      this.exchangeMetaOAuthCode(code, credentials),
+      this.prisma.clientSocialMediaConfig.findUnique({
+        where: { clientProfileId },
+        select: socialMediaConfigSelect,
+      }),
+    ]);
+    const pages = await this.fetchMetaPages(tokenResult.accessToken, credentials);
+    const activePlatforms = existingConfig?.activePlatforms ?? [];
+    const shouldResolveInstagram =
+      activePlatforms.length === 0 || activePlatforms.includes(SocialMediaPlatform.INSTAGRAM);
+    const selectedPage = this.selectMetaPageForConfig(pages, existingConfig);
+
+    if (!selectedPage) {
+      const errorMessage =
+        "Meta account did not return any manageable Facebook Pages. Make sure the Facebook user has full control of a Page, selected that Page during authorization, and the app uses a Facebook Login for Business configuration when required.";
+      await this.markSocialMediaMetaConnectionError(clientProfileId, errorMessage);
+      throw new BadGatewayException(errorMessage);
+    }
+
+    if (shouldResolveInstagram && !selectedPage.instagramBusinessAccount) {
+      const errorMessage =
+        "Selected Facebook Page does not have a connected Instagram Business or Creator account.";
+      await this.markSocialMediaMetaConnectionError(clientProfileId, errorMessage);
+      throw new BadGatewayException(errorMessage);
+    }
+
+    const connectedAt = new Date();
+    const shouldWriteInstagram = Boolean(
+      selectedPage.instagramBusinessAccount && shouldResolveInstagram,
+    );
+    const nextConfig = await this.prisma.clientSocialMediaConfig.upsert({
+      where: { clientProfileId },
+      update: {
+        activePlatforms: this.resolveMetaCallbackActivePlatforms(
+          activePlatforms,
+          selectedPage.instagramBusinessAccount,
+        ),
+        facebookPageId: selectedPage.id,
+        instagramAccountId: shouldWriteInstagram
+          ? selectedPage.instagramBusinessAccount?.id ?? null
+          : existingConfig?.instagramAccountId ?? null,
+        instagramUsername: shouldWriteInstagram
+          ? this.formatMetaUsername(selectedPage.instagramBusinessAccount?.username ?? null)
+          : existingConfig?.instagramUsername ?? null,
+        connectionStatus: SocialMediaConnectionStatus.CONNECTED,
+        lastSyncAt: connectedAt,
+        syncError: null,
+      },
+      create: {
+        clientProfileId,
+        activePlatforms: this.resolveMetaCallbackActivePlatforms(
+          activePlatforms,
+          selectedPage.instagramBusinessAccount,
+        ),
+        facebookPageId: selectedPage.id,
+        instagramAccountId: shouldWriteInstagram
+          ? selectedPage.instagramBusinessAccount?.id ?? null
+          : null,
+        instagramUsername: shouldWriteInstagram
+          ? this.formatMetaUsername(selectedPage.instagramBusinessAccount?.username ?? null)
+          : null,
+        connectionStatus: SocialMediaConnectionStatus.CONNECTED,
+        lastSyncAt: connectedAt,
+        syncError: null,
+      },
+      select: socialMediaConfigSelect,
+    });
+
+    // Persist encrypted page access token for future Graph API calls
+    if (selectedPage.accessToken) {
+      try {
+        const pageAccessTokenEnc = this.metaTokenService.encrypt(selectedPage.accessToken);
+        await this.prisma.clientSocialMediaMetaCredential.upsert({
+          where: { clientProfileId },
+          update: {
+            pageAccessTokenEnc,
+            facebookPageId: selectedPage.id,
+            instagramAccountId: selectedPage.instagramBusinessAccount?.id ?? null,
+            grantedScopes: this.getSocialMediaMetaOAuthScopes(),
+          },
+          create: {
+            clientProfileId,
+            pageAccessTokenEnc,
+            facebookPageId: selectedPage.id,
+            instagramAccountId: selectedPage.instagramBusinessAccount?.id ?? null,
+            grantedScopes: this.getSocialMediaMetaOAuthScopes(),
+          },
+        });
+        // Trigger async sync — non-blocking
+        void this.metaSyncService.syncClient(clientProfileId).catch(() => undefined);
+      } catch {
+        // Token storage failure is non-fatal — OAuth completion still succeeds
+      }
+    }
+
+    return {
+      clientProfileId,
+      connectionStatus: SocialMediaConnectionStatus.CONNECTED,
+      facebookPage: {
+        id: selectedPage.id,
+        name: selectedPage.name,
+      },
+      instagramAccount: selectedPage.instagramBusinessAccount
+        ? {
+            id: selectedPage.instagramBusinessAccount.id,
+            username: selectedPage.instagramBusinessAccount.username,
+          }
+        : null,
+      config: this.toAdminConfigResponse(clientProfileId, nextConfig, true),
+      connectedAt,
+    };
+  }
+
   async getClientSummary(
     currentUser: AuthenticatedUser,
     clientProfileId: string,
   ): Promise<SocialMediaSummaryResponse> {
     await this.assertCanReadSummary(currentUser, clientProfileId);
     return this.summaryService.getSummary(clientProfileId);
+  }
+
+  async triggerClientMetaSync(
+    currentUser: AuthenticatedUser,
+    clientProfileId: string,
+  ): Promise<{ synced: number; platforms: string[] }> {
+    this.assertCanManageConfig(currentUser);
+    await this.assertClientProfileExists(clientProfileId);
+    return this.metaSyncService.syncClient(clientProfileId);
   }
 
   async getClientPosts(
@@ -621,6 +907,7 @@ export class SocialMediaService {
     await this.assertClientHasActiveSocialMediaService(clientProfileId);
 
     const payload = this.normalizeCreatePostPayload(dto);
+    await this.assertPostPlatformIsEnabled(clientProfileId, payload.platform);
     await this.assertPostReferencesAreValid(clientProfileId, payload);
 
     return this.prisma.socialMediaPost.create({
@@ -667,6 +954,10 @@ export class SocialMediaService {
     await this.assertClientHasActiveSocialMediaService(existingPost.clientProfileId);
 
     const payload = this.normalizeUpdatePostPayload(dto);
+    await this.assertPostPlatformIsEnabled(
+      existingPost.clientProfileId,
+      payload.platform ?? existingPost.platform,
+    );
     await this.assertPostReferencesAreValid(existingPost.clientProfileId, payload);
     this.assertPostStatusTransition(existingPost.status, payload.status);
     this.assertPostTimingIsValid(existingPost, payload);
@@ -958,9 +1249,6 @@ export class SocialMediaService {
 
   async getOwnInsights(currentUser: AuthenticatedUser, query: SocialMediaInsightsQueryDto) {
     this.assertCanReadOwnPosts(currentUser);
-    if (!this.hasPermission(currentUser, REPORTS_READ_OWN_PERMISSION)) {
-      throw new ForbiddenException("Missing required report permission.");
-    }
 
     const clientProfileId = this.getOwnClientProfileIdOrFail(currentUser);
     await this.assertClientHasActiveSocialMediaService(clientProfileId);
@@ -2274,6 +2562,7 @@ export class SocialMediaService {
       externalPostId: this.normalizeNullableText(dto.externalPostId, "externalPostId", 180) ?? null,
       externalPostUrl:
         this.normalizeNullableText(dto.externalPostUrl, "externalPostUrl", 500) ?? null,
+      externalMediaUrl: null,
     };
   }
 
@@ -2415,6 +2704,7 @@ export class SocialMediaService {
   private buildConfigPatchData(dto: UpdateSocialMediaConfigDto): SocialMediaConfigPatchData {
     const patchData: SocialMediaConfigPatchData = {};
 
+    this.assignIfDefined(patchData, "activePlatforms", this.normalizeActivePlatforms(dto.activePlatforms));
     this.assignIfDefined(
       patchData,
       "instagramUsername",
@@ -2465,6 +2755,436 @@ export class SocialMediaService {
     }
 
     return patchData;
+  }
+
+  private normalizeActivePlatforms(
+    platforms: UpdateSocialMediaConfigDto["activePlatforms"] | undefined,
+  ): SocialMediaPlatform[] | undefined {
+    if (platforms === undefined) {
+      return undefined;
+    }
+
+    const validPlatforms = new Set(Object.values(SocialMediaPlatform));
+    return platforms.filter(
+      (platform, index, items) =>
+        validPlatforms.has(platform) && items.indexOf(platform) === index,
+    );
+  }
+
+  private async assertPostPlatformIsEnabled(
+    clientProfileId: string,
+    platform: SocialMediaPlatform,
+  ): Promise<void> {
+    const config = await this.prisma.clientSocialMediaConfig.findUnique({
+      where: { clientProfileId },
+      select: { activePlatforms: true },
+    });
+
+    if (!config || config.activePlatforms.length === 0) {
+      return;
+    }
+
+    if (!config.activePlatforms.includes(platform)) {
+      throw new BadRequestException("Selected platform is not enabled for this Social Media client.");
+    }
+  }
+
+  private async assertClientHasMetaPlatformEnabled(clientProfileId: string): Promise<void> {
+    const config = await this.prisma.clientSocialMediaConfig.findUnique({
+      where: { clientProfileId },
+      select: { activePlatforms: true },
+    });
+
+    if (!config || config.activePlatforms.length === 0) {
+      return;
+    }
+
+    const hasMetaPlatform =
+      config.activePlatforms.includes(SocialMediaPlatform.INSTAGRAM) ||
+      config.activePlatforms.includes(SocialMediaPlatform.FACEBOOK);
+
+    if (!hasMetaPlatform) {
+      throw new BadRequestException("Meta platform must be enabled before creating a Meta connection link.");
+    }
+  }
+
+  private getSocialMediaMetaOAuthScopes(): string[] {
+    const configuredScopes = this.configService
+      .get<string>("SOCIAL_MEDIA_META_OAUTH_SCOPES")
+      ?.split(",")
+      .map((scope) => scope.trim())
+      .filter((scope, index, scopes) => scope.length > 0 && scopes.indexOf(scope) === index);
+
+    return configuredScopes?.length ? configuredScopes : [...DEFAULT_SOCIAL_MEDIA_META_OAUTH_SCOPES];
+  }
+
+  private getSocialMediaMetaBusinessLoginConfigId(): string | null {
+    const configId = this.configService
+      .get<string>("SOCIAL_MEDIA_META_BUSINESS_LOGIN_CONFIG_ID")
+      ?.trim();
+
+    return configId || null;
+  }
+
+  private getSocialMediaMetaOAuthCredentials(): SocialMediaMetaOAuthCredentials {
+    const appId = this.configService.get<string>("META_APP_ID")?.trim();
+    const appSecret = this.configService.get<string>("META_APP_SECRET")?.trim();
+    const redirectUri = this.configService.get<string>("META_REDIRECT_URI")?.trim();
+    const graphApiVersion =
+      this.configService.get<string>("META_GRAPH_API_VERSION")?.trim() || "v22.0";
+
+    if (!appId || !appSecret || !redirectUri) {
+      throw new BadRequestException(
+        "META_APP_ID, META_APP_SECRET and META_REDIRECT_URI must be configured to complete Meta connection.",
+      );
+    }
+
+    return {
+      appId,
+      appSecret,
+      redirectUri,
+      graphApiVersion,
+    };
+  }
+
+  private createMetaOAuthState(clientProfileId: string): string {
+    const payload = Buffer.from(
+      JSON.stringify({
+        clientProfileId,
+        flow: "SOCIAL_MEDIA_META",
+        nonce: randomUUID(),
+        createdAt: new Date().toISOString(),
+      } satisfies SocialMediaMetaOAuthStatePayload),
+    ).toString("base64url");
+
+    return `${payload}.${this.signMetaOAuthStatePayload(payload)}`;
+  }
+
+  private parseMetaOAuthState(state: string | undefined): SocialMediaMetaOAuthStatePayload {
+    if (!state) {
+      throw new BadRequestException("Meta OAuth callback is missing state.");
+    }
+
+    const [payload, signature, extra] = state.split(".");
+    if (!payload || !signature || extra !== undefined) {
+      throw new BadRequestException("Meta OAuth state is malformed.");
+    }
+
+    const expectedSignature = this.signMetaOAuthStatePayload(payload);
+    const providedSignatureBuffer = Buffer.from(signature);
+    const expectedSignatureBuffer = Buffer.from(expectedSignature);
+    if (
+      providedSignatureBuffer.length !== expectedSignatureBuffer.length ||
+      !timingSafeEqual(providedSignatureBuffer, expectedSignatureBuffer)
+    ) {
+      throw new BadRequestException("Meta OAuth state signature is invalid.");
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    } catch {
+      throw new BadRequestException("Meta OAuth state payload is invalid.");
+    }
+
+    if (!this.isPlainRecord(parsed)) {
+      throw new BadRequestException("Meta OAuth state payload is invalid.");
+    }
+
+    const clientProfileId =
+      typeof parsed.clientProfileId === "string" ? parsed.clientProfileId.trim() : "";
+    const flow = parsed.flow;
+    const nonce = typeof parsed.nonce === "string" ? parsed.nonce.trim() : "";
+    const createdAt = typeof parsed.createdAt === "string" ? parsed.createdAt.trim() : "";
+
+    if (!this.isUuid(clientProfileId) || flow !== "SOCIAL_MEDIA_META" || !nonce || !createdAt) {
+      throw new BadRequestException("Meta OAuth state payload is invalid.");
+    }
+
+    const createdAtMs = Date.parse(createdAt);
+    const ageMs = Date.now() - createdAtMs;
+    if (!Number.isFinite(createdAtMs) || ageMs < 0 || ageMs > SOCIAL_MEDIA_META_OAUTH_STATE_MAX_AGE_MS) {
+      throw new BadRequestException("Meta OAuth state has expired.");
+    }
+
+    return {
+      clientProfileId,
+      flow,
+      nonce,
+      createdAt,
+    };
+  }
+
+  private signMetaOAuthStatePayload(payload: string): string {
+    const secret = this.configService.getOrThrow<string>("JWT_ACCESS_SECRET");
+    return createHmac("sha256", secret).update(payload).digest("base64url");
+  }
+
+  private async exchangeMetaOAuthCode(
+    code: string,
+    credentials: SocialMediaMetaOAuthCredentials,
+  ): Promise<SocialMediaMetaOAuthTokenResult> {
+    const url = this.createMetaGraphUrl("oauth/access_token", credentials);
+    url.searchParams.set("client_id", credentials.appId);
+    url.searchParams.set("client_secret", credentials.appSecret);
+    url.searchParams.set("redirect_uri", credentials.redirectUri);
+    url.searchParams.set("code", code);
+
+    const payload = await this.requestMetaGraph(url);
+    const accessToken = typeof payload.access_token === "string" ? payload.access_token : "";
+    if (!accessToken) {
+      throw new BadGatewayException("Meta OAuth token response is missing access_token.");
+    }
+
+    const expiresIn =
+      typeof payload.expires_in === "number" && Number.isFinite(payload.expires_in)
+        ? payload.expires_in
+        : null;
+
+    return {
+      accessToken,
+      expiresAt: expiresIn ? new Date(Date.now() + expiresIn * 1000) : null,
+    };
+  }
+
+  private async fetchMetaPages(
+    accessToken: string,
+    credentials: SocialMediaMetaOAuthCredentials,
+  ): Promise<SocialMediaMetaPageCandidate[]> {
+    const pages: SocialMediaMetaPageCandidate[] = [];
+    let nextUrl: URL | null = this.createMetaGraphUrl("me/accounts", credentials);
+    nextUrl.searchParams.set("fields", "id,name,access_token,instagram_business_account{id,username}");
+    nextUrl.searchParams.set("limit", "100");
+    nextUrl.searchParams.set("access_token", accessToken);
+
+    while (nextUrl && pages.length < SOCIAL_MEDIA_META_GRAPH_PAGE_SCAN_LIMIT) {
+      const payload = await this.requestMetaGraph(nextUrl);
+      pages.push(...this.parseMetaPages(payload));
+
+      const next = this.readMetaGraphNextPageUrl(payload);
+      nextUrl = next ? new URL(next) : null;
+    }
+
+    return pages.slice(0, SOCIAL_MEDIA_META_GRAPH_PAGE_SCAN_LIMIT);
+  }
+
+  private parseMetaPages(payload: Record<string, unknown>): SocialMediaMetaPageCandidate[] {
+    if (!Array.isArray(payload.data)) {
+      return [];
+    }
+
+    return payload.data
+      .map((item) => {
+        if (!this.isPlainRecord(item)) {
+          return null;
+        }
+
+        const id = typeof item.id === "string" ? item.id.trim() : "";
+        if (!id) {
+          return null;
+        }
+
+        const instagramBusinessAccount = this.parseInstagramBusinessAccount(
+          item.instagram_business_account,
+        );
+
+        return {
+          id,
+          name: typeof item.name === "string" && item.name.trim() ? item.name.trim() : null,
+          accessToken:
+            typeof item.access_token === "string" && item.access_token.trim()
+              ? item.access_token.trim()
+              : null,
+          instagramBusinessAccount,
+        } satisfies SocialMediaMetaPageCandidate;
+      })
+      .filter((item): item is SocialMediaMetaPageCandidate => item !== null);
+  }
+
+  private parseInstagramBusinessAccount(
+    value: unknown,
+  ): SocialMediaMetaPageCandidate["instagramBusinessAccount"] {
+    if (!this.isPlainRecord(value)) {
+      return null;
+    }
+
+    const id = typeof value.id === "string" ? value.id.trim() : "";
+    if (!id) {
+      return null;
+    }
+
+    return {
+      id,
+      username:
+        typeof value.username === "string" && value.username.trim()
+          ? value.username.trim()
+          : null,
+    };
+  }
+
+  private readMetaGraphNextPageUrl(payload: Record<string, unknown>): string | null {
+    if (!this.isPlainRecord(payload.paging)) {
+      return null;
+    }
+
+    const next = payload.paging.next;
+    if (typeof next !== "string" || !next.trim()) {
+      return null;
+    }
+
+    try {
+      const url = new URL(next);
+      return url.hostname === "graph.facebook.com" ? url.toString() : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private selectMetaPageForConfig(
+    pages: SocialMediaMetaPageCandidate[],
+    config: SocialMediaConfigModel | null,
+  ): SocialMediaMetaPageCandidate | null {
+    if (pages.length === 0) {
+      return null;
+    }
+
+    const expectedFacebookPageId = config?.facebookPageId?.trim();
+    if (expectedFacebookPageId) {
+      return pages.find((page) => page.id === expectedFacebookPageId) ?? null;
+    }
+
+    const expectedInstagramAccountId = config?.instagramAccountId?.trim();
+    if (expectedInstagramAccountId) {
+      return (
+        pages.find(
+          (page) => page.instagramBusinessAccount?.id === expectedInstagramAccountId,
+        ) ?? null
+      );
+    }
+
+    const expectedInstagramUsername = this.normalizeMetaUsername(config?.instagramUsername ?? null);
+    if (expectedInstagramUsername) {
+      return (
+        pages.find(
+          (page) =>
+            this.normalizeMetaUsername(page.instagramBusinessAccount?.username ?? null) ===
+            expectedInstagramUsername,
+        ) ?? null
+      );
+    }
+
+    return pages.find((page) => page.instagramBusinessAccount) ?? pages[0] ?? null;
+  }
+
+  private resolveMetaCallbackActivePlatforms(
+    activePlatforms: SocialMediaPlatform[],
+    instagramBusinessAccount: SocialMediaMetaPageCandidate["instagramBusinessAccount"],
+  ): SocialMediaPlatform[] {
+    if (activePlatforms.length > 0) {
+      return activePlatforms;
+    }
+
+    return instagramBusinessAccount
+      ? [SocialMediaPlatform.INSTAGRAM, SocialMediaPlatform.FACEBOOK]
+      : [SocialMediaPlatform.FACEBOOK];
+  }
+
+  private async requestMetaGraph(url: URL): Promise<Record<string, unknown>> {
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        headers: {
+          Accept: "application/json",
+        },
+      });
+    } catch (error) {
+      throw new BadGatewayException(
+        `Meta API network request failed: ${error instanceof Error ? error.message : "Unknown error"}.`,
+      );
+    }
+
+    const payload = (await response.json().catch(() => null)) as unknown;
+    if (!response.ok) {
+      throw new BadGatewayException(this.extractMetaGraphErrorMessage(payload, response.status));
+    }
+
+    if (!this.isPlainRecord(payload)) {
+      throw new BadGatewayException("Meta API returned a malformed response.");
+    }
+
+    return payload;
+  }
+
+  private createMetaGraphUrl(
+    path: string,
+    credentials: Pick<SocialMediaMetaOAuthCredentials, "graphApiVersion">,
+  ): URL {
+    return new URL(path, `https://graph.facebook.com/${credentials.graphApiVersion}/`);
+  }
+
+  private extractMetaGraphErrorMessage(payload: unknown, statusCode: number): string {
+    if (this.isPlainRecord(payload) && this.isPlainRecord(payload.error)) {
+      const error = payload.error;
+      const userMessage =
+        typeof error.error_user_msg === "string" && error.error_user_msg.trim()
+          ? error.error_user_msg.trim()
+          : null;
+      const userTitle =
+        typeof error.error_user_title === "string" && error.error_user_title.trim()
+          ? error.error_user_title.trim()
+          : null;
+      const message =
+        typeof error.message === "string" && error.message.trim()
+          ? error.message.trim()
+          : null;
+
+      return userMessage ?? userTitle ?? message ?? "Meta API request failed.";
+    }
+
+    return `Meta API request failed with status ${statusCode}.`;
+  }
+
+  private normalizeMetaOAuthCallbackError(error: string, description: string | undefined): string {
+    const normalizedDescription = description?.trim();
+    if (normalizedDescription) {
+      return `Meta OAuth failed: ${normalizedDescription}`;
+    }
+
+    return `Meta OAuth failed: ${error.trim() || "Unknown error"}`;
+  }
+
+  private async markSocialMediaMetaConnectionError(
+    clientProfileId: string,
+    syncError: string,
+  ): Promise<void> {
+    await this.prisma.clientSocialMediaConfig.upsert({
+      where: { clientProfileId },
+      update: {
+        connectionStatus: SocialMediaConnectionStatus.ERROR,
+        syncError,
+        lastSyncAt: new Date(),
+      },
+      create: {
+        clientProfileId,
+        connectionStatus: SocialMediaConnectionStatus.ERROR,
+        syncError,
+        lastSyncAt: new Date(),
+      },
+    });
+  }
+
+  private normalizeMetaUsername(username: string | null): string | null {
+    const normalized = username?.trim().replace(/^@+/, "").toLowerCase();
+    return normalized ? normalized : null;
+  }
+
+  private formatMetaUsername(username: string | null): string | null {
+    const normalized = this.normalizeMetaUsername(username);
+    return normalized ? `@${normalized}` : null;
+  }
+
+  private isPlainRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value && typeof value === "object" && !Array.isArray(value));
   }
 
   private normalizeRequiredText(
@@ -2766,7 +3486,7 @@ export class SocialMediaService {
   } {
     return {
       page: this.normalizePositiveInteger(query.page, "page", 1, 1, Number.MAX_SAFE_INTEGER),
-      limit: this.normalizePositiveInteger(query.limit, "limit", 50, 1, 100),
+      limit: this.normalizePositiveInteger(query.limit, "limit", 50, 1, 500),
     };
   }
 
@@ -2814,15 +3534,23 @@ export class SocialMediaService {
     return {
       clientProfileId,
       hasActiveService,
+      activePlatforms: config?.activePlatforms ?? [],
       instagramUsername: config?.instagramUsername ?? null,
       instagramAccountId: config?.instagramAccountId ?? null,
+      instagramProfilePictureUrl: config?.instagramProfilePictureUrl ?? null,
       facebookPageId: config?.facebookPageId ?? null,
+      facebookPageName: config?.facebookPageName ?? null,
+      facebookProfilePictureUrl: config?.facebookProfilePictureUrl ?? null,
       tiktokUsername: config?.tiktokUsername ?? null,
       linkedinPageUrl: config?.linkedinPageUrl ?? null,
       contentFrequency: config?.contentFrequency ?? null,
       primaryGoal: config?.primaryGoal ?? null,
       toneOfVoice: config?.toneOfVoice ?? null,
       hashtags: config?.hashtags ?? [],
+      igFollowerCount: config?.igFollowerCount ?? null,
+      igImpressions: config?.igImpressions ?? null,
+      igProfileViews: config?.igProfileViews ?? null,
+      igWebsiteClicks: config?.igWebsiteClicks ?? null,
       connectionStatus: config?.connectionStatus ?? SocialMediaConnectionStatus.NOT_CONNECTED,
       lastSyncAt: config?.lastSyncAt ?? null,
       syncError: config?.syncError ?? null,
@@ -2836,22 +3564,9 @@ export class SocialMediaService {
     clientProfileId: string,
     config: SocialMediaConfigModel | null,
   ): OwnSocialMediaConfigResponse {
-    const adminResponse = this.toAdminConfigResponse(clientProfileId, config, true);
-    return {
-      clientProfileId: adminResponse.clientProfileId,
-      instagramUsername: adminResponse.instagramUsername,
-      instagramAccountId: adminResponse.instagramAccountId,
-      facebookPageId: adminResponse.facebookPageId,
-      tiktokUsername: adminResponse.tiktokUsername,
-      linkedinPageUrl: adminResponse.linkedinPageUrl,
-      contentFrequency: adminResponse.contentFrequency,
-      primaryGoal: adminResponse.primaryGoal,
-      toneOfVoice: adminResponse.toneOfVoice,
-      hashtags: adminResponse.hashtags,
-      connectionStatus: adminResponse.connectionStatus,
-      lastSyncAt: adminResponse.lastSyncAt,
-      notes: adminResponse.notes,
-    };
+    const { hasActiveService: _hasActiveService, syncError: _syncError, createdAt: _createdAt, updatedAt: _updatedAt, ...rest } =
+      this.toAdminConfigResponse(clientProfileId, config, true);
+    return rest;
   }
 
   private toOwnPostResponse(post: SocialMediaPostModel) {
@@ -2868,6 +3583,7 @@ export class SocialMediaService {
       publishedAt: post.publishedAt,
       clientVisible: post.clientVisible,
       externalPostUrl: post.externalPostUrl,
+      externalMediaUrl: post.externalMediaUrl,
       createdAt: post.createdAt,
       updatedAt: post.updatedAt,
       project: post.project,

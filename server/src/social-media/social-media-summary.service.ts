@@ -23,15 +23,23 @@ export type SocialMediaSummaryState =
   | "WAITING_CONTENT_PLAN";
 
 const socialMediaConfigSelect = {
+  activePlatforms: true,
   instagramUsername: true,
   instagramAccountId: true,
+  instagramProfilePictureUrl: true,
   facebookPageId: true,
+  facebookPageName: true,
+  facebookProfilePictureUrl: true,
   tiktokUsername: true,
   linkedinPageUrl: true,
   contentFrequency: true,
   primaryGoal: true,
   toneOfVoice: true,
   hashtags: true,
+  igFollowerCount: true,
+  igImpressions: true,
+  igProfileViews: true,
+  igWebsiteClicks: true,
   connectionStatus: true,
   lastSyncAt: true,
   syncError: true,
@@ -138,15 +146,23 @@ type SocialMediaSummaryOptions = {
 };
 
 export type SocialMediaConfigSummary = {
+  activePlatforms: SocialMediaPlatform[];
   instagramUsername: string | null;
   instagramAccountId: string | null;
+  instagramProfilePictureUrl: string | null;
   facebookPageId: string | null;
+  facebookPageName: string | null;
+  facebookProfilePictureUrl: string | null;
   tiktokUsername: string | null;
   linkedinPageUrl: string | null;
   contentFrequency: string | null;
   primaryGoal: SocialMediaGoal | null;
   toneOfVoice: string | null;
   hashtags: string[];
+  igFollowerCount: number | null;
+  igImpressions: number | null;
+  igProfileViews: number | null;
+  igWebsiteClicks: number | null;
   connectionStatus: SocialMediaConnectionStatus;
   lastSyncAt: Date | null;
   notes?: string | null;
@@ -459,15 +475,23 @@ export class SocialMediaSummaryService {
 
   private toConfigSummary(config: SocialMediaConfigModel): SocialMediaConfigSummary {
     return {
+      activePlatforms: config.activePlatforms,
       instagramUsername: config.instagramUsername,
       instagramAccountId: config.instagramAccountId,
+      instagramProfilePictureUrl: config.instagramProfilePictureUrl,
       facebookPageId: config.facebookPageId,
+      facebookPageName: config.facebookPageName,
+      facebookProfilePictureUrl: config.facebookProfilePictureUrl,
       tiktokUsername: config.tiktokUsername,
       linkedinPageUrl: config.linkedinPageUrl,
       contentFrequency: config.contentFrequency,
       primaryGoal: config.primaryGoal,
       toneOfVoice: config.toneOfVoice,
       hashtags: config.hashtags,
+      igFollowerCount: config.igFollowerCount,
+      igImpressions: config.igImpressions,
+      igProfileViews: config.igProfileViews,
+      igWebsiteClicks: config.igWebsiteClicks,
       connectionStatus: config.connectionStatus,
       lastSyncAt: config.lastSyncAt,
       notes: config.notes,
@@ -497,6 +521,7 @@ export class SocialMediaSummaryService {
 
   private hasMeaningfulConfig(config: SocialMediaConfigModel): boolean {
     return [
+      config.activePlatforms.length > 0 ? "activePlatforms" : null,
       config.instagramUsername,
       config.instagramAccountId,
       config.facebookPageId,
