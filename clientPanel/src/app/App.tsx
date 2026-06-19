@@ -89,6 +89,11 @@ const WebAppDashboard = lazy(() =>
     default: module.WebAppDashboard,
   })),
 );
+const SocialAccountsDashboard = lazy(() =>
+  import("./pages/services/social-accounts-dashboard").then((module) => ({
+    default: module.SocialAccountsDashboard,
+  })),
+);
 const SeoAuditDashboard = lazy(() =>
   import("./pages/services/seo-dashboard").then((module) => ({
     default: module.SeoAuditDashboard,
@@ -117,6 +122,11 @@ const WebMobileDesignDashboard = lazy(() =>
 const ServiceTabPage = lazy(() =>
   import("./pages/service-tab-page").then((module) => ({
     default: module.ServiceTabPage,
+  })),
+);
+const AutomationsPage = lazy(() =>
+  import("./pages/automations").then((module) => ({
+    default: module.AutomationsPage,
   })),
 );
 
@@ -160,7 +170,18 @@ export function ClientPortalApp() {
     });
   }, [clientProjects, selectedService]);
   const activeProjectId = selectedProjectId || scopedProjects[0]?.id || null;
-  const activeWebAppProjectId = selectedService === "web-app" ? activeProjectId : null;
+  const shouldShowProjectSelector =
+    (selectedService === "web-app" || selectedService === "web-mobile-design") &&
+    scopedProjects.length > 1;
+
+  // Workspace features (meetings, reports) need a web-app project regardless of the
+  // currently selected service. Find it from all client projects.
+  const workspaceProjectId = useMemo(() => {
+    const webAppProject = clientProjects.find(
+      (p) => normalizeServiceId(p.serviceKey) === "web-app",
+    );
+    return webAppProject?.id ?? activeProjectId;
+  }, [clientProjects, activeProjectId]);
 
   useEffect(() => {
     if (!isAuthenticated || !currentUser || isSupportedClientPortalUser(currentUser)) {
@@ -305,10 +326,15 @@ export function ClientPortalApp() {
   }, [activePurchasedServiceSet]);
 
   const renderContent = () => {
-    if (currentPage === "reports") return <ReportsPage projectId={activeWebAppProjectId} />;
-    if (currentPage === "meetings") return <MeetingsPage projectId={activeWebAppProjectId} />;
+    if (currentPage === "reports") return <ReportsPage projectId={workspaceProjectId} selectedService={selectedService} />;
+    if (currentPage === "meetings") return <MeetingsPage projectId={workspaceProjectId} />;
     if (currentPage === "billing") return <BillingPage />;
     if (currentPage === "settings") return <SettingsPage />;
+    if (currentPage === "competitor-analysis") return <AutomationsPage />;
+
+    if (selectedService === "social-media" && currentPage === "social-accounts") {
+      return <SocialAccountsDashboard />;
+    }
 
     if (currentPage === "service-dashboard") {
       switch (selectedService) {
@@ -333,7 +359,7 @@ export function ClientPortalApp() {
         case "landing-pages":
           return <LandingPagesDashboard />;
         case "web-mobile-design":
-          return <WebMobileDesignDashboard />;
+          return <WebMobileDesignDashboard projectId={activeProjectId} />;
         case "technical-support":
           return <TechnicalSupportDashboard />;
         case "seo-audit":
@@ -403,7 +429,7 @@ export function ClientPortalApp() {
           onLogout={handleLogout}
         />
         <main className="flex-1 overflow-y-auto">
-          {selectedService === "web-app" && scopedProjects.length > 1 ? (
+          {shouldShowProjectSelector ? (
             <div className="px-8 pt-6">
               <div className="rounded-xl border border-white/[0.08] bg-[#1A1A1A] px-4 py-3">
                 <label className="mb-2 block text-xs text-[#A0A0A0]">Proje Seçimi</label>

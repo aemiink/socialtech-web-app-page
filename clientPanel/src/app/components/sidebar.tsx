@@ -50,6 +50,7 @@ const serviceMenuItems: Record<string, MenuItem[]> = {
   ],
   'social-media': [
     { id: 'service-dashboard', label: 'Genel Bakış', icon: LayoutDashboard },
+    { id: 'social-accounts', label: 'Sosyal Hesaplar', icon: Users },
     { id: 'content-calendar', label: 'İçerik Takvimi', icon: Calendar },
     { id: 'pending-approvals', label: 'Onay Bekleyenler', icon: CheckSquare },
     { id: 'published-content', label: 'Yayınlanan İçerikler', icon: FileText },

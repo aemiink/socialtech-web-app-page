@@ -32,7 +32,30 @@ export const authApi = baseApi.injectEndpoints({
       }),
       transformResponse: parseAuthUserProfile,
     }),
+    updateMe: builder.mutation<AuthUserProfile, { displayName?: string }>({
+      query: (body) => ({
+        url: "/auth/me",
+        method: "PATCH",
+        body,
+      }),
+      transformResponse: parseAuthUserProfile,
+    }),
+    changePassword: builder.mutation<{ success: true }, { currentPassword: string; newPassword: string }>({
+      query: (body) => ({
+        url: "/auth/me/password",
+        method: "PATCH",
+        body,
+      }),
+    }),
   }),
 });
 
-export const { useLoginMutation, useRefreshMutation, useLogoutMutation, useLazyMeQuery } = authApi;
+export const {
+  useLoginMutation,
+  useRefreshMutation,
+  useLogoutMutation,
+  useLazyMeQuery,
+  useMeQuery,
+  useUpdateMeMutation,
+  useChangePasswordMutation,
+} = authApi;

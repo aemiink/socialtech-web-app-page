@@ -211,7 +211,7 @@ export function MetaAdsDashboard() {
 
   const displayCampaigns = campaignsResponse && campaignsResponse.data.length > 0
     ? campaignsResponse.data.map((campaign) => ({
-        name: campaign.name,
+        name: campaign.name.replace(/_/g, " "),
         budget: formatCurrency(campaign.spend),
         spend: campaign.spend,
         roas: campaign.roas !== null ? `${campaign.roas.toFixed(2)}x` : '—',
@@ -219,7 +219,7 @@ export function MetaAdsDashboard() {
         cpa: campaign.results > 0 ? formatCurrency(campaign.spend / campaign.results) : '—',
         status: normalizeCampaignStatusLabel(campaign.effectiveStatus),
         statusColor: campaign.effectiveStatus === 'ACTIVE' ? 'green' : 'blue',
-        objective: campaign.objective,
+        objective: formatMetaObjective(campaign.objective),
         comment: buildCampaignComment(campaign),
       }))
     : [];
@@ -696,6 +696,29 @@ function formatInteger(value: number): string {
   return new Intl.NumberFormat('tr-TR', {
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+const META_OBJECTIVE_LABELS: Record<string, string> = {
+  OUTCOME_TRAFFIC: "Trafik",
+  OUTCOME_ENGAGEMENT: "Etkileşim",
+  OUTCOME_AWARENESS: "Farkındalık",
+  OUTCOME_LEADS: "Lead",
+  OUTCOME_SALES: "Satış",
+  OUTCOME_APP_PROMOTION: "Uygulama",
+  LINK_CLICKS: "Link Tıklamaları",
+  POST_ENGAGEMENT: "Gönderi Etkileşimi",
+  REACH: "Erişim",
+  BRAND_AWARENESS: "Marka Bilinirliği",
+  VIDEO_VIEWS: "Video Görüntüleme",
+  CONVERSIONS: "Dönüşüm",
+  APP_INSTALLS: "Uygulama Yükleme",
+  LEAD_GENERATION: "Lead Üretimi",
+  MESSAGES: "Mesajlar",
+  CATALOG_SALES: "Katalog Satışı",
+};
+
+function formatMetaObjective(objective: string): string {
+  return META_OBJECTIVE_LABELS[objective] ?? objective.replace(/^OUTCOME_/, "").replace(/_/g, " ");
 }
 
 function normalizeCampaignStatusLabel(status: string): string {
