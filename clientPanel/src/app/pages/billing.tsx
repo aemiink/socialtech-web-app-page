@@ -1,111 +1,132 @@
-import { CreditCard, Download, CheckCircle } from 'lucide-react';
-import { Button } from '../components/button';
+import { CreditCard, CheckCircle, Sparkles, Shield, Zap, Phone } from 'lucide-react';
+import { useMeQuery } from '../features/auth/authApi';
 
-const invoices = [
-  { id: 'FAT-2026-04', date: '1 Nis 2026', amount: '₺3,700', status: 'paid' },
-  { id: 'FAT-2026-03', date: '1 Mar 2026', amount: '₺3,700', status: 'paid' },
-  { id: 'FAT-2026-02', date: '1 Şub 2026', amount: '₺3,700', status: 'paid' },
-];
+const SERVICE_LABELS: Record<string, string> = {
+  'meta-ads': 'Meta Ads Yönetimi',
+  'tiktok-ads': 'TikTok Ads Yönetimi',
+  'amazon-ads': 'Amazon Ads Yönetimi',
+  'google-ads': 'Google Ads Yönetimi',
+  'social-media': 'Sosyal Medya Yönetimi',
+  'growth-hub': 'Growth Hub',
+  'web-app': 'Web Uygulama Geliştirme',
+  'mobile-app': 'Mobil Uygulama',
+  'web-mobile-design': 'Web & Mobil Tasarım',
+  'landing-pages': 'Landing Page',
+  'seo-audit': 'SEO Denetimi',
+  'technical-support': 'Teknik Destek',
+  'media-hub': 'Medya Hub',
+};
+
+function getServiceLabel(key: string): string {
+  return SERVICE_LABELS[key] ?? key;
+}
+
+function getServiceIcon(key: string): React.ElementType {
+  if (key.includes('ads')) return Zap;
+  if (key.includes('social') || key.includes('growth')) return Sparkles;
+  return Shield;
+}
 
 export function BillingPage() {
+  const { data: me, isLoading } = useMeQuery();
+
+  const activeServices = (me?.purchasedServices ?? []).filter(
+    (s) => s.status === 'ACTIVE',
+  );
+
   return (
-    <div className="p-8 space-y-6">
-      <div>
-        <h1 className="text-3xl text-white mb-2">Faturalama</h1>
-        <p className="text-[#A0A0A0]">Aboneliğinizi ve faturalarınızı yönetin</p>
-      </div>
+    <div className="min-h-full bg-[#131313]">
+      <div className="max-w-5xl mx-auto px-6 py-8 md:px-8 md:py-10 space-y-6">
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
-          <h2 className="text-xl text-white mb-4">Mevcut Plan</h2>
-          <div className="bg-gradient-to-br from-[#AAFF01]/10 to-[#7B61FF]/10 rounded-xl p-6 border border-[#AAFF01]/20 mb-4">
-            <h3 className="text-2xl text-white mb-2">Büyüme Planı</h3>
-            <p className="text-4xl text-[#AAFF01] mb-4">₺3,700<span className="text-lg text-[#A0A0A0]">/ay</span></p>
-            <div className="space-y-2 text-sm text-white">
-              <div className="flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-[#AAFF01]" />
-                <span>Sınırsız kampanya</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-[#AAFF01]" />
-                <span>Gelişmiş otomasyonlar</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-[#AAFF01]" />
-                <span>Öncelikli destek</span>
-              </div>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <div className="bg-[#202020] rounded-xl p-4 border border-white/[0.08]">
-              <p className="text-xs text-[#A0A0A0] mb-1">Ödeme Durumu</p>
-              <p className="text-[#AAFF01]">Aktif / Sorunsuz</p>
-            </div>
-            <div className="bg-[#202020] rounded-xl p-4 border border-white/[0.08]">
-              <p className="text-xs text-[#A0A0A0] mb-1">Sonraki Ödeme</p>
-              <p className="text-white">1 Mayıs 2026</p>
-            </div>
-            <div className="bg-[#202020] rounded-xl p-4 border border-white/[0.08]">
-              <p className="text-xs text-[#A0A0A0] mb-1">Sözleşme Durumu</p>
-              <p className="text-white">Aktif</p>
-            </div>
-            <div className="bg-[#202020] rounded-xl p-4 border border-white/[0.08]">
-              <p className="text-xs text-[#A0A0A0] mb-1">Paket Yenileme</p>
-              <p className="text-white">Aylık</p>
-            </div>
-          </div>
-          <Button variant="secondary" className="w-full justify-center">
-            Aboneliği Yönet
-          </Button>
+        {/* Header */}
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold text-white">Faturalama</h1>
+          <p className="text-[#A0A0A0]">Aboneliğiniz ve aktif hizmetleriniz</p>
         </div>
 
-        <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
-          <h2 className="text-xl text-white mb-4">Ödeme Yöntemi</h2>
-          <div className="bg-[#202020] rounded-xl p-4 border border-white/[0.08] mb-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-8 bg-gradient-to-br from-[#AAFF01] to-[#7B61FF] rounded flex items-center justify-center">
-                  <CreditCard className="w-5 h-5 text-black" />
-                </div>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+
+          {/* Aktif Hizmetler */}
+          <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-6 space-y-5">
+            <h2 className="text-lg font-semibold text-white">Aktif Hizmetler</h2>
+
+            <div className="relative overflow-hidden rounded-xl border border-[#AAFF01]/[0.18] bg-[#202020] p-6">
+              <div
+                className="pointer-events-none absolute inset-0"
+                style={{
+                  background:
+                    'radial-gradient(ellipse 80% 60% at 100% 0%, rgba(170,255,1,0.07) 0%, transparent 60%), radial-gradient(ellipse 60% 80% at 0% 100%, rgba(123,97,255,0.06) 0%, transparent 60%)',
+                }}
+              />
+              <div className="relative space-y-4">
                 <div>
-                  <p className="text-white">•••• •••• •••• 4242</p>
-                  <p className="text-sm text-[#A0A0A0]">Son kullanma: 12/26</p>
+                  <p className="text-xs font-semibold uppercase tracking-widest text-[#AAFF01]">Social Tech</p>
+                  <h3 className="mt-1 text-2xl font-bold text-white">Büyüme Paketi</h3>
                 </div>
+
+                {isLoading ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="h-6 animate-pulse rounded bg-white/10" />
+                    ))}
+                  </div>
+                ) : activeServices.length === 0 ? (
+                  <p className="text-sm text-[#A0A0A0]">Aktif hizmet bulunamadı.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {activeServices.map((service) => {
+                      const Icon = getServiceIcon(service.serviceId);
+                      return (
+                        <li key={service.serviceId} className="flex items-center gap-3">
+                          <Icon className="h-4 w-4 flex-shrink-0 text-[#AAFF01]" />
+                          <span className="text-sm text-[#CFCFCF]">
+                            {getServiceLabel(service.serviceId)}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </div>
             </div>
           </div>
-          <Button variant="secondary" className="w-full justify-center">
-            Ödeme Yöntemini Güncelle
-          </Button>
-        </div>
-      </div>
 
-      <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
-        <h2 className="text-xl text-white mb-4">Fatura Geçmişi</h2>
-        <div className="space-y-3">
-          {invoices.map((invoice, i) => (
-            <div key={i} className="flex items-center justify-between p-4 bg-[#202020] rounded-xl border border-white/[0.08]">
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-lg bg-[#AAFF01]/10 flex items-center justify-center">
-                  <Download className="w-5 h-5 text-[#AAFF01]" />
-                </div>
-                <div>
-                  <p className="text-white">{invoice.id}</p>
-                  <p className="text-sm text-[#A0A0A0]">{invoice.date}</p>
+          {/* Fatura Durumu */}
+          <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-6 space-y-4">
+            <h2 className="text-lg font-semibold text-white">Fatura Durumu</h2>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-[#202020] px-4 py-3">
+                <span className="text-sm text-[#A0A0A0]">Ödeme Durumu</span>
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-[#AAFF01]" />
+                  <span className="text-sm font-medium text-[#AAFF01]">Aktif</span>
                 </div>
               </div>
-              <div className="flex items-center gap-4">
-                <p className="text-white">{invoice.amount}</p>
-                <span className="px-3 py-1 rounded-lg bg-[#AAFF01]/10 text-[#AAFF01] text-sm border border-[#AAFF01]/20">
-                  Ödendi
-                </span>
-                <Button variant="ghost" icon={Download}>
-                  İndir
-                </Button>
+              <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-[#202020] px-4 py-3">
+                <span className="text-sm text-[#A0A0A0]">Sözleşme</span>
+                <span className="text-sm font-medium text-white">Aktif</span>
               </div>
             </div>
-          ))}
+
+            {/* Fatura geçmişi — backend endpoint yok */}
+            <div className="rounded-xl border border-dashed border-white/[0.10] bg-[#202020]/50 p-5 text-center space-y-3">
+              <CreditCard className="mx-auto h-8 w-8 text-[#A0A0A0]/50" />
+              <p className="text-sm font-medium text-white/50">Fatura Geçmişi</p>
+              <p className="text-xs text-white/30 leading-relaxed">
+                Faturalarınıza ve ödeme geçmişinize ulaşmak için hesap yöneticinizle iletişime geçin.
+              </p>
+              <a
+                href="mailto:info@socialtech.com.tr"
+                className="inline-flex items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.04] px-4 py-2 text-xs text-[#A0A0A0] hover:text-white hover:border-white/[0.16] transition-colors"
+              >
+                <Phone className="h-3.5 w-3.5" />
+                Hesap yöneticinize ulaşın
+              </a>
+            </div>
+          </div>
         </div>
+
       </div>
     </div>
   );
