@@ -1270,8 +1270,8 @@ export function TaskDetail() {
                         <div className="mt-3 rounded-lg border border-white/[0.08] bg-[#202020] p-3">
                           <p className="text-xs text-[#A0A0A0]">
                             Bu hizmet türü ({task.project?.serviceKey ?? "tanımsız"}) için müşteri onay akışı
-                            desteklenmiyor. Onay süreci yalnızca Growth Hub, Meta Ads, TikTok Ads, Amazon Ads ve
-                            Sosyal Medya projelerinde kullanılabilir.
+                            desteklenmiyor. Onay süreci yalnızca Growth Hub, Meta Ads, TikTok Ads, Amazon Ads,
+                            Sosyal Medya ve Web & Mobile Design projelerinde kullanılabilir.
                           </p>
                         </div>
                       );

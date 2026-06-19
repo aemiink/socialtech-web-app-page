@@ -512,6 +512,7 @@ function getDesignerTaskKindLabel(task: Task): string {
   if (task.approvalType === "SOCIAL_MEDIA_CALENDAR_APPROVAL") return "İçerik Takvimi";
   if (task.approvalType === "SOCIAL_MEDIA_POST_APPROVAL") return "Post / Asset";
   if (task.approvalType === "SOCIAL_MEDIA_CREATIVE_APPROVAL") return "Social Media Kreatif";
+  if (task.approvalType === "DESIGN_CREATIVE_APPROVAL") return "UI Tasarım";
   if (task.type === "REVISION" || task.approvalStatus === "CHANGES_REQUESTED") return "Revizyon";
   if (task.workstream === "UI_INTEGRATION") return "UI Tasarım";
   return "Tasarım";
@@ -558,6 +559,7 @@ function getDesignerContextLabel(task: Task): string {
   if (task.approvalType?.startsWith("TIKTOK_ADS")) return "TikTok Ads";
   if (task.approvalType?.startsWith("AMAZON_ADS")) return "Amazon Ads";
   if (task.approvalType?.startsWith("SOCIAL_MEDIA")) return "Social Media";
+  if (task.approvalType === "DESIGN_CREATIVE_APPROVAL") return "Web & Mobile Design";
   if (task.workstream === "UI_INTEGRATION") return "UI / Ürün Tasarımı";
   return getDesignerTaskKindLabel(task);
 }

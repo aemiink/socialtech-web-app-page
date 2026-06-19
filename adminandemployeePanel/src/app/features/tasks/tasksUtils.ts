@@ -318,6 +318,9 @@ export function getDesignApprovalSetupForServiceKey(
   if (serviceKey === "growth-hub") {
     return { approvalType: "SOCIAL_MEDIA_CREATIVE_APPROVAL", permission: "socialMedia.approvals.create.assigned" };
   }
+  if (serviceKey === "web-mobile-design") {
+    return { approvalType: "DESIGN_CREATIVE_APPROVAL", permission: "design.approvals.create.assigned" };
+  }
   return null;
 }
 
@@ -337,6 +340,9 @@ export function getDesignApprovalSetupForTask(
   }
   if (approvalType?.startsWith("SOCIAL_MEDIA")) {
     return { approvalType, permission: "socialMedia.approvals.create.assigned" };
+  }
+  if (approvalType === "DESIGN_CREATIVE_APPROVAL") {
+    return { approvalType, permission: "design.approvals.create.assigned" };
   }
 
   return getDesignApprovalSetupForServiceKey(task?.project?.serviceKey);

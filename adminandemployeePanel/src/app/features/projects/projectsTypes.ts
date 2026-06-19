@@ -336,6 +336,7 @@ export type ProjectFile = {
     | "SOCIAL_MEDIA_CAPTION_APPROVAL"
     | "SOCIAL_MEDIA_CALENDAR_APPROVAL"
     | "SOCIAL_MEDIA_REPORT_ACKNOWLEDGEMENT"
+    | "DESIGN_CREATIVE_APPROVAL"
     | null;
   approvalStatus?:
     | "PENDING"

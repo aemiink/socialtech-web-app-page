@@ -23,6 +23,7 @@ export function ProjectManagerClientDetail() {
   const [creatingServiceKey, setCreatingServiceKey] = useState<string | null>(null);
   const [projectName, setProjectName] = useState("");
   const [repositoryUrl, setRepositoryUrl] = useState("");
+  const [figmaProjectUrl, setFigmaProjectUrl] = useState("");
   const { data: summary, isLoading, isError, error } = useGetClientSummaryQuery(normalizedClientId ?? "", {
     skip: !normalizedClientId,
   });
@@ -68,8 +69,13 @@ export function ProjectManagerClientDetail() {
     const normalizedServiceKey = normalizeServiceKey(serviceKey);
     const needsRepositoryUrl =
       normalizedServiceKey === "web-app" || normalizedServiceKey === "mobile-app";
+    const needsFigmaUrl = normalizedServiceKey === "web-mobile-design";
     if (needsRepositoryUrl && repositoryUrl.trim().length === 0) {
       setCreateProjectError("WEB_APP ve MOBILE_APP için repository linki zorunludur.");
+      return;
+    }
+    if (needsFigmaUrl && figmaProjectUrl.trim().length === 0) {
+      setCreateProjectError("Web & Mobile Design için Figma veya prototip linki zorunludur.");
       return;
     }
 
@@ -83,9 +89,11 @@ export function ProjectManagerClientDetail() {
         status: "PLANNED",
         priority: "MEDIUM",
         repositoryUrl: repositoryUrl.trim().length > 0 ? repositoryUrl.trim() : null,
+        figmaProjectUrl: figmaProjectUrl.trim().length > 0 ? figmaProjectUrl.trim() : null,
       }).unwrap();
       setProjectName("");
       setRepositoryUrl("");
+      setFigmaProjectUrl("");
       setCreatingServiceKey(null);
     } catch (mutationError) {
       setCreateProjectError(extractApiErrorMessage(mutationError, "Proje oluşturulamadı."));
@@ -175,6 +183,14 @@ export function ProjectManagerClientDetail() {
                           required
                         />
                       ) : null}
+                      {normalizeServiceKey(serviceCard.serviceKey) === "web-mobile-design" ? (
+                        <Input
+                          value={figmaProjectUrl}
+                          onChange={(event) => setFigmaProjectUrl(event.target.value)}
+                          placeholder="https://www.figma.com/file/... veya https://www.figma.com/proto/..."
+                          required
+                        />
+                      ) : null}
                       {createProjectError ? (
                         <p className="text-xs text-red-300">{createProjectError}</p>
                       ) : null}
@@ -190,6 +206,7 @@ export function ProjectManagerClientDetail() {
                             setCreatingServiceKey(null);
                             setProjectName("");
                             setRepositoryUrl("");
+                            setFigmaProjectUrl("");
                             setCreateProjectError(null);
                           }}
                         >
@@ -205,6 +222,7 @@ export function ProjectManagerClientDetail() {
                         setCreatingServiceKey(serviceCard.serviceKey);
                         setProjectName(`${serviceCard.label} Operasyon`);
                         setRepositoryUrl("");
+                        setFigmaProjectUrl("");
                         setCreateProjectError(null);
                       }}
                     >

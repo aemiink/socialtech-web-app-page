@@ -27,6 +27,7 @@ import {
   useGetClientSocialMediaReportsQuery,
   useGetClientSocialMediaSummaryQuery,
   usePublishSocialMediaReportMutation,
+  useTriggerClientSocialMediaSyncMutation,
   useUpdateSocialMediaPostMutation,
 } from "../../features/socialMedia/socialMediaApi";
 import type {
@@ -53,6 +54,11 @@ import {
   getSocialMediaPostTypeLabel,
   getSocialMediaSummaryStateLabel,
 } from "../../features/socialMedia/socialMediaUtils";
+import {
+  SocialMediaActionQueue,
+  SocialMediaConnectionHealth,
+  SocialMediaProfileCards,
+} from "../../features/socialMedia/components/SocialMediaAccountPanels";
 import { useCreateTaskMutation, useGetTasksQuery } from "../../features/tasks/tasksApi";
 import type { CreateTaskRequest, Task } from "../../features/tasks/tasksTypes";
 import { useAppSelector } from "../../store/hooks";
@@ -145,6 +151,7 @@ const SOCIAL_MEDIA_APPROVAL_TYPE_LABELS: Record<NonNullable<CreateTaskRequest["a
   SOCIAL_MEDIA_CAPTION_APPROVAL: "Social Media Caption",
   SOCIAL_MEDIA_CALENDAR_APPROVAL: "Social Media Calendar",
   SOCIAL_MEDIA_REPORT_ACKNOWLEDGEMENT: "Social Media Report",
+  DESIGN_CREATIVE_APPROVAL: "Web & Mobile Design Creative",
 };
 
 const SOCIAL_MEDIA_REPORT_TYPE_OPTIONS: Array<{ value: SocialMediaReportType; label: string }> = [
@@ -253,6 +260,7 @@ export function SocialMediaWorkspace({ initialView = "overview" }: SocialMediaWo
   const [createClientSocialMediaReport, createReportState] =
     useCreateClientSocialMediaReportMutation();
   const [publishSocialMediaReport, publishReportState] = usePublishSocialMediaReportMutation();
+  const [triggerMetaSync, { isLoading: isSyncing }] = useTriggerClientSocialMediaSyncMutation();
 
   const projects = useMemo(
     () => (projectsQuery.data?.data ?? []).filter((project) => project.serviceKey === "social-media"),
@@ -281,6 +289,17 @@ export function SocialMediaWorkspace({ initialView = "overview" }: SocialMediaWo
     (activeView === "reports" && (insightsQuery.isFetching || reportsQuery.isFetching)) ||
     projectsQuery.isFetching ||
     tasksQuery.isFetching;
+
+  async function handleMetaSync() {
+    if (!selectedClientId) return;
+    try {
+      const result = await triggerMetaSync({ clientId: selectedClientId }).unwrap();
+      setActionMessage(`Meta sync tamamlandı: ${result.synced} içerik (${result.platforms.join(", ")})`);
+      await handleRefresh();
+    } catch {
+      setActionMessage("Meta sync başarısız oldu.");
+    }
+  }
 
   async function handleRefresh() {
     await clientsQuery.refetch();
@@ -500,6 +519,10 @@ export function SocialMediaWorkspace({ initialView = "overview" }: SocialMediaWo
             <RefreshCw className={cn("h-4 w-4", isBusy && "animate-spin")} aria-hidden="true" />
             Yenile
           </Button>
+          <Button variant="outline" onClick={() => void handleMetaSync()} disabled={!selectedClientId || isBusy || isSyncing}>
+            <RefreshCw className={cn("h-4 w-4", isSyncing && "animate-spin")} aria-hidden="true" />
+            Meta Sync
+          </Button>
         </div>
       </div>
 
@@ -636,58 +659,79 @@ function OverviewPanel({
   const upcomingPosts = summary?.contentPlan.upcomingPosts ?? [];
 
   return (
-    <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-      <Card className="rounded-lg border-white/[0.08] bg-[#181818] p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold text-[#F7F7F7]">{client.companyName}</h2>
-            <p className="mt-1 text-sm text-[#BDBDBD]">
-              {config?.instagramUsername ?? "Instagram hesabı tanımlı değil"}
-            </p>
+    <div className="space-y-4">
+      <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+        <Card className="rounded-lg border-white/[0.08] bg-[#181818] p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-[#F7F7F7]">{client.companyName}</h2>
+              <p className="mt-1 text-sm text-[#BDBDBD]">
+                {config?.instagramUsername ?? "Instagram hesabı tanımlı değil"}
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={onOpenCalendar}>
+              <Calendar className="h-4 w-4" aria-hidden="true" />
+              Takvimi Aç
+            </Button>
           </div>
-          <Button variant="outline" size="sm" onClick={onOpenCalendar}>
-            <Calendar className="h-4 w-4" aria-hidden="true" />
-            Takvimi Aç
-          </Button>
-        </div>
 
-        <div className="mt-5 grid gap-3 md:grid-cols-2">
-          <InfoRow label="Ana Hedef" value={getSocialMediaGoalLabel(config?.primaryGoal ?? null)} />
-          <InfoRow label="Frekans" value={config?.contentFrequency ?? "Tanımlı değil"} />
-          <InfoRow label="Ton" value={config?.toneOfVoice ?? "Tanımlı değil"} />
-          <InfoRow label="Aktif Proje" value={String(projects.length)} />
-        </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-2">
+            <InfoRow label="Ana Hedef" value={getSocialMediaGoalLabel(config?.primaryGoal ?? null)} />
+            <InfoRow label="Frekans" value={config?.contentFrequency ?? "Tanımlı değil"} />
+            <InfoRow label="Ton" value={config?.toneOfVoice ?? "Tanımlı değil"} />
+            <InfoRow label="Aktif Proje" value={String(projects.length)} />
+          </div>
 
-        <div className="mt-5 flex flex-wrap gap-2">
-          {(config?.hashtags ?? []).slice(0, 8).map((hashtag) => (
-            <Badge key={hashtag} className="border-white/[0.12] bg-white/[0.06] text-[#E5E5E5]">
-              {hashtag}
+          <div className="mt-5 flex flex-wrap gap-2">
+            {(config?.hashtags ?? []).slice(0, 8).map((hashtag) => (
+              <Badge key={hashtag} className="border-white/[0.12] bg-white/[0.06] text-[#E5E5E5]">
+                {hashtag}
+              </Badge>
+            ))}
+          </div>
+        </Card>
+
+        <Card className="rounded-lg border-white/[0.08] bg-[#181818] p-5">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-[#F7F7F7]">Yaklaşan İçerikler</h2>
+            <Badge className="border-white/[0.12] bg-white/[0.06] text-[#E5E5E5]">
+              {posts.length} post
             </Badge>
-          ))}
-        </div>
-      </Card>
+          </div>
+          <div className="mt-4 space-y-3">
+            {upcomingPosts.length > 0 ? (
+              upcomingPosts.slice(0, 4).map((post) => <SummaryPostRow key={post.id} post={post} />)
+            ) : (
+              <p className="text-sm text-[#BDBDBD]">Yaklaşan görünür içerik bulunamadı.</p>
+            )}
+          </div>
+          {!canManagePosts ? (
+            <p className="mt-4 text-xs text-[#8F8F8F]">
+              Post oluşturma ve düzenleme için assigned manage yetkisi gerekiyor.
+            </p>
+          ) : null}
+        </Card>
+      </section>
 
-      <Card className="rounded-lg border-white/[0.08] bg-[#181818] p-5">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold text-[#F7F7F7]">Yaklaşan İçerikler</h2>
-          <Badge className="border-white/[0.12] bg-white/[0.06] text-[#E5E5E5]">
-            {posts.length} post
-          </Badge>
+      <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+        <div className="space-y-3">
+          <SocialMediaConnectionHealth
+            config={config}
+            lastUpdatedAt={summary?.meta.lastUpdatedAt ?? summary?.meta.generatedAt ?? null}
+          />
+          <SocialMediaProfileCards config={config} />
         </div>
-        <div className="mt-4 space-y-3">
-          {upcomingPosts.length > 0 ? (
-            upcomingPosts.slice(0, 4).map((post) => <SummaryPostRow key={post.id} post={post} />)
-          ) : (
-            <p className="text-sm text-[#BDBDBD]">Yaklaşan görünür içerik bulunamadı.</p>
-          )}
-        </div>
-        {!canManagePosts ? (
-          <p className="mt-4 text-xs text-[#8F8F8F]">
-            Post oluşturma ve düzenleme için assigned manage yetkisi gerekiyor.
-          </p>
-        ) : null}
-      </Card>
-    </section>
+        <SocialMediaActionQueue
+          config={config}
+          metrics={{
+            plannedPosts: summary?.metrics.plannedPosts ?? 0,
+            publishedPosts: summary?.metrics.publishedPosts ?? 0,
+            pendingApprovals: summary?.metrics.pendingApprovals ?? 0,
+            creativeAssets: summary?.metrics.creativeAssets ?? 0,
+          }}
+        />
+      </section>
+    </div>
   );
 }
 

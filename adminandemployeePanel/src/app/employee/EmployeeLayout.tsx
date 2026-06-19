@@ -5,7 +5,7 @@ import {
   FileText, ThumbsUp, UserCheck, FolderKanban, TrendingUp, Zap, Image,
   MessageSquare, BookOpen, Code, Bug, Rocket, Headphones, Wrench, Shield, Video,
   Search as SearchIcon, BarChart, Globe, Search, Plus, LogOut, LucideIcon, Megaphone, ChevronLeft, ChevronRight,
-  PhoneCall
+  PhoneCall, Palette
 } from "lucide-react";
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
@@ -68,6 +68,7 @@ const roleMenus: Record<EmployeePanelRole, SidebarItem[]> = {
     { path: "/employee/tiktok-ads", label: "TikTok Ads Workspace", icon: Video },
     { path: "/employee/amazon-ads", label: "Amazon Ads Workspace", icon: BarChart },
     { path: "/employee/social-media", label: "Social Media Workspace", icon: MessageSquare },
+    { path: "/employee/web-mobile-design", label: "Web & Mobil Tasarım", icon: Palette },
     { path: "/employee/gorevlerim", label: "Görevlerim", icon: CheckSquare },
     { path: "/employee/icerik-takvimi", label: "İçerik Takvimi", icon: Calendar },
     { path: "/employee/captionlar", label: "Captionlar", icon: FileText },

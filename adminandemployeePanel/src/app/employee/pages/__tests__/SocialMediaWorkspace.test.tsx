@@ -25,6 +25,8 @@ const mockUseCreateClientSocialMediaReportMutation = vi.fn();
 const mockCreateClientSocialMediaReport = vi.fn();
 const mockUsePublishSocialMediaReportMutation = vi.fn();
 const mockPublishSocialMediaReport = vi.fn();
+const mockUseTriggerClientSocialMediaSyncMutation = vi.fn();
+const mockTriggerClientSocialMediaSync = vi.fn();
 
 vi.mock("../../../store/hooks", () => ({
   useAppSelector: (selector: (state: unknown) => unknown) =>
@@ -61,6 +63,8 @@ vi.mock("../../../features/socialMedia/socialMediaApi", () => ({
     mockUseCreateClientSocialMediaReportMutation(...args),
   usePublishSocialMediaReportMutation: (...args: unknown[]) =>
     mockUsePublishSocialMediaReportMutation(...args),
+  useTriggerClientSocialMediaSyncMutation: (...args: unknown[]) =>
+    mockUseTriggerClientSocialMediaSyncMutation(...args),
 }));
 
 vi.mock("../../../features/projects/projectsApi", () => ({
@@ -151,9 +155,10 @@ function setupBaseMocks() {
         updatedAt: "2026-05-28T08:00:00.000Z",
       },
       config: {
+        activePlatforms: ["INSTAGRAM", "FACEBOOK"],
         instagramUsername: "@socialclient",
-        instagramAccountId: null,
-        facebookPageId: null,
+        instagramAccountId: "ig-social-client",
+        facebookPageId: "fb-social-client",
         tiktokUsername: null,
         linkedinPageUrl: null,
         contentFrequency: "Haftada 3 post",
@@ -374,6 +379,9 @@ function setupBaseMocks() {
   mockPublishSocialMediaReport.mockReturnValue({
     unwrap: () => Promise.resolve({ id: "report-1", status: "PUBLISHED" }),
   });
+  mockTriggerClientSocialMediaSync.mockReturnValue({
+    unwrap: () => Promise.resolve({ jobId: "sync-1" }),
+  });
   mockUseCreateTaskMutation.mockReturnValue([mockCreateTask, { isLoading: false }]);
   mockUseUpdateSocialMediaPostMutation.mockReturnValue([
     mockUpdateSocialMediaPost,
@@ -496,6 +504,10 @@ function setupBaseMocks() {
     mockPublishSocialMediaReport,
     { isLoading: false },
   ]);
+  mockUseTriggerClientSocialMediaSyncMutation.mockReturnValue([
+    mockTriggerClientSocialMediaSync,
+    { isLoading: false },
+  ]);
 }
 
 function renderWorkspace(initialView?: Parameters<typeof SocialMediaWorkspace>[0]["initialView"]) {
@@ -535,6 +547,11 @@ describe("SocialMediaWorkspace", () => {
 
     expect(screen.getByText("Project Manager")).toBeInTheDocument();
     expect(await screen.findByText("Planlı Post")).toBeInTheDocument();
+    expect(screen.getByText("Meta ID Eşleşmesi")).toBeInTheDocument();
+    expect(screen.getByText("Instagram Profili")).toBeInTheDocument();
+    expect(screen.getByText("ig-social-client")).toBeInTheDocument();
+    expect(screen.getByText("Facebook Sayfası")).toBeInTheDocument();
+    expect(screen.getByText("Page ID fb-social-client")).toBeInTheDocument();
   });
 
   it("renders the embedded calendar view", async () => {
