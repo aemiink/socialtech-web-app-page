@@ -32,7 +32,7 @@ const navItems = [
   { label: "Hakkımızda", to: "/hakkimizda" },
 ];
 
-const CLIENT_PORTAL_URL = import.meta.env.VITE_CLIENT_PORTAL_URL ?? "http://localhost:5175";
+const CLIENT_PORTAL_URL = import.meta.env.VITE_CLIENT_PORTAL_URL ?? "https://musteripaneli.socialtech.com.tr";
 
 const serviceMenuGroups: ServiceMenuGroup[] = [
   {
