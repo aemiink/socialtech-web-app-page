@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import { Video, Calendar, Clock, CheckCircle, CalendarDays, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Video, Calendar, Clock, CheckCircle, AlertCircle, CalendarDays, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { Button } from '../components/button';
 import {
   AlertDialog,
@@ -21,9 +21,9 @@ import {
 } from '../components/ui/dialog';
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
-import { webAppWorkspaceApi, useCreateWebAppWorkspaceMeetingRequestMutation, useGetWebAppWorkspaceMeetingRequestsQuery } from "../features/webAppWorkspace/webAppWorkspaceApi";
+import { webAppWorkspaceApi, useCreateClientMeetingRequestMutation, useGetClientMeetingRequestsQuery } from "../features/webAppWorkspace/webAppWorkspaceApi";
 import type { WorkspaceMeetingRequest } from '../features/webAppWorkspace/webAppWorkspaceTypes';
-import { createWorkspaceSocket, type WorkspaceUpdateEvent } from '../features/webAppWorkspace/workspaceSocket';
+import { createWorkspaceSocket } from '../features/webAppWorkspace/workspaceSocket';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { selectAccessToken } from '../features/auth/authSelectors';
 
@@ -244,7 +244,6 @@ function StatusBadge({ status }: { status: string }) {
 export function MeetingsPage({ projectId }: { projectId?: string | null }) {
   const dispatch = useAppDispatch();
   const accessToken = useAppSelector(selectAccessToken);
-  const lastWorkspaceSequenceRef = useRef(0);
 
   // Dialog / form states
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
@@ -259,15 +258,13 @@ export function MeetingsPage({ projectId }: { projectId?: string | null }) {
   // Calendar highlight
   const [highlightedDay, setHighlightedDay] = useState<Date | null>(null);
   const upcomingRef = useRef<HTMLDivElement>(null);
+  const justSubmittedRef = useRef(false);
 
   // Status notifications from socket
   const [notifications, setNotifications] = useState<StatusNotification[]>([]);
 
-  const { data: requests = [], isLoading } = useGetWebAppWorkspaceMeetingRequestsQuery(
-    { projectId: projectId ?? "" },
-    { skip: !projectId },
-  );
-  const [createRequest, { isLoading: isCreating }] = useCreateWebAppWorkspaceMeetingRequestMutation();
+  const { data: requests = [], isLoading } = useGetClientMeetingRequestsQuery();
+  const [createRequest, { isLoading: isCreating }] = useCreateClientMeetingRequestMutation();
 
   // ─── Derived lists ────────────────────────────────────────────────────────────
 
@@ -321,73 +318,64 @@ export function MeetingsPage({ projectId }: { projectId?: string | null }) {
   // ─── Socket ───────────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!projectId || !accessToken) {
+    if (!accessToken) {
       return;
     }
 
     const socket = createWorkspaceSocket(accessToken);
-    const joinPayload = { projectId, tabKey: "MEETINGS" };
-    socket.emit("project:join", joinPayload);
+    const onMeetingRequestUpdated = (payload: { meetingRequest?: WorkspaceMeetingRequest }) => {
+      const meetingRequest = payload.meetingRequest;
+      if (!meetingRequest) return;
 
-    const onWorkspaceUpdate = (event: WorkspaceUpdateEvent) => {
-      if (event.projectId !== projectId) {
-        return;
-      }
-      if (event.tabKey !== "MEETINGS") {
-        return;
-      }
-      if (event.sequence <= lastWorkspaceSequenceRef.current) {
-        return;
-      }
-      lastWorkspaceSequenceRef.current = event.sequence;
-      const payload = event.payload ?? {};
-      const meetingRequest = (payload.meetingRequest ?? null) as WorkspaceMeetingRequest | null;
-      if (event.event === "meeting-request.created" && meetingRequest) {
-        dispatch(
-          webAppWorkspaceApi.util.updateQueryData("getWebAppWorkspaceMeetingRequests", { projectId }, (draft) => {
-            const exists = draft.some((item) => item.id === meetingRequest.id);
-            if (!exists) {
-              draft.unshift(meetingRequest);
-            }
-          }),
-        );
-        return;
-      }
-      if (event.event === "meeting-request.updated" && meetingRequest) {
-        dispatch(
-          webAppWorkspaceApi.util.updateQueryData("getWebAppWorkspaceMeetingRequests", { projectId }, (draft) => {
-            const target = draft.find((item) => item.id === meetingRequest.id);
-            if (target) {
-              const prevStatus = target.status;
-              Object.assign(target, meetingRequest);
-              // Show notification if status changed to CONFIRMED or DECLINED
-              if (
-                prevStatus !== meetingRequest.status &&
-                (meetingRequest.status === "CONFIRMED" || meetingRequest.status === "DECLINED")
-              ) {
-                const notifId = `${meetingRequest.id}-${meetingRequest.status}-${Date.now()}`;
-                setNotifications(prev => [
-                  ...prev,
-                  { id: notifId, meetingTitle: meetingRequest.title, status: meetingRequest.status as "CONFIRMED" | "DECLINED" },
-                ]);
-                setTimeout(() => {
-                  setNotifications(prev => prev.filter(n => n.id !== notifId));
-                }, 6000);
-              }
-            }
-          }),
-        );
+      let previousStatus: string | undefined;
+      dispatch(
+        webAppWorkspaceApi.util.updateQueryData("getClientMeetingRequests", undefined, (draft) => {
+          const target = draft.find((item) => item.id === meetingRequest.id);
+          if (target) {
+            previousStatus = target.status;
+            Object.assign(target, meetingRequest);
+          }
+        }),
+      );
+
+      if (
+        previousStatus !== meetingRequest.status &&
+        (meetingRequest.status === "CONFIRMED" || meetingRequest.status === "DECLINED")
+      ) {
+        const notifId = `${meetingRequest.id}-${meetingRequest.status}-${Date.now()}`;
+        setNotifications((previous) => [
+          ...previous,
+          {
+            id: notifId,
+            meetingTitle: meetingRequest.title,
+            status: meetingRequest.status as "CONFIRMED" | "DECLINED",
+          },
+        ]);
+        if (meetingRequest.status === "DECLINED") {
+          setTimeout(() => {
+            setNotifications((previous) => previous.filter((item) => item.id !== notifId));
+          }, 8000);
+        }
       }
     };
 
-    socket.on("workspace:update", onWorkspaceUpdate);
+    socket.on("meeting-request.updated", onMeetingRequestUpdated);
 
     return () => {
-      socket.emit("project:leave", joinPayload);
-      socket.off("workspace:update", onWorkspaceUpdate);
+      socket.off("meeting-request.updated", onMeetingRequestUpdated);
       socket.disconnect();
     };
-  }, [accessToken, dispatch, projectId]);
+  }, [accessToken, dispatch]);
+
+  // Scroll to upcoming section when the new request appears in the list after submit
+  useEffect(() => {
+    if (!justSubmittedRef.current) return;
+    justSubmittedRef.current = false;
+    const timer = setTimeout(() => {
+      upcomingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [requests.length]);
 
   // ─── Calendar day click ───────────────────────────────────────────────────────
 
@@ -423,9 +411,6 @@ export function MeetingsPage({ projectId }: { projectId?: string | null }) {
   };
 
   const submitMeetingRequest = async () => {
-    if (!projectId) {
-      return;
-    }
     if (!requestTopic) {
       setRequestError("Lütfen toplantı konusunu seçin.");
       setIsConfirmationOpen(false);
@@ -449,13 +434,14 @@ export function MeetingsPage({ projectId }: { projectId?: string | null }) {
     try {
       setRequestError(null);
       await createRequest({
-        projectId,
+        projectId: projectId ?? undefined,
         title: titleWithTopic,
         agenda: requestAgenda.trim() || undefined,
         preferredStartAt: startAt.toISOString(),
         preferredEndAt: endAt.toISOString(),
         timezone: ISTANBUL_TIMEZONE,
       }).unwrap();
+      justSubmittedRef.current = true;
       setIsConfirmationOpen(false);
       setRequestDate("");
       setRequestTime("");
@@ -486,20 +472,26 @@ export function MeetingsPage({ projectId }: { projectId?: string | null }) {
             <div
               key={n.id}
               className={[
-                "flex items-start justify-between rounded-xl border px-4 py-3 text-sm",
+                "flex items-center justify-between rounded-xl border px-4 py-4 text-sm gap-3",
                 n.status === "CONFIRMED"
-                  ? "border-[#AAFF01]/30 bg-[#AAFF01]/10 text-[#d9ff8b]"
+                  ? "border-[#AAFF01]/40 bg-[#AAFF01]/12 text-[#d9ff8b] shadow-[0_0_20px_rgba(170,255,1,0.08)]"
                   : "border-red-400/30 bg-red-400/10 text-red-200",
               ].join(" ")}
             >
-              <span>
+              <div className="flex items-center gap-3 flex-1">
                 {n.status === "CONFIRMED"
-                  ? `Toplantı talebiniz onaylandı: "${n.meetingTitle}"`
-                  : `Toplantı talebiniz reddedildi: "${n.meetingTitle}"`}
-              </span>
+                  ? <CheckCircle className="w-5 h-5 flex-shrink-0 text-[#AAFF01]" />
+                  : <AlertCircle className="w-5 h-5 flex-shrink-0 text-red-400" />
+                }
+                <span className="font-medium">
+                  {n.status === "CONFIRMED"
+                    ? `Toplantı talebiniz onaylandı: "${n.meetingTitle}"`
+                    : `Toplantı talebiniz uygun bulunmadı: "${n.meetingTitle}"`}
+                </span>
+              </div>
               <button
                 onClick={() => dismissNotification(n.id)}
-                className="ml-4 opacity-60 hover:opacity-100 transition-opacity flex-shrink-0"
+                className="opacity-50 hover:opacity-100 transition-opacity flex-shrink-0"
                 aria-label="Kapat"
               >
                 <X className="w-4 h-4" />
@@ -540,7 +532,7 @@ export function MeetingsPage({ projectId }: { projectId?: string | null }) {
             </Button>
           </div>
 
-          {isLoading && projectId ? (
+          {isLoading ? (
             <p className="text-sm text-[#A0A0A0] mb-3">Toplantı talepleri yükleniyor...</p>
           ) : null}
 

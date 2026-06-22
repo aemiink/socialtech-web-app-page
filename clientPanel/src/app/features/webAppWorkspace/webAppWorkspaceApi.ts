@@ -111,6 +111,31 @@ export const webAppWorkspaceApi = baseApi.injectEndpoints({
         method: "GET",
       }),
     }),
+    getClientMeetingRequests: builder.query<WorkspaceMeetingRequest[], void>({
+      query: () => ({
+        url: "/clients/me/meeting-requests",
+        method: "GET",
+      }),
+      providesTags: ["ClientMeetingRequests"],
+    }),
+    createClientMeetingRequest: builder.mutation<
+      WorkspaceMeetingRequest,
+      {
+        projectId?: string;
+        title: string;
+        agenda?: string;
+        preferredStartAt: string;
+        preferredEndAt: string;
+        timezone: string;
+      }
+    >({
+      query: (body) => ({
+        url: "/clients/me/meeting-requests",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["ClientMeetingRequests"],
+    }),
     createWebAppWorkspaceMeetingRequest: builder.mutation<
       WorkspaceMeetingRequest,
       {
@@ -141,6 +166,8 @@ export const {
   useGetWebAppWorkspaceReportsQuery,
   useGetWebAppWorkspaceMeetingRequestsQuery,
   useCreateWebAppWorkspaceMeetingRequestMutation,
+  useGetClientMeetingRequestsQuery,
+  useCreateClientMeetingRequestMutation,
 } = webAppWorkspaceApi;
 
 function patchWorkspaceRevisionCaches(

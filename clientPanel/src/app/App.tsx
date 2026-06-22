@@ -174,14 +174,16 @@ export function ClientPortalApp() {
     (selectedService === "web-app" || selectedService === "web-mobile-design") &&
     scopedProjects.length > 1;
 
-  // Workspace features (meetings, reports) need a web-app project regardless of the
-  // currently selected service. Find it from all client projects.
+  // Reports still need web-app workspace specifically.
   const workspaceProjectId = useMemo(() => {
     const webAppProject = clientProjects.find(
       (p) => normalizeServiceId(p.serviceKey) === "web-app",
     );
     return webAppProject?.id ?? activeProjectId;
   }, [clientProjects, activeProjectId]);
+
+  // Meetings: önce seçili servisin projesi, yoksa herhangi bir proje.
+  const meetingProjectId = activeProjectId ?? clientProjects[0]?.id ?? null;
 
   useEffect(() => {
     if (!isAuthenticated || !currentUser || isSupportedClientPortalUser(currentUser)) {
@@ -327,7 +329,7 @@ export function ClientPortalApp() {
 
   const renderContent = () => {
     if (currentPage === "reports") return <ReportsPage projectId={workspaceProjectId} selectedService={selectedService} />;
-    if (currentPage === "meetings") return <MeetingsPage projectId={workspaceProjectId} />;
+    if (currentPage === "meetings") return <MeetingsPage projectId={meetingProjectId} />;
     if (currentPage === "billing") return <BillingPage />;
     if (currentPage === "settings") return <SettingsPage />;
     if (currentPage === "competitor-analysis") return <AutomationsPage />;

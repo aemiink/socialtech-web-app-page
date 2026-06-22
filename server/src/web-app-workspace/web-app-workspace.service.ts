@@ -923,7 +923,7 @@ export class WebAppWorkspaceService {
   }
 
   async getMeetingRequests(currentUser: AuthenticatedUser, projectId: string) {
-    const project = await this.assertWorkspaceProjectAccess(currentUser, projectId, "read");
+    const project = await this.assertMeetingProjectAccess(currentUser, projectId, "read");
     return this.prisma.webAppWorkspaceMeetingRequest.findMany({
       where: { projectId: project.id },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -936,7 +936,7 @@ export class WebAppWorkspaceService {
     projectId: string,
     dto: CreateMeetingRequestDto,
   ) {
-    const project = await this.assertWorkspaceProjectAccess(currentUser, projectId, "interact");
+    const project = await this.assertMeetingProjectAccess(currentUser, projectId, "interact");
     const preferredStartAt = new Date(dto.preferredStartAt);
     const preferredEndAt = new Date(dto.preferredEndAt);
     this.assertDateRange(
@@ -949,6 +949,7 @@ export class WebAppWorkspaceService {
     const request = await this.prisma.webAppWorkspaceMeetingRequest.create({
       data: {
         projectId: project.id,
+        clientProfileId: project.clientProfileId,
         title: dto.title,
         agenda: dto.agenda ?? null,
         requestedByUserId: currentUser.id,
@@ -962,6 +963,98 @@ export class WebAppWorkspaceService {
     this.gateway.emitWorkspaceUpdate(project.id, WebAppWorkspaceTabKey.MEETINGS, "meeting-request.created", {
       meetingRequest: request,
     });
+
+    // Notify the assigned project manager via their personal socket room
+    const pmAssignment = await this.prisma.employeeClientAssignment.findFirst({
+      where: {
+        clientProfileId: project.clientProfileId,
+        isActive: true,
+        scope: EmployeeClientAssignmentScope.PROJECT,
+        employeeUser: {
+          role: UserRole.PROJECT_MANAGER,
+          status: UserStatus.ACTIVE,
+        },
+      },
+      select: { employeeUserId: true },
+    });
+
+    if (pmAssignment) {
+      this.gateway.emitToUser(pmAssignment.employeeUserId, "meeting-request.new", {
+        projectId: project.id,
+        meetingRequest: request,
+      });
+    }
+
+    return request;
+  }
+
+  async getMeetingRequestsForClientProfile(currentUser: AuthenticatedUser) {
+    const clientProfileId = this.getClientProfileIdOrFail(currentUser);
+    this.assertHasPermission(currentUser, [WORKSPACE_READ_OWN_PERMISSION]);
+    return this.prisma.webAppWorkspaceMeetingRequest.findMany({
+      where: { clientProfileId },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: meetingRequestSelect,
+    });
+  }
+
+  async createMeetingRequestForClientProfile(
+    currentUser: AuthenticatedUser,
+    dto: CreateMeetingRequestDto,
+  ) {
+    const clientProfileId = this.getClientProfileIdOrFail(currentUser);
+    this.assertHasPermission(currentUser, [WORKSPACE_INTERACT_OWN_PERMISSION]);
+    const project = dto.projectId
+      ? await this.prisma.project.findFirst({
+          where: { id: dto.projectId, clientProfileId },
+          select: { id: true },
+        })
+      : null;
+    if (dto.projectId && !project) {
+      throw new NotFoundException("Proje bulunamadı.");
+    }
+
+    const preferredStartAt = new Date(dto.preferredStartAt);
+    const preferredEndAt = new Date(dto.preferredEndAt);
+    this.assertDateRange(preferredStartAt, preferredEndAt, "preferredEndAt cannot be earlier than preferredStartAt.");
+    this.assertMeetingSchedule(preferredStartAt, preferredEndAt, dto.timezone);
+
+    const request = await this.prisma.webAppWorkspaceMeetingRequest.create({
+      data: {
+        projectId: project?.id ?? null,
+        clientProfileId,
+        title: dto.title,
+        agenda: dto.agenda ?? null,
+        requestedByUserId: currentUser.id,
+        preferredStartAt,
+        preferredEndAt,
+        timezone: dto.timezone,
+      },
+      select: meetingRequestSelect,
+    });
+
+    if (project) {
+      this.gateway.emitWorkspaceUpdate(project.id, WebAppWorkspaceTabKey.MEETINGS, "meeting-request.created", {
+        meetingRequest: request,
+      });
+    }
+
+    const pmAssignment = await this.prisma.employeeClientAssignment.findFirst({
+      where: {
+        clientProfileId,
+        isActive: true,
+        scope: EmployeeClientAssignmentScope.PROJECT,
+        employeeUser: { role: UserRole.PROJECT_MANAGER, status: UserStatus.ACTIVE },
+      },
+      select: { employeeUserId: true },
+    });
+
+    if (pmAssignment) {
+      this.gateway.emitToUser(pmAssignment.employeeUserId, "meeting-request.new", {
+        projectId: project?.id ?? null,
+        meetingRequest: request,
+      });
+    }
 
     return request;
   }
@@ -985,7 +1078,7 @@ export class WebAppWorkspaceService {
       },
     });
     if (!existing) {
-      throw new NotFoundException("Meeting request not found.");
+      throw new NotFoundException("Toplantı talebi bulunamadı.");
     }
 
     const nextScheduledStartAt =
@@ -1002,7 +1095,7 @@ export class WebAppWorkspaceService {
         : (dto.scheduledEndAt ? new Date(dto.scheduledEndAt) : null);
 
     if ((nextScheduledStartAt && !nextScheduledEndAt) || (!nextScheduledStartAt && nextScheduledEndAt)) {
-      throw new BadRequestException("scheduledStartAt and scheduledEndAt must be provided together.");
+      throw new BadRequestException("scheduledStartAt ve scheduledEndAt birlikte belirtilmelidir.");
     }
 
     if (nextScheduledStartAt && nextScheduledEndAt) {
@@ -1017,7 +1110,7 @@ export class WebAppWorkspaceService {
         nextScheduledStartAt.getTime() !== existing.preferredStartAt.getTime() ||
         nextScheduledEndAt.getTime() !== existing.preferredEndAt.getTime();
       if (dateChanged && !dto.responseNote?.trim()) {
-        throw new BadRequestException("A response note is required when proposing a different meeting time.");
+        throw new BadRequestException("Farklı bir toplantı saati önerirken yanıt notu zorunludur.");
       }
     }
 
@@ -1036,8 +1129,56 @@ export class WebAppWorkspaceService {
     this.gateway.emitWorkspaceUpdate(project.id, WebAppWorkspaceTabKey.MEETINGS, "meeting-request.updated", {
       meetingRequest: request,
     });
+    this.gateway.emitToClientProfile(project.clientProfileId, "meeting-request.updated", {
+      meetingRequest: request,
+    });
 
     return request;
+  }
+
+  private async assertMeetingProjectAccess(
+    currentUser: AuthenticatedUser,
+    projectId: string,
+    accessLevel: "read" | "interact",
+  ): Promise<{ id: string; clientProfileId: string }> {
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: { id: true, clientProfileId: true },
+    });
+    if (!project) {
+      throw new NotFoundException("Proje bulunamadı.");
+    }
+
+    if (currentUser.accountType === AccountType.ADMIN) {
+      this.assertAdminWorkspaceAccess(currentUser, accessLevel);
+      return project;
+    }
+
+    if (currentUser.accountType === AccountType.CLIENT) {
+      if (currentUser.clientProfileId !== project.clientProfileId) {
+        throw new NotFoundException("Proje bulunamadı.");
+      }
+      if (accessLevel === "interact") {
+        this.assertHasPermission(currentUser, [WORKSPACE_INTERACT_OWN_PERMISSION]);
+      } else {
+        this.assertHasPermission(currentUser, [WORKSPACE_READ_OWN_PERMISSION]);
+      }
+      return project;
+    }
+
+    this.assertEmployeeWorkspacePermission(currentUser, accessLevel);
+    const assignment = await this.prisma.employeeClientAssignment.findFirst({
+      where: {
+        employeeUserId: currentUser.id,
+        clientProfileId: project.clientProfileId,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    if (!assignment) {
+      throw new NotFoundException("Proje bulunamadı.");
+    }
+    return project;
   }
 
   private async assertMeetingResponderAccess(
@@ -1048,7 +1189,7 @@ export class WebAppWorkspaceService {
       currentUser.accountType !== AccountType.EMPLOYEE ||
       currentUser.role !== UserRole.PROJECT_MANAGER
     ) {
-      throw new ForbiddenException("Only the assigned project manager can respond to meeting requests.");
+      throw new ForbiddenException("Toplantı taleplerine yalnızca atanmış proje yöneticisi yanıt verebilir.");
     }
 
     this.assertEmployeeWorkspacePermission(currentUser, "manage");
@@ -1056,8 +1197,8 @@ export class WebAppWorkspaceService {
       where: { id: projectId },
       select: projectSummarySelect,
     });
-    if (!project || project.serviceKey !== PurchasedServiceKey.WEB_APP) {
-      throw new NotFoundException("Project not found.");
+    if (!project) {
+      throw new NotFoundException("Proje bulunamadı.");
     }
 
     const assignment = await this.prisma.employeeClientAssignment.findFirst({
@@ -1070,7 +1211,7 @@ export class WebAppWorkspaceService {
       select: { id: true },
     });
     if (!assignment) {
-      throw new NotFoundException("Project not found.");
+      throw new NotFoundException("Proje bulunamadı.");
     }
 
     return project;
@@ -1190,6 +1331,13 @@ export class WebAppWorkspaceService {
     if (!permissions.some((permission) => currentUser.permissions.includes(permission))) {
       throw new ForbiddenException("Missing required workspace permissions.");
     }
+  }
+
+  private getClientProfileIdOrFail(currentUser: AuthenticatedUser): string {
+    if (!currentUser.clientProfileId) {
+      throw new ForbiddenException("Bu işlem için müşteri profili gereklidir.");
+    }
+    return currentUser.clientProfileId;
   }
 
   private shouldHideInternalRecords(currentUser: AuthenticatedUser) {
@@ -1406,13 +1554,13 @@ export class WebAppWorkspaceService {
 
   private assertMeetingSchedule(startDate: Date, endDate: Date, timezone: string) {
     if (timezone !== "Europe/Istanbul") {
-      throw new BadRequestException("Meeting timezone must be Europe/Istanbul.");
+      throw new BadRequestException("Toplantı saat dilimi Europe/Istanbul olmalıdır.");
     }
     if (endDate.getTime() <= startDate.getTime()) {
-      throw new BadRequestException("Meeting end time must be later than start time.");
+      throw new BadRequestException("Toplantı bitiş saati başlangıç saatinden sonra olmalıdır.");
     }
     if (startDate.getTime() <= Date.now()) {
-      throw new BadRequestException("Meeting date cannot be in the past.");
+      throw new BadRequestException("Geçmiş bir tarih için toplantı talebi oluşturamazsınız.");
     }
 
     const parts = new Intl.DateTimeFormat("en-GB", {
@@ -1425,7 +1573,7 @@ export class WebAppWorkspaceService {
     const minute = Number(parts.find((part) => part.type === "minute")?.value ?? "-1");
     const minutesSinceMidnight = hour * 60 + minute;
     if (minutesSinceMidnight < 9 * 60 || minutesSinceMidnight > 18 * 60) {
-      throw new BadRequestException("Meeting start time must be between 09:00 and 18:00 TSİ.");
+      throw new BadRequestException("Toplantı başlangıç saati 09:00-18:00 TSİ arasında olmalıdır.");
     }
   }
 

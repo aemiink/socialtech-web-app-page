@@ -24,11 +24,11 @@ vi.mock("../../features/webAppWorkspace/webAppWorkspaceApi", () => ({
       updateQueryData: vi.fn(),
     },
   },
-  useGetWebAppWorkspaceMeetingRequestsQuery: () => ({
+  useGetClientMeetingRequestsQuery: () => ({
     data: [],
     isLoading: false,
   }),
-  useCreateWebAppWorkspaceMeetingRequestMutation: () => [
+  useCreateClientMeetingRequestMutation: () => [
     mockCreateRequest,
     { isLoading: false },
   ],
@@ -48,10 +48,11 @@ describe("MeetingsPage", () => {
     vi.useRealTimers();
   });
 
-  it("requires a confirmation popup before sending the selected TSİ date and time", async () => {
-    render(<MeetingsPage projectId="project-1" />);
+  it("allows a client without a project to confirm and send a TSİ meeting request", async () => {
+    render(<MeetingsPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Toplantı Talep Et" }));
+    fireEvent.click(screen.getByRole("button", { name: "Talep Et" }));
+    fireEvent.click(screen.getByRole("button", { name: /Genel Görüşme/ }));
     fireEvent.change(screen.getByLabelText("Tarih"), { target: { value: "2026-06-16" } });
     fireEvent.change(screen.getByLabelText("Saat (TSİ)"), { target: { value: "10:00" } });
     fireEvent.change(screen.getByLabelText("Görüşme notu (opsiyonel)"), {
@@ -66,8 +67,8 @@ describe("MeetingsPage", () => {
 
     await waitFor(() => {
       expect(mockCreateRequest).toHaveBeenCalledWith({
-        projectId: "project-1",
-        title: "Müşteri toplantı talebi",
+        projectId: undefined,
+        title: "[Genel Görüşme] Toplantı Talebi",
         agenda: "Sprint ilerlemesini konuşalım.",
         preferredStartAt: "2026-06-16T07:00:00.000Z",
         preferredEndAt: "2026-06-16T07:45:00.000Z",
@@ -80,7 +81,8 @@ describe("MeetingsPage", () => {
   it("does not continue when the selected TSİ time is outside 09:00-18:00", () => {
     render(<MeetingsPage projectId="project-1" />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Toplantı Talep Et" }));
+    fireEvent.click(screen.getByRole("button", { name: "Talep Et" }));
+    fireEvent.click(screen.getByRole("button", { name: /Genel Görüşme/ }));
     fireEvent.change(screen.getByLabelText("Tarih"), { target: { value: "2026-06-16" } });
     fireEvent.change(screen.getByLabelText("Saat (TSİ)"), { target: { value: "08:45" } });
     fireEvent.click(screen.getByRole("button", { name: "Talebi Kontrol Et" }));
@@ -93,7 +95,8 @@ describe("MeetingsPage", () => {
   it("does not continue with a past date", () => {
     render(<MeetingsPage projectId="project-1" />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Toplantı Talep Et" }));
+    fireEvent.click(screen.getByRole("button", { name: "Talep Et" }));
+    fireEvent.click(screen.getByRole("button", { name: /Genel Görüşme/ }));
     fireEvent.change(screen.getByLabelText("Tarih"), { target: { value: "2026-06-14" } });
     fireEvent.change(screen.getByLabelText("Saat (TSİ)"), { target: { value: "10:00" } });
     fireEvent.click(screen.getByRole("button", { name: "Talebi Kontrol Et" }));

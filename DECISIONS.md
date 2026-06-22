@@ -3911,3 +3911,33 @@ API endpoints:
 - `GET /api/v1/web-mobile-design/clients/:clientId/summary` (employee)
 - `GET /api/v1/clients/me/web-mobile-design/config` (client)
 - `GET /api/v1/clients/me/web-mobile-design/summary` (client)
+
+## 2026-06-22 - Client-Level Meeting Requests With Optional Project Scope
+
+Context:
+Müşteri portalındaki toplantı talebi akışı bir `projectId` bulunmasına bağlıydı. Satın alınmış hizmeti olmasına rağmen henüz projesi açılmamış müşterilerde buton devre dışı kalıyor ve toplantı talebi oluşturulamıyordu.
+
+Decision:
+- Toplantı taleplerinin sahiplik sınırı `clientProfileId` olur; `projectId` opsiyonel ilişki olarak korunur.
+- Müşteri portalı talepleri `GET/POST /api/v1/clients/me/meeting-requests` üzerinden müşteri seviyesinde okur ve oluşturur.
+- Portalda uygun bir proje varsa talep o projeyle ilişkilendirilir; proje yoksa kayıt `projectId = null` ile oluşturulur.
+- Proje kimliği gönderildiğinde backend, projenin oturumdaki müşteriye ait olduğunu doğrular ve kapsam dışı projeleri güvenli `404` ile reddeder.
+- Toplantı durumu güncellemeleri müşteri profiline ait socket odasına yayınlanır; atanmış proje yöneticisine yeni talep bildirimi kullanıcı odası üzerinden gönderilir.
+
+Reason:
+Toplantı talebi müşteri-ajans iletişimidir ve proje açılış zamanlamasına bağlı olmamalıdır. Opsiyonel proje ilişkisi mevcut proje bazlı yönetim akışını korurken henüz projesi olmayan gerçek müşterilerin talep oluşturmasını mümkün kılar.
+
+Affected files:
+- `server/prisma/schema.prisma`
+- `server/prisma/migrations/20260622131007_add_client_meeting_requests/migration.sql`
+- `server/src/clients/clients.controller.ts`
+- `server/src/clients/clients.module.ts`
+- `server/src/web-app-workspace/dto/create-meeting-request.dto.ts`
+- `server/src/web-app-workspace/web-app-workspace.gateway.ts`
+- `server/src/web-app-workspace/web-app-workspace.module.ts`
+- `server/src/web-app-workspace/web-app-workspace.service.ts`
+- `server/test/web-app-workspace-revisions-authz.e2e-spec.ts`
+- `clientPanel/src/app/App.tsx`
+- `clientPanel/src/app/features/webAppWorkspace/webAppWorkspaceApi.ts`
+- `clientPanel/src/app/pages/meetings.tsx`
+- `clientPanel/src/app/pages/__tests__/meetings.test.tsx`

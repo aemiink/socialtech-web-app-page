@@ -42,6 +42,7 @@ describe("Web App Workspace Revision Lifecycle (e2e)", () => {
   let developerUserId = "";
   let acmeWorkspaceProjectId = "";
   let outOfScopeWorkspaceProjectId = "";
+  let standaloneMeetingRequestId = "";
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -76,6 +77,12 @@ describe("Web App Workspace Revision Lifecycle (e2e)", () => {
   });
 
   afterAll(async () => {
+    if (standaloneMeetingRequestId) {
+      await prisma.webAppWorkspaceMeetingRequest.deleteMany({
+        where: { id: standaloneMeetingRequestId },
+      });
+    }
+
     const projectIds = [acmeWorkspaceProjectId, outOfScopeWorkspaceProjectId].filter(Boolean);
     if (projectIds.length > 0) {
       await prisma.project.deleteMany({
@@ -236,7 +243,7 @@ describe("Web App Workspace Revision Lifecycle (e2e)", () => {
       .expect(400);
 
     expect(missingNoteResponse.body.error.message).toBe(
-      "A response note is required when proposing a different meeting time.",
+      "Farklı bir toplantı saati önerirken yanıt notu zorunludur.",
     );
 
     const proposedResponse = await request(app.getHttpServer())
@@ -294,6 +301,58 @@ describe("Web App Workspace Revision Lifecycle (e2e)", () => {
         timezone: "Europe/Istanbul",
       })
       .expect(400);
+  });
+
+  it("allows a client to create and list a meeting request without a project", async () => {
+    const validStartAt = futureIstanbulIso(5, 10, 0);
+    const validEndAt = futureIstanbulIso(5, 10, 45);
+
+    await request(app.getHttpServer())
+      .post("/api/v1/clients/me/meeting-requests")
+      .set("Authorization", `Bearer ${clientToken}`)
+      .send({
+        projectId: outOfScopeWorkspaceProjectId,
+        title: "Out-of-scope client meeting request",
+        preferredStartAt: validStartAt,
+        preferredEndAt: validEndAt,
+        timezone: "Europe/Istanbul",
+      })
+      .expect(404);
+
+    const createResponse = await request(app.getHttpServer())
+      .post("/api/v1/clients/me/meeting-requests")
+      .set("Authorization", `Bearer ${clientToken}`)
+      .send({
+        title: "Client-level meeting request",
+        agenda: "This request intentionally has no project.",
+        preferredStartAt: validStartAt,
+        preferredEndAt: validEndAt,
+        timezone: "Europe/Istanbul",
+      })
+      .expect(201);
+
+    standaloneMeetingRequestId = createResponse.body.id as string;
+    expect(createResponse.body).toEqual(
+      expect.objectContaining({
+        id: standaloneMeetingRequestId,
+        projectId: null,
+        status: WebAppWorkspaceMeetingRequestStatus.REQUESTED,
+      }),
+    );
+
+    const listResponse = await request(app.getHttpServer())
+      .get("/api/v1/clients/me/meeting-requests")
+      .set("Authorization", `Bearer ${clientToken}`)
+      .expect(200);
+
+    expect(listResponse.body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: standaloneMeetingRequestId,
+          projectId: null,
+        }),
+      ]),
+    );
   });
 
   async function setDeterministicDemoPasswords(): Promise<void> {

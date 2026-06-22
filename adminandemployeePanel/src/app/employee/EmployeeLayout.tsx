@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { Outlet, Link, useLocation, Navigate, useNavigate } from "react-router";
 import {
   LayoutDashboard, CheckSquare, Users, Calendar, Bell, Folder, Settings,
@@ -15,11 +16,13 @@ import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { useLogoutMutation } from "../features/auth/authApi";
 import { clearAuth } from "../features/auth/authSlice";
 import {
+  selectAccessToken,
   selectCurrentEmployeeRole,
   selectCurrentUser,
   selectIsAuthenticated,
   selectIsBootstrapping,
 } from "../features/auth/authSelectors";
+import { createWorkspaceSocket } from "../features/projects/workspaceSocket";
 import { EmployeePanelRole, getBackendRoleLabel, getUserDisplayName, getUserInitials } from "../features/auth/roleMapping";
 import yatayLogo from "../../assets/branding/yatay-logo.svg";
 import dikeyLogo from "../../assets/branding/dikey-logo.svg";
@@ -171,6 +174,32 @@ export function EmployeeLayout() {
   const isBootstrapping = useAppSelector(selectIsBootstrapping);
   const selectedRole = useAppSelector(selectCurrentEmployeeRole);
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
+  const accessToken = useAppSelector(selectAccessToken);
+  const [pendingMeetingNotifCount, setPendingMeetingNotifCount] = useState(0);
+
+  useEffect(() => {
+    if (!accessToken || currentUser?.role !== "PROJECT_MANAGER") {
+      return;
+    }
+
+    const socket = createWorkspaceSocket(accessToken);
+
+    const onNewMeetingRequest = (data: Record<string, unknown>) => {
+      const meetingRequest = data.meetingRequest as { title?: string } | null;
+      setPendingMeetingNotifCount((c) => c + 1);
+      toast("Yeni toplantı talebi", {
+        description: meetingRequest?.title ?? "Bir müşteri toplantı talep etti.",
+        duration: 10000,
+      });
+    };
+
+    socket.on("meeting-request.new", onNewMeetingRequest);
+
+    return () => {
+      socket.off("meeting-request.new", onNewMeetingRequest);
+      socket.disconnect();
+    };
+  }, [accessToken, currentUser?.role]);
 
   if (isBootstrapping) {
     return (
@@ -292,9 +321,21 @@ export function EmployeeLayout() {
               Hızlı Aksiyon
             </Button>
 
-            <button className="relative p-2 hover:bg-[#1A1A1A] rounded-lg transition-colors">
+            <button
+              className="relative p-2 hover:bg-[#1A1A1A] rounded-lg transition-colors"
+              onClick={() => {
+                setPendingMeetingNotifCount(0);
+                navigate("/employee/toplantilar");
+              }}
+            >
               <Bell className="w-5 h-5" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-[#AAFF01] rounded-full" />
+              {pendingMeetingNotifCount > 0 ? (
+                <span className="absolute top-0.5 right-0.5 flex min-w-[16px] h-4 items-center justify-center rounded-full bg-[#AAFF01] px-1 text-[9px] font-bold leading-none text-[#131313]">
+                  {pendingMeetingNotifCount > 9 ? "9+" : pendingMeetingNotifCount}
+                </span>
+              ) : (
+                <span className="absolute top-1 right-1 w-2 h-2 bg-[#AAFF01] rounded-full" />
+              )}
             </button>
 
             <Button

@@ -95,6 +95,7 @@ export const baseApi = createApi({
     "SeoAuditConfig",
     "SeoAuditSummary",
     "ClientInvoices",
+    "ClientMeetingRequests",
   ],
   endpoints: () => ({}),
 });

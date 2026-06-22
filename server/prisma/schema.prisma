@@ -727,6 +727,7 @@ model ClientProfile {
   projects                Project[]
   files                   ProjectFile[]
   invoices                ClientInvoice[]
+  workspaceMeetingRequests WebAppWorkspaceMeetingRequest[]
   convertedCrmLeads       CrmLead[]                  @relation("CrmLeadConvertedClient")
 
   @@index([status])
@@ -1935,7 +1936,8 @@ model WebAppWorkspaceWeeklyReport {
 
 model WebAppWorkspaceMeetingRequest {
   id                String                              @id @default(uuid()) @db.Uuid
-  projectId         String                              @db.Uuid
+  projectId         String?                             @db.Uuid
+  clientProfileId   String                              @db.Uuid
   title             String
   agenda            String?
   requestedByUserId String                              @db.Uuid
@@ -1950,10 +1952,12 @@ model WebAppWorkspaceMeetingRequest {
   createdAt         DateTime                            @default(now())
   updatedAt         DateTime                            @updatedAt
 
-  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  requestedBy User    @relation("WorkspaceMeetingRequestedBy", fields: [requestedByUserId], references: [id], onDelete: Restrict)
-  responder   User?   @relation("WorkspaceMeetingRespondedBy", fields: [responderUserId], references: [id], onDelete: SetNull)
+  project       Project?      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  requestedBy   User          @relation("WorkspaceMeetingRequestedBy", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  responder     User?         @relation("WorkspaceMeetingRespondedBy", fields: [responderUserId], references: [id], onDelete: SetNull)
 
+  @@index([clientProfileId, status, preferredStartAt])
   @@index([projectId, status, preferredStartAt])
   @@index([requestedByUserId, createdAt])
   @@index([responderUserId, updatedAt])

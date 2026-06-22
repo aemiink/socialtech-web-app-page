@@ -9,7 +9,6 @@ import { JwtService } from "@nestjs/jwt";
 import {
   AccountType,
   EmployeeClientAssignmentScope,
-  PurchasedServiceKey,
   UserRole,
   UserStatus,
   WebAppWorkspaceTabKey,
@@ -78,6 +77,12 @@ export class WebAppWorkspaceGateway implements OnGatewayConnection {
         clientProfileId: user.clientProfileId,
         permissions,
       } satisfies AuthenticatedUser;
+
+      // Auto-join personal room for user-specific events
+      await client.join(`user:${user.id}`);
+      if (user.clientProfileId) {
+        await client.join(`client:${user.clientProfileId}`);
+      }
     } catch {
       client.disconnect(true);
     }
@@ -126,12 +131,20 @@ export class WebAppWorkspaceGateway implements OnGatewayConnection {
     });
   }
 
+  emitToUser(userId: string, eventName: string, payload: Record<string, unknown>) {
+    this.server.to(`user:${userId}`).emit(eventName, payload);
+  }
+
+  emitToClientProfile(clientProfileId: string, eventName: string, payload: Record<string, unknown>) {
+    this.server.to(`client:${clientProfileId}`).emit(eventName, payload);
+  }
+
   private async assertCanReadProject(currentUser: AuthenticatedUser, projectId: string) {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
-      select: { id: true, clientProfileId: true, serviceKey: true },
+      select: { id: true, clientProfileId: true },
     });
-    if (!project || project.serviceKey !== PurchasedServiceKey.WEB_APP) {
+    if (!project) {
       throw new UnauthorizedException("Project scope is not available.");
     }
 
