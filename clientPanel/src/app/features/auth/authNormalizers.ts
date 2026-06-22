@@ -213,17 +213,22 @@ function normalizePurchasedService(value: unknown): ClientPurchasedService | nul
     return null;
   }
 
+  const packageTierKey =
+    typeof record.packageTierKey === "string" ? record.packageTierKey : null;
+
   return {
     serviceId: objectServiceId,
     status:
       readEnumValue(record.status, PURCHASED_SERVICE_STATUSES) ??
       readEnumValue(record.purchaseStatus, PURCHASED_SERVICE_STATUSES) ??
       "ACTIVE",
+    packageTierKey,
   };
 }
 
 function mergePurchasedServices(...serviceGroups: ClientPurchasedService[][]): ClientPurchasedService[] {
   const serviceMap = new Map<ServiceId, PurchasedServiceStatus>();
+  const tierMap = new Map<ServiceId, string | null>();
 
   for (const serviceGroup of serviceGroups) {
     for (const service of serviceGroup) {
@@ -233,12 +238,17 @@ function mergePurchasedServices(...serviceGroups: ClientPurchasedService[][]): C
       }
 
       serviceMap.set(service.serviceId, service.status);
+      if (service.packageTierKey !== undefined) {
+        tierMap.set(service.serviceId, service.packageTierKey);
+      }
     }
   }
 
   return SERVICE_IDS.flatMap((serviceId) => {
     const status = serviceMap.get(serviceId);
-    return status ? [{ serviceId, status }] : [];
+    if (!status) return [];
+    const packageTierKey = tierMap.get(serviceId) ?? null;
+    return [{ serviceId, status, packageTierKey }];
   });
 }
 

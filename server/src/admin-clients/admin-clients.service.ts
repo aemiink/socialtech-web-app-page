@@ -47,6 +47,7 @@ const clientOwnerSummarySelect = {
 const purchasedServiceReadSelect = {
   id: true,
   serviceKey: true,
+  packageTierKey: true,
   status: true,
   startedAt: true,
   endedAt: true,
@@ -104,6 +105,7 @@ type AdminClientOwnerResponse = {
 type AdminClientPurchasedServiceResponse = {
   id: string;
   serviceKey: PurchasedServiceKey;
+  packageTierKey: string | null;
   status: PurchasedServiceStatus;
   startedAt: Date | null;
   endedAt: Date | null;
@@ -699,6 +701,7 @@ export class AdminClientsService {
           },
         },
         update: {
+          packageTierKey: service.packageTierKey ?? null,
           status: service.status ?? PurchasedServiceStatus.ACTIVE,
           startedAt: this.parseNullableDate(service.startedAt),
           endedAt: this.parseNullableDate(service.endedAt),
@@ -706,6 +709,7 @@ export class AdminClientsService {
         create: {
           clientProfileId,
           serviceKey: service.serviceKey,
+          packageTierKey: service.packageTierKey ?? null,
           status: service.status ?? PurchasedServiceStatus.ACTIVE,
           startedAt: this.parseNullableDate(service.startedAt),
           endedAt: this.parseNullableDate(service.endedAt),
@@ -916,6 +920,7 @@ export class AdminClientsService {
 
     return purchasedServices.map((service) => ({
       serviceKey: service.serviceKey,
+      packageTierKey: service.packageTierKey ?? null,
       status: service.status ?? PurchasedServiceStatus.ACTIVE,
       startedAt: this.parseNullableDate(service.startedAt),
       endedAt: this.parseNullableDate(service.endedAt),
@@ -1103,6 +1108,7 @@ export class AdminClientsService {
     return {
       id: purchasedService.id,
       serviceKey: purchasedService.serviceKey,
+      packageTierKey: purchasedService.packageTierKey,
       status: purchasedService.status,
       startedAt: purchasedService.startedAt,
       endedAt: purchasedService.endedAt,

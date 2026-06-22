@@ -27,6 +27,7 @@ export type PurchasedServiceStatus =
 export type ClientPurchasedService = {
   serviceId: ServiceId;
   status: PurchasedServiceStatus;
+  packageTierKey?: string | null;
 };
 
 export type ClientProfileSummary = {

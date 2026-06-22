@@ -20,6 +20,7 @@ const clientReadSelect = {
     select: {
       id: true,
       serviceKey: true,
+      packageTierKey: true,
       status: true,
       startedAt: true,
       endedAt: true,

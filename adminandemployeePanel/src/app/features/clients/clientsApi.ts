@@ -1498,11 +1498,13 @@ function serializeAdminClientMutationBody(
   body: CreateAdminClientRequest | UpdateAdminClientRequest,
 ): Record<string, unknown> {
   const serializedBody: Record<string, unknown> = { ...body };
+  delete serializedBody.serviceTierKeys;
 
   if (body.purchasedServices !== undefined) {
     serializedBody.purchasedServices = body.purchasedServices.map((serviceKey) => ({
       serviceKey: toBackendServiceKey(serviceKey),
       status: "ACTIVE",
+      packageTierKey: body.serviceTierKeys?.[serviceKey] ?? null,
     }));
   }
 

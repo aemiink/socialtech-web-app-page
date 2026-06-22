@@ -1996,6 +1996,7 @@ function normalizePurchasedService(value: unknown): ClientPurchasedService | nul
 
   return {
     serviceKey,
+    packageTierKey: typeof value.packageTierKey === "string" ? value.packageTierKey : null,
     status: normalizePurchasedServiceStatus(value.status),
     startedAt: isStringOrNull(value.startedAt) ? value.startedAt : undefined,
     endedAt: isStringOrNull(value.endedAt) ? value.endedAt : undefined,

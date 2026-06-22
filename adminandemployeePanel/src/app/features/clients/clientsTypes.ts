@@ -45,6 +45,7 @@ export type BackendPurchasedServiceStatus = "ACTIVE" | "INACTIVE" | "PAUSED" | "
 
 export type ClientPurchasedService = {
   serviceKey: ServiceKey;
+  packageTierKey?: string | null;
   status: PurchasedServiceStatus;
   startedAt?: string | null;
   endedAt?: string | null;
@@ -94,6 +95,7 @@ export type CreateAdminClientRequest = {
   slug?: string;
   status?: ClientStatus;
   purchasedServices: ServiceKey[];
+  serviceTierKeys?: Partial<Record<ServiceKey, string>>;
 };
 
 export type UpdateAdminClientRequest = {
@@ -101,6 +103,7 @@ export type UpdateAdminClientRequest = {
   slug?: string;
   status?: ClientStatus;
   purchasedServices?: ServiceKey[];
+  serviceTierKeys?: Partial<Record<ServiceKey, string>>;
 };
 
 export type CreateClientOwnerRequest = {

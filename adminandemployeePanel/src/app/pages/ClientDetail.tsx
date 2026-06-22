@@ -100,9 +100,11 @@ import {
   getClientTaskStatusBadgeClass,
   getClientTaskStatusLabel,
   getServiceLabel,
+  toBackendServiceKey,
   isNotFoundError,
   isUuid,
 } from "../features/clients/clientsUtils";
+import { CATALOG_BY_SERVICE_KEY } from "../features/billing/packagesCatalog";
 
 export function ClientDetail() {
   const { id } = useParams();
@@ -1776,16 +1778,56 @@ function PurchasedServicesSection({ services }: { services: ClientPurchasedServi
       {activeServices.length === 0 ? (
         <EmptyState>Bu müşteri için aktif hizmet bulunmuyor.</EmptyState>
       ) : (
-        <div className="flex flex-wrap gap-2">
-          {activeServices.map((service) => (
-            <Badge
-              key={service.serviceKey}
-              variant="outline"
-              className="border-[#AAFF01]/30 bg-[#AAFF01]/10 px-3 py-1 text-[#d2ff8a]"
-            >
-              {getServiceLabel(service.serviceKey)}
-            </Badge>
-          ))}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {activeServices.map((service) => {
+            const backendKey = toBackendServiceKey(service.serviceKey);
+            const catalogEntry = CATALOG_BY_SERVICE_KEY[backendKey];
+            const tier = service.packageTierKey
+              ? catalogEntry?.tiers.find((t) => t.key === service.packageTierKey)
+              : null;
+
+            return (
+              <div
+                key={service.serviceKey}
+                className="rounded-lg border border-[#AAFF01]/20 bg-[#202020]/60 p-3"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-sm font-medium text-white">
+                    {getServiceLabel(service.serviceKey)}
+                  </span>
+                  {tier && (
+                    <Badge
+                      variant="outline"
+                      className="shrink-0 border-[#AAFF01]/30 bg-[#AAFF01]/10 px-2 py-0 text-[10px] text-[#d2ff8a]"
+                    >
+                      {tier.name}
+                    </Badge>
+                  )}
+                </div>
+                {tier ? (
+                  <div className="mt-2 space-y-1">
+                    {tier.features.slice(0, 4).map((feat, i) => (
+                      <p key={i} className="text-[11px] leading-relaxed text-[#A0A0A0]">
+                        • {feat}
+                      </p>
+                    ))}
+                    {tier.features.length > 4 && (
+                      <p className="text-[11px] text-white/30">
+                        +{tier.features.length - 4} özellik daha
+                      </p>
+                    )}
+                    {tier.defaultPrice !== null && (
+                      <p className="mt-1.5 text-xs font-medium text-[#AAFF01]/80">
+                        ₺{tier.defaultPrice.toLocaleString("tr-TR")}{tier.priceSuffix}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="mt-1.5 text-[11px] text-white/30">Paket seçilmedi</p>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </Card>

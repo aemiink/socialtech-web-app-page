@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import {
   TrendingUp,
   MessageSquare,
@@ -15,6 +16,12 @@ import {
   LucideIcon,
 } from 'lucide-react';
 import type { ServiceId } from '../data/service-pages';
+import { useGetClientGrowthHubSummaryQuery } from '../features/growthHub/growthHubApi';
+import { useGetOwnSocialMediaSummaryQuery } from '../features/socialMedia/socialMediaApi';
+import { useGetOwnMetaAdsSummaryQuery } from '../features/metaAds/metaAdsApi';
+import { useGetOwnWebMobileDesignSummaryQuery } from '../features/webMobileDesign/webMobileDesignApi';
+import { useGetOwnTechnicalSupportSummaryQuery } from '../features/technicalSupport/technicalSupportApi';
+import { useGetOwnSeoAuditSummaryQuery } from '../features/seoAudit/seoAuditApi';
 
 interface Service {
   id: ServiceId;
@@ -32,7 +39,7 @@ const services: Service[] = [
     description: 'Büyüme stratejisi, sosyal medya, reklamlar ve raporlama',
     icon: TrendingUp,
     status: 'active',
-    metrics: [{ label: 'Toplam Lead', value: '247' }, { label: 'ROAS', value: '4.2x' }]
+    metrics: [{ label: 'Toplam Lead', value: '—' }, { label: 'ROAS', value: '—' }],
   },
   {
     id: 'social-media',
@@ -40,7 +47,7 @@ const services: Service[] = [
     description: 'İçerik planlama, üretim, DM yönetimi ve rakip analizi',
     icon: MessageSquare,
     status: 'active',
-    metrics: [{ label: 'Yayınlanan', value: '18' }, { label: 'Bekleyen', value: '3' }]
+    metrics: [{ label: 'Yayınlanan', value: '—' }, { label: 'Bekleyen', value: '—' }],
   },
   {
     id: 'media-hub',
@@ -48,7 +55,7 @@ const services: Service[] = [
     description: 'Tüm reklam kanallarının birleşik yönetimi',
     icon: Video,
     status: 'active',
-    metrics: [{ label: 'Toplam Harcama', value: '₺42K' }, { label: 'Blended ROAS', value: '3.8x' }]
+    metrics: [{ label: 'Toplam Harcama', value: '—' }, { label: 'Blended ROAS', value: '—' }],
   },
   {
     id: 'meta-ads',
@@ -56,7 +63,7 @@ const services: Service[] = [
     description: 'Facebook ve Instagram reklam kampanyaları',
     icon: Megaphone,
     status: 'active',
-    metrics: [{ label: 'ROAS', value: '4.8x' }, { label: 'Lead', value: '147' }]
+    metrics: [{ label: 'ROAS', value: '—' }, { label: 'Dönüşüm', value: '—' }],
   },
   {
     id: 'tiktok-ads',
@@ -64,7 +71,7 @@ const services: Service[] = [
     description: 'TikTok reklam kampanyaları ve UGC içerik',
     icon: Video,
     status: 'active',
-    metrics: [{ label: 'CTR', value: '2.4%' }, { label: 'CPA', value: '₺95' }]
+    metrics: [{ label: 'CTR', value: '—' }, { label: 'CPA', value: '—' }],
   },
   {
     id: 'google-ads',
@@ -72,7 +79,7 @@ const services: Service[] = [
     description: 'Arama, Display ve Performance Max kampanyaları',
     icon: Search,
     status: 'active',
-    metrics: [{ label: 'Dönüşüm', value: '89' }, { label: 'CPA', value: '₺124' }]
+    metrics: [{ label: 'Dönüşüm', value: '—' }, { label: 'CPA', value: '—' }],
   },
   {
     id: 'amazon-ads',
@@ -80,7 +87,7 @@ const services: Service[] = [
     description: 'Amazon Sponsored Products, Brands ve Display',
     icon: ShoppingCart,
     status: 'active',
-    metrics: [{ label: 'ACOS', value: '18%' }, { label: 'Satış', value: '₺22K' }]
+    metrics: [{ label: 'ACOS', value: '—' }, { label: 'Satış', value: '—' }],
   },
   {
     id: 'web-app',
@@ -88,7 +95,7 @@ const services: Service[] = [
     description: 'Web uygulama geliştirme ve SEO yapısı',
     icon: Code,
     status: 'active',
-    metrics: [{ label: 'İlerleme', value: '%65' }, { label: 'Sprint', value: '3/5' }]
+    metrics: [{ label: 'İlerleme', value: '—' }, { label: 'Sprint', value: '—' }],
   },
   {
     id: 'mobile-app',
@@ -96,7 +103,7 @@ const services: Service[] = [
     description: 'iOS ve Android uygulama geliştirme',
     icon: Smartphone,
     status: 'active',
-    metrics: [{ label: 'Ekranlar', value: '12/18' }, { label: 'Build', value: 'Beta' }]
+    metrics: [{ label: 'Ekranlar', value: '—' }, { label: 'Build', value: '—' }],
   },
   {
     id: 'landing-pages',
@@ -104,7 +111,7 @@ const services: Service[] = [
     description: 'Dönüşüm odaklı açılış sayfaları',
     icon: FileText,
     status: 'active',
-    metrics: [{ label: 'Aktif', value: '3' }, { label: 'CVR', value: '3.2%' }]
+    metrics: [{ label: 'Aktif', value: '—' }, { label: 'CVR', value: '—' }],
   },
   {
     id: 'web-mobile-design',
@@ -112,7 +119,7 @@ const services: Service[] = [
     description: 'UI/UX tasarım, design system ve prototip',
     icon: Palette,
     status: 'active',
-    metrics: [{ label: 'Ekranlar', value: '24' }, { label: 'Revizyon', value: '2' }]
+    metrics: [{ label: 'Ekranlar', value: '—' }, { label: 'Revizyon', value: '—' }],
   },
   {
     id: 'technical-support',
@@ -120,7 +127,7 @@ const services: Service[] = [
     description: 'Bakım, güvenlik, backup ve teknik destek',
     icon: Headphones,
     status: 'active',
-    metrics: [{ label: 'Açık Talep', value: '2' }, { label: 'Uptime', value: '99.9%' }]
+    metrics: [{ label: 'Açık Talep', value: '—' }, { label: 'Uptime', value: '—' }],
   },
   {
     id: 'seo-audit',
@@ -128,8 +135,8 @@ const services: Service[] = [
     description: 'SEO audit, teknik SEO ve anahtar kelime optimizasyonu',
     icon: BarChart3,
     status: 'active',
-    metrics: [{ label: 'SEO Skor', value: '94%' }, { label: 'Trafik', value: '+28%' }]
-  }
+    metrics: [{ label: 'SEO Skor', value: '—' }, { label: 'Açık Görev', value: '—' }],
+  },
 ];
 
 interface ServiceSelectionPageProps {
@@ -148,6 +155,100 @@ export function ServiceSelectionPage({
   availableServiceIds,
 }: ServiceSelectionPageProps) {
   const availableServiceIdSet = new Set<ServiceId>(availableServiceIds);
+
+  const { data: growthHubSummary } = useGetClientGrowthHubSummaryQuery(undefined, {
+    skip: !availableServiceIdSet.has('growth-hub'),
+  });
+  const { data: socialSummary } = useGetOwnSocialMediaSummaryQuery(undefined, {
+    skip: !availableServiceIdSet.has('social-media'),
+  });
+  const { data: metaAdsSummary } = useGetOwnMetaAdsSummaryQuery(undefined, {
+    skip: !availableServiceIdSet.has('meta-ads'),
+  });
+  const { data: webMobileDesignSummary } = useGetOwnWebMobileDesignSummaryQuery(undefined, {
+    skip: !availableServiceIdSet.has('web-mobile-design'),
+  });
+  const { data: techSupportSummary } = useGetOwnTechnicalSupportSummaryQuery(undefined, {
+    skip: !availableServiceIdSet.has('technical-support'),
+  });
+  const { data: seoAuditSummary } = useGetOwnSeoAuditSummaryQuery(undefined, {
+    skip: !availableServiceIdSet.has('seo-audit'),
+  });
+
+  const totalPendingApprovals = useMemo(() => {
+    if (growthHubSummary) return growthHubSummary.metrics.pendingApprovals;
+    let total = 0;
+    if (socialSummary) total += socialSummary.metrics.pendingApprovals;
+    if (webMobileDesignSummary) total += webMobileDesignSummary.approvalStats.pending;
+    return total;
+  }, [growthHubSummary, socialSummary, webMobileDesignSummary]);
+
+  function getRealMetrics(serviceId: ServiceId): { label: string; value: string }[] | null {
+    switch (serviceId) {
+      case 'growth-hub':
+        if (!growthHubSummary) return null;
+        return [
+          { label: 'Toplam Lead', value: String(growthHubSummary.metrics.totalLeads) },
+          {
+            label: 'ROAS',
+            value: growthHubSummary.metrics.blendedRoas
+              ? `${growthHubSummary.metrics.blendedRoas.toFixed(1)}x`
+              : '—',
+          },
+        ];
+      case 'social-media':
+        if (!socialSummary) return null;
+        return [
+          { label: 'Yayınlanan', value: String(socialSummary.metrics.publishedPosts) },
+          { label: 'Bekleyen', value: String(socialSummary.metrics.pendingApprovals) },
+        ];
+      case 'meta-ads':
+        if (!metaAdsSummary) return null;
+        return [
+          {
+            label: 'ROAS',
+            value: metaAdsSummary.roas != null ? `${metaAdsSummary.roas.toFixed(1)}x` : '—',
+          },
+          { label: 'Dönüşüm', value: String(metaAdsSummary.results) },
+        ];
+      case 'web-mobile-design':
+        if (!webMobileDesignSummary) return null;
+        return [
+          { label: 'Ekranlar', value: String(webMobileDesignSummary.taskStats.total) },
+          { label: 'Revizyon', value: String(webMobileDesignSummary.revisionCount) },
+        ];
+      case 'technical-support':
+        if (!techSupportSummary) return null;
+        return [
+          { label: 'Açık Talep', value: String(techSupportSummary.openTicketCount) },
+          {
+            label: 'Uptime',
+            value:
+              techSupportSummary.config?.uptimeTarget != null
+                ? `%${techSupportSummary.config.uptimeTarget}`
+                : '—',
+          },
+        ];
+      case 'seo-audit':
+        if (!seoAuditSummary) return null;
+        return [
+          {
+            label: 'SEO Skor',
+            value:
+              seoAuditSummary.config?.lastAuditScore != null
+                ? `%${seoAuditSummary.config.lastAuditScore}`
+                : '—',
+          },
+          {
+            label: 'Açık Görev',
+            value: String(seoAuditSummary.taskStats.total - seoAuditSummary.taskStats.done),
+          },
+        ];
+      default:
+        return null;
+    }
+  }
+
   const purchasedActiveServices = services.filter(
     (service) => service.status === 'active' && availableServiceIdSet.has(service.id),
   );
@@ -183,15 +284,17 @@ export function ServiceSelectionPage({
             <div className="text-sm text-[#A0A0A0]">Aktif Hizmet</div>
           </div>
           <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
-            <div className="text-3xl text-[#FFA726] mb-1">{activeServices > 0 ? '5' : '0'}</div>
+            <div className="text-3xl text-[#FFA726] mb-1">
+              {activeServices > 0 ? totalPendingApprovals : '0'}
+            </div>
             <div className="text-sm text-[#A0A0A0]">Bekleyen Onay</div>
           </div>
           <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
-            <div className="text-3xl text-white mb-1">{activeServices > 0 ? '15 Nis' : '-'}</div>
+            <div className="text-3xl text-white mb-1">{activeServices > 0 ? '—' : '-'}</div>
             <div className="text-sm text-[#A0A0A0]">Son Rapor</div>
           </div>
           <div className="bg-[#1A1A1A] rounded-2xl p-6 border border-white/[0.08]">
-            <div className="text-3xl text-white mb-1">{activeServices > 0 ? '2 May' : '-'}</div>
+            <div className="text-3xl text-white mb-1">{activeServices > 0 ? '—' : '-'}</div>
             <div className="text-sm text-[#A0A0A0]">Sonraki Toplantı</div>
           </div>
         </div>
@@ -207,44 +310,46 @@ export function ServiceSelectionPage({
             </p>
           </div>
         ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {purchasedActiveServices.map((service) => {
-            const Icon = service.icon;
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {purchasedActiveServices.map((service) => {
+              const Icon = service.icon;
+              const realMetrics = getRealMetrics(service.id);
+              const displayMetrics = realMetrics ?? service.metrics;
 
-            return (
-              <button
-                key={service.id}
-                onClick={() => onServiceSelect(service.id)}
-                className="rounded-xl border border-border bg-card p-6 hover:border-primary/40 hover:shadow-[0_0_30px_rgba(170,255,1,0.08)] cursor-pointer transition-all text-left flex flex-col"
-              >
-                <div className="bg-primary/10 rounded-lg p-3 w-10 h-10 flex items-center justify-center mb-4 flex-shrink-0">
-                  <Icon className="w-5 h-5 text-primary" />
-                </div>
-
-                <h3 className="text-sm font-medium text-white mb-1">{service.title}</h3>
-                <p className="text-xs text-muted-foreground mb-4 leading-relaxed">{service.description}</p>
-
-                {service.metrics && (
-                  <div className="grid grid-cols-2 gap-2 mb-4">
-                    {service.metrics.map((metric, i) => (
-                      <div key={i} className="bg-card-surface rounded-lg p-2">
-                        <div className="text-sm text-white">{metric.value}</div>
-                        <div className="text-xs text-muted-foreground">{metric.label}</div>
-                      </div>
-                    ))}
+              return (
+                <button
+                  key={service.id}
+                  onClick={() => onServiceSelect(service.id)}
+                  className="rounded-xl border border-border bg-card p-6 hover:border-primary/40 hover:shadow-[0_0_30px_rgba(170,255,1,0.08)] cursor-pointer transition-all text-left flex flex-col"
+                >
+                  <div className="bg-primary/10 rounded-lg p-3 w-10 h-10 flex items-center justify-center mb-4 flex-shrink-0">
+                    <Icon className="w-5 h-5 text-primary" />
                   </div>
-                )}
 
-                <div className="flex items-center justify-between mt-auto">
-                  <span className="text-xs px-3 py-1 rounded-lg bg-primary/10 text-primary border border-primary/20">
-                    Aktif
-                  </span>
-                  <span className="text-primary text-sm">→</span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
+                  <h3 className="text-sm font-medium text-white mb-1">{service.title}</h3>
+                  <p className="text-xs text-muted-foreground mb-4 leading-relaxed">{service.description}</p>
+
+                  {displayMetrics && (
+                    <div className="grid grid-cols-2 gap-2 mb-4">
+                      {displayMetrics.map((metric, i) => (
+                        <div key={i} className="bg-card-surface rounded-lg p-2">
+                          <div className="text-sm text-white">{metric.value}</div>
+                          <div className="text-xs text-muted-foreground">{metric.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between mt-auto">
+                    <span className="text-xs px-3 py-1 rounded-lg bg-primary/10 text-primary border border-primary/20">
+                      Aktif
+                    </span>
+                    <span className="text-primary text-sm">→</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         )}
       </div>
     </div>

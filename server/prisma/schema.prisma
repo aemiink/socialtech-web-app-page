@@ -1449,6 +1449,7 @@ model ClientPurchasedService {
   clientProfileId String                 @db.Uuid
   serviceKey      PurchasedServiceKey
   status          PurchasedServiceStatus @default(ACTIVE)
+  packageTierKey  String?
   startedAt       DateTime?
   endedAt         DateTime?
   createdAt       DateTime               @default(now())

@@ -262,6 +262,7 @@ export class AuthService {
                 status: true,
                 startedAt: true,
                 endedAt: true,
+                packageTierKey: true,
               },
               orderBy: [{ serviceKey: "asc" }, { id: "asc" }],
             },
@@ -282,6 +283,7 @@ export class AuthService {
           status: service.status,
           startedAt: service.startedAt,
           endedAt: service.endedAt,
+          packageTierKey: service.packageTierKey,
         }))
       : [];
 

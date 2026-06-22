@@ -11,6 +11,7 @@ export type PurchasedServiceSummary = {
   status: PurchasedServiceStatus;
   startedAt: Date | null;
   endedAt: Date | null;
+  packageTierKey: string | null;
 };
 
 export type ClientProfileSummary = {

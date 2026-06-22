@@ -102,6 +102,9 @@ import type {
   UpdateAdminClientRequest,
 } from "../features/clients/clientsTypes";
 import {
+  CATALOG_BY_SERVICE_KEY,
+} from "../features/billing/packagesCatalog";
+import {
   CLIENT_STATUS_OPTIONS,
   SERVICE_CATALOG,
   extractApiErrorMessage,
@@ -113,6 +116,7 @@ import {
   getClientStatusLabel,
   getPurchasedServicesSummary,
   getServiceLabel,
+  toBackendServiceKey,
   shortId,
   validateClientName,
   validateClientOwnerDisplayName,
@@ -156,6 +160,7 @@ type ClientFormState = {
   ownerPassword: string;
   existingOwnerUserId: string;
   purchasedServices: ServiceKey[];
+  serviceTierKeys: Partial<Record<ServiceKey, string>>;
   amazonProfileId: string;
   amazonAdvertiserAccountId: string;
   amazonMarketplaceId: string;
@@ -199,6 +204,7 @@ const initialClientForm: ClientFormState = {
   ownerPassword: "",
   existingOwnerUserId: "",
   purchasedServices: [],
+  serviceTierKeys: {},
   amazonProfileId: "",
   amazonAdvertiserAccountId: "",
   amazonMarketplaceId: "",
@@ -1738,9 +1744,19 @@ function ClientFormFields({
       <ServiceCheckboxGroup
         idPrefix={idPrefix}
         selectedServices={form.purchasedServices}
+        serviceTierKeys={form.serviceTierKeys}
         disabled={disabled}
         onToggle={(serviceKey) => {
           onChange("purchasedServices", toggleServiceSelection(form.purchasedServices, serviceKey));
+        }}
+        onTierChange={(serviceKey, tierKey) => {
+          const updated = { ...form.serviceTierKeys };
+          if (tierKey) {
+            updated[serviceKey] = tierKey;
+          } else {
+            delete updated[serviceKey];
+          }
+          onChange("serviceTierKeys", updated);
         }}
       />
 
@@ -1858,13 +1874,17 @@ function ClientFormFields({
 function ServiceCheckboxGroup({
   idPrefix,
   selectedServices,
+  serviceTierKeys,
   disabled,
   onToggle,
+  onTierChange,
 }: {
   idPrefix: string;
   selectedServices: ServiceKey[];
+  serviceTierKeys: Partial<Record<ServiceKey, string>>;
   disabled: boolean;
   onToggle: (serviceKey: ServiceKey) => void;
+  onTierChange: (serviceKey: ServiceKey, tierKey: string | null) => void;
 }) {
   return (
     <fieldset className="space-y-3 rounded-lg border border-white/[0.06] bg-[#202020]/60 p-3">
@@ -1873,22 +1893,64 @@ function ServiceCheckboxGroup({
         {SERVICE_CATALOG.map((service) => {
           const checkboxId = `${idPrefix}-service-${service.key}`;
           const checked = selectedServices.includes(service.key);
+          const backendKey = toBackendServiceKey(service.key);
+          const catalogEntry = CATALOG_BY_SERVICE_KEY[backendKey];
+          const tiers = catalogEntry?.tiers ?? [];
+          const selectedTier = serviceTierKeys[service.key] ?? "";
 
           return (
-            <label
+            <div
               key={service.key}
-              htmlFor={checkboxId}
-              className="flex min-h-10 items-center gap-3 rounded-md border border-white/[0.06] bg-[#1A1A1A] px-3 py-2 text-sm text-white"
+              className={`rounded-md border bg-[#1A1A1A] px-3 py-2 text-sm text-white ${checked ? "border-[#AAFF01]/20" : "border-white/[0.06]"}`}
             >
-              <Checkbox
-                id={checkboxId}
-                checked={checked}
-                onCheckedChange={() => onToggle(service.key)}
-                disabled={disabled}
-                className="border-white/[0.18] data-[state=checked]:border-[#AAFF01] data-[state=checked]:bg-[#AAFF01] data-[state=checked]:text-[#131313]"
-              />
-              <span>{service.label}</span>
-            </label>
+              <label htmlFor={checkboxId} className="flex min-h-7 cursor-pointer items-center gap-3">
+                <Checkbox
+                  id={checkboxId}
+                  checked={checked}
+                  onCheckedChange={() => onToggle(service.key)}
+                  disabled={disabled}
+                  className="border-white/[0.18] data-[state=checked]:border-[#AAFF01] data-[state=checked]:bg-[#AAFF01] data-[state=checked]:text-[#131313]"
+                />
+                <span>{service.label}</span>
+              </label>
+              {checked && tiers.length > 0 && (
+                <div className="mt-2 pl-7">
+                  <select
+                    value={selectedTier}
+                    onChange={(e) => onTierChange(service.key, e.target.value || null)}
+                    disabled={disabled}
+                    className="w-full rounded border border-white/[0.10] bg-[#131313] px-2 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-[#AAFF01]/40"
+                  >
+                    <option value="">Paket seçin (opsiyonel)</option>
+                    {tiers.map((tier) => (
+                      <option key={tier.key} value={tier.key}>
+                        {tier.name}
+                        {tier.defaultPrice !== null
+                          ? ` — ₺${tier.defaultPrice.toLocaleString("tr-TR")}`
+                          : " — Özel Fiyat"}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedTier && tiers.find((t) => t.key === selectedTier) && (
+                    <div className="mt-1.5 space-y-0.5">
+                      {tiers
+                        .find((t) => t.key === selectedTier)
+                        ?.features.slice(0, 3)
+                        .map((feat, i) => (
+                          <p key={i} className="text-[10px] leading-relaxed text-white/40">
+                            • {feat}
+                          </p>
+                        ))}
+                      {(tiers.find((t) => t.key === selectedTier)?.features.length ?? 0) > 3 && (
+                        <p className="text-[10px] text-white/30">
+                          +{(tiers.find((t) => t.key === selectedTier)?.features.length ?? 0) - 3} daha
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           );
         })}
       </div>
@@ -2922,6 +2984,7 @@ function buildCreateClientPayload(form: ClientFormState): CreateAdminClientReque
     name: form.name.trim(),
     status: form.status,
     purchasedServices: form.purchasedServices,
+    serviceTierKeys: form.serviceTierKeys,
   };
   const slug = normalizeOptionalText(form.slug);
 
@@ -2937,6 +3000,7 @@ function buildUpdateClientPayload(form: ClientFormState): UpdateAdminClientReque
     name: form.name.trim(),
     status: form.status,
     purchasedServices: form.purchasedServices,
+    serviceTierKeys: form.serviceTierKeys,
   };
   const slug = normalizeOptionalText(form.slug);
 
@@ -3045,12 +3109,21 @@ function buildOwnerPayload(form: ClientFormState): CreateOrLinkClientOwnerReques
 }
 
 function clientToForm(client: ClientProfile): ClientFormState {
+  const activeServices = getActivePurchasedServices(client);
+  const serviceTierKeys: Partial<Record<ServiceKey, string>> = {};
+  for (const svc of activeServices) {
+    if (svc.packageTierKey) {
+      serviceTierKeys[svc.serviceKey] = svc.packageTierKey;
+    }
+  }
+
   return {
     ...initialClientForm,
     name: client.companyName,
     slug: client.slug,
     status: client.status,
-    purchasedServices: getActivePurchasedServiceKeys(client),
+    purchasedServices: activeServices.map((s) => s.serviceKey),
+    serviceTierKeys,
   };
 }
 
