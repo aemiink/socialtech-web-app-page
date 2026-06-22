@@ -1408,14 +1408,26 @@ function normalizeClientSummaryClient(value: unknown): ClientSummaryResponse["cl
     return null;
   }
 
+  const ownerRaw = isRecord(value.owner) ? value.owner : null;
+  const owner =
+    ownerRaw && typeof ownerRaw.id === "string" && typeof ownerRaw.email === "string"
+      ? {
+          id: ownerRaw.id,
+          email: ownerRaw.email,
+          displayName: typeof ownerRaw.displayName === "string" ? ownerRaw.displayName : null,
+        }
+      : null;
+
   return {
     id: value.id,
     name,
     slug: value.slug,
+    contactEmail: isStringOrNull(value.contactEmail) ? value.contactEmail : null,
     status: value.status as ClientStatus,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
     purchasedServices: normalizePurchasedServices(value.purchasedServices),
+    owner,
   };
 }
 

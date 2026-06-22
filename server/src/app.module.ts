@@ -28,6 +28,7 @@ import { WebAppWorkspaceModule } from "./web-app-workspace/web-app-workspace.mod
 import { WebMobileDesignModule } from "./web-mobile-design/web-mobile-design.module";
 import { TechnicalSupportModule } from "./technical-support/technical-support.module";
 import { SeoAuditModule } from "./seo-audit/seo-audit.module";
+import { BillingModule } from "./billing/billing.module";
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { SeoAuditModule } from "./seo-audit/seo-audit.module";
     WebMobileDesignModule,
     TechnicalSupportModule,
     SeoAuditModule,
+    BillingModule,
   ],
 })
 export class AppModule {}

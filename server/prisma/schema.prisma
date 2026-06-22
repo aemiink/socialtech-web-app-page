@@ -520,6 +520,20 @@ enum WebAppWorkspaceMeetingRequestStatus {
   CANCELLED
 }
 
+enum BillingPackageType {
+  LAUNCH
+  GROWTH
+  SCALE
+  CUSTOM
+}
+
+enum BillingStatus {
+  PLANNED
+  PENDING
+  PAID
+  CANCELLED
+}
+
 enum CrmLeadStatus {
   NEW
   CONTACTED
@@ -645,6 +659,7 @@ model User {
   acknowledgedGrowthHubReports   GrowthHubReport[]                   @relation("GrowthHubReportAcknowledgedBy")
   createdGrowthHubRecommendations GrowthHubRecommendation[]           @relation("GrowthHubRecommendationCreatedBy")
   convertedGrowthHubRecommendations GrowthHubRecommendation[]         @relation("GrowthHubRecommendationConvertedBy")
+  createdInvoices                   ClientInvoice[]                    @relation("ClientInvoiceCreatedBy")
 
   @@index([accountType, role])
   @@index([accountType, status])
@@ -711,6 +726,7 @@ model ClientProfile {
   socialMediaReports      SocialMediaReport[]
   projects                Project[]
   files                   ProjectFile[]
+  invoices                ClientInvoice[]
   convertedCrmLeads       CrmLead[]                  @relation("CrmLeadConvertedClient")
 
   @@index([status])
@@ -1460,6 +1476,33 @@ model ClientPurchasedService {
   @@unique([clientProfileId, serviceKey])
   @@index([clientProfileId, status])
   @@index([serviceKey, status])
+}
+
+model ClientInvoice {
+  id              String             @id @default(uuid()) @db.Uuid
+  clientProfileId String             @db.Uuid
+  invoiceNumber   String             @unique
+  packageType     BillingPackageType
+  description     String
+  amount          Decimal            @db.Decimal(12, 2)
+  currency        String             @default("TRY")
+  periodStart     DateTime?
+  periodEnd       DateTime?
+  dueDate         DateTime?
+  status          BillingStatus      @default(PENDING)
+  paidAt          DateTime?
+  note            String?
+  createdByUserId String             @db.Uuid
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  createdByUser User          @relation("ClientInvoiceCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([clientProfileId])
+  @@index([clientProfileId, status])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model Project {

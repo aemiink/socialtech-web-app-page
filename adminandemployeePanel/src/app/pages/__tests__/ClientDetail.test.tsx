@@ -150,6 +150,24 @@ vi.mock("../../features/clients/clientsApi", () => ({
     mockUseDisconnectAdminClientMetaAdsMutation(),
   useUpdateAdminClientMetaAdsConfigMutation: () =>
     mockUseUpdateAdminClientMetaAdsConfigMutation(),
+  useGetAdminClientWebMobileDesignConfigQuery: () => ({
+    data: undefined,
+    isLoading: false,
+  }),
+  useGetAdminClientWebMobileDesignSummaryQuery: () => ({
+    data: undefined,
+    isLoading: false,
+  }),
+  useGetAdminClientTechnicalSupportSummaryQuery: () => ({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+  }),
+  useGetAdminClientSeoAuditSummaryQuery: () => ({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+  }),
   useResetClientOwnerPasswordMutation: () => mockUseResetClientOwnerPasswordMutation(),
 }));
 vi.mock("../../features/adminAssignments/adminAssignmentsApi", () => ({
@@ -178,6 +196,9 @@ vi.mock("../../features/projects/projectsApi", () => ({
 vi.mock("../../features/growthHub/components/GrowthHubClientDetailSection", () => ({
   GrowthHubClientDetailSection: () => <div data-testid="growth-hub-client-detail-section" />,
 }));
+vi.mock("../../features/billing/ClientBillingSection", () => ({
+  ClientBillingSection: () => <div data-testid="client-billing-section" />,
+}));
 
 const clientProfileId = "11111111-1111-4111-8111-111111111111";
 const projectId = "22222222-2222-4222-8222-222222222222";
@@ -188,6 +209,7 @@ const clientSummary: ClientSummaryResponse = {
     id: clientProfileId,
     name: "Acme E-ticaret",
     slug: "acme-e-ticaret",
+    contactEmail: "acme@example.com",
     status: "ACTIVE",
     createdAt: "2026-04-01T09:00:00.000Z",
     updatedAt: "2026-04-29T10:00:00.000Z",
@@ -199,6 +221,7 @@ const clientSummary: ClientSummaryResponse = {
       { serviceKey: "social-media", status: "ACTIVE" },
       { serviceKey: "web-app", status: "ACTIVE" },
     ],
+    owner: { id: "owner-id", email: "acme@example.com", displayName: "Acme Yetkili" },
   },
   projects: {
     total: 9,

@@ -11,6 +11,7 @@ import {
   FolderKanban,
   Github,
   ListChecks,
+  Mail,
   Megaphone,
   PlugZap,
   RefreshCw,
@@ -44,6 +45,7 @@ import {
   getSocialMediaSummaryStateLabel,
 } from "../features/socialMedia/socialMediaUtils";
 import { GrowthHubClientDetailSection } from "../features/growthHub/components/GrowthHubClientDetailSection";
+import { ClientBillingSection } from "../features/billing/ClientBillingSection";
 import { useGetProjectsQuery } from "../features/projects/projectsApi";
 import type { Project } from "../features/projects/projectsTypes";
 import {
@@ -917,8 +919,13 @@ export function ClientDetail() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         <InfoCard icon={<Building2 className="h-5 w-5 text-[#AAFF01]" />} label="Firma" value={client.name} />
         <InfoCard icon={<ExternalLink className="h-5 w-5 text-[#AAFF01]" />} label="Portal Slug" value={client.slug} mono />
+        <InfoCard
+          icon={<Mail className="h-5 w-5 text-[#AAFF01]" />}
+          label="Portal E-posta"
+          value={client.owner?.email ?? client.contactEmail ?? '—'}
+          mono
+        />
         <InfoCard icon={<Calendar className="h-5 w-5 text-[#AAFF01]" />} label="Oluşturulma" value={formatClientDate(client.createdAt)} />
-        <InfoCard icon={<Calendar className="h-5 w-5 text-[#AAFF01]" />} label="Son Güncelleme" value={formatClientDateTime(client.updatedAt)} />
       </div>
 
       <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
@@ -935,6 +942,12 @@ export function ClientDetail() {
           <DetailRow label="Durum" value={getClientStatusLabel(client.status)} />
           <DetailRow label="Oluşturulma tarihi" value={formatClientDateTime(client.createdAt)} />
           <DetailRow label="Son güncelleme" value={formatClientDateTime(client.updatedAt)} />
+          {client.owner && (
+            <DetailRow label="Portal e-posta" value={client.owner.email} mono />
+          )}
+          {client.contactEmail && (
+            <DetailRow label="İletişim e-postası" value={client.contactEmail} mono />
+          )}
         </div>
       </Card>
 
@@ -1656,6 +1669,8 @@ export function ClientDetail() {
         onRefresh={() => refetchSocialMediaSummary()}
       />
       ) : null}
+
+      <ClientBillingSection clientId={clientProfileId} services={client.purchasedServices} />
 
       <Card className="border-white/[0.06] bg-[#1A1A1A] p-6">
         <h2 className="mb-2 text-lg font-semibold text-white">Müşteri Portal Şifre Sıfırlama</h2>

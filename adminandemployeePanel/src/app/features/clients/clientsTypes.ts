@@ -166,10 +166,12 @@ export type ClientSummaryResponse = {
     id: string;
     name: string;
     slug: string;
+    contactEmail: string | null;
     status: ClientStatus;
     createdAt: string;
     updatedAt: string;
     purchasedServices: ClientPurchasedService[];
+    owner: { id: string; email: string; displayName: string | null } | null;
   };
   projects: {
     total: number;

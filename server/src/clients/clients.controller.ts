@@ -16,6 +16,11 @@ export class ClientsController {
     return this.clientsService.getMyClientProfile(currentUser);
   }
 
+  @Get("me/invoices")
+  getMyInvoices(@CurrentUser() currentUser: AuthenticatedUser) {
+    return this.clientsService.getMyInvoices(currentUser);
+  }
+
   @Get()
   getClients(
     @CurrentUser() currentUser: AuthenticatedUser,

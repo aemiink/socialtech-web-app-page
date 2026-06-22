@@ -29,6 +29,20 @@ const clientReadSelect = {
     },
     orderBy: [{ serviceKey: "asc" }, { id: "asc" }],
   },
+  users: {
+    where: {
+      accountType: AccountType.CLIENT,
+      role: UserRole.CLIENT_OWNER,
+      deletedAt: null,
+    },
+    select: {
+      id: true,
+      email: true,
+      displayName: true,
+    },
+    orderBy: [{ createdAt: "asc" as const }, { id: "asc" as const }],
+    take: 1,
+  },
 } satisfies Prisma.ClientProfileSelect;
 
 type ClientReadModel = Prisma.ClientProfileGetPayload<{ select: typeof clientReadSelect }>;
@@ -50,10 +64,12 @@ type ClientSummaryResponse = {
     id: string;
     name: string;
     slug: string;
+    contactEmail: string | null;
     status: ClientReadModel["status"];
     createdAt: Date;
     updatedAt: Date;
     purchasedServices: ClientReadModel["purchasedServices"];
+    owner: { id: string; email: string; displayName: string | null } | null;
   };
   projects: {
     total: number;
@@ -172,6 +188,37 @@ export class ClientsService {
 
     this.assertHasPermission(currentUser, "clients.read.own");
     return this.getOwnProfileByUserContext(currentUser);
+  }
+
+  async getMyInvoices(currentUser: AuthenticatedUser) {
+    if (!this.isClient(currentUser)) {
+      throw new ForbiddenException("Only client accounts can access their invoices.");
+    }
+
+    this.assertHasPermission(currentUser, "clients.read.own");
+
+    if (!currentUser.clientProfileId) {
+      throw new ForbiddenException("No client profile linked to this account.");
+    }
+
+    return this.prisma.clientInvoice.findMany({
+      where: { clientProfileId: currentUser.clientProfileId },
+      select: {
+        id: true,
+        invoiceNumber: true,
+        packageType: true,
+        description: true,
+        amount: true,
+        currency: true,
+        periodStart: true,
+        periodEnd: true,
+        dueDate: true,
+        status: true,
+        paidAt: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
   }
 
   async getClientSummary(
@@ -296,15 +343,21 @@ export class ClientsService {
       }),
     ]);
 
+    const ownerUser = clientProfile.users[0] ?? null;
+
     return {
       client: {
         id: clientProfile.id,
         name: clientProfile.companyName,
         slug: clientProfile.slug,
+        contactEmail: clientProfile.contactEmail,
         status: clientProfile.status,
         createdAt: clientProfile.createdAt,
         updatedAt: clientProfile.updatedAt,
         purchasedServices: clientProfile.purchasedServices,
+        owner: ownerUser
+          ? { id: ownerUser.id, email: ownerUser.email, displayName: ownerUser.displayName }
+          : null,
       },
       projects: {
         total: projectTotal,
