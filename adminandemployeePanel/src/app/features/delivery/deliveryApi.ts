@@ -27,6 +27,7 @@ export const deliveryApi = baseApi.injectEndpoints({
         params: query ?? undefined,
       }),
       transformResponse: (response: unknown) => normalizeDeliverySprintsResponse(response),
+      providesTags: ["DeliverySprints"],
     }),
     getDeliverySprint: builder.query<DeliverySprint, string>({
       query: (id) => ({
@@ -40,6 +41,7 @@ export const deliveryApi = baseApi.injectEndpoints({
         method: "POST",
         body,
       }),
+      invalidatesTags: ["DeliverySprints", "DeliverySummary"],
     }),
     updateDeliverySprint: builder.mutation<
       DeliverySprint,
@@ -50,6 +52,7 @@ export const deliveryApi = baseApi.injectEndpoints({
         method: "PATCH",
         body,
       }),
+      invalidatesTags: ["DeliverySprints", "DeliverySummary"],
     }),
     getDeliveryReleases: builder.query<DeliveryReleasesResponse, DeliveryReleaseQuery | void>({
       query: (query) => ({
@@ -58,6 +61,7 @@ export const deliveryApi = baseApi.injectEndpoints({
         params: query ?? undefined,
       }),
       transformResponse: (response: unknown) => normalizeDeliveryReleasesResponse(response),
+      providesTags: ["DeliveryReleases"],
     }),
     getDeliveryRelease: builder.query<DeliveryRelease, string>({
       query: (id) => ({
@@ -71,6 +75,7 @@ export const deliveryApi = baseApi.injectEndpoints({
         method: "POST",
         body,
       }),
+      invalidatesTags: ["DeliveryReleases", "DeliverySummary"],
     }),
     updateDeliveryRelease: builder.mutation<
       DeliveryRelease,
@@ -81,6 +86,7 @@ export const deliveryApi = baseApi.injectEndpoints({
         method: "PATCH",
         body,
       }),
+      invalidatesTags: ["DeliveryReleases", "DeliverySummary"],
     }),
     getDeliverySummary: builder.query<DeliverySummary, void>({
       query: () => ({
@@ -88,6 +94,7 @@ export const deliveryApi = baseApi.injectEndpoints({
         method: "GET",
       }),
       transformResponse: (response: unknown) => normalizeDeliverySummaryResponse(response),
+      providesTags: ["DeliverySummary"],
     }),
   }),
 });

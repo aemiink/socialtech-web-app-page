@@ -38,6 +38,7 @@ const categoryLabel: Record<ProjectFileCategory, string> = {
   MOBILE_SOURCE: "Mobil Kaynak",
   MOBILE_BUILD: "Mobil Build",
   ADS_CREATIVE: "Reklam Kreatif",
+  REPORT: "Rapor",
   SEO_REPORT: "SEO Raporu",
   OTHER: "Diğer",
 };

@@ -9,14 +9,18 @@ import { ProjectManagerServiceWorkspace } from "../ProjectManagerServiceWorkspac
 
 const mockCreateTask = vi.fn();
 const mockCreateTaskTodo = vi.fn();
+const mockUpdateProject = vi.fn();
 const mockCreateRevision = vi.fn();
 const mockUpdateRevisionStatus = vi.fn();
 const mockUpdateMeetingRequest = vi.fn();
+const mockUpdateRelease = vi.fn();
 
 let currentUser: AuthUserProfile | null = null;
 let currentAccessToken = "test-token";
 let workspaceRevisions: Array<Record<string, unknown>> = [];
 let workspaceMeetings: Array<Record<string, unknown>> = [];
+let deliverySprints: Array<Record<string, unknown>> = [];
+let deliveryReleases: Array<Record<string, unknown>> = [];
 
 vi.mock("../../../store/hooks", () => ({
   useAppSelector: (selector: (state: unknown) => unknown) => {
@@ -108,6 +112,7 @@ vi.mock("../../../features/projects/projectsApi", () => ({
       },
     ],
   }),
+  useUpdateProjectMutation: () => [mockUpdateProject, { isLoading: false }],
   useCreateProjectWorkspaceMessageMutation: () => [vi.fn(), { isLoading: false }],
   useCreateProjectWorkspaceRevisionMutation: () => [mockCreateRevision, { isLoading: false }],
   useUpdateProjectWorkspaceRevisionStatusMutation: () => [
@@ -123,31 +128,20 @@ vi.mock("../../../features/projects/projectsApi", () => ({
 vi.mock("../../../features/delivery/deliveryApi", () => ({
   useGetDeliverySprintsQuery: () => ({
     data: {
-      data: [
-        {
-          id: "44444444-4444-4444-8444-444444444444",
-          projectId: "22222222-2222-4222-8222-222222222222",
-          name: "Sprint 1",
-          goal: null,
-          status: "PLANNED",
-          startDate: "2026-05-05T00:00:00.000Z",
-          endDate: "2026-05-19T00:00:00.000Z",
-          createdAt: "2026-05-05T00:00:00.000Z",
-          updatedAt: "2026-05-05T00:00:00.000Z",
-          project: null,
-          taskCounts: { total: 0, completed: 0, open: 0 },
-          progressPercent: 0,
-        },
-      ],
-      meta: { page: 1, limit: 20, total: 1, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
+      data: deliverySprints,
+      meta: { page: 1, limit: 20, total: deliverySprints.length, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
     },
   }),
   useGetDeliveryReleasesQuery: () => ({
-    data: { data: [], meta: { page: 1, limit: 20, total: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false } },
+    data: {
+      data: deliveryReleases,
+      meta: { page: 1, limit: 20, total: deliveryReleases.length, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
+    },
   }),
   useCreateDeliverySprintMutation: () => [vi.fn(), { isLoading: false }],
   useUpdateDeliverySprintMutation: () => [vi.fn(), { isLoading: false }],
   useCreateDeliveryReleaseMutation: () => [vi.fn(), { isLoading: false }],
+  useUpdateDeliveryReleaseMutation: () => [mockUpdateRelease, { isLoading: false }],
 }));
 
 vi.mock("../../../features/tasks/tasksApi", () => ({
@@ -184,6 +178,27 @@ describe("ProjectManagerServiceWorkspace task routing", () => {
     currentAccessToken = "token";
     workspaceRevisions = [];
     workspaceMeetings = [];
+    deliveryReleases = [];
+    deliverySprints = [
+      {
+        id: "44444444-4444-4444-8444-444444444444",
+        projectId: "22222222-2222-4222-8222-222222222222",
+        name: "Sprint 1",
+        goal: null,
+        status: "PLANNED",
+        startDate: "2026-05-05T00:00:00.000Z",
+        endDate: "2026-05-19T00:00:00.000Z",
+        createdAt: "2026-05-05T00:00:00.000Z",
+        updatedAt: "2026-05-05T00:00:00.000Z",
+        project: null,
+        taskCounts: { total: 0, completed: 0, open: 0 },
+        progressPercent: 0,
+      },
+    ];
+    mockUpdateProject.mockReset();
+    mockUpdateProject.mockReturnValue({
+      unwrap: () => Promise.resolve({ id: "22222222-2222-4222-8222-222222222222" }),
+    });
     mockCreateTask.mockReturnValue({
       unwrap: () =>
         Promise.resolve({
@@ -204,6 +219,10 @@ describe("ProjectManagerServiceWorkspace task routing", () => {
     mockUpdateMeetingRequest.mockReset();
     mockUpdateMeetingRequest.mockReturnValue({
       unwrap: () => Promise.resolve({ id: "meeting-id" }),
+    });
+    mockUpdateRelease.mockReset();
+    mockUpdateRelease.mockReturnValue({
+      unwrap: () => Promise.resolve({ id: "release-id" }),
     });
   });
 
@@ -239,6 +258,212 @@ describe("ProjectManagerServiceWorkspace task routing", () => {
     const payload = mockCreateTask.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(payload.workstream).toBe("BACKEND");
     expect(payload.type).toBe("FEATURE");
+  });
+
+  it("shows all roadmap sprints in the project manager action panel", () => {
+    deliverySprints = ["Sprint 1", "Sprint 2", "Sprint 3", "Sprint 4"].map((name, index) => ({
+      id: `44444444-4444-4444-8444-44444444444${index + 1}`,
+      projectId: "22222222-2222-4222-8222-222222222222",
+      name,
+      goal: null,
+      status: "PLANNED",
+      startDate: `2026-05-${String(5 + index).padStart(2, "0")}T00:00:00.000Z`,
+      endDate: `2026-05-${String(19 + index).padStart(2, "0")}T00:00:00.000Z`,
+      createdAt: "2026-05-05T00:00:00.000Z",
+      updatedAt: "2026-05-05T00:00:00.000Z",
+      project: null,
+      taskCounts: { total: 0, completed: 0, open: 0 },
+      progressPercent: 0,
+    }));
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          "/employee/project-manager/clients/11111111-1111-4111-8111-111111111111/services/web-app?tab=TASKS",
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/employee/project-manager/clients/:clientId/services/:serviceKey"
+            element={<ProjectManagerServiceWorkspace />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getAllByText("Sprint 1").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Sprint 2").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Sprint 3").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Sprint 4").length).toBeGreaterThan(0);
+    expect(screen.getByText("4 roadmap sprinti listelendi")).toBeInTheDocument();
+  });
+
+  it("lets the project manager update release status and notes", async () => {
+    deliveryReleases = [
+      {
+        id: "release-1",
+        projectId: "22222222-2222-4222-8222-222222222222",
+        title: "Release 1.0",
+        environment: "STAGING",
+        status: "PLANNED",
+        approvalStatus: "NOT_REQUESTED",
+        version: "1.0.0",
+        releaseNotes: null,
+        approvalNotes: null,
+        scheduledAt: null,
+        deployedAt: null,
+        createdAt: "2026-06-25T09:00:00.000Z",
+        updatedAt: "2026-06-25T09:00:00.000Z",
+        project: null,
+      },
+    ];
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          "/employee/project-manager/clients/11111111-1111-4111-8111-111111111111/services/web-app?tab=TASKS",
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/employee/project-manager/clients/:clientId/services/:serviceKey"
+            element={<ProjectManagerServiceWorkspace />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Release durumu: Release 1.0"), {
+      target: { value: "READY" },
+    });
+    fireEvent.change(screen.getByLabelText("Neler yapıldı: Release 1.0"), {
+      target: { value: "Checkout bug fix ve ödeme doğrulaması yayına hazırlandı." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Release Güncelle" }));
+
+    await waitFor(() => {
+      expect(mockUpdateRelease).toHaveBeenCalledWith({
+        id: "release-1",
+        body: {
+          title: "Release 1.0",
+          status: "READY",
+          version: "1.0.0",
+          releaseNotes: "Checkout bug fix ve ödeme doğrulaması yayına hazırlandı.",
+        },
+      });
+    });
+  });
+
+  it("lets the project manager save a Web App Figma prototype link", async () => {
+    const figmaUrl =
+      "https://www.figma.com/proto/acme-file/Client-Portal?node-id=1-2&starting-point-node-id=1%3A2";
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          "/employee/project-manager/clients/11111111-1111-4111-8111-111111111111/services/web-app?tab=TASKS",
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/employee/project-manager/clients/:clientId/services/:serviceKey"
+            element={<ProjectManagerServiceWorkspace />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Figma prototype linki"), {
+      target: { value: figmaUrl },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Figma Linkini Kaydet" }));
+
+    await waitFor(() => {
+      expect(mockUpdateProject).toHaveBeenCalledWith({
+        id: "22222222-2222-4222-8222-222222222222",
+        body: { figmaProjectUrl: figmaUrl },
+      });
+    });
+
+    expect(screen.getByText("Figma prototip linki kaydedildi.")).toBeInTheDocument();
+  });
+
+  it("lets the project manager save a Web App live preview URL", async () => {
+    const livePreviewUrl = "https://staging.acme-web-app.com";
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          "/employee/project-manager/clients/11111111-1111-4111-8111-111111111111/services/web-app?tab=TASKS",
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/employee/project-manager/clients/:clientId/services/:serviceKey"
+            element={<ProjectManagerServiceWorkspace />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Canlı / staging URL"), {
+      target: { value: livePreviewUrl },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Önizleme Linkini Kaydet" }));
+
+    await waitFor(() => {
+      expect(mockUpdateProject).toHaveBeenCalledWith({
+        id: "22222222-2222-4222-8222-222222222222",
+        body: { livePreviewUrl },
+      });
+    });
+
+    expect(screen.getByText("Canlı önizleme linki kaydedildi.")).toBeInTheDocument();
+  });
+
+  it("lets the project manager save Web App GA4 integration details", async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          "/employee/project-manager/clients/11111111-1111-4111-8111-111111111111/services/web-app?tab=TASKS",
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/employee/project-manager/clients/:clientId/services/:serviceKey"
+            element={<ProjectManagerServiceWorkspace />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Measurement ID"), {
+      target: { value: "G-ABC1234567" },
+    });
+    fireEvent.change(screen.getByLabelText("Property ID"), {
+      target: { value: "123456789" },
+    });
+    fireEvent.change(screen.getByLabelText("GA4 durumu"), {
+      target: { value: "CONNECTED" },
+    });
+    fireEvent.change(screen.getByLabelText("Site tipi / ölçüm profili"), {
+      target: { value: "ECOMMERCE" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "GA4 Bilgisini Kaydet" }));
+
+    await waitFor(() => {
+      expect(mockUpdateProject).toHaveBeenCalledWith({
+        id: "22222222-2222-4222-8222-222222222222",
+        body: {
+          ga4MeasurementId: "G-ABC1234567",
+          ga4PropertyId: "123456789",
+          ga4Status: "CONNECTED",
+          ga4MeasurementProfile: "ECOMMERCE",
+        },
+      });
+    });
+
+    expect(screen.getByText("GA4 entegrasyon bilgileri kaydedildi.")).toBeInTheDocument();
   });
 
   it("uses service-specific tabs and fields for Meta Ads operations", async () => {

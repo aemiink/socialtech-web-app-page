@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   FileText,
   Folder,
+  Link2,
   ListChecks,
   MessageSquare,
   Rocket,
@@ -32,9 +33,19 @@ import {
   useCreateDeliverySprintMutation,
   useGetDeliveryReleasesQuery,
   useGetDeliverySprintsQuery,
+  useUpdateDeliveryReleaseMutation,
   useUpdateDeliverySprintMutation,
 } from "../../features/delivery/deliveryApi";
-import type { DeliveryRelease, DeliverySprint, DeliverySprintStatus } from "../../features/delivery/deliveryTypes";
+import type {
+  DeliveryRelease,
+  DeliveryReleaseStatus,
+  DeliverySprint,
+  DeliverySprintStatus,
+} from "../../features/delivery/deliveryTypes";
+import {
+  DELIVERY_RELEASE_STATUS_OPTIONS,
+  getDeliveryReleaseStatusLabel,
+} from "../../features/delivery/deliveryUtils";
 import {
   projectsApi,
   useCreateProjectWorkspaceRevisionMutation,
@@ -46,17 +57,26 @@ import {
   useGetProjectWorkspaceReportsQuery,
   useGetProjectWorkspaceRevisionsQuery,
   useGetProjectsQuery,
+  useUpdateProjectMutation,
   useUpdateProjectWorkspaceMeetingRequestMutation,
   useUpdateProjectWorkspaceRevisionStatusMutation,
 } from "../../features/projects/projectsApi";
 import type {
+  ProjectGa4MeasurementProfile,
+  ProjectGa4Status,
   WorkspaceMeetingRequest,
   WorkspaceMessage,
   WorkspaceRevision,
   WorkspaceRevisionStatus,
   WorkspaceTabKey,
 } from "../../features/projects/projectsTypes";
-import { extractApiErrorMessage, getProjectStatusBadgeClass, getProjectStatusLabel } from "../../features/projects/projectsUtils";
+import {
+  extractApiErrorMessage,
+  getProjectGa4MeasurementProfileLabel,
+  getProjectStatusBadgeClass,
+  getProjectStatusLabel,
+  PROJECT_GA4_MEASUREMENT_PROFILE_OPTIONS,
+} from "../../features/projects/projectsUtils";
 import { createWorkspaceSocket, type WorkspaceUpdateEvent } from "../../features/projects/workspaceSocket";
 import {
   useCreateTaskMutation,
@@ -208,6 +228,13 @@ type TaskTargetPreset = {
   approvalType?: TaskApprovalType;
 };
 
+type ReleaseDraft = {
+  title: string;
+  version: string;
+  releaseNotes: string;
+  status: DeliveryReleaseStatus;
+};
+
 const TASK_TARGET_TAB_LABELS: Record<EmployeePanelTargetTab, string> = {
   GOREVLERIM: "Görevlerim",
   FRONTEND: "Frontend",
@@ -259,6 +286,7 @@ const TASK_TARGET_TAB_PRESETS: Record<EmployeePanelTargetTab, TaskTargetPreset> 
 const TASK_PRIORITY_OPTIONS = ["LOW", "MEDIUM", "HIGH", "URGENT"] as const;
 type TaskPriority = (typeof TASK_PRIORITY_OPTIONS)[number];
 const SPRINT_STATUS_OPTIONS: DeliverySprintStatus[] = ["PLANNED", "ACTIVE", "COMPLETED", "CANCELLED"];
+const PROJECT_GA4_STATUS_OPTIONS: ProjectGa4Status[] = ["NOT_CONFIGURED", "PENDING", "CONNECTED", "ERROR"];
 
 const ASSIGNEE_ROLE_TARGET_TABS: Partial<Record<string, EmployeePanelTargetTab[]>> = {
   DESIGNER: [
@@ -513,6 +541,17 @@ export function ProjectManagerServiceWorkspace() {
   );
   const [releaseTitle, setReleaseTitle] = useState("");
   const [releaseVersion, setReleaseVersion] = useState("");
+  const [releaseDrafts, setReleaseDrafts] = useState<Record<string, ReleaseDraft>>({});
+  const [figmaProjectUrlDraft, setFigmaProjectUrlDraft] = useState("");
+  const [figmaProjectUrlFeedback, setFigmaProjectUrlFeedback] = useState<string | null>(null);
+  const [livePreviewUrlDraft, setLivePreviewUrlDraft] = useState("");
+  const [livePreviewUrlFeedback, setLivePreviewUrlFeedback] = useState<string | null>(null);
+  const [ga4MeasurementIdDraft, setGa4MeasurementIdDraft] = useState("");
+  const [ga4PropertyIdDraft, setGa4PropertyIdDraft] = useState("");
+  const [ga4StatusDraft, setGa4StatusDraft] = useState<ProjectGa4Status>("NOT_CONFIGURED");
+  const [ga4MeasurementProfileDraft, setGa4MeasurementProfileDraft] =
+    useState<ProjectGa4MeasurementProfile>("CORPORATE");
+  const [ga4Feedback, setGa4Feedback] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [revisionTitle, setRevisionTitle] = useState("");
   const [revisionDescription, setRevisionDescription] = useState("");
@@ -592,6 +631,7 @@ export function ProjectManagerServiceWorkspace() {
   }, [tasks]);
   const unassignedTasks = tasksBySprint.get("UNASSIGNED") ?? [];
   const [createMessage, { isLoading: isSending }] = useCreateProjectWorkspaceMessageMutation();
+  const [updateProject, { isLoading: isUpdatingProject }] = useUpdateProjectMutation();
   const [createRevision, { isLoading: isCreatingRevision }] = useCreateProjectWorkspaceRevisionMutation();
   const [updateRevisionStatus, { isLoading: isUpdatingRevisionStatus }] =
     useUpdateProjectWorkspaceRevisionStatusMutation();
@@ -606,6 +646,7 @@ export function ProjectManagerServiceWorkspace() {
   const [createSprint, { isLoading: isCreatingSprint }] = useCreateDeliverySprintMutation();
   const [updateSprint, { isLoading: isUpdatingSprint }] = useUpdateDeliverySprintMutation();
   const [createRelease, { isLoading: isCreatingRelease }] = useCreateDeliveryReleaseMutation();
+  const [updateRelease, { isLoading: isUpdatingRelease }] = useUpdateDeliveryReleaseMutation();
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [bulkMoveSprintId, setBulkMoveSprintId] = useState("");
   const [isBulkMoving, setIsBulkMoving] = useState(false);
@@ -721,6 +762,30 @@ export function ProjectManagerServiceWorkspace() {
     setViewTab(serviceProfile.defaultTab);
     setSearchParams({ tab: serviceProfile.defaultTab });
   }, [serviceProfile.defaultTab, setSearchParams, viewTab, workspaceTabs]);
+
+  useEffect(() => {
+    setFigmaProjectUrlDraft(project?.figmaProjectUrl ?? "");
+    setFigmaProjectUrlFeedback(null);
+  }, [project?.figmaProjectUrl, project?.id]);
+
+  useEffect(() => {
+    setLivePreviewUrlDraft(project?.livePreviewUrl ?? "");
+    setLivePreviewUrlFeedback(null);
+  }, [project?.livePreviewUrl, project?.id]);
+
+  useEffect(() => {
+    setGa4MeasurementIdDraft(project?.ga4MeasurementId ?? "");
+    setGa4PropertyIdDraft(project?.ga4PropertyId ?? "");
+    setGa4StatusDraft(project?.ga4Status ?? "NOT_CONFIGURED");
+    setGa4MeasurementProfileDraft(project?.ga4MeasurementProfile ?? "CORPORATE");
+    setGa4Feedback(null);
+  }, [
+    project?.ga4MeasurementId,
+    project?.ga4MeasurementProfile,
+    project?.ga4PropertyId,
+    project?.ga4Status,
+    project?.id,
+  ]);
 
   useEffect(() => {
     if (sprints.length === 0) {
@@ -876,6 +941,23 @@ export function ProjectManagerServiceWorkspace() {
   );
   const workstreamLabelPrefix = getTaskWorkstreamLabelPrefix(taskRoutingProfile);
   const sprintPlanningCopy = getSprintPlanningCopy(serviceProfile);
+  const normalizedCurrentFigmaProjectUrl = project.figmaProjectUrl?.trim() ?? "";
+  const normalizedFigmaProjectUrlDraft = figmaProjectUrlDraft.trim();
+  const isFigmaProjectUrlUnchanged = normalizedFigmaProjectUrlDraft === normalizedCurrentFigmaProjectUrl;
+  const normalizedCurrentLivePreviewUrl = project.livePreviewUrl?.trim() ?? "";
+  const normalizedLivePreviewUrlDraft = livePreviewUrlDraft.trim();
+  const isLivePreviewUrlUnchanged = normalizedLivePreviewUrlDraft === normalizedCurrentLivePreviewUrl;
+  const normalizedCurrentGa4MeasurementId = project.ga4MeasurementId?.trim() ?? "";
+  const normalizedCurrentGa4PropertyId = project.ga4PropertyId?.trim() ?? "";
+  const currentGa4Status = project.ga4Status ?? "NOT_CONFIGURED";
+  const currentGa4MeasurementProfile = project.ga4MeasurementProfile ?? "CORPORATE";
+  const normalizedGa4MeasurementIdDraft = ga4MeasurementIdDraft.trim();
+  const normalizedGa4PropertyIdDraft = ga4PropertyIdDraft.trim();
+  const isGa4Unchanged =
+    normalizedGa4MeasurementIdDraft === normalizedCurrentGa4MeasurementId &&
+    normalizedGa4PropertyIdDraft === normalizedCurrentGa4PropertyId &&
+    ga4StatusDraft === currentGa4Status &&
+    ga4MeasurementProfileDraft === currentGa4MeasurementProfile;
 
   const handleViewTabChange = (nextTab: string) => {
     const parsedTab = parseWorkspaceViewTab(nextTab, serviceProfile);
@@ -1170,6 +1252,131 @@ export function ProjectManagerServiceWorkspace() {
       setReleaseVersion("");
     } catch (mutationError) {
       setActionError(extractApiErrorMessage(mutationError, "Release oluşturulamadı."));
+    }
+  };
+
+  const handleReleaseDraftChange = (release: DeliveryRelease, patch: Partial<ReleaseDraft>) => {
+    setReleaseDrafts((prev) => ({
+      ...prev,
+      [release.id]: {
+        ...getReleaseDraftFromRelease(release),
+        ...prev[release.id],
+        ...patch,
+      },
+    }));
+  };
+
+  const handleUpdateRelease = async (event: FormEvent<HTMLFormElement>, release: DeliveryRelease) => {
+    event.preventDefault();
+
+    const draft = releaseDrafts[release.id] ?? getReleaseDraftFromRelease(release);
+    const title = draft.title.trim();
+    const version = draft.version.trim();
+    const releaseNotes = draft.releaseNotes.trim();
+
+    if (title.length < 3) {
+      setActionError("Release başlığı en az 3 karakter olmalıdır.");
+      return;
+    }
+
+    try {
+      setActionError(null);
+      await updateRelease({
+        id: release.id,
+        body: {
+          title,
+          status: draft.status,
+          version: version.length > 0 ? version : null,
+          releaseNotes: releaseNotes.length > 0 ? releaseNotes : null,
+        },
+      }).unwrap();
+      setReleaseDrafts((prev) => ({
+        ...prev,
+        [release.id]: {
+          title,
+          status: draft.status,
+          version,
+          releaseNotes,
+        },
+      }));
+    } catch (mutationError) {
+      setActionError(extractApiErrorMessage(mutationError, "Release güncellenemedi."));
+    }
+  };
+
+  const handleUpdateFigmaProjectUrl = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const nextFigmaProjectUrl = figmaProjectUrlDraft.trim();
+    if (nextFigmaProjectUrl.length > 0 && !isFigmaProjectUrlCandidate(nextFigmaProjectUrl)) {
+      setActionError("Geçerli bir Figma prototype linki girin.");
+      setFigmaProjectUrlFeedback(null);
+      return;
+    }
+
+    try {
+      setActionError(null);
+      setFigmaProjectUrlFeedback(null);
+      await updateProject({
+        id: project.id,
+        body: {
+          figmaProjectUrl: nextFigmaProjectUrl.length > 0 ? nextFigmaProjectUrl : null,
+        },
+      }).unwrap();
+      setFigmaProjectUrlFeedback(
+        nextFigmaProjectUrl.length > 0 ? "Figma prototip linki kaydedildi." : "Figma linki temizlendi.",
+      );
+    } catch (mutationError) {
+      setActionError(extractApiErrorMessage(mutationError, "Figma linki güncellenemedi."));
+    }
+  };
+
+  const handleUpdateLivePreviewUrl = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const nextLivePreviewUrl = livePreviewUrlDraft.trim();
+    if (nextLivePreviewUrl.length > 0 && !isHttpUrlCandidate(nextLivePreviewUrl)) {
+      setActionError("Geçerli bir canlı önizleme URL'i girin.");
+      setLivePreviewUrlFeedback(null);
+      return;
+    }
+
+    try {
+      setActionError(null);
+      setLivePreviewUrlFeedback(null);
+      await updateProject({
+        id: project.id,
+        body: {
+          livePreviewUrl: nextLivePreviewUrl.length > 0 ? nextLivePreviewUrl : null,
+        },
+      }).unwrap();
+      setLivePreviewUrlFeedback(
+        nextLivePreviewUrl.length > 0 ? "Canlı önizleme linki kaydedildi." : "Canlı önizleme linki temizlendi.",
+      );
+    } catch (mutationError) {
+      setActionError(extractApiErrorMessage(mutationError, "Canlı önizleme linki güncellenemedi."));
+    }
+  };
+
+  const handleUpdateGa4Integration = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    try {
+      setActionError(null);
+      setGa4Feedback(null);
+      await updateProject({
+        id: project.id,
+        body: {
+          ga4MeasurementId:
+            normalizedGa4MeasurementIdDraft.length > 0 ? normalizedGa4MeasurementIdDraft : null,
+          ga4PropertyId: normalizedGa4PropertyIdDraft.length > 0 ? normalizedGa4PropertyIdDraft : null,
+          ga4Status: ga4StatusDraft,
+          ga4MeasurementProfile: ga4MeasurementProfileDraft,
+        },
+      }).unwrap();
+      setGa4Feedback("GA4 entegrasyon bilgileri kaydedildi.");
+    } catch (mutationError) {
+      setActionError(extractApiErrorMessage(mutationError, "GA4 entegrasyonu güncellenemedi."));
     }
   };
 
@@ -1615,7 +1822,7 @@ export function ProjectManagerServiceWorkspace() {
             </Button>
           </form>
           <div className="space-y-2">
-            {sprints.slice(0, 3).map((sprint) => (
+            {sprints.map((sprint) => (
               <div
                 key={sprint.id}
                 onClick={() => handleOpenSprintTaskPlanner(sprint.id)}
@@ -1686,12 +1893,258 @@ export function ProjectManagerServiceWorkspace() {
             </Button>
           </form>
           <div className="space-y-2">
-            {releases.slice(0, 3).map((release) => (
-              <SummaryRow key={release.id} title={release.title} meta={release.version ?? "Versiyon yok"} badge={release.status} />
-            ))}
+            {releases.map((release) => {
+              const draft = releaseDrafts[release.id] ?? getReleaseDraftFromRelease(release);
+              const isUnchanged = isReleaseDraftUnchanged(release, draft);
+
+              return (
+                <form
+                  key={release.id}
+                  className="space-y-3 rounded-xl border border-white/10 bg-black/20 p-3"
+                  onSubmit={(event) => void handleUpdateRelease(event, release)}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-[#D8D8D8]">Release güncelle</p>
+                    <Badge variant="outline" className="border-white/10 bg-white/5 text-[#D8D8D8]">
+                      {getDeliveryReleaseStatusLabel(draft.status)}
+                    </Badge>
+                  </div>
+                  <Input
+                    aria-label={`Release başlığı: ${release.title}`}
+                    value={draft.title}
+                    onChange={(event) => handleReleaseDraftChange(release, { title: event.target.value })}
+                    className="bg-black/20"
+                    placeholder="Release başlığı"
+                  />
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <select
+                      aria-label={`Release durumu: ${release.title}`}
+                      className="h-9 w-full rounded-md border border-white/10 bg-black/40 px-3 text-xs text-white outline-none"
+                      value={draft.status}
+                      onChange={(event) =>
+                        handleReleaseDraftChange(release, {
+                          status: event.target.value as DeliveryReleaseStatus,
+                        })
+                      }
+                    >
+                      {DELIVERY_RELEASE_STATUS_OPTIONS.map((status) => (
+                        <option key={`${release.id}-${status}`} value={status}>
+                          {getDeliveryReleaseStatusLabel(status)}
+                        </option>
+                      ))}
+                    </select>
+                    <Input
+                      aria-label={`Release versiyonu: ${release.title}`}
+                      value={draft.version}
+                      onChange={(event) => handleReleaseDraftChange(release, { version: event.target.value })}
+                      className="bg-black/20"
+                      placeholder="Versiyon"
+                    />
+                  </div>
+                  <Textarea
+                    aria-label={`Neler yapıldı: ${release.title}`}
+                    value={draft.releaseNotes}
+                    onChange={(event) => handleReleaseDraftChange(release, { releaseNotes: event.target.value })}
+                    placeholder="Neler yapıldı? Release notu"
+                    className="min-h-20 bg-black/20"
+                  />
+                  <Button
+                    type="submit"
+                    size="sm"
+                    variant="outline"
+                    className="w-full"
+                    disabled={isUpdatingRelease || isUnchanged || draft.title.trim().length < 3}
+                  >
+                    {isUpdatingRelease ? "Kaydediliyor..." : "Release Güncelle"}
+                  </Button>
+                </form>
+              );
+            })}
             {releases.length === 0 ? <EmptyHint text="Planlanmış release bulunmuyor." /> : null}
           </div>
         </ActionPanel>
+
+        {shouldUseWebAppWorkspace ? (
+          <ActionPanel
+            icon={Link2}
+            title="Figma Prototip Linki"
+            description="Müşteri panelindeki Arayüz / Deneyim embed kaynağını güncelle."
+            footer={project.figmaProjectUrl ? "Müşteri panelinde görünür" : "Henüz Figma linki yok"}
+          >
+            <form className="space-y-3" onSubmit={(event) => void handleUpdateFigmaProjectUrl(event)}>
+              <label className="space-y-2 text-sm text-[#D8D8D8]" htmlFor="pm-figma-project-url">
+                <span>Figma prototype linki</span>
+                <Input
+                  id="pm-figma-project-url"
+                  value={figmaProjectUrlDraft}
+                  onChange={(event) => {
+                    setFigmaProjectUrlDraft(event.target.value);
+                    setFigmaProjectUrlFeedback(null);
+                  }}
+                  placeholder="https://www.figma.com/proto/..."
+                  className="bg-black/20"
+                />
+              </label>
+              <p className="text-xs leading-5 text-[#A0A0A0]">
+                Prototip linki girerseniz müşteri panelindeki Arayüz / Deneyim sekmesinde embed olarak açılır.
+                Alanı boş kaydederseniz müşteriye açık Figma linki temizlenir.
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="min-w-32"
+                  disabled={isUpdatingProject || isFigmaProjectUrlUnchanged}
+                >
+                  {isUpdatingProject ? "Kaydediliyor..." : "Figma Linkini Kaydet"}
+                </Button>
+                {project.figmaProjectUrl ? (
+                  <a
+                    href={project.figmaProjectUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-[#AAFF01] hover:underline"
+                  >
+                    Mevcut linki aç
+                    <Link2 className="h-3.5 w-3.5" />
+                  </a>
+                ) : null}
+              </div>
+              {figmaProjectUrlFeedback ? (
+                <p className="text-xs text-[#AAFF01]">{figmaProjectUrlFeedback}</p>
+              ) : null}
+            </form>
+          </ActionPanel>
+        ) : null}
+
+        {shouldUseWebAppWorkspace ? (
+          <ActionPanel
+            icon={Link2}
+            title="Web Sayfası Canlı Önizleme"
+            description="Müşteri panelinde iframe ve dış link olarak açılacak canlı/staging URL'i."
+            footer={project.livePreviewUrl ? "Canlı önizleme müşteriye açık" : "Henüz önizleme URL'i yok"}
+          >
+            <form className="space-y-3" onSubmit={(event) => void handleUpdateLivePreviewUrl(event)}>
+              <label className="space-y-2 text-sm text-[#D8D8D8]" htmlFor="pm-live-preview-url">
+                <span>Canlı / staging URL</span>
+                <Input
+                  id="pm-live-preview-url"
+                  value={livePreviewUrlDraft}
+                  onChange={(event) => {
+                    setLivePreviewUrlDraft(event.target.value);
+                    setLivePreviewUrlFeedback(null);
+                  }}
+                  placeholder="https://staging.musteri-domain.com"
+                  className="bg-black/20"
+                />
+              </label>
+              <p className="text-xs leading-5 text-[#A0A0A0]">
+                Link girildiğinde müşteri panelinde Web Sayfasının Canlı Önizlemesi alanında iframe olarak gösterilir.
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="min-w-32"
+                  disabled={isUpdatingProject || isLivePreviewUrlUnchanged}
+                >
+                  {isUpdatingProject ? "Kaydediliyor..." : "Önizleme Linkini Kaydet"}
+                </Button>
+                {project.livePreviewUrl ? (
+                  <a
+                    href={project.livePreviewUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-[#AAFF01] hover:underline"
+                  >
+                    Canlı sayfayı aç
+                    <Link2 className="h-3.5 w-3.5" />
+                  </a>
+                ) : null}
+              </div>
+              {livePreviewUrlFeedback ? (
+                <p className="text-xs text-[#AAFF01]">{livePreviewUrlFeedback}</p>
+              ) : null}
+            </form>
+          </ActionPanel>
+        ) : null}
+
+        {shouldUseWebAppWorkspace ? (
+          <ActionPanel
+            icon={CheckCircle2}
+            title="GA4 Entegrasyonu"
+            description="Analytics measurement/property bilgisini ve bağlantı durumunu müşteriye göster."
+            footer={`Durum: ${getProjectGa4StatusLabel(project.ga4Status ?? "NOT_CONFIGURED")} · Profil: ${getProjectGa4MeasurementProfileLabel(project.ga4MeasurementProfile ?? "CORPORATE")}`}
+          >
+            <form className="space-y-3" onSubmit={(event) => void handleUpdateGa4Integration(event)}>
+              <label className="space-y-2 text-sm text-[#D8D8D8]" htmlFor="pm-ga4-measurement-id">
+                <span>Measurement ID</span>
+                <Input
+                  id="pm-ga4-measurement-id"
+                  value={ga4MeasurementIdDraft}
+                  onChange={(event) => {
+                    setGa4MeasurementIdDraft(event.target.value);
+                    setGa4Feedback(null);
+                  }}
+                  placeholder="G-XXXXXXXXXX"
+                  className="bg-black/20"
+                />
+              </label>
+              <label className="space-y-2 text-sm text-[#D8D8D8]" htmlFor="pm-ga4-property-id">
+                <span>Property ID</span>
+                <Input
+                  id="pm-ga4-property-id"
+                  value={ga4PropertyIdDraft}
+                  onChange={(event) => {
+                    setGa4PropertyIdDraft(event.target.value);
+                    setGa4Feedback(null);
+                  }}
+                  placeholder="123456789"
+                  className="bg-black/20"
+                />
+              </label>
+              <select
+                aria-label="GA4 durumu"
+                className="h-10 w-full rounded-md border border-white/10 bg-black/30 px-3 text-sm text-white outline-none"
+                value={ga4StatusDraft}
+                onChange={(event) => {
+                  setGa4StatusDraft(event.target.value as ProjectGa4Status);
+                  setGa4Feedback(null);
+                }}
+              >
+                {PROJECT_GA4_STATUS_OPTIONS.map((status) => (
+                  <option key={status} value={status}>
+                    {getProjectGa4StatusLabel(status)}
+                  </option>
+                ))}
+              </select>
+              <select
+                aria-label="Site tipi / ölçüm profili"
+                className="h-10 w-full rounded-md border border-white/10 bg-black/30 px-3 text-sm text-white outline-none"
+                value={ga4MeasurementProfileDraft}
+                onChange={(event) => {
+                  setGa4MeasurementProfileDraft(event.target.value as ProjectGa4MeasurementProfile);
+                  setGa4Feedback(null);
+                }}
+              >
+                {PROJECT_GA4_MEASUREMENT_PROFILE_OPTIONS.map((profile) => (
+                  <option key={profile} value={profile}>
+                    {getProjectGa4MeasurementProfileLabel(profile)}
+                  </option>
+                ))}
+              </select>
+              <Button
+                type="submit"
+                size="sm"
+                className="w-full"
+                disabled={isUpdatingProject || isGa4Unchanged}
+              >
+                {isUpdatingProject ? "Kaydediliyor..." : "GA4 Bilgisini Kaydet"}
+              </Button>
+              {ga4Feedback ? <p className="text-xs text-[#AAFF01]">{ga4Feedback}</p> : null}
+            </form>
+          </ActionPanel>
+        ) : null}
       </div>
 
       {actionError ? (
@@ -2804,6 +3257,24 @@ function CompactMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
+function getReleaseDraftFromRelease(release: DeliveryRelease): ReleaseDraft {
+  return {
+    title: release.title,
+    version: release.version ?? "",
+    releaseNotes: release.releaseNotes ?? "",
+    status: release.status,
+  };
+}
+
+function isReleaseDraftUnchanged(release: DeliveryRelease, draft: ReleaseDraft): boolean {
+  return (
+    draft.title.trim() === release.title &&
+    draft.version.trim() === (release.version ?? "") &&
+    draft.releaseNotes.trim() === (release.releaseNotes ?? "") &&
+    draft.status === release.status
+  );
+}
+
 function ActionPanel({
   icon: Icon,
   title,
@@ -3783,6 +4254,29 @@ function isWebAppWorkspaceService(serviceKey?: string | null): boolean {
 
 function normalizeServiceKey(value?: string | null): string {
   return (value ?? "").toLowerCase().replace(/_/g, "-").trim();
+}
+
+function isFigmaProjectUrlCandidate(value: string): boolean {
+  return value.toLowerCase().includes("figma.com/proto/");
+}
+
+function isHttpUrlCandidate(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function getProjectGa4StatusLabel(status: ProjectGa4Status | string): string {
+  const labels: Record<ProjectGa4Status, string> = {
+    NOT_CONFIGURED: "Kurulmadı",
+    PENDING: "Kurulum Bekliyor",
+    CONNECTED: "Bağlı",
+    ERROR: "Hata",
+  };
+  return labels[status as ProjectGa4Status] ?? status;
 }
 
 function parseWorkspaceViewTab(

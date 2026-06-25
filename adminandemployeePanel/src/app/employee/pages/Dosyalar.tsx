@@ -26,6 +26,7 @@ const CATEGORIES: ProjectFileCategory[] = [
   "MOBILE_SOURCE",
   "MOBILE_BUILD",
   "ADS_CREATIVE",
+  "REPORT",
   "SEO_REPORT",
   "BRAND_ASSET",
   "DOCUMENT",
@@ -68,6 +69,7 @@ export function Dosyalar() {
     { projectId: activeProjectId },
     { skip: !activeProjectId || !canShareFiles },
   );
+  const isReportUpload = category === "REPORT";
 
   const [createSignature, { isLoading: isSigning }] = useCreateProjectFileUploadSignatureMutation();
   const [completeUpload, { isLoading: isCompleting }] = useCompleteProjectFileUploadMutation();
@@ -95,10 +97,10 @@ export function Dosyalar() {
         mimeType: file.type || "application/octet-stream",
         bytes: file.size,
         category,
-        visibility,
+        visibility: isReportUpload ? "CLIENT_VISIBLE" : visibility,
         overwrite: overwrite === "overwrite",
         overwriteFileId: overwrite === "overwrite" && overwriteFileId ? overwriteFileId : undefined,
-        folderId: folderId || undefined,
+        folderId: isReportUpload ? undefined : folderId || undefined,
       }).unwrap();
 
       const formData = new FormData();
@@ -107,6 +109,9 @@ export function Dosyalar() {
       formData.set("timestamp", String(signature.timestamp));
       formData.set("signature", signature.signature);
       formData.set("public_id", signature.publicId);
+      if (signature.assetFolder) {
+        formData.set("asset_folder", signature.assetFolder);
+      }
       if (signature.overwrite) {
         formData.set("overwrite", "true");
       }
@@ -146,10 +151,10 @@ export function Dosyalar() {
         bytes: uploadJson.bytes ?? file.size,
         mimeType: file.type || "application/octet-stream",
         category,
-        visibility,
+        visibility: isReportUpload ? "CLIENT_VISIBLE" : visibility,
         overwrite: overwrite === "overwrite",
         overwriteFileId: overwrite === "overwrite" && overwriteFileId ? overwriteFileId : undefined,
-        folderId: folderId || undefined,
+        folderId: signature.folderId ?? (isReportUpload ? undefined : folderId || undefined),
       }).unwrap();
 
       setFeedback("Dosya yüklendi.");
@@ -216,7 +221,17 @@ export function Dosyalar() {
           </div>
           <div className="space-y-2">
             <Label>Kategori</Label>
-            <Select value={category} onValueChange={(value) => setCategory(value as ProjectFileCategory)}>
+            <Select
+              value={category}
+              onValueChange={(value) => {
+                const nextCategory = value as ProjectFileCategory;
+                setCategory(nextCategory);
+                if (nextCategory === "REPORT") {
+                  setVisibility("CLIENT_VISIBLE");
+                  setFolderId("");
+                }
+              }}
+            >
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {CATEGORIES.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
@@ -225,23 +240,35 @@ export function Dosyalar() {
           </div>
           <div className="space-y-2">
             <Label>Görünürlük</Label>
-            <Select value={visibility} onValueChange={(value) => setVisibility(value as ProjectFileVisibility)}>
+            <Select
+              value={isReportUpload ? "CLIENT_VISIBLE" : visibility}
+              onValueChange={(value) => setVisibility(value as ProjectFileVisibility)}
+              disabled={isReportUpload}
+            >
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="INTERNAL">INTERNAL</SelectItem>
                 <SelectItem value="CLIENT_VISIBLE">CLIENT_VISIBLE</SelectItem>
               </SelectContent>
             </Select>
+            {isReportUpload && (
+              <p className="text-xs text-[#A0A0A0]">
+                Raporlar müşteri panelinde görünecek şekilde otomatik yayınlanır.
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <Label>Klasör</Label>
             <Select
               value={folderId || NONE_FOLDER_VALUE}
               onValueChange={(value) => setFolderId(value === NONE_FOLDER_VALUE ? "" : value)}
+              disabled={isReportUpload}
             >
               <SelectTrigger><SelectValue placeholder="Klasörsüz" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value={NONE_FOLDER_VALUE}>Klasörsüz</SelectItem>
+                <SelectItem value={NONE_FOLDER_VALUE}>
+                  {isReportUpload ? "Raporlar klasörü otomatik" : "Klasörsüz"}
+                </SelectItem>
                 {folders.map((folder) => (
                   <SelectItem key={folder.id} value={folder.id}>
                     {folder.name}
@@ -249,6 +276,11 @@ export function Dosyalar() {
                 ))}
               </SelectContent>
             </Select>
+            {isReportUpload && (
+              <p className="text-xs text-[#A0A0A0]">
+                Operasyon içinde Raporlar klasörü yoksa sistem yükleme sırasında oluşturur.
+              </p>
+            )}
           </div>
           <div className="space-y-2 md:col-span-2">
             <Label>Açıklama</Label>

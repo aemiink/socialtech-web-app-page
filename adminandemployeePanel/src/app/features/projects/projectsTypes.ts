@@ -3,6 +3,13 @@ import type { ClientPurchasedService, ServiceKey } from "../clients/clientsTypes
 
 export type ProjectStatus = "PLANNED" | "IN_PROGRESS" | "REVIEW" | "COMPLETED" | "ON_HOLD";
 export type Priority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+export type ProjectGa4Status = "NOT_CONFIGURED" | "PENDING" | "CONNECTED" | "ERROR";
+export type ProjectGa4MeasurementProfile =
+  | "CORPORATE"
+  | "ECOMMERCE"
+  | "SHOWCASE"
+  | "LEAD_GENERATION"
+  | "CUSTOM";
 
 export type ProjectClientProfile = ClientProfileSummary & {
   purchasedServices?: ClientPurchasedService[];
@@ -14,6 +21,12 @@ export type Project = {
   serviceKey?: ServiceKey | null;
   figmaProjectUrl?: string | null;
   repositoryUrl?: string | null;
+  livePreviewUrl?: string | null;
+  ga4MeasurementId?: string | null;
+  ga4PropertyId?: string | null;
+  ga4Status?: ProjectGa4Status;
+  ga4MeasurementProfile?: ProjectGa4MeasurementProfile;
+  ga4LastVerifiedAt?: string | null;
   name: string;
   slug: string;
   description: string | null;
@@ -288,6 +301,7 @@ export type ProjectFileCategory =
   | "MOBILE_SOURCE"
   | "MOBILE_BUILD"
   | "ADS_CREATIVE"
+  | "REPORT"
   | "SEO_REPORT"
   | "BRAND_ASSET"
   | "DOCUMENT"
@@ -418,6 +432,7 @@ export type ProjectFileUploadSignatureResponse = {
   timestamp: number;
   publicId: string;
   assetFolder?: string | null;
+  folderId?: string | null;
   signature: string;
   uploadUrl: string;
   overwrite: boolean;
@@ -503,6 +518,11 @@ export type CreateProjectRequest = {
   serviceKey?: ServiceKey | null;
   figmaProjectUrl?: string | null;
   repositoryUrl?: string | null;
+  livePreviewUrl?: string | null;
+  ga4MeasurementId?: string | null;
+  ga4PropertyId?: string | null;
+  ga4Status?: ProjectGa4Status;
+  ga4MeasurementProfile?: ProjectGa4MeasurementProfile;
   name: string;
   description?: string | null;
   status?: ProjectStatus;

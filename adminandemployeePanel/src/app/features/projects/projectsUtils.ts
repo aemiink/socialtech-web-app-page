@@ -9,6 +9,8 @@ import type {
   Priority,
   Project,
   ProjectClientProfile,
+  ProjectGa4MeasurementProfile,
+  ProjectGa4Status,
   ProjectsListMeta,
   ProjectsListResponse,
   ProjectStatus,
@@ -25,6 +27,19 @@ export const PROJECT_STATUS_OPTIONS: ProjectStatus[] = [
 ];
 
 export const PRIORITY_OPTIONS: Priority[] = ["LOW", "MEDIUM", "HIGH", "URGENT"];
+export const PROJECT_GA4_STATUS_OPTIONS: ProjectGa4Status[] = [
+  "NOT_CONFIGURED",
+  "PENDING",
+  "CONNECTED",
+  "ERROR",
+];
+export const PROJECT_GA4_MEASUREMENT_PROFILE_OPTIONS: ProjectGa4MeasurementProfile[] = [
+  "CORPORATE",
+  "ECOMMERCE",
+  "SHOWCASE",
+  "LEAD_GENERATION",
+  "CUSTOM",
+];
 
 const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
   PLANNED: "Planlandı",
@@ -39,6 +54,14 @@ const PRIORITY_LABELS: Record<Priority, string> = {
   MEDIUM: "Normal",
   HIGH: "Yüksek",
   URGENT: "Acil",
+};
+
+const PROJECT_GA4_MEASUREMENT_PROFILE_LABELS: Record<ProjectGa4MeasurementProfile, string> = {
+  CORPORATE: "Kurumsal site",
+  ECOMMERCE: "E-ticaret",
+  SHOWCASE: "Vitrin / katalog",
+  LEAD_GENERATION: "Lead toplama",
+  CUSTOM: "Özel ölçüm",
 };
 
 const PROJECT_PROGRESS_BY_STATUS: Record<ProjectStatus, number> = {
@@ -76,6 +99,10 @@ export function getProjectStatusLabel(status: ProjectStatus): string {
 
 export function getPriorityLabel(priority: Priority): string {
   return PRIORITY_LABELS[priority] ?? priority;
+}
+
+export function getProjectGa4MeasurementProfileLabel(profile: ProjectGa4MeasurementProfile): string {
+  return PROJECT_GA4_MEASUREMENT_PROFILE_LABELS[profile] ?? profile;
 }
 
 export function getProjectProgress(status: ProjectStatus): number {
@@ -242,6 +269,13 @@ function normalizeProject(value: unknown): Project | null {
     serviceKey === undefined ||
     (typeof value.figmaProjectUrl !== "undefined" && !isStringOrNull(value.figmaProjectUrl)) ||
     (typeof value.repositoryUrl !== "undefined" && !isStringOrNull(value.repositoryUrl)) ||
+    (typeof value.livePreviewUrl !== "undefined" && !isStringOrNull(value.livePreviewUrl)) ||
+    (typeof value.ga4MeasurementId !== "undefined" && !isStringOrNull(value.ga4MeasurementId)) ||
+    (typeof value.ga4PropertyId !== "undefined" && !isStringOrNull(value.ga4PropertyId)) ||
+    (typeof value.ga4Status !== "undefined" && !isProjectGa4Status(value.ga4Status)) ||
+    (typeof value.ga4MeasurementProfile !== "undefined" &&
+      !isProjectGa4MeasurementProfile(value.ga4MeasurementProfile)) ||
+    (typeof value.ga4LastVerifiedAt !== "undefined" && !isStringOrNull(value.ga4LastVerifiedAt)) ||
     typeof value.name !== "string" ||
     typeof value.slug !== "string" ||
     !isStringOrNull(value.description) ||
@@ -262,6 +296,14 @@ function normalizeProject(value: unknown): Project | null {
     serviceKey,
     figmaProjectUrl: typeof value.figmaProjectUrl === "undefined" ? undefined : value.figmaProjectUrl,
     repositoryUrl: typeof value.repositoryUrl === "undefined" ? undefined : value.repositoryUrl,
+    livePreviewUrl: typeof value.livePreviewUrl === "undefined" ? undefined : value.livePreviewUrl,
+    ga4MeasurementId: typeof value.ga4MeasurementId === "undefined" ? undefined : value.ga4MeasurementId,
+    ga4PropertyId: typeof value.ga4PropertyId === "undefined" ? undefined : value.ga4PropertyId,
+    ga4Status: typeof value.ga4Status === "undefined" ? undefined : value.ga4Status,
+    ga4MeasurementProfile:
+      typeof value.ga4MeasurementProfile === "undefined" ? undefined : value.ga4MeasurementProfile,
+    ga4LastVerifiedAt:
+      typeof value.ga4LastVerifiedAt === "undefined" ? undefined : value.ga4LastVerifiedAt,
     name: value.name,
     slug: value.slug,
     description: value.description,
@@ -295,6 +337,17 @@ function isProjectStatus(value: unknown): value is ProjectStatus {
 
 function isPriority(value: unknown): value is Priority {
   return typeof value === "string" && PRIORITY_OPTIONS.includes(value as Priority);
+}
+
+function isProjectGa4Status(value: unknown): value is ProjectGa4Status {
+  return typeof value === "string" && PROJECT_GA4_STATUS_OPTIONS.includes(value as ProjectGa4Status);
+}
+
+function isProjectGa4MeasurementProfile(value: unknown): value is ProjectGa4MeasurementProfile {
+  return (
+    typeof value === "string" &&
+    PROJECT_GA4_MEASUREMENT_PROFILE_OPTIONS.includes(value as ProjectGa4MeasurementProfile)
+  );
 }
 
 function normalizeOptionalServiceKey(value: unknown): ServiceKey | null | undefined {
