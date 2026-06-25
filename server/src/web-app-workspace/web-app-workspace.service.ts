@@ -94,6 +94,24 @@ const workspaceMessageSelect = {
   },
 } satisfies Prisma.WebAppWorkspaceMessageSelect;
 
+const workspaceMessageInboxSelect = {
+  ...workspaceMessageSelect,
+  project: {
+    select: {
+      id: true,
+      name: true,
+      serviceKey: true,
+      clientProfile: {
+        select: {
+          id: true,
+          companyName: true,
+          slug: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.WebAppWorkspaceMessageSelect;
+
 const workspaceRevisionSelect = {
   id: true,
   projectId: true,
@@ -686,6 +704,51 @@ export class WebAppWorkspaceService {
       },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       select: workspaceMessageSelect,
+    });
+  }
+
+  async getAssignedMessageInbox(currentUser: AuthenticatedUser) {
+    if (currentUser.accountType === AccountType.CLIENT) {
+      throw new ForbiddenException("Client accounts cannot access employee message inbox.");
+    }
+
+    const where: Prisma.WebAppWorkspaceMessageWhereInput = {
+      isInternal: false,
+      author: { accountType: AccountType.CLIENT },
+      project: {
+        serviceKey: PurchasedServiceKey.WEB_APP,
+      },
+    };
+
+    if (currentUser.accountType === AccountType.ADMIN) {
+      this.assertAdminWorkspaceAccess(currentUser, "read");
+    } else {
+      this.assertEmployeeWorkspacePermission(currentUser, "read");
+      where.project = {
+        serviceKey: PurchasedServiceKey.WEB_APP,
+        clientProfile: {
+          employeeAssignments: {
+            some: {
+              employeeUserId: currentUser.id,
+              isActive: true,
+              scope: {
+                in: [
+                  EmployeeClientAssignmentScope.PROJECT,
+                  EmployeeClientAssignmentScope.DEVELOPMENT,
+                  EmployeeClientAssignmentScope.DESIGN,
+                ],
+              },
+            },
+          },
+        },
+      };
+    }
+
+    return this.prisma.webAppWorkspaceMessage.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: 50,
+      select: workspaceMessageInboxSelect,
     });
   }
 

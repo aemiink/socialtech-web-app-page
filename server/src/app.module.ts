@@ -8,6 +8,7 @@ import { AdminSummaryModule } from "./admin-summary/admin-summary.module";
 import { AdminUsersModule } from "./admin-users/admin-users.module";
 import { AmazonAdsModule } from "./amazon-ads/amazon-ads.module";
 import { AuthModule } from "./auth/auth.module";
+import { ClientTicketsModule } from "./client-tickets/client-tickets.module";
 import { ClientsModule } from "./clients/clients.module";
 import { envValidationSchema } from "./config/env.validation";
 import { DatabaseModule } from "./database/database.module";
@@ -46,6 +47,7 @@ import { BillingModule } from "./billing/billing.module";
     HealthModule,
     LegalModule,
     AuthModule,
+    ClientTicketsModule,
     UsersModule,
     ClientsModule,
     CrmModule,

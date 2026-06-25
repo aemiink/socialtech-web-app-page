@@ -345,6 +345,14 @@ enum ProjectStatus {
   ON_HOLD
 }
 
+enum ClientTicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_CLIENT
+  RESOLVED
+  CLOSED
+}
+
 enum ProjectGa4Status {
   NOT_CONFIGURED
   PENDING
@@ -676,6 +684,8 @@ model User {
   createdGrowthHubRecommendations   GrowthHubRecommendation[]           @relation("GrowthHubRecommendationCreatedBy")
   convertedGrowthHubRecommendations GrowthHubRecommendation[]           @relation("GrowthHubRecommendationConvertedBy")
   createdInvoices                   ClientInvoice[]                     @relation("ClientInvoiceCreatedBy")
+  createdClientTickets              ClientTicket[]                      @relation("ClientTicketCreatedBy")
+  clientTicketMessages              ClientTicketMessage[]               @relation("ClientTicketMessageAuthor")
 
   @@index([accountType, role])
   @@index([accountType, status])
@@ -743,6 +753,7 @@ model ClientProfile {
   projects                  Project[]
   files                     ProjectFile[]
   invoices                  ClientInvoice[]
+  tickets                   ClientTicket[]
   workspaceMeetingRequests  WebAppWorkspaceMeetingRequest[]
   convertedCrmLeads         CrmLead[]                        @relation("CrmLeadConvertedClient")
 
@@ -1565,12 +1576,55 @@ model Project {
   workspaceRevisions       WebAppWorkspaceRevision[]
   workspaceWeeklyReports   WebAppWorkspaceWeeklyReport[]
   workspaceMeetingRequests WebAppWorkspaceMeetingRequest[]
+  clientTickets            ClientTicket[]
 
   @@unique([clientProfileId, slug])
   @@index([clientProfileId])
   @@index([serviceKey])
   @@index([status])
   @@index([priority])
+}
+
+model ClientTicket {
+  id              String               @id @default(uuid()) @db.Uuid
+  clientProfileId String               @db.Uuid
+  projectId       String?              @db.Uuid
+  serviceKey      PurchasedServiceKey?
+  title           String
+  description     String
+  status          ClientTicketStatus   @default(OPEN)
+  priority        Priority             @default(MEDIUM)
+  createdByUserId String               @db.Uuid
+  lastMessageAt   DateTime             @default(now())
+  resolvedAt      DateTime?
+  closedAt        DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  clientProfile ClientProfile         @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  project       Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdBy     User                  @relation("ClientTicketCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  messages      ClientTicketMessage[]
+
+  @@index([clientProfileId, status, updatedAt])
+  @@index([clientProfileId, serviceKey, status])
+  @@index([projectId, status])
+  @@index([createdByUserId, createdAt])
+}
+
+model ClientTicketMessage {
+  id           String   @id @default(uuid()) @db.Uuid
+  ticketId     String   @db.Uuid
+  authorUserId String   @db.Uuid
+  body         String
+  isInternal   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  ticket ClientTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User         @relation("ClientTicketMessageAuthor", fields: [authorUserId], references: [id], onDelete: Restrict)
+
+  @@index([ticketId, createdAt])
+  @@index([authorUserId, createdAt])
 }
 
 model Task {
