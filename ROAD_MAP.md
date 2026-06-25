@@ -119,6 +119,7 @@
 - Project files backend/API/UI (Cloudinary signed upload + share links)
 - Client panel client-visible file delivery integration
 - Employee report upload to automatic client-visible Reports folder
+- Client Portal ticket system and employee/PM message inbox replies
 - Web APP workspace backend module (sections/items/messages/revisions/reports/meeting requests)
 - Web APP workspace admin/employee management UI on project detail
 - Web APP workspace client panel API-driven reports/meetings/data binding

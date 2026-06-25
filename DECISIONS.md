@@ -1,5 +1,20 @@
 # Architecture Decisions
 
+## 2026-06-26 - Client Ticket and Workspace Message Inbox
+
+Müşteri panelinden gelen soru/cevap mesajları ve destek talepleri çalışan/PM operasyon akışına düşmelidir; PM ticket durumunu yönetebilmeli, ilgili çalışan da müşteri mesajlarına yanıt verebilmelidir.
+
+Karar:
+- Soru/cevap için yeni tablo açılmadı; mevcut `WebAppWorkspaceMessage` thread modeli source of truth olarak korundu.
+- Çalışan bildirim ekranı için assigned-scope `GET /api/v1/web-app-workspace/message-inbox` endpoint'i eklendi; yalnızca müşteri kaynaklı, internal olmayan Web App mesajlarını proje/müşteri bağlamıyla döndürür.
+- Ticket sistemi için `ClientTicket` ve `ClientTicketMessage` modelleri eklendi. Ticket müşteri-genel, servis-bağlı veya proje-bağlı olabilir.
+- Client Portal'da ortak “Talepler” sayfası açıldı; müşteri ticket oluşturabilir ve mevcut ticket'a cevap yazabilir.
+- Workforce tarafında `GET /api/v1/tickets/inbox`, `GET /api/v1/tickets/clients/:clientId`, `POST /api/v1/tickets/:ticketId/messages` ve `PATCH /api/v1/tickets/:ticketId` endpointleri eklendi.
+- PM müşteri operasyonunda `Ticket` sekmesi görür; PM/admin status ve priority güncelleyebilir. Assigned çalışan ticket mesajı yazabilir, fakat status yönetimi PM/admin'de kalır.
+
+Reason:
+Soru/cevap mesajları zaten workspace thread yapısına sahip olduğu için yeni bir messaging domain'i açmak gereksiz olurdu. Ticket ise müşteri-genel takip/status gerektirdiğinden ayrı kalıcı model olarak tutuldu. Bu ayrım hem mevcut Web App akışını bozmaz hem de destek/talep operasyonunu servislerden bağımsız görünür yapar.
+
 ## 2026-06-26 - Employee Report Uploads Via Project Files
 
 Herhangi bir assigned çalışan operasyon içinde müşteriye rapor dosyası yükleyebilmelidir; raporlar yanlışlıkla internal kalmamalı veya rastgele klasörlere dağılmamalıdır.
