@@ -9,6 +9,13 @@ export type WorkspaceTabKey =
   | "REPORTS"
   | "MEETINGS";
 
+export type WorkspaceGa4MeasurementProfile =
+  | "CORPORATE"
+  | "ECOMMERCE"
+  | "SHOWCASE"
+  | "LEAD_GENERATION"
+  | "CUSTOM";
+
 export type WorkspaceProjectSummary = {
   id: string;
   clientProfileId: string;
@@ -19,7 +26,13 @@ export type WorkspaceProjectSummary = {
   status?: string | null;
   priority?: string | null;
   repositoryUrl?: string | null;
+  livePreviewUrl?: string | null;
   figmaProjectUrl?: string | null;
+  ga4MeasurementId?: string | null;
+  ga4PropertyId?: string | null;
+  ga4Status?: "NOT_CONFIGURED" | "PENDING" | "CONNECTED" | "ERROR" | string;
+  ga4MeasurementProfile?: WorkspaceGa4MeasurementProfile | string | null;
+  ga4LastVerifiedAt?: string | null;
   startDate?: string | null;
   dueDate?: string | null;
 };

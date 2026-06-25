@@ -179,8 +179,8 @@ export function ClientPortalApp() {
     const webAppProject = clientProjects.find(
       (p) => normalizeServiceId(p.serviceKey) === "web-app",
     );
-    return webAppProject?.id ?? activeProjectId;
-  }, [clientProjects, activeProjectId]);
+    return webAppProject?.id ?? null;
+  }, [clientProjects]);
 
   // Meetings: önce seçili servisin projesi, yoksa herhangi bir proje.
   const meetingProjectId = activeProjectId ?? clientProjects[0]?.id ?? null;

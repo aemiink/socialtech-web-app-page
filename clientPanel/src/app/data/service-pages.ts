@@ -304,6 +304,7 @@ const profiles: Record<ServiceId, ServiceProfile> = {
       'backend-api': { title: 'Backend / API', description: 'API modülleri, veritabanı, authentication ve entegrasyonlar.', focus: ['API modules', 'Database status', 'Authentication', 'Integrations', 'Technical notes'] },
       'admin-panel': { title: 'Admin Panel', description: 'Admin özellikleri, roller, CRUD modülleri ve yetki durumu.', focus: ['Admin features', 'User roles', 'CRUD modules', 'Permission status'] },
       'test-deploy': { title: 'Test & Yayın', description: 'QA checklist, buglar, staging link ve launch readiness.', focus: ['QA checklist', 'Bugs', 'Staging link', 'Launch readiness', 'Deployment status'] },
+      'ga4-integration': { title: 'GA4 Entegrasyonu', description: 'Analytics bağlantısı, ölçüm kimlikleri, doğrulama durumu ve izleme hazırlığı.', focus: ['Connection status', 'Measurement ID', 'Property ID', 'Verification status', 'Tracking readiness'] },
       revisions: { title: 'Revizyonlar', description: 'Revizyon talepleri, durum, öncelik ve ajans yanıtı.', focus: ['Revision requests', 'Status', 'Priority', 'Agency response'] },
       files: { title: 'Dosyalar', description: 'Paylaşılan dosyalar, tasarım linkleri, dokümanlar ve indirme aksiyonları.', focus: ['Shared files', 'Links', 'Design files', 'Documents', 'Download buttons'] },
     },

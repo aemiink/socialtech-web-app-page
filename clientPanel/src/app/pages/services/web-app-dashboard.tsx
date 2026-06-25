@@ -117,6 +117,36 @@ const SPRINT_STATUS_CONFIG: Record<SprintStatus, { label: string; className: str
   CANCELLED: { label: "İptal",        className: "border-red-400/20 bg-red-400/[0.05] text-red-400/70" },
 };
 
+type ProjectGa4Status = "NOT_CONFIGURED" | "PENDING" | "CONNECTED" | "ERROR";
+
+const GA4_STATUS_CONFIG: Record<ProjectGa4Status, { label: string; className: string }> = {
+  NOT_CONFIGURED: { label: "Kurulmadı", className: "border-white/[0.15] bg-white/[0.05] text-[#A0A0A0]" },
+  PENDING: { label: "Kurulum Bekliyor", className: "border-amber-400/25 bg-amber-400/10 text-amber-300" },
+  CONNECTED: { label: "Bağlı", className: "border-[#AAFF01]/25 bg-[#AAFF01]/10 text-[#AAFF01]" },
+  ERROR: { label: "Hata", className: "border-red-400/20 bg-red-400/[0.05] text-red-300" },
+};
+
+function getGa4StatusConfig(status?: string | null) {
+  return GA4_STATUS_CONFIG[(status as ProjectGa4Status) ?? "NOT_CONFIGURED"] ?? GA4_STATUS_CONFIG.NOT_CONFIGURED;
+}
+
+function formatOptionalDateTime(value?: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  return new Intl.DateTimeFormat("tr-TR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function WebAppDashboard({ projectId }: { projectId?: string | null }) {
@@ -176,6 +206,8 @@ export function WebAppDashboard({ projectId }: { projectId?: string | null }) {
   const project       = workspace?.project;
   const latestRevs    = (workspace?.revisions ?? []).slice(0, 5);
   const latestMsgs    = (workspace?.messages  ?? []).filter((m) => !m.isInternal).slice(0, 5);
+  const ga4StatusConfig = getGa4StatusConfig(project?.ga4Status);
+  const ga4VerifiedAt = formatOptionalDateTime(project?.ga4LastVerifiedAt);
 
   return (
     <div className="space-y-6 p-8">
@@ -386,6 +418,71 @@ export function WebAppDashboard({ projectId }: { projectId?: string | null }) {
                 Figma Prototipi
               </a>
             )}
+          </div>
+        </div>
+      )}
+
+      {project && (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-6">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <div className="mb-2 flex items-center gap-2">
+                  <Play className="h-4 w-4 text-[#AAFF01]" />
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-[#CFCFCF]">
+                    Web Sayfası Canlı Önizleme
+                  </h3>
+                </div>
+                <p className="text-xs text-[#A0A0A0]">Staging/canlı arayüz bağlantısı</p>
+              </div>
+            </div>
+            {project.livePreviewUrl ? (
+              <a
+                href={project.livePreviewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-xl border border-[#AAFF01]/20 bg-[#AAFF01]/10 px-4 py-3 text-sm text-[#AAFF01] transition-colors hover:bg-[#AAFF01]/15"
+              >
+                Önizlemeyi Aç
+              </a>
+            ) : (
+              <p className="rounded-xl border border-white/[0.08] bg-[#202020] p-4 text-sm text-[#A0A0A0]">
+                Önizleme linki henüz paylaşılmadı.
+              </p>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-6">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="mb-2 flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-[#00D4FF]" />
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-[#CFCFCF]">GA4 Entegrasyonu</h3>
+                </div>
+                <p className="text-xs text-[#A0A0A0]">Analytics ölçüm durumu</p>
+              </div>
+              <span className={`rounded-full border px-3 py-1 text-xs font-medium ${ga4StatusConfig.className}`}>
+                {ga4StatusConfig.label}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="rounded-xl border border-white/[0.08] bg-[#202020] p-3">
+                <p className="text-[11px] text-[#606060]">Measurement ID</p>
+                <p className="mt-1 break-all font-mono text-xs text-white">
+                  {project.ga4MeasurementId?.trim() || "-"}
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/[0.08] bg-[#202020] p-3">
+                <p className="text-[11px] text-[#606060]">Property ID</p>
+                <p className="mt-1 break-all font-mono text-xs text-white">
+                  {project.ga4PropertyId?.trim() || "-"}
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/[0.08] bg-[#202020] p-3">
+                <p className="text-[11px] text-[#606060]">Son doğrulama</p>
+                <p className="mt-1 text-xs text-white">{ga4VerifiedAt ?? "-"}</p>
+              </div>
+            </div>
           </div>
         </div>
       )}

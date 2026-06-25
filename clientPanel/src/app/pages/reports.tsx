@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Printer, Eye, BarChart2, CalendarDays, CheckCircle2, ClipboardList, AlertTriangle, FileText } from "lucide-react";
+import { Printer, Eye, BarChart2, CalendarDays, CheckCircle2, ClipboardList, AlertTriangle, FileText, Download } from "lucide-react";
 import { Button } from "../components/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import { webAppWorkspaceApi, useGetWebAppWorkspaceReportsQuery } from "../features/webAppWorkspace/webAppWorkspaceApi";
@@ -18,6 +18,8 @@ import type { AmazonAdsReportItem } from "../features/amazonAds/amazonAdsTypes";
 import { getActivePurchasedServiceIds } from "../features/auth/authNormalizers";
 import { cn } from "../lib/utils";
 import type { ServiceId } from "../data/service-pages";
+import { useGetClientProjectFilesQuery } from "../features/projectFiles/projectFilesApi";
+import type { ProjectFile } from "../features/projectFiles/projectFilesTypes";
 
 // ─── Turkish date formatting ────────────────────────────────────────────────
 
@@ -34,6 +36,20 @@ function formatTurkishDate(dateStr: string): string {
 
 function formatDateRange(start: string, end: string): string {
   return `${formatTurkishDate(start)} – ${formatTurkishDate(end)}`;
+}
+
+function formatFileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "0 KB";
+  }
+
+  if (bytes >= 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toLocaleString("tr-TR", {
+      maximumFractionDigits: 1,
+    })} MB`;
+  }
+
+  return `${Math.ceil(bytes / 1024).toLocaleString("tr-TR")} KB`;
 }
 
 // ─── Skeleton card ───────────────────────────────────────────────────────────
@@ -416,6 +432,79 @@ function WeeklyReportsTab({ projectId, reports, isLoading }: WeeklyReportsTabPro
   );
 }
 
+function UploadedReportFilesTab({ projectId }: { projectId?: string | null }) {
+  const { data, isLoading } = useGetClientProjectFilesQuery(
+    { projectId: projectId ?? "", category: "REPORT" },
+    { skip: !projectId },
+  );
+  const reports = data?.data ?? [];
+
+  if (!projectId) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <FileText className="mb-4 h-12 w-12 text-white/20" />
+        <p className="text-base font-medium text-white/60">Yüklenen raporlar için bir proje seçin.</p>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        <SkeletonCard />
+        <SkeletonCard />
+      </div>
+    );
+  }
+
+  if (reports.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <FileText className="mb-4 h-12 w-12 text-white/20" />
+        <p className="text-base font-medium text-white/60">Henüz yüklenmiş rapor dosyası yok.</p>
+        <p className="mt-1 text-sm text-white/30">Ekibinizin paylaştığı PDF, sunum ve dosya raporları burada görünür.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {reports.map((report) => (
+        <UploadedReportFileCard key={report.id} report={report} />
+      ))}
+    </div>
+  );
+}
+
+function UploadedReportFileCard({ report }: { report: ProjectFile }) {
+  return (
+    <div className="rounded-2xl border border-white/[0.08] bg-[#1A1A1A] p-5 transition-colors hover:border-white/[0.14]">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <FileText className="h-4 w-4 flex-shrink-0 text-[#AAFF01]" />
+            <p className="text-sm font-semibold text-white">{report.title}</p>
+            <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-[#A0A0A0]">
+              {formatFileSize(report.bytes)}
+            </span>
+          </div>
+          <p className="mt-2 text-sm text-[#A0A0A0]">{report.description || report.originalFileName}</p>
+          <p className="mt-2 text-xs text-white/30">{formatTurkishDate(report.createdAt)}</p>
+        </div>
+        <a
+          href={report.secureUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex flex-shrink-0 items-center gap-2 rounded-xl border border-white/[0.08] px-4 py-2.5 text-sm text-white transition hover:border-[#AAFF01]/30 hover:bg-white/[0.05]"
+        >
+          <Download className="h-4 w-4" />
+          Raporu Aç
+        </a>
+      </div>
+    </div>
+  );
+}
+
 // ─── Meta Ads Reports Tab ────────────────────────────────────────────────────
 
 function MetaAdsReportsTab() {
@@ -666,10 +755,11 @@ function AmazonAdsReportsTab() {
 
 // ─── Service-aware tab resolution ───────────────────────────────────────────
 
-type Tab = "weekly" | "meta-ads" | "social-media" | "tiktok-ads" | "amazon-ads";
+type Tab = "weekly" | "uploaded" | "meta-ads" | "social-media" | "tiktok-ads" | "amazon-ads";
 
 const TAB_LABELS: Record<Tab, string> = {
   "weekly": "Haftalık Raporlar",
+  "uploaded": "Yüklenen Raporlar",
   "meta-ads": "Meta Ads",
   "social-media": "Sosyal Medya",
   "tiktok-ads": "TikTok Ads",
@@ -713,8 +803,9 @@ export function ReportsPage({
   const activePurchasedServiceIds = currentUser
     ? getActivePurchasedServiceIds(currentUser)
     : [];
-  const activeTabs = (["weekly", "meta-ads", "social-media", "tiktok-ads", "amazon-ads"] as Tab[]).filter((tab) => {
+  const activeTabs = (["weekly", "uploaded", "meta-ads", "social-media", "tiktok-ads", "amazon-ads"] as Tab[]).filter((tab) => {
     if (tab === "weekly")       return activePurchasedServiceIds.includes("web-app");
+    if (tab === "uploaded")     return Boolean(projectId);
     if (tab === "meta-ads")     return activePurchasedServiceIds.includes("meta-ads");
     if (tab === "social-media") return activePurchasedServiceIds.includes("social-media");
     if (tab === "tiktok-ads")   return activePurchasedServiceIds.includes("tiktok-ads");
@@ -786,7 +877,7 @@ export function ReportsPage({
   }, [selectedService]);
 
   // ── No-report service guard ──────────────────────────────────────────────
-  const isNoReportService = selectedService && NO_REPORT_SERVICES.has(selectedService);
+  const isNoReportService = selectedService && NO_REPORT_SERVICES.has(selectedService) && !projectId;
 
   return (
     <div className="min-h-full bg-[#131313]">
@@ -840,6 +931,9 @@ export function ReportsPage({
                 reports={reports}
                 isLoading={isLoading}
               />
+            )}
+            {activeTab === "uploaded" && activeTabs.includes("uploaded") && (
+              <UploadedReportFilesTab projectId={projectId} />
             )}
             {activeTab === "meta-ads" && activeTabs.includes("meta-ads") && (
               <MetaAdsReportsTab />

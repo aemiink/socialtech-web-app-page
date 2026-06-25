@@ -123,6 +123,7 @@ const serviceMenuItems: Record<string, MenuItem[]> = {
     { id: 'backend-api', label: 'Backend / API', icon: Cpu },
     { id: 'admin-panel', label: 'Yönetim Paneli', icon: Settings },
     { id: 'test-deploy', label: 'Test & Yayın', icon: Zap },
+    { id: 'ga4-integration', label: 'GA4 Entegrasyonu', icon: Activity },
     { id: 'revisions', label: 'Revizyonlar', icon: FileText },
     { id: 'files', label: 'Dosyalar', icon: Package },
   ],

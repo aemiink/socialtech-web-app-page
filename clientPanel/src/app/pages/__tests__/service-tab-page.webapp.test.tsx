@@ -330,6 +330,182 @@ describe("ServiceTabPage workspace and revision flows", () => {
     expect(screen.queryByText("Auth refresh endpoint")).not.toBeInTheDocument();
   });
 
+  it("embeds the project Figma prototype on the ui-ux tab", () => {
+    const figmaUrl =
+      "https://www.figma.com/proto/acme-file/Client-Portal?node-id=1-2&starting-point-node-id=1%3A2";
+
+    mockUseGetWebAppWorkspaceQuery.mockReturnValue({
+      data: {
+        project: {
+          id: "p1",
+          clientProfileId: "c1",
+          serviceKey: "WEB_APP",
+          name: "Acme Web App",
+          figmaProjectUrl: figmaUrl,
+        },
+        sourceOfTruth: {
+          tasks: [
+            {
+              id: "t1",
+              title: "Prototype interaction review",
+              status: "REVIEW",
+              priority: "HIGH",
+              type: "FEATURE",
+              workstream: "UI_INTEGRATION",
+            },
+          ],
+          sprints: [],
+          releases: [],
+          files: [],
+        },
+        sections: [],
+        messages: [],
+        revisions: [],
+      },
+      isLoading: false,
+    });
+
+    render(<ServiceTabPage serviceId="web-app" tabId="ui-ux" projectId="p1" />);
+
+    expect(screen.getByText("Figma Prototip Önizlemesi")).toBeInTheDocument();
+    expect(screen.getByText("Prototype interaction review")).toBeInTheDocument();
+
+    const iframe = screen.getByTitle("Figma Prototype Preview");
+    expect(iframe).toHaveAttribute("src", expect.stringContaining("https://www.figma.com/embed"));
+    expect(iframe).toHaveAttribute("src", expect.stringContaining(encodeURIComponent(figmaUrl)));
+  });
+
+  it("renders live preview on the test-deploy tab", () => {
+    const livePreviewUrl = "https://staging.acme-web-app.com";
+
+    mockUseGetWebAppWorkspaceQuery.mockReturnValue({
+      data: {
+        project: {
+          id: "p1",
+          clientProfileId: "c1",
+          serviceKey: "WEB_APP",
+          name: "Acme Web App",
+          livePreviewUrl,
+        },
+        sourceOfTruth: {
+          tasks: [],
+          sprints: [],
+          releases: [],
+          files: [],
+        },
+        sections: [],
+        messages: [],
+        revisions: [],
+      },
+      isLoading: false,
+    });
+
+    render(<ServiceTabPage serviceId="web-app" tabId="test-deploy" projectId="p1" />);
+
+    expect(screen.getByText("Web Sayfasının Canlı Önizlemesi")).toBeInTheDocument();
+    expect(screen.getByTitle("Web Page Live Preview")).toHaveAttribute("src", livePreviewUrl);
+    expect(screen.getByRole("link", { name: "Yeni sekmede aç" })).toHaveAttribute("href", livePreviewUrl);
+  });
+
+  it("renders dedicated GA4 integration details on the GA4 tab", () => {
+    mockUseGetWebAppWorkspaceQuery.mockReturnValue({
+      data: {
+        project: {
+          id: "p1",
+          clientProfileId: "c1",
+          serviceKey: "WEB_APP",
+          name: "Acme Web App",
+          livePreviewUrl: "https://staging.acme-web-app.com",
+          ga4MeasurementId: "G-ABC1234567",
+          ga4PropertyId: "123456789",
+          ga4Status: "CONNECTED",
+          ga4MeasurementProfile: "ECOMMERCE",
+          ga4LastVerifiedAt: "2026-06-25T12:30:00.000Z",
+        },
+        sourceOfTruth: {
+          tasks: [
+            {
+              id: "t1",
+              title: "GA4 event doğrulama",
+              code: "GA4-001",
+              status: "IN_PROGRESS",
+              priority: "HIGH",
+              type: "QA",
+              workstream: "QA",
+            },
+          ],
+          sprints: [],
+          releases: [],
+          files: [],
+        },
+        sections: [],
+        messages: [],
+        revisions: [],
+      },
+      isLoading: false,
+    });
+
+    render(<ServiceTabPage serviceId="web-app" tabId="ga4-integration" projectId="p1" />);
+
+    expect(screen.getAllByText("GA4 Entegrasyonu").length).toBeGreaterThan(0);
+    expect(screen.getByText("Ölçüm Gözlemi")).toBeInTheDocument();
+    expect(screen.getByText("İzleme Kapsamı")).toBeInTheDocument();
+    expect(screen.getByText("E-ticaret")).toBeInTheDocument();
+    expect(screen.getByText("E-ticaret Satın Alma Yolculuğu")).toBeInTheDocument();
+    expect(screen.getByText("Ödeme Yolculuğu")).toBeInTheDocument();
+    expect(screen.getByText("GA4 Görevleri")).toBeInTheDocument();
+    expect(screen.getByText("GA4 event doğrulama")).toBeInTheDocument();
+    expect(screen.getAllByText("Bağlı").length).toBeGreaterThan(0);
+    expect(screen.getByText("G-ABC1234567")).toBeInTheDocument();
+    expect(screen.getByText("123456789")).toBeInTheDocument();
+    expect(screen.getByText("Form gönderimleri")).toBeInTheDocument();
+    expect(screen.getByText("view_item")).toBeInTheDocument();
+    expect(screen.getByText("add_to_cart")).toBeInTheDocument();
+    expect(screen.getAllByText("begin_checkout").length).toBeGreaterThan(0);
+    expect(screen.getByText("add_payment_info")).toBeInTheDocument();
+    expect(screen.getByText("payment_failed")).toBeInTheDocument();
+    expect(screen.getAllByText("purchase").length).toBeGreaterThan(0);
+  });
+
+  it("uses the GA4 measurement profile to hide ecommerce payment journeys for corporate sites", () => {
+    mockUseGetWebAppWorkspaceQuery.mockReturnValue({
+      data: {
+        project: {
+          id: "p1",
+          clientProfileId: "c1",
+          serviceKey: "WEB_APP",
+          name: "Acme Corporate Site",
+          ga4MeasurementId: "G-CORP123456",
+          ga4PropertyId: "987654321",
+          ga4Status: "CONNECTED",
+          ga4MeasurementProfile: "CORPORATE",
+        },
+        sourceOfTruth: {
+          tasks: [],
+          sprints: [],
+          releases: [],
+          files: [],
+        },
+        sections: [],
+        messages: [],
+        revisions: [],
+      },
+      isLoading: false,
+    });
+
+    render(<ServiceTabPage serviceId="web-app" tabId="ga4-integration" projectId="p1" />);
+
+    expect(screen.getByText("Kurumsal site")).toBeInTheDocument();
+    expect(screen.getByText("Kurumsal İletişim Yolculuğu")).toBeInTheDocument();
+    expect(screen.getByText("İçerik Etkileşim Yolculuğu")).toBeInTheDocument();
+    expect(screen.getByText("form_submit")).toBeInTheDocument();
+    expect(screen.getByText("click_whatsapp")).toBeInTheDocument();
+    expect(screen.queryByText("E-ticaret Satın Alma Yolculuğu")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ödeme Yolculuğu")).not.toBeInTheDocument();
+    expect(screen.queryByText("add_payment_info")).not.toBeInTheDocument();
+    expect(screen.queryByText("purchase")).not.toBeInTheDocument();
+  });
+
   it("supports creating and approving web-app revisions on the revisions tab", async () => {
     mockUseGetWebAppWorkspaceQuery.mockReturnValue({
       data: {

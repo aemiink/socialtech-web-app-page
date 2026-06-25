@@ -134,6 +134,7 @@ import {
   useUpdateWebAppWorkspaceRevisionStatusMutation,
 } from '../features/webAppWorkspace/webAppWorkspaceApi';
 import type {
+  WorkspaceGa4MeasurementProfile,
   WorkspaceMessage,
   WorkspaceProjectSummary,
   WorkspaceRevision,
@@ -692,9 +693,6 @@ function WebAppWorkspaceTab({
 }
 
 function WorkspaceProjectLinksPanel({ project }: { project: WorkspaceProjectSummary }) {
-  const figmaKind = detectFigmaLinkKind(project.figmaProjectUrl);
-  const figmaEmbedUrl = buildFigmaEmbedUrl(project.figmaProjectUrl);
-
   if (!project.repositoryUrl && !project.figmaProjectUrl) {
     return null;
   }
@@ -734,16 +732,6 @@ function WorkspaceProjectLinksPanel({ project }: { project: WorkspaceProjectSumm
           </div>
         ) : null}
       </div>
-      {figmaKind === "prototype" && figmaEmbedUrl ? (
-        <div className="mt-4 overflow-hidden rounded-xl border border-white/[0.08]">
-          <iframe
-            title="Figma Prototype"
-            src={figmaEmbedUrl}
-            className="h-[420px] w-full border-0 bg-[#101010]"
-            allowFullScreen
-          />
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -776,8 +764,18 @@ function WebAppSourceOfTruthPanel({
   if (tabId === "test-deploy") {
     return (
       <div className="space-y-4">
+        {project ? <WebAppLivePreviewPanel project={project} /> : null}
         <ReleaseSourcePanel releases={releases} />
         <TaskSourcePanel title="Test & Yayın Görevleri" tasks={tasks} emptyText="Test/Yayın görevi bulunmuyor." />
+      </div>
+    );
+  }
+
+  if (tabId === "ga4-integration") {
+    return (
+      <div className="space-y-4">
+        {project ? <WebAppGa4IntegrationPanel project={project} /> : null}
+        <TaskSourcePanel title="GA4 Görevleri" tasks={tasks} emptyText="GA4 entegrasyonu için görünür görev bulunmuyor." />
       </div>
     );
   }
@@ -786,7 +784,16 @@ function WebAppSourceOfTruthPanel({
     return <WorkspaceSourceFilesPanel files={files} />;
   }
 
-  if (["frontend", "backend-api", "admin-panel", "ui-ux", "revisions"].includes(tabId)) {
+  if (tabId === "ui-ux") {
+    return (
+      <div className="space-y-4">
+        {project ? <WebAppFigmaPrototypePanel project={project} /> : null}
+        <TaskSourcePanel title="Operasyon Görevleri" tasks={tasks} emptyText="Bu sekme için görev bulunmuyor." />
+      </div>
+    );
+  }
+
+  if (["frontend", "backend-api", "admin-panel", "revisions"].includes(tabId)) {
     return <TaskSourcePanel title="Operasyon Görevleri" tasks={tasks} emptyText="Bu sekme için görev bulunmuyor." />;
   }
 
@@ -855,6 +862,239 @@ function TaskSourcePanel({
             +{tasks.length - 12} görev daha — proje yöneticinizle iletişime geçin
           </p>
         ) : null}
+      </div>
+    </div>
+  );
+}
+
+function WebAppFigmaPrototypePanel({ project }: { project: WorkspaceProjectSummary }) {
+  const figmaKind = detectFigmaLinkKind(project.figmaProjectUrl);
+  const figmaEmbedUrl = buildFigmaEmbedUrl(project.figmaProjectUrl);
+
+  if (figmaKind !== "prototype" || !figmaEmbedUrl || !project.figmaProjectUrl) {
+    return null;
+  }
+
+  return (
+    <div className={cardClass}>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl text-white">Figma Prototip Önizlemesi</h2>
+          <p className="mt-1 text-sm text-[#A0A0A0]">Arayüz akışı ve etkileşimler</p>
+        </div>
+        <a
+          href={project.figmaProjectUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-[#AAFF01] hover:underline"
+        >
+          Figma ile Aç
+          <ArrowRight className="h-3.5 w-3.5" />
+        </a>
+      </div>
+      <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-[#101010]">
+        <iframe
+          title="Figma Prototype Preview"
+          src={figmaEmbedUrl}
+          className="h-[520px] w-full border-0 bg-[#101010]"
+          allowFullScreen
+        />
+      </div>
+    </div>
+  );
+}
+
+function WebAppLivePreviewPanel({ project }: { project: WorkspaceProjectSummary }) {
+  const previewUrl = project.livePreviewUrl?.trim();
+
+  return (
+    <div className={cardClass}>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="mb-2 flex items-center gap-2">
+            <Eye className="h-4 w-4 text-[#AAFF01]" />
+            <h2 className="text-xl text-white">Web Sayfasının Canlı Önizlemesi</h2>
+          </div>
+          <p className="text-sm text-[#A0A0A0]">Staging/canlı arayüz kontrolü</p>
+        </div>
+        {previewUrl ? (
+          <a
+            href={previewUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-[#AAFF01] hover:underline"
+          >
+            Yeni sekmede aç
+            <ArrowRight className="h-3.5 w-3.5" />
+          </a>
+        ) : null}
+      </div>
+
+      {previewUrl ? (
+        <>
+          <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-[#101010]">
+            <iframe
+              title="Web Page Live Preview"
+              src={previewUrl}
+              className="h-[560px] w-full border-0 bg-[#101010]"
+              loading="lazy"
+            />
+          </div>
+          <p className="mt-3 text-xs text-[#606060]">
+            Bazı domainler güvenlik ayarı nedeniyle iframe içinde açılmayabilir; yeni sekme linki aynı URL'i açar.
+          </p>
+        </>
+      ) : (
+        <div className="rounded-xl border border-white/[0.08] bg-[#202020] p-5 text-sm text-[#A0A0A0]">
+          Canlı önizleme linki henüz paylaşılmadı.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WebAppGa4IntegrationPanel({ project }: { project: WorkspaceProjectSummary }) {
+  const status = project.ga4Status ?? "NOT_CONFIGURED";
+  const profile = getWorkspaceGa4MeasurementProfile(project.ga4MeasurementProfile);
+  const verifiedAt = formatWorkspaceDateTime(project.ga4LastVerifiedAt);
+  const checklistItems = getWorkspaceGa4ChecklistItems(project);
+  const completedChecklistItems = checklistItems.filter((item) => item.isComplete).length;
+  const readinessPercent = Math.round((completedChecklistItems / checklistItems.length) * 100);
+  const signalItems = getWorkspaceGa4SignalItems(status);
+  const journeyGroups = getWorkspaceGa4JourneyGroups(profile, status);
+
+  return (
+    <div className="space-y-4">
+      <div className={cardClass}>
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="mb-2 flex items-center gap-2">
+              <Gauge className="h-4 w-4 text-[#00D4FF]" />
+              <h2 className="text-xl text-white">GA4 Entegrasyonu</h2>
+            </div>
+            <p className="text-sm text-[#A0A0A0]">Analytics bağlantı ve ölçüm bilgisi</p>
+          </div>
+          <span className={`rounded border px-3 py-1 text-xs ${getWorkspaceGa4StatusTone(status)}`}>
+            {getWorkspaceGa4StatusLabel(status)}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+          <div className="rounded-xl border border-white/[0.08] bg-[#202020] p-4">
+            <p className="text-xs text-[#A0A0A0]">Bağlantı Durumu</p>
+            <p className="mt-2 text-sm text-white">{getWorkspaceGa4StatusLabel(status)}</p>
+          </div>
+          <div className="rounded-xl border border-white/[0.08] bg-[#202020] p-4">
+            <p className="text-xs text-[#A0A0A0]">Ölçüm Profili</p>
+            <p className="mt-2 text-sm text-white">{getWorkspaceGa4MeasurementProfileLabel(profile)}</p>
+          </div>
+          <div className="rounded-xl border border-white/[0.08] bg-[#202020] p-4">
+            <p className="text-xs text-[#A0A0A0]">Measurement ID</p>
+            <p className="mt-2 break-all font-mono text-sm text-white">
+              {project.ga4MeasurementId?.trim() || "Henüz tanımlanmadı"}
+            </p>
+          </div>
+          <div className="rounded-xl border border-white/[0.08] bg-[#202020] p-4">
+            <p className="text-xs text-[#A0A0A0]">Property ID</p>
+            <p className="mt-2 break-all font-mono text-sm text-white">
+              {project.ga4PropertyId?.trim() || "Henüz tanımlanmadı"}
+            </p>
+          </div>
+          <div className="rounded-xl border border-white/[0.08] bg-[#202020] p-4">
+            <p className="text-xs text-[#A0A0A0]">Son doğrulama</p>
+            <p className="mt-2 text-sm text-white">{verifiedAt ?? "Doğrulama bekliyor"}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className={cardClass}>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl text-white">Ölçüm Gözlemi</h2>
+              <p className="mt-1 text-sm text-[#A0A0A0]">Kurulum hazırlığı ve doğrulama durumu</p>
+            </div>
+            <span className="rounded border border-white/[0.12] bg-white/[0.04] px-3 py-1 text-xs text-white">
+              %{readinessPercent}
+            </span>
+          </div>
+          <div className="mb-4 h-2 overflow-hidden rounded-full bg-white/[0.06]">
+            <div className="h-full rounded-full bg-[#AAFF01]" style={{ width: `${readinessPercent}%` }} />
+          </div>
+          <div className="space-y-3">
+            {checklistItems.map((item) => {
+              const Icon = item.isComplete ? CheckCircle : XCircle;
+              return (
+                <div key={item.label} className="flex items-start gap-3 rounded-xl border border-white/[0.08] bg-[#202020] p-4">
+                  <Icon className={`mt-0.5 h-4 w-4 ${item.isComplete ? "text-[#AAFF01]" : "text-[#606060]"}`} />
+                  <div>
+                    <p className="text-sm text-white">{item.label}</p>
+                    <p className="mt-1 text-xs text-[#A0A0A0]">{item.detail}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className={cardClass}>
+          <h2 className="mb-4 text-xl text-white">İzleme Kapsamı</h2>
+          <div className="space-y-3">
+            {signalItems.map((item) => (
+              <div key={item.label} className="rounded-xl border border-white/[0.08] bg-[#202020] p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm text-white">{item.label}</p>
+                  <span className={`rounded border px-2 py-1 text-[11px] ${item.tone}`}>
+                    {item.statusLabel}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs text-[#A0A0A0]">{item.detail}</p>
+              </div>
+            ))}
+          </div>
+          {project.livePreviewUrl ? (
+            <a
+              href={project.livePreviewUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 inline-flex items-center gap-1 text-xs text-[#AAFF01] hover:underline"
+            >
+              Canlı önizlemeyi aç
+              <ArrowRight className="h-3.5 w-3.5" />
+            </a>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {journeyGroups.map((group) => {
+          const Icon = group.icon;
+          return (
+            <div key={group.title} className={cardClass}>
+              <div className="mb-4 flex items-center gap-2">
+                <Icon className={`h-4 w-4 ${group.iconClassName}`} />
+                <h2 className="text-xl text-white">{group.title}</h2>
+              </div>
+              <p className="mb-4 text-sm text-[#A0A0A0]">{group.description}</p>
+              <div className="space-y-3">
+                {group.items.map((item) => (
+                  <div key={`${group.title}-${item.eventName}`} className={innerClass}>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm text-white">{item.label}</p>
+                        <p className="mt-1 font-mono text-xs text-[#A0A0A0]">{item.eventName}</p>
+                      </div>
+                      <span className={`rounded border px-2 py-1 text-[11px] ${item.tone}`}>
+                        {item.statusLabel}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-[#A0A0A0]">{item.detail}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -5412,6 +5652,7 @@ function getWebAppTabLabel(tabId: string): string {
     "admin-panel": "Yönetim Paneli",
     "ui-ux": "UI/UX Tasarım",
     "test-deploy": "Test & Yayın",
+    "ga4-integration": "GA4 Entegrasyonu",
     "delivery-files": "Teslim Dosyaları",
     "files": "Dosyalar",
     "messages": "Mesajlar",
@@ -5439,6 +5680,7 @@ function mapTabIdToWorkspaceTabKey(tabId: string): WorkspaceTabKey {
   if (tabId === 'meetings') return 'MEETINGS';
   if (tabId === 'delivery-files' || tabId === 'files') return 'FILES';
   if (tabId === 'test-deploy') return 'DELIVERY';
+  if (tabId === 'ga4-integration') return 'OVERVIEW';
   if (tabId.includes('revision')) return 'REVISIONS';
   if (['project-roadmap', 'sprint-status', 'frontend', 'backend-api', 'admin-panel'].includes(tabId)) {
     return 'TASKS';
@@ -5476,6 +5718,16 @@ function filterWorkspaceTasksByTab(tabId: string, tasks: WorkspaceSourceTask[]):
   if (tabId === "test-deploy") {
     return tasks.filter(
       (task) => task.type === "DEPLOYMENT" || task.type === "QA" || task.workstream === "DEVOPS" || task.workstream === "QA",
+    );
+  }
+
+  if (tabId === "ga4-integration") {
+    return tasks.filter((task) =>
+      [task.title, task.code, task.type, task.workstream]
+        .filter(Boolean)
+        .join(" ")
+        .toLocaleLowerCase("tr-TR")
+        .match(/ga4|analytics|tag|tracking|conversion|dönüşüm|ölçüm/) !== null,
     );
   }
 
@@ -5786,6 +6038,550 @@ function buildFigmaEmbedUrl(url: string | null | undefined): string | null {
   return `https://www.figma.com/embed?embed_host=socialtech-client&url=${encodeURIComponent(url)}`;
 }
 
+const WORKSPACE_GA4_MEASUREMENT_PROFILE_OPTIONS: WorkspaceGa4MeasurementProfile[] = [
+  "CORPORATE",
+  "ECOMMERCE",
+  "SHOWCASE",
+  "LEAD_GENERATION",
+  "CUSTOM",
+];
+
+type WorkspaceGa4JourneyItem = {
+  label: string;
+  eventName: string;
+  detail: string;
+  statusLabel: string;
+  tone: string;
+};
+
+type WorkspaceGa4JourneyGroup = {
+  title: string;
+  description: string;
+  icon: LucideIcon;
+  iconClassName: string;
+  items: WorkspaceGa4JourneyItem[];
+};
+
+function getWorkspaceGa4StatusLabel(status: string | null | undefined): string {
+  const labels: Record<string, string> = {
+    NOT_CONFIGURED: "Kurulmadı",
+    PENDING: "Kurulum Bekliyor",
+    CONNECTED: "Bağlı",
+    ERROR: "Hata",
+  };
+  return labels[status ?? "NOT_CONFIGURED"] ?? status ?? "Kurulmadı";
+}
+
+function getWorkspaceGa4MeasurementProfile(
+  profile: string | null | undefined,
+): WorkspaceGa4MeasurementProfile {
+  return WORKSPACE_GA4_MEASUREMENT_PROFILE_OPTIONS.includes(profile as WorkspaceGa4MeasurementProfile)
+    ? (profile as WorkspaceGa4MeasurementProfile)
+    : "CORPORATE";
+}
+
+function getWorkspaceGa4MeasurementProfileLabel(profile: WorkspaceGa4MeasurementProfile): string {
+  const labels: Record<WorkspaceGa4MeasurementProfile, string> = {
+    CORPORATE: "Kurumsal site",
+    ECOMMERCE: "E-ticaret",
+    SHOWCASE: "Vitrin / katalog",
+    LEAD_GENERATION: "Lead toplama",
+    CUSTOM: "Özel ölçüm",
+  };
+
+  return labels[profile] ?? profile;
+}
+
+function getWorkspaceGa4StatusTone(status: string | null | undefined): string {
+  if (status === "CONNECTED") return statusTone.good;
+  if (status === "PENDING") return statusTone.warn;
+  if (status === "ERROR") return statusTone.danger;
+  return statusTone.violet;
+}
+
+function getWorkspaceGa4ChecklistItems(project: WorkspaceProjectSummary) {
+  const measurementId = project.ga4MeasurementId?.trim();
+  const propertyId = project.ga4PropertyId?.trim();
+  const status = project.ga4Status ?? "NOT_CONFIGURED";
+  const verifiedAt = formatWorkspaceDateTime(project.ga4LastVerifiedAt);
+  const livePreviewUrl = project.livePreviewUrl?.trim();
+
+  return [
+    {
+      label: "Measurement ID",
+      isComplete: Boolean(measurementId),
+      detail: measurementId ? `${measurementId} tanımlandı.` : "Measurement ID bekliyor.",
+    },
+    {
+      label: "Property ID",
+      isComplete: Boolean(propertyId),
+      detail: propertyId ? `${propertyId} tanımlandı.` : "Property ID bekliyor.",
+    },
+    {
+      label: "Bağlantı",
+      isComplete: status === "CONNECTED",
+      detail: status === "CONNECTED" ? "GA4 bağlantısı bağlı görünüyor." : getWorkspaceGa4StatusLabel(status),
+    },
+    {
+      label: "Doğrulama",
+      isComplete: Boolean(verifiedAt),
+      detail: verifiedAt ? `${verifiedAt} tarihinde doğrulandı.` : "Son doğrulama bekliyor.",
+    },
+    {
+      label: "Canlı ortam",
+      isComplete: Boolean(livePreviewUrl),
+      detail: livePreviewUrl ? "Canlı/staging önizleme linki bağlı." : "Canlı/staging önizleme linki bekliyor.",
+    },
+  ];
+}
+
+function getWorkspaceGa4SignalItems(status: string | null | undefined) {
+  const isConnected = status === "CONNECTED";
+  const statusLabel = isConnected ? "Gözlemde" : "Bekliyor";
+  const tone = isConnected ? statusTone.good : statusTone.warn;
+
+  return [
+    {
+      label: "Sayfa görüntüleme",
+      statusLabel,
+      tone,
+      detail: isConnected ? "Page view sinyali izleme kapsamına alındı." : "GA4 bağlantısı tamamlanınca izlenecek.",
+    },
+    {
+      label: "Oturum başlangıcı",
+      statusLabel,
+      tone,
+      detail: isConnected ? "Session start sinyali izleme kapsamına alındı." : "GA4 bağlantısı tamamlanınca izlenecek.",
+    },
+    {
+      label: "Form gönderimleri",
+      statusLabel,
+      tone,
+      detail: isConnected ? "Lead/form gönderimi dönüşüm takibine hazır." : "Form event doğrulaması bekliyor.",
+    },
+    {
+      label: "Dönüşüm olayları",
+      statusLabel,
+      tone,
+      detail: isConnected ? "Conversion event kontrolü aktif durumda." : "Conversion event kontrolü bekliyor.",
+    },
+  ];
+}
+
+function getWorkspaceGa4JourneyGroups(
+  profile: WorkspaceGa4MeasurementProfile,
+  status: string | null | undefined,
+): WorkspaceGa4JourneyGroup[] {
+  if (profile === "ECOMMERCE") {
+    return [
+      {
+        title: "E-ticaret Satın Alma Yolculuğu",
+        description: "Ürün keşfinden sipariş tamamlanmasına kadar e-ticaret event kapsamı.",
+        icon: MousePointerClick,
+        iconClassName: "text-[#AAFF01]",
+        items: getWorkspaceGa4EcommerceJourneyItems(status),
+      },
+      {
+        title: "Ödeme Yolculuğu",
+        description: "Checkout ve ödeme başarı/hata sinyallerinin doğrulanma kapsamı.",
+        icon: Shield,
+        iconClassName: "text-[#00D4FF]",
+        items: getWorkspaceGa4PaymentJourneyItems(status),
+      },
+    ];
+  }
+
+  if (profile === "SHOWCASE") {
+    return [
+      {
+        title: "Vitrin / Katalog Yolculuğu",
+        description: "Ürün, hizmet veya portfolyo keşfi için katalog etkileşimleri.",
+        icon: Grid,
+        iconClassName: "text-[#AAFF01]",
+        items: getWorkspaceGa4ShowcaseJourneyItems(status),
+      },
+      {
+        title: "İletişim Talebi Yolculuğu",
+        description: "Vitrin deneyiminden teklif veya iletişim talebine geçiş sinyalleri.",
+        icon: Send,
+        iconClassName: "text-[#00D4FF]",
+        items: getWorkspaceGa4ContactJourneyItems(status),
+      },
+    ];
+  }
+
+  if (profile === "LEAD_GENERATION") {
+    return [
+      {
+        title: "Lead Generation Yolculuğu",
+        description: "Form, telefon, WhatsApp ve teklif talebi dönüşüm eventleri.",
+        icon: Target,
+        iconClassName: "text-[#AAFF01]",
+        items: getWorkspaceGa4LeadJourneyItems(status),
+      },
+      {
+        title: "Lead Kalite Sinyalleri",
+        description: "Lead niyetini güçlendiren içerik ve CTA etkileşimleri.",
+        icon: TrendingUp,
+        iconClassName: "text-[#00D4FF]",
+        items: getWorkspaceGa4LeadQualityJourneyItems(status),
+      },
+    ];
+  }
+
+  if (profile === "CUSTOM") {
+    return [
+      {
+        title: "Özel Ölçüm Yolculuğu",
+        description: "Projeye özel tanımlanacak dönüşüm ve mikro event ailesi.",
+        icon: Sparkles,
+        iconClassName: "text-[#AAFF01]",
+        items: getWorkspaceGa4CustomJourneyItems(status),
+      },
+      {
+        title: "Dönüşüm Doğrulama Yolculuğu",
+        description: "Özel hedeflerin bağlantı, event ve dönüşüm doğrulama kapsamı.",
+        icon: CheckCircle,
+        iconClassName: "text-[#00D4FF]",
+        items: getWorkspaceGa4CustomValidationJourneyItems(status),
+      },
+    ];
+  }
+
+  return [
+    {
+      title: "Kurumsal İletişim Yolculuğu",
+      description: "Kurumsal sitede iletişim, teklif ve yönlendirme etkileşimleri.",
+      icon: Send,
+      iconClassName: "text-[#AAFF01]",
+      items: getWorkspaceGa4CorporateJourneyItems(status),
+    },
+    {
+      title: "İçerik Etkileşim Yolculuğu",
+      description: "Hizmet sayfası, belge, blog ve CTA etkileşimlerinin izleme kapsamı.",
+      icon: FileText,
+      iconClassName: "text-[#00D4FF]",
+      items: getWorkspaceGa4CorporateContentJourneyItems(status),
+    },
+  ];
+}
+
+function getWorkspaceGa4EcommerceJourneyItems(status: string | null | undefined) {
+  const journeyState = getWorkspaceGa4JourneyState(status);
+
+  return [
+    {
+      label: "Ürün görüntüleme",
+      eventName: "view_item",
+      detail: "Ürün detay sayfası görüntülendiğinde satın alma hunisine giriş sinyali olarak izlenir.",
+      ...journeyState,
+    },
+    {
+      label: "Sepete ekleme",
+      eventName: "add_to_cart",
+      detail: "Müşteri ürünü sepete eklediğinde ürün, fiyat ve adet bağlamı ile doğrulanır.",
+      ...journeyState,
+    },
+    {
+      label: "Sepeti görüntüleme",
+      eventName: "view_cart",
+      detail: "Sepet sayfasına geçiş ve sepet içeriği kontrolü ödeme öncesi adım olarak takip edilir.",
+      ...journeyState,
+    },
+    {
+      label: "Satın alma başlangıcı",
+      eventName: "begin_checkout",
+      detail: "Checkout akışı başladığında ödeme yolculuğuna geçiş noktası olarak görünür.",
+      ...journeyState,
+    },
+    {
+      label: "Satın alma tamamlandı",
+      eventName: "purchase",
+      detail: "Sipariş başarı ekranında gelir, sipariş ve ürün parametreleriyle doğrulanması beklenir.",
+      ...journeyState,
+    },
+  ];
+}
+
+function getWorkspaceGa4PaymentJourneyItems(status: string | null | undefined) {
+  const journeyState = getWorkspaceGa4JourneyState(status);
+
+  return [
+    {
+      label: "Checkout başladı",
+      eventName: "begin_checkout",
+      detail: "Kullanıcı ödeme akışına geçtiğinde ödeme hunisinin ilk adımı olarak izlenir.",
+      ...journeyState,
+    },
+    {
+      label: "Ödeme bilgisi eklendi",
+      eventName: "add_payment_info",
+      detail: "Kart veya ödeme yöntemi bilgisi girildiğinde ödeme denemesi öncesi sinyal olarak takip edilir.",
+      ...journeyState,
+    },
+    {
+      label: "Ödeme hatası",
+      eventName: "payment_failed",
+      detail: "Ödeme sağlayıcı veya doğrulama hataları custom event olarak takip kapsamına alınır.",
+      ...journeyState,
+    },
+    {
+      label: "Ödeme başarılı",
+      eventName: "purchase",
+      detail: "Başarılı ödeme sonrası sipariş tamamlanma sinyali ve gelir parametreleri kontrol edilir.",
+      ...journeyState,
+    },
+  ];
+}
+
+function getWorkspaceGa4CorporateJourneyItems(status: string | null | undefined): WorkspaceGa4JourneyItem[] {
+  const journeyState = getWorkspaceGa4JourneyState(status);
+
+  return [
+    {
+      label: "Hizmet sayfası görüntülendi",
+      eventName: "view_service",
+      detail: "Kurumsal hizmet sayfaları ilgi sinyali olarak takip kapsamına alınır.",
+      ...journeyState,
+    },
+    {
+      label: "İletişim formu açıldı",
+      eventName: "contact_form_open",
+      detail: "Form açılışı, ziyaretçinin iletişim niyetini ölçmek için izlenir.",
+      ...journeyState,
+    },
+    {
+      label: "Form gönderildi",
+      eventName: "form_submit",
+      detail: "İletişim veya teklif formu gönderimi ana kurumsal dönüşüm olarak doğrulanır.",
+      ...journeyState,
+    },
+    {
+      label: "WhatsApp tıklaması",
+      eventName: "click_whatsapp",
+      detail: "WhatsApp yönlendirmeleri hızlı iletişim sinyali olarak takip edilir.",
+      ...journeyState,
+    },
+  ];
+}
+
+function getWorkspaceGa4CorporateContentJourneyItems(
+  status: string | null | undefined,
+): WorkspaceGa4JourneyItem[] {
+  const journeyState = getWorkspaceGa4JourneyState(status);
+
+  return [
+    {
+      label: "CTA tıklaması",
+      eventName: "select_cta",
+      detail: "Teklif al, bizi arayın veya randevu al gibi CTA etkileşimleri izlenir.",
+      ...journeyState,
+    },
+    {
+      label: "Dosya indirildi",
+      eventName: "file_download",
+      detail: "Katalog, broşür veya kurumsal doküman indirmeleri ölçüm kapsamına alınır.",
+      ...journeyState,
+    },
+    {
+      label: "Sayfa kaydırma",
+      eventName: "scroll_depth",
+      detail: "İçerik tüketimi ve sayfa ilgisi scroll derinliğiyle gözlemlenir.",
+      ...journeyState,
+    },
+  ];
+}
+
+function getWorkspaceGa4ShowcaseJourneyItems(status: string | null | undefined): WorkspaceGa4JourneyItem[] {
+  const journeyState = getWorkspaceGa4JourneyState(status);
+
+  return [
+    {
+      label: "Liste görüntülendi",
+      eventName: "view_item_list",
+      detail: "Katalog, portfolyo veya referans listesi görüntüleme sinyali olarak izlenir.",
+      ...journeyState,
+    },
+    {
+      label: "Öğe seçildi",
+      eventName: "select_item",
+      detail: "Bir ürün, hizmet veya portfolyo öğesine geçiş kullanıcı niyeti olarak doğrulanır.",
+      ...journeyState,
+    },
+    {
+      label: "Detay görüntülendi",
+      eventName: "view_item",
+      detail: "Detay sayfası veya modal görüntüleme katalog etkileşimi olarak izlenir.",
+      ...journeyState,
+    },
+    {
+      label: "Galeri görüntülendi",
+      eventName: "gallery_view",
+      detail: "Görsel galeri veya medya alanı etkileşimi vitrin ilgisini gösterir.",
+      ...journeyState,
+    },
+  ];
+}
+
+function getWorkspaceGa4ContactJourneyItems(status: string | null | undefined): WorkspaceGa4JourneyItem[] {
+  const journeyState = getWorkspaceGa4JourneyState(status);
+
+  return [
+    {
+      label: "Teklif talebi",
+      eventName: "request_quote",
+      detail: "Vitrin deneyiminden teklif talebine geçen kullanıcılar dönüşüm olarak izlenir.",
+      ...journeyState,
+    },
+    {
+      label: "İletişim talebi",
+      eventName: "contact_request",
+      detail: "Form, telefon veya mesajlaşma yönlendirmeleri iletişim talebi olarak doğrulanır.",
+      ...journeyState,
+    },
+    {
+      label: "Harita tıklaması",
+      eventName: "click_map",
+      detail: "Fiziksel lokasyon veya mağaza yönlendirmesi olan vitrinlerde harita tıklaması izlenir.",
+      ...journeyState,
+    },
+  ];
+}
+
+function getWorkspaceGa4LeadJourneyItems(status: string | null | undefined): WorkspaceGa4JourneyItem[] {
+  const journeyState = getWorkspaceGa4JourneyState(status);
+
+  return [
+    {
+      label: "Lead formu açıldı",
+      eventName: "lead_form_open",
+      detail: "Lead toplama formu açılışı dönüşüm öncesi niyet sinyali olarak izlenir.",
+      ...journeyState,
+    },
+    {
+      label: "Lead oluşturuldu",
+      eventName: "generate_lead",
+      detail: "Başarılı lead gönderimi ana dönüşüm eventi olarak takip edilir.",
+      ...journeyState,
+    },
+    {
+      label: "Telefon tıklaması",
+      eventName: "click_call",
+      detail: "Mobil arama ve hızlı iletişim tıklamaları lead kaynağı olarak ölçülür.",
+      ...journeyState,
+    },
+    {
+      label: "WhatsApp tıklaması",
+      eventName: "click_whatsapp",
+      detail: "WhatsApp konuşma başlangıcı lead yolculuğunda ayrı sinyal olarak izlenir.",
+      ...journeyState,
+    },
+  ];
+}
+
+function getWorkspaceGa4LeadQualityJourneyItems(status: string | null | undefined): WorkspaceGa4JourneyItem[] {
+  const journeyState = getWorkspaceGa4JourneyState(status);
+
+  return [
+    {
+      label: "Fiyat/plan görüntülendi",
+      eventName: "view_pricing",
+      detail: "Fiyatlandırma veya paket sayfası ziyaretleri yüksek niyet sinyali olarak ayrılır.",
+      ...journeyState,
+    },
+    {
+      label: "Referans incelendi",
+      eventName: "view_case_study",
+      detail: "Referans, başarı hikayesi veya kanıt içerikleri lead kalitesi için gözlenir.",
+      ...journeyState,
+    },
+    {
+      label: "Toplantı talebi",
+      eventName: "schedule_meeting",
+      detail: "Randevu veya demo talebi lead yolculuğunun sıcak dönüşümü olarak takip edilir.",
+      ...journeyState,
+    },
+  ];
+}
+
+function getWorkspaceGa4CustomJourneyItems(status: string | null | undefined): WorkspaceGa4JourneyItem[] {
+  const journeyState = getWorkspaceGa4JourneyState(status);
+
+  return [
+    {
+      label: "Özel dönüşüm",
+      eventName: "custom_conversion",
+      detail: "Proje hedeflerine göre isimlendirilecek ana dönüşüm eventi için yer ayrılır.",
+      ...journeyState,
+    },
+    {
+      label: "Özel etkileşim",
+      eventName: "custom_interaction",
+      detail: "Standart eventlerle karşılanmayan kullanıcı etkileşimleri custom event olarak izlenir.",
+      ...journeyState,
+    },
+    {
+      label: "Mikro hedef",
+      eventName: "micro_goal",
+      detail: "Ana dönüşüm öncesindeki yardımcı hedefler ayrı sinyal olarak takip edilir.",
+      ...journeyState,
+    },
+  ];
+}
+
+function getWorkspaceGa4CustomValidationJourneyItems(
+  status: string | null | undefined,
+): WorkspaceGa4JourneyItem[] {
+  const journeyState = getWorkspaceGa4JourneyState(status);
+
+  return [
+    {
+      label: "Event doğrulama",
+      eventName: "event_validation",
+      detail: "Custom eventlerin GA4 DebugView ve raporlarda görünüp görünmediği kontrol edilir.",
+      ...journeyState,
+    },
+    {
+      label: "Parametre doğrulama",
+      eventName: "parameter_validation",
+      detail: "Event parametrelerinin hedef raporlama için yeterli bağlam taşıdığı doğrulanır.",
+      ...journeyState,
+    },
+    {
+      label: "Dönüşüm işaretleme",
+      eventName: "conversion_marked",
+      detail: "Özel eventlerin conversion olarak işaretlenme durumu takip kapsamına alınır.",
+      ...journeyState,
+    },
+  ];
+}
+
+function getWorkspaceGa4JourneyState(status: string | null | undefined) {
+  const isConnected = status === "CONNECTED";
+
+  return {
+    statusLabel: isConnected ? "Gözlemde" : "Kurulum bekliyor",
+    tone: isConnected ? statusTone.good : statusTone.warn,
+  };
+}
+
+function formatWorkspaceDateTime(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  return new Intl.DateTimeFormat("tr-TR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
 function getViewKind(serviceId: string, tabId: string): ViewKind {
   if (['growth-summary', 'weekly-actions', 'channels'].includes(tabId)) return 'growth';
   if (['content-calendar'].includes(tabId)) return 'calendar';
@@ -5797,7 +6593,7 @@ function getViewKind(serviceId: string, tabId: string): ViewKind {
   if (['channel-performance', 'budget-distribution', 'ad-sets', 'acos-tacos'].includes(tabId)) return 'performance';
   if (['funnel-structure', 'app-flow', 'ux-flow', 'project-roadmap'].includes(tabId)) return 'funnel';
   if (['creatives', 'video-creatives', 'hook-tests', 'design', 'ui-screens', 'screens', 'prototype'].includes(tabId)) return 'creative';
-  if (['seo-audit', 'technical-issues', 'page-speed', 'index-status', 'search-console', 'pixel-events', 'conversions', 'form-tracking', 'retail-readiness', 'security', 'backup', 'maintenance', 'updates'].includes(tabId)) return 'diagnostics';
+  if (['seo-audit', 'technical-issues', 'page-speed', 'index-status', 'search-console', 'pixel-events', 'conversions', 'form-tracking', 'ga4-integration', 'retail-readiness', 'security', 'backup', 'maintenance', 'updates'].includes(tabId)) return 'diagnostics';
   if (['sprint-status', 'frontend', 'backend-api', 'admin-panel', 'test-deploy', 'api-admin', 'push-notifications', 'test-build', 'store-readiness', 'development', 'publish-status', 'ab-tests', 'responsive-design', 'design-system'].includes(tabId)) return 'project';
   if (['support-requests', 'open-tasks', 'resolved-tasks', 'activity-log'].includes(tabId)) return 'support';
   if (['brief-target'].includes(tabId)) return 'brief';
