@@ -6,9 +6,9 @@ import {
 } from "@nestjs/common";
 import {
   AccountType,
-  EmployeeClientAssignmentScope,
   MetaAdsApprovalStatus,
   Prisma,
+  ProjectFileCategory,
   ProjectFileVisibility,
   PurchasedServiceKey,
   UserRole,
@@ -37,6 +37,7 @@ const TIKTOK_ADS_CREATIVES_MANAGE_ASSIGNED_PERMISSION = "tiktokAds.creatives.man
 const AMAZON_ADS_PRODUCT_COLLABORATION_MANAGE_ASSIGNED_PERMISSION =
   "amazonAds.productCollaboration.manage.assigned";
 const FINAL_DELIVERY_FOLDER_PREFIX = "FINAL-";
+const REPORTS_FOLDER_NAME = "Raporlar";
 
 const projectFileReadSelect = {
   id: true,
@@ -119,10 +120,14 @@ export class ProjectFilesService {
     projectId: string,
     dto: CreateUploadSignatureDto,
   ) {
-    const project = await this.assertReadableProject(currentUser, projectId);
-    await this.assertCanManageFiles(currentUser, project.id, project.clientProfileId, project.serviceKey);
+    const isReportUpload = this.isReportUploadCategory(dto.category);
+    const project = isReportUpload
+      ? await this.assertReportUploadProject(currentUser, projectId)
+      : await this.assertReadableProject(currentUser, projectId);
+    if (!isReportUpload) {
+      await this.assertCanManageFiles(currentUser, project.id, project.clientProfileId, project.serviceKey);
+    }
     this.assertFileSizeLimit(dto.bytes);
-    this.assertFolderSelectionRequired(dto.folderId);
     const overwrite = Boolean(dto.overwrite && dto.overwriteFileId);
     const approvalStatus =
       dto.approvalStatus ?? (dto.approvalRequired ? MetaAdsApprovalStatus.PENDING : null);
@@ -130,8 +135,8 @@ export class ProjectFilesService {
     if (overwrite && dto.overwriteFileId) {
       await this.assertOverwriteFile(currentUser, project.id, dto.overwriteFileId);
     }
-    const folder = await this.assertFolder(project.id, dto.folderId);
-    await this.assertEmployeeFolderAssignmentForUpload(currentUser, project.id, dto.folderId);
+    const folder = await this.resolveUploadFolder(currentUser, project.id, dto.category, dto.folderId);
+    const visibility = this.resolveUploadVisibility(dto.category, dto.visibility);
 
     const datePrefix = new Date().toISOString().slice(0, 10).replace(/-/g, "/");
     const publicId = `${project.id}/${datePrefix}/${randomUUID()}`;
@@ -148,8 +153,9 @@ export class ProjectFilesService {
       uploadUrl: `https://api.cloudinary.com/v1_1/${signature.cloudName}/auto/upload`,
       projectId: project.id,
       clientProfileId: project.clientProfileId,
+      folderId: folder.id,
       category: dto.category,
-      visibility: dto.visibility,
+      visibility,
       title: dto.title,
       description: dto.description ?? null,
       overwrite,
@@ -170,10 +176,14 @@ export class ProjectFilesService {
     projectId: string,
     dto: CompleteUploadDto,
   ) {
-    const project = await this.assertReadableProject(currentUser, projectId);
-    await this.assertCanManageFiles(currentUser, project.id, project.clientProfileId, project.serviceKey);
+    const isReportUpload = this.isReportUploadCategory(dto.category);
+    const project = isReportUpload
+      ? await this.assertReportUploadProject(currentUser, projectId)
+      : await this.assertReadableProject(currentUser, projectId);
+    if (!isReportUpload) {
+      await this.assertCanManageFiles(currentUser, project.id, project.clientProfileId, project.serviceKey);
+    }
     this.assertFileSizeLimit(dto.bytes);
-    this.assertFolderSelectionRequired(dto.folderId);
 
     const overwrite = Boolean(dto.overwrite && dto.overwriteFileId);
     const approvalStatus =
@@ -186,8 +196,8 @@ export class ProjectFilesService {
     const performanceSummaryInput = dto.performanceSummary
       ? (dto.performanceSummary as Prisma.InputJsonValue)
       : Prisma.JsonNull;
-    await this.assertFolder(project.id, dto.folderId);
-    await this.assertEmployeeFolderAssignmentForUpload(currentUser, project.id, dto.folderId);
+    const folder = await this.resolveUploadFolder(currentUser, project.id, dto.category, dto.folderId);
+    const visibility = this.resolveUploadVisibility(dto.category, dto.visibility);
     if (overwrite && dto.overwriteFileId) {
       const existing = await this.assertOverwriteFile(currentUser, project.id, dto.overwriteFileId);
       return this.prisma.projectFile.update({
@@ -203,8 +213,8 @@ export class ProjectFilesService {
           mimeType: dto.mimeType,
           originalFileName: dto.originalFileName,
           category: dto.category,
-          visibility: dto.visibility,
-          folderId: dto.folderId,
+          visibility,
+          folderId: folder.id,
           approvalRequired: dto.approvalRequired ?? false,
           approvalType: dto.approvalType ?? null,
           approvalStatus,
@@ -237,8 +247,8 @@ export class ProjectFilesService {
         mimeType: dto.mimeType,
         originalFileName: dto.originalFileName,
         category: dto.category,
-        visibility: dto.visibility,
-        folderId: dto.folderId,
+        visibility,
+        folderId: folder.id,
         approvalRequired: dto.approvalRequired ?? false,
         approvalType: dto.approvalType ?? null,
         approvalStatus,
@@ -686,11 +696,51 @@ export class ProjectFilesService {
         employeeUserId: currentUser.id,
         clientProfileId: project.clientProfileId,
         isActive: true,
-        scope: { in: [EmployeeClientAssignmentScope.PROJECT, EmployeeClientAssignmentScope.DEVELOPMENT, EmployeeClientAssignmentScope.DESIGN] },
       },
       select: { id: true },
     });
     if (!isAssigned) {
+      throw new NotFoundException("Project not found.");
+    }
+
+    return project;
+  }
+
+  private async assertReportUploadProject(currentUser: AuthenticatedUser, projectId: string) {
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: { id: true, clientProfileId: true, serviceKey: true },
+    });
+    if (!project) {
+      throw new NotFoundException("Project not found.");
+    }
+
+    if (currentUser.accountType === AccountType.CLIENT) {
+      throw new ForbiddenException("Clients cannot upload reports.");
+    }
+
+    if (
+      currentUser.accountType === AccountType.ADMIN &&
+      (currentUser.role === UserRole.ADMIN ||
+        this.hasPermission(currentUser, [MANAGE_ANY_PERMISSION, "reports.manage", "projects.manage.any"]))
+    ) {
+      return project;
+    }
+
+    if (currentUser.accountType !== AccountType.EMPLOYEE) {
+      throw new ForbiddenException("Only employees can upload client reports.");
+    }
+
+    const assignment = await this.prisma.employeeClientAssignment.findFirst({
+      where: {
+        employeeUserId: currentUser.id,
+        clientProfileId: project.clientProfileId,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+
+    if (!assignment) {
       throw new NotFoundException("Project not found.");
     }
 
@@ -818,6 +868,74 @@ export class ProjectFilesService {
     return folder;
   }
 
+  private async resolveUploadFolder(
+    currentUser: AuthenticatedUser,
+    projectId: string,
+    category: ProjectFileCategory,
+    folderId: string | null | undefined,
+  ) {
+    if (this.isReportUploadCategory(category)) {
+      return this.findOrCreateReportsFolder(projectId, currentUser.id);
+    }
+
+    this.assertFolderSelectionRequired(folderId);
+    const folder = await this.assertFolder(projectId, folderId);
+    await this.assertEmployeeFolderAssignmentForUpload(currentUser, projectId, folder.id);
+
+    return folder;
+  }
+
+  private async findOrCreateReportsFolder(projectId: string, currentUserId: string) {
+    const existing = await this.prisma.projectFileFolder.findFirst({
+      where: {
+        projectId,
+        name: { equals: REPORTS_FOLDER_NAME, mode: "insensitive" },
+      },
+      select: { id: true, name: true },
+    });
+    if (existing) {
+      return existing;
+    }
+
+    try {
+      return await this.prisma.projectFileFolder.create({
+        data: {
+          projectId,
+          name: REPORTS_FOLDER_NAME,
+          createdByUserId: currentUserId,
+        },
+        select: { id: true, name: true },
+      });
+    } catch (error) {
+      if (!this.isUniqueConstraintError(error)) {
+        throw error;
+      }
+
+      const folder = await this.prisma.projectFileFolder.findFirst({
+        where: {
+          projectId,
+          name: { equals: REPORTS_FOLDER_NAME, mode: "insensitive" },
+        },
+        select: { id: true, name: true },
+      });
+      if (!folder) {
+        throw error;
+      }
+      return folder;
+    }
+  }
+
+  private resolveUploadVisibility(
+    category: ProjectFileCategory,
+    visibility: ProjectFileVisibility,
+  ): ProjectFileVisibility {
+    return this.isReportUploadCategory(category) ? ProjectFileVisibility.CLIENT_VISIBLE : visibility;
+  }
+
+  private isReportUploadCategory(category: ProjectFileCategory): boolean {
+    return category === ProjectFileCategory.REPORT;
+  }
+
   private async getAssignableEmployees(clientProfileId: string) {
     const assignments = await this.prisma.employeeClientAssignment.findMany({
       where: {
@@ -861,10 +979,13 @@ export class ProjectFilesService {
       return null;
     }
 
-    const finalDeliveryFolders = await this.prisma.projectFileFolder.findMany({
+    const sharedFolders = await this.prisma.projectFileFolder.findMany({
       where: {
         projectId,
-        name: { startsWith: FINAL_DELIVERY_FOLDER_PREFIX },
+        OR: [
+          { name: { startsWith: FINAL_DELIVERY_FOLDER_PREFIX } },
+          { name: { equals: REPORTS_FOLDER_NAME, mode: "insensitive" } },
+        ],
       },
       select: { id: true },
     });
@@ -872,12 +993,12 @@ export class ProjectFilesService {
     return Array.from(
       new Set([
         ...assignedFolderRows.map((item: { folderId: string }) => item.folderId),
-        ...finalDeliveryFolders.map((folder: { id: string }) => folder.id),
+        ...sharedFolders.map((folder: { id: string }) => folder.id),
       ]),
     );
   }
 
-  private assertFolderSelectionRequired(folderId: string | null | undefined) {
+  private assertFolderSelectionRequired(folderId: string | null | undefined): asserts folderId is string {
     if (!folderId) {
       throw new BadRequestException("folderId is required for project file uploads.");
     }
@@ -912,5 +1033,9 @@ export class ProjectFilesService {
   private getApiBaseUrl() {
     const port = this.configService.get<number>("PORT", 4000);
     return `http://localhost:${port}/api/v1`;
+  }
+
+  private isUniqueConstraintError(error: unknown): boolean {
+    return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
   }
 }

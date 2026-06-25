@@ -69,8 +69,9 @@ export class CompleteUploadDto {
   @IsUUID()
   overwriteFileId?: string;
 
+  @IsOptional()
   @IsUUID()
-  folderId!: string;
+  folderId?: string;
 
   @IsOptional()
   @IsBoolean()

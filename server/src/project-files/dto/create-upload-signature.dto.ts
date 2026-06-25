@@ -48,8 +48,9 @@ export class CreateUploadSignatureDto {
   @IsUUID()
   overwriteFileId?: string;
 
+  @IsOptional()
   @IsUUID()
-  folderId!: string;
+  folderId?: string;
 
   @IsOptional()
   @IsBoolean()

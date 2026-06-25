@@ -345,6 +345,21 @@ enum ProjectStatus {
   ON_HOLD
 }
 
+enum ProjectGa4Status {
+  NOT_CONFIGURED
+  PENDING
+  CONNECTED
+  ERROR
+}
+
+enum ProjectGa4MeasurementProfile {
+  CORPORATE
+  ECOMMERCE
+  SHOWCASE
+  LEAD_GENERATION
+  CUSTOM
+}
+
 enum TaskStatus {
   TODO
   IN_PROGRESS
@@ -475,6 +490,7 @@ enum ProjectFileCategory {
   MOBILE_SOURCE
   MOBILE_BUILD
   ADS_CREATIVE
+  REPORT
   SEO_REPORT
   BRAND_ASSET
   DOCUMENT
@@ -611,55 +627,55 @@ model User {
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
 
-  refreshTokens                  RefreshToken[]
-  clientProfile                  ClientProfile?                      @relation(fields: [clientProfileId], references: [id], onDelete: SetNull)
-  employeeClientAssignments      EmployeeClientAssignment[]          @relation("EmployeeClientAssignments")
-  assignedTasks                  Task[]                              @relation("TaskAssignee")
-  codePreparedTasks              Task[]                              @relation("TaskCodePreparedBy")
-  taskApprovalActions            Task[]                              @relation("TaskApprovalResponder")
-  completedTaskTodos             TaskTodo[]                          @relation("TaskTodoCompletedBy")
-  taskWorkNotes                  TaskWorkNote[]                      @relation("TaskWorkNoteAuthor")
-  uploadedProjectFiles           ProjectFile[]                       @relation("ProjectFileUploadedBy")
-  projectFileApprovalActions     ProjectFile[]                       @relation("ProjectFileApprovalResponder")
-  createdProjectFileFolders      ProjectFileFolder[]                 @relation("ProjectFileFolderCreatedBy")
-  assignedProjectFileFolders     ProjectFileFolderAssignment[]       @relation("ProjectFileFolderAssignedUser")
-  projectFileShareLinks          ProjectFileShareLink[]              @relation("ProjectFileShareLinkCreatedBy")
-  createdWorkspaceSections       WebAppWorkspaceSection[]            @relation("WorkspaceSectionCreatedBy")
-  workspaceMessages              WebAppWorkspaceMessage[]            @relation("WorkspaceMessageAuthor")
-  requestedWorkspaceRevisions    WebAppWorkspaceRevision[]           @relation("WorkspaceRevisionRequestedBy")
-  assignedWorkspaceRevisions     WebAppWorkspaceRevision[]           @relation("WorkspaceRevisionAssignedTo")
-  workspaceRevisionTransitions   WebAppWorkspaceRevisionTransition[] @relation("WorkspaceRevisionTransitionActor")
-  createdWeeklyReports           WebAppWorkspaceWeeklyReport[]       @relation("WorkspaceWeeklyReportAuthor")
-  requestedMeetingRequests       WebAppWorkspaceMeetingRequest[]     @relation("WorkspaceMeetingRequestedBy")
-  respondedMeetingRequests       WebAppWorkspaceMeetingRequest[]     @relation("WorkspaceMeetingRespondedBy")
-  ownedCrmLeads                  CrmLead[]                           @relation("CrmLeadOwner")
-  crmLeadActivities              CrmLeadActivity[]                   @relation("CrmLeadActivityActor")
-  releaseApprovalActions         DeliveryRelease[]                   @relation("DeliveryReleaseApprovalActor")
-  triggeredCrmLeadScans          CrmLeadScanLog[]                    @relation("CrmLeadScanTriggeredBy")
-  auditLogs                      AuditLog[]                          @relation("AuditActor")
-  createdMetaAdsReports          MetaAdsReport[]                     @relation("MetaAdsReportCreatedBy")
-  publishedMetaAdsReports        MetaAdsReport[]                     @relation("MetaAdsReportPublishedBy")
-  acknowledgedMetaAdsReports     MetaAdsReport[]                     @relation("MetaAdsReportAcknowledgedBy")
-  createdAmazonAdsReports        AmazonAdsReport[]                   @relation("AmazonAdsReportCreatedBy")
-  publishedAmazonAdsReports      AmazonAdsReport[]                   @relation("AmazonAdsReportPublishedBy")
-  acknowledgedAmazonAdsReports   AmazonAdsReport[]                   @relation("AmazonAdsReportAcknowledgedBy")
-  createdTikTokAdsReports        TikTokAdsReport[]                   @relation("TikTokAdsReportCreatedBy")
-  publishedTikTokAdsReports      TikTokAdsReport[]                   @relation("TikTokAdsReportPublishedBy")
-  acknowledgedTikTokAdsReports   TikTokAdsReport[]                   @relation("TikTokAdsReportAcknowledgedBy")
-  createdSocialMediaPosts        SocialMediaPost[]                   @relation("SocialMediaPostCreatedBy")
-  assignedSocialMediaPosts       SocialMediaPost[]                   @relation("SocialMediaPostAssignedTo")
-  createdSocialMediaReports      SocialMediaReport[]                 @relation("SocialMediaReportCreatedBy")
-  publishedSocialMediaReports    SocialMediaReport[]                 @relation("SocialMediaReportPublishedBy")
-  acknowledgedSocialMediaReports SocialMediaReport[]                 @relation("SocialMediaReportAcknowledgedBy")
-  ownedGrowthHubActions          GrowthHubAction[]                   @relation("GrowthHubActionOwner")
-  createdGrowthHubActions        GrowthHubAction[]                   @relation("GrowthHubActionCreatedBy")
-  createdGrowthHubWeeklyNotes    GrowthHubWeeklyNote[]               @relation("GrowthHubWeeklyNoteCreatedBy")
-  createdGrowthHubReports        GrowthHubReport[]                   @relation("GrowthHubReportCreatedBy")
-  publishedGrowthHubReports      GrowthHubReport[]                   @relation("GrowthHubReportPublishedBy")
-  acknowledgedGrowthHubReports   GrowthHubReport[]                   @relation("GrowthHubReportAcknowledgedBy")
-  createdGrowthHubRecommendations GrowthHubRecommendation[]           @relation("GrowthHubRecommendationCreatedBy")
-  convertedGrowthHubRecommendations GrowthHubRecommendation[]         @relation("GrowthHubRecommendationConvertedBy")
-  createdInvoices                   ClientInvoice[]                    @relation("ClientInvoiceCreatedBy")
+  refreshTokens                     RefreshToken[]
+  clientProfile                     ClientProfile?                      @relation(fields: [clientProfileId], references: [id], onDelete: SetNull)
+  employeeClientAssignments         EmployeeClientAssignment[]          @relation("EmployeeClientAssignments")
+  assignedTasks                     Task[]                              @relation("TaskAssignee")
+  codePreparedTasks                 Task[]                              @relation("TaskCodePreparedBy")
+  taskApprovalActions               Task[]                              @relation("TaskApprovalResponder")
+  completedTaskTodos                TaskTodo[]                          @relation("TaskTodoCompletedBy")
+  taskWorkNotes                     TaskWorkNote[]                      @relation("TaskWorkNoteAuthor")
+  uploadedProjectFiles              ProjectFile[]                       @relation("ProjectFileUploadedBy")
+  projectFileApprovalActions        ProjectFile[]                       @relation("ProjectFileApprovalResponder")
+  createdProjectFileFolders         ProjectFileFolder[]                 @relation("ProjectFileFolderCreatedBy")
+  assignedProjectFileFolders        ProjectFileFolderAssignment[]       @relation("ProjectFileFolderAssignedUser")
+  projectFileShareLinks             ProjectFileShareLink[]              @relation("ProjectFileShareLinkCreatedBy")
+  createdWorkspaceSections          WebAppWorkspaceSection[]            @relation("WorkspaceSectionCreatedBy")
+  workspaceMessages                 WebAppWorkspaceMessage[]            @relation("WorkspaceMessageAuthor")
+  requestedWorkspaceRevisions       WebAppWorkspaceRevision[]           @relation("WorkspaceRevisionRequestedBy")
+  assignedWorkspaceRevisions        WebAppWorkspaceRevision[]           @relation("WorkspaceRevisionAssignedTo")
+  workspaceRevisionTransitions      WebAppWorkspaceRevisionTransition[] @relation("WorkspaceRevisionTransitionActor")
+  createdWeeklyReports              WebAppWorkspaceWeeklyReport[]       @relation("WorkspaceWeeklyReportAuthor")
+  requestedMeetingRequests          WebAppWorkspaceMeetingRequest[]     @relation("WorkspaceMeetingRequestedBy")
+  respondedMeetingRequests          WebAppWorkspaceMeetingRequest[]     @relation("WorkspaceMeetingRespondedBy")
+  ownedCrmLeads                     CrmLead[]                           @relation("CrmLeadOwner")
+  crmLeadActivities                 CrmLeadActivity[]                   @relation("CrmLeadActivityActor")
+  releaseApprovalActions            DeliveryRelease[]                   @relation("DeliveryReleaseApprovalActor")
+  triggeredCrmLeadScans             CrmLeadScanLog[]                    @relation("CrmLeadScanTriggeredBy")
+  auditLogs                         AuditLog[]                          @relation("AuditActor")
+  createdMetaAdsReports             MetaAdsReport[]                     @relation("MetaAdsReportCreatedBy")
+  publishedMetaAdsReports           MetaAdsReport[]                     @relation("MetaAdsReportPublishedBy")
+  acknowledgedMetaAdsReports        MetaAdsReport[]                     @relation("MetaAdsReportAcknowledgedBy")
+  createdAmazonAdsReports           AmazonAdsReport[]                   @relation("AmazonAdsReportCreatedBy")
+  publishedAmazonAdsReports         AmazonAdsReport[]                   @relation("AmazonAdsReportPublishedBy")
+  acknowledgedAmazonAdsReports      AmazonAdsReport[]                   @relation("AmazonAdsReportAcknowledgedBy")
+  createdTikTokAdsReports           TikTokAdsReport[]                   @relation("TikTokAdsReportCreatedBy")
+  publishedTikTokAdsReports         TikTokAdsReport[]                   @relation("TikTokAdsReportPublishedBy")
+  acknowledgedTikTokAdsReports      TikTokAdsReport[]                   @relation("TikTokAdsReportAcknowledgedBy")
+  createdSocialMediaPosts           SocialMediaPost[]                   @relation("SocialMediaPostCreatedBy")
+  assignedSocialMediaPosts          SocialMediaPost[]                   @relation("SocialMediaPostAssignedTo")
+  createdSocialMediaReports         SocialMediaReport[]                 @relation("SocialMediaReportCreatedBy")
+  publishedSocialMediaReports       SocialMediaReport[]                 @relation("SocialMediaReportPublishedBy")
+  acknowledgedSocialMediaReports    SocialMediaReport[]                 @relation("SocialMediaReportAcknowledgedBy")
+  ownedGrowthHubActions             GrowthHubAction[]                   @relation("GrowthHubActionOwner")
+  createdGrowthHubActions           GrowthHubAction[]                   @relation("GrowthHubActionCreatedBy")
+  createdGrowthHubWeeklyNotes       GrowthHubWeeklyNote[]               @relation("GrowthHubWeeklyNoteCreatedBy")
+  createdGrowthHubReports           GrowthHubReport[]                   @relation("GrowthHubReportCreatedBy")
+  publishedGrowthHubReports         GrowthHubReport[]                   @relation("GrowthHubReportPublishedBy")
+  acknowledgedGrowthHubReports      GrowthHubReport[]                   @relation("GrowthHubReportAcknowledgedBy")
+  createdGrowthHubRecommendations   GrowthHubRecommendation[]           @relation("GrowthHubRecommendationCreatedBy")
+  convertedGrowthHubRecommendations GrowthHubRecommendation[]           @relation("GrowthHubRecommendationConvertedBy")
+  createdInvoices                   ClientInvoice[]                     @relation("ClientInvoiceCreatedBy")
 
   @@index([accountType, role])
   @@index([accountType, status])
@@ -693,42 +709,42 @@ model ClientProfile {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
-  users                   User[]
-  employeeAssignments     EmployeeClientAssignment[]
-  purchasedServices       ClientPurchasedService[]
-  growthHubConfig         ClientGrowthHubConfig?
-  growthHubActions        GrowthHubAction[]
-  growthHubWeeklyNotes    GrowthHubWeeklyNote[]
-  growthHubReports        GrowthHubReport[]
-  growthHubRecommendations GrowthHubRecommendation[]
-  metaAdsConfig           ClientMetaAdsConfig?
-  metaAdsCredential       ClientMetaAdsCredential?
-  metaAdsInsights         MetaAdsDailyInsight[]
-  metaAdsSyncLogs         MetaAdsSyncLog[]
-  metaAdsReports          MetaAdsReport[]
-  webMobileDesignConfig         ClientWebMobileDesignConfig?
-  technicalSupportConfig        ClientTechnicalSupportConfig?
-  seoAuditConfig                ClientSeoAuditConfig?
-  socialMediaConfig             ClientSocialMediaConfig?
-  socialMediaMetaCredential     ClientSocialMediaMetaCredential?
-  tikTokAdsConfig         ClientTikTokAdsConfig?
-  tikTokAdsCredential     ClientTikTokAdsCredential?
-  tikTokAdsInsights       TikTokAdsDailyInsight[]
-  tikTokAdsSyncLogs       TikTokAdsSyncLog[]
-  tikTokAdsReports        TikTokAdsReport[]
-  amazonAdsConfig         ClientAmazonAdsConfig?
-  amazonAdsCredential     ClientAmazonAdsCredential?
-  amazonAdsInsights       AmazonAdsDailyInsight[]
-  amazonAdsSyncLogs       AmazonAdsSyncLog[]
-  amazonAdsReports        AmazonAdsReport[]
-  socialMediaPosts        SocialMediaPost[]
-  socialMediaPostInsights SocialMediaPostInsight[]
-  socialMediaReports      SocialMediaReport[]
-  projects                Project[]
-  files                   ProjectFile[]
-  invoices                ClientInvoice[]
-  workspaceMeetingRequests WebAppWorkspaceMeetingRequest[]
-  convertedCrmLeads       CrmLead[]                  @relation("CrmLeadConvertedClient")
+  users                     User[]
+  employeeAssignments       EmployeeClientAssignment[]
+  purchasedServices         ClientPurchasedService[]
+  growthHubConfig           ClientGrowthHubConfig?
+  growthHubActions          GrowthHubAction[]
+  growthHubWeeklyNotes      GrowthHubWeeklyNote[]
+  growthHubReports          GrowthHubReport[]
+  growthHubRecommendations  GrowthHubRecommendation[]
+  metaAdsConfig             ClientMetaAdsConfig?
+  metaAdsCredential         ClientMetaAdsCredential?
+  metaAdsInsights           MetaAdsDailyInsight[]
+  metaAdsSyncLogs           MetaAdsSyncLog[]
+  metaAdsReports            MetaAdsReport[]
+  webMobileDesignConfig     ClientWebMobileDesignConfig?
+  technicalSupportConfig    ClientTechnicalSupportConfig?
+  seoAuditConfig            ClientSeoAuditConfig?
+  socialMediaConfig         ClientSocialMediaConfig?
+  socialMediaMetaCredential ClientSocialMediaMetaCredential?
+  tikTokAdsConfig           ClientTikTokAdsConfig?
+  tikTokAdsCredential       ClientTikTokAdsCredential?
+  tikTokAdsInsights         TikTokAdsDailyInsight[]
+  tikTokAdsSyncLogs         TikTokAdsSyncLog[]
+  tikTokAdsReports          TikTokAdsReport[]
+  amazonAdsConfig           ClientAmazonAdsConfig?
+  amazonAdsCredential       ClientAmazonAdsCredential?
+  amazonAdsInsights         AmazonAdsDailyInsight[]
+  amazonAdsSyncLogs         AmazonAdsSyncLog[]
+  amazonAdsReports          AmazonAdsReport[]
+  socialMediaPosts          SocialMediaPost[]
+  socialMediaPostInsights   SocialMediaPostInsight[]
+  socialMediaReports        SocialMediaReport[]
+  projects                  Project[]
+  files                     ProjectFile[]
+  invoices                  ClientInvoice[]
+  workspaceMeetingRequests  WebAppWorkspaceMeetingRequest[]
+  convertedCrmLeads         CrmLead[]                        @relation("CrmLeadConvertedClient")
 
   @@index([status])
   @@index([deletedAt])
@@ -889,18 +905,18 @@ model ClientMetaAdsCredential {
 }
 
 model ClientSocialMediaConfig {
-  id                 String                      @id @default(uuid()) @db.Uuid
-  clientProfileId    String                      @unique @db.Uuid
-  activePlatforms    SocialMediaPlatform[]       @default([])
-  instagramUsername  String?
-  instagramAccountId String?
-  facebookPageId     String?
-  tiktokUsername     String?
-  linkedinPageUrl    String?
-  contentFrequency   String?
-  primaryGoal        SocialMediaGoal?
-  toneOfVoice        String?
-  hashtags           String[]                    @default([])
+  id                         String                      @id @default(uuid()) @db.Uuid
+  clientProfileId            String                      @unique @db.Uuid
+  activePlatforms            SocialMediaPlatform[]       @default([])
+  instagramUsername          String?
+  instagramAccountId         String?
+  facebookPageId             String?
+  tiktokUsername             String?
+  linkedinPageUrl            String?
+  contentFrequency           String?
+  primaryGoal                SocialMediaGoal?
+  toneOfVoice                String?
+  hashtags                   String[]                    @default([])
   instagramProfilePictureUrl String?
   facebookProfilePictureUrl  String?
   facebookPageName           String?
@@ -1507,20 +1523,26 @@ model ClientInvoice {
 }
 
 model Project {
-  id              String               @id @default(uuid()) @db.Uuid
-  clientProfileId String               @db.Uuid
-  serviceKey      PurchasedServiceKey?
-  repositoryUrl   String?
-  name            String
-  slug            String
-  description     String?
-  figmaProjectUrl String?
-  status          ProjectStatus        @default(PLANNED)
-  priority        Priority             @default(MEDIUM)
-  startDate       DateTime?
-  dueDate         DateTime?
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
+  id                    String                       @id @default(uuid()) @db.Uuid
+  clientProfileId       String                       @db.Uuid
+  serviceKey            PurchasedServiceKey?
+  repositoryUrl         String?
+  livePreviewUrl        String?
+  name                  String
+  slug                  String
+  description           String?
+  figmaProjectUrl       String?
+  ga4MeasurementId      String?
+  ga4PropertyId         String?
+  ga4Status             ProjectGa4Status             @default(NOT_CONFIGURED)
+  ga4MeasurementProfile ProjectGa4MeasurementProfile @default(CORPORATE)
+  ga4LastVerifiedAt     DateTime?
+  status                ProjectStatus                @default(PLANNED)
+  priority              Priority                     @default(MEDIUM)
+  startDate             DateTime?
+  dueDate               DateTime?
+  createdAt             DateTime                     @default(now())
+  updatedAt             DateTime                     @updatedAt
 
   clientProfile            ClientProfile                   @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
   tasks                    Task[]
@@ -1588,22 +1610,22 @@ model Task {
   createdAt                 DateTime               @default(now())
   updatedAt                 DateTime               @updatedAt
 
-  project                           Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  sprint                            DeliverySprint?           @relation(fields: [sprintId], references: [id], onDelete: SetNull)
-  assignee                          User?                     @relation("TaskAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
-  codePreparedBy                    User?                     @relation("TaskCodePreparedBy", fields: [codePreparedByUserId], references: [id], onDelete: SetNull)
-  approvalRespondedBy               User?                     @relation("TaskApprovalResponder", fields: [approvalRespondedByUserId], references: [id], onDelete: SetNull)
-  referenceProjectFile              ProjectFile?              @relation("TaskReferenceProjectFile", fields: [referenceProjectFileId], references: [id], onDelete: SetNull)
-  amazonAdsReportAcknowledgements   AmazonAdsReport[]         @relation("AmazonAdsReportAcknowledgementTask")
-  metaAdsReportAcknowledgements     MetaAdsReport[]           @relation("MetaAdsReportAcknowledgementTask")
-  tikTokAdsReportAcknowledgements   TikTokAdsReport[]         @relation("TikTokAdsReportAcknowledgementTask")
-  growthHubReportAcknowledgements   GrowthHubReport[]         @relation("GrowthHubReportAcknowledgementTask")
+  project                            Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sprint                             DeliverySprint?           @relation(fields: [sprintId], references: [id], onDelete: SetNull)
+  assignee                           User?                     @relation("TaskAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
+  codePreparedBy                     User?                     @relation("TaskCodePreparedBy", fields: [codePreparedByUserId], references: [id], onDelete: SetNull)
+  approvalRespondedBy                User?                     @relation("TaskApprovalResponder", fields: [approvalRespondedByUserId], references: [id], onDelete: SetNull)
+  referenceProjectFile               ProjectFile?              @relation("TaskReferenceProjectFile", fields: [referenceProjectFileId], references: [id], onDelete: SetNull)
+  amazonAdsReportAcknowledgements    AmazonAdsReport[]         @relation("AmazonAdsReportAcknowledgementTask")
+  metaAdsReportAcknowledgements      MetaAdsReport[]           @relation("MetaAdsReportAcknowledgementTask")
+  tikTokAdsReportAcknowledgements    TikTokAdsReport[]         @relation("TikTokAdsReportAcknowledgementTask")
+  growthHubReportAcknowledgements    GrowthHubReport[]         @relation("GrowthHubReportAcknowledgementTask")
   growthHubRecommendationConversions GrowthHubRecommendation[] @relation("GrowthHubRecommendationConvertedTask")
-  socialMediaPostApprovals          SocialMediaPost[]         @relation("SocialMediaPostApprovalTask")
-  socialMediaReportAcknowledgements SocialMediaReport[]       @relation("SocialMediaReportAcknowledgementTask")
-  todos                             TaskTodo[]
-  workNotes                         TaskWorkNote[]
-  workspaceRevisions                WebAppWorkspaceRevision[]
+  socialMediaPostApprovals           SocialMediaPost[]         @relation("SocialMediaPostApprovalTask")
+  socialMediaReportAcknowledgements  SocialMediaReport[]       @relation("SocialMediaReportAcknowledgementTask")
+  todos                              TaskTodo[]
+  workNotes                          TaskWorkNote[]
+  workspaceRevisions                 WebAppWorkspaceRevision[]
 
   @@index([projectId])
   @@index([sprintId])
@@ -2120,20 +2142,20 @@ model AuditLog {
 }
 
 model ClientWebMobileDesignConfig {
-  id                  String              @id @default(uuid()) @db.Uuid
-  clientProfileId     String              @unique @db.Uuid
-  figmaFileUrl        String?
-  prototypeUrl        String?
-  styleGuideUrl       String?
-  designSystemStatus  DesignSystemStatus  @default(NONE)
-  primaryColor        String?
-  secondaryColor      String?
-  fontFamily          String?
-  targetPlatforms     String[]            @default([])
-  gridSystem          String?
-  notes               String?
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
+  id                 String             @id @default(uuid()) @db.Uuid
+  clientProfileId    String             @unique @db.Uuid
+  figmaFileUrl       String?
+  prototypeUrl       String?
+  styleGuideUrl      String?
+  designSystemStatus DesignSystemStatus @default(NONE)
+  primaryColor       String?
+  secondaryColor     String?
+  fontFamily         String?
+  targetPlatforms    String[]           @default([])
+  gridSystem         String?
+  notes              String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
   clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
 
@@ -2160,18 +2182,18 @@ model EmployeeClientAssignment {
 }
 
 model ClientTechnicalSupportConfig {
-  id                     String   @id @default(uuid()) @db.Uuid
-  clientProfileId        String   @unique @db.Uuid
-  slaLevel               String?
-  supportPortalUrl       String?
-  maintenanceWindowDay   String?
-  maintenanceWindowTime  String?
-  monitoringEnabled      Boolean  @default(true)
-  backupFrequency        String?
-  uptimeTarget           Float?
-  notes                  String?
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  id                    String   @id @default(uuid()) @db.Uuid
+  clientProfileId       String   @unique @db.Uuid
+  slaLevel              String?
+  supportPortalUrl      String?
+  maintenanceWindowDay  String?
+  maintenanceWindowTime String?
+  monitoringEnabled     Boolean  @default(true)
+  backupFrequency       String?
+  uptimeTarget          Float?
+  notes                 String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   clientProfile ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
 

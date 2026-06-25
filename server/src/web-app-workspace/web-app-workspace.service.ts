@@ -239,7 +239,13 @@ const projectSummarySelect = {
   status: true,
   priority: true,
   repositoryUrl: true,
+  livePreviewUrl: true,
   figmaProjectUrl: true,
+  ga4MeasurementId: true,
+  ga4PropertyId: true,
+  ga4Status: true,
+  ga4MeasurementProfile: true,
+  ga4LastVerifiedAt: true,
   startDate: true,
   dueDate: true,
   clientProfile: {

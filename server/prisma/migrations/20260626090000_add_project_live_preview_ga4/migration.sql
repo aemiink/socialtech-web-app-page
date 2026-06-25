@@ -1,0 +1,13 @@
+CREATE TYPE "ProjectGa4Status" AS ENUM (
+  'NOT_CONFIGURED',
+  'PENDING',
+  'CONNECTED',
+  'ERROR'
+);
+
+ALTER TABLE "Project"
+ADD COLUMN "livePreviewUrl" TEXT,
+ADD COLUMN "ga4MeasurementId" TEXT,
+ADD COLUMN "ga4PropertyId" TEXT,
+ADD COLUMN "ga4Status" "ProjectGa4Status" NOT NULL DEFAULT 'NOT_CONFIGURED',
+ADD COLUMN "ga4LastVerifiedAt" TIMESTAMP(3);

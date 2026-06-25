@@ -8,6 +8,8 @@ import {
 import {
   AccountType,
   Prisma,
+  ProjectGa4MeasurementProfile,
+  ProjectGa4Status,
   PurchasedServiceKey,
   PurchasedServiceStatus,
   UserRole,
@@ -30,10 +32,16 @@ const projectReadSelect = {
   clientProfileId: true,
   serviceKey: true,
   repositoryUrl: true,
+  livePreviewUrl: true,
   name: true,
   slug: true,
   description: true,
   figmaProjectUrl: true,
+  ga4MeasurementId: true,
+  ga4PropertyId: true,
+  ga4Status: true,
+  ga4MeasurementProfile: true,
+  ga4LastVerifiedAt: true,
   status: true,
   priority: true,
   startDate: true,
@@ -52,7 +60,13 @@ type ProjectUpdateState = {
   clientProfileId: string;
   serviceKey: PurchasedServiceKey | null;
   repositoryUrl: string | null;
+  livePreviewUrl: string | null;
   figmaProjectUrl: string | null;
+  ga4MeasurementId: string | null;
+  ga4PropertyId: string | null;
+  ga4Status: ProjectGa4Status;
+  ga4MeasurementProfile: ProjectGa4MeasurementProfile;
+  ga4LastVerifiedAt: Date | null;
   name: string;
   startDate: Date | null;
   dueDate: Date | null;
@@ -122,6 +136,7 @@ export class ProjectsService {
     await this.assertClientAllowsServiceKey(dto.clientProfileId, dto.serviceKey ?? null);
     this.assertRepositoryUrlRequirement(dto.serviceKey ?? null, dto.repositoryUrl ?? null);
     this.assertFigmaUrlRequirement(dto.serviceKey ?? null, dto.figmaProjectUrl ?? null);
+    this.assertHttpUrl(dto.livePreviewUrl ?? null, "livePreviewUrl");
 
     const startDate = this.parseNullableDate(dto.startDate) ?? null;
     const dueDate = this.parseNullableDate(dto.dueDate) ?? null;
@@ -137,6 +152,12 @@ export class ProjectsService {
           description: dto.description ?? null,
           figmaProjectUrl: dto.figmaProjectUrl ?? null,
           repositoryUrl: dto.repositoryUrl ?? null,
+          livePreviewUrl: dto.livePreviewUrl ?? null,
+          ga4MeasurementId: dto.ga4MeasurementId ?? null,
+          ga4PropertyId: dto.ga4PropertyId ?? null,
+          ga4Status: dto.ga4Status ?? ProjectGa4Status.NOT_CONFIGURED,
+          ga4MeasurementProfile: dto.ga4MeasurementProfile ?? ProjectGa4MeasurementProfile.CORPORATE,
+          ga4LastVerifiedAt: this.resolveGa4LastVerifiedAt(dto.ga4Status ?? ProjectGa4Status.NOT_CONFIGURED, null),
           serviceKey: dto.serviceKey ?? null,
           status: dto.status,
           priority: dto.priority,
@@ -174,6 +195,8 @@ export class ProjectsService {
       dto.repositoryUrl === undefined ? existingProject.repositoryUrl : (dto.repositoryUrl ?? null);
     const nextFigmaProjectUrl =
       dto.figmaProjectUrl === undefined ? existingProject.figmaProjectUrl : (dto.figmaProjectUrl ?? null);
+    const nextLivePreviewUrl =
+      dto.livePreviewUrl === undefined ? existingProject.livePreviewUrl : (dto.livePreviewUrl ?? null);
     if (dto.clientProfileId) {
       await this.assertClientProfileExists(dto.clientProfileId);
       await this.assertCanManageProjectScope(currentUser, dto.clientProfileId);
@@ -184,6 +207,13 @@ export class ProjectsService {
     await this.assertClientAllowsServiceKey(nextClientProfileId, nextServiceKey);
     this.assertRepositoryUrlRequirement(nextServiceKey, nextRepositoryUrl);
     this.assertFigmaUrlRequirement(nextServiceKey, nextFigmaProjectUrl);
+    this.assertHttpUrl(nextLivePreviewUrl, "livePreviewUrl");
+
+    const nextGa4Status = dto.ga4Status ?? existingProject.ga4Status;
+    const ga4LastVerifiedAt =
+      dto.ga4Status === undefined
+        ? undefined
+        : this.resolveGa4LastVerifiedAt(nextGa4Status, existingProject.ga4LastVerifiedAt);
 
     const startDateUpdate = this.parseNullableDate(dto.startDate);
     const dueDateUpdate = this.parseNullableDate(dto.dueDate);
@@ -204,6 +234,12 @@ export class ProjectsService {
       ...(dto.description !== undefined ? { description: dto.description } : {}),
       ...(dto.figmaProjectUrl !== undefined ? { figmaProjectUrl: dto.figmaProjectUrl } : {}),
       ...(dto.repositoryUrl !== undefined ? { repositoryUrl: dto.repositoryUrl } : {}),
+      ...(dto.livePreviewUrl !== undefined ? { livePreviewUrl: dto.livePreviewUrl } : {}),
+      ...(dto.ga4MeasurementId !== undefined ? { ga4MeasurementId: dto.ga4MeasurementId } : {}),
+      ...(dto.ga4PropertyId !== undefined ? { ga4PropertyId: dto.ga4PropertyId } : {}),
+      ...(dto.ga4Status !== undefined ? { ga4Status: dto.ga4Status } : {}),
+      ...(dto.ga4MeasurementProfile !== undefined ? { ga4MeasurementProfile: dto.ga4MeasurementProfile } : {}),
+      ...(ga4LastVerifiedAt !== undefined ? { ga4LastVerifiedAt } : {}),
       ...(dto.status !== undefined ? { status: dto.status } : {}),
       ...(dto.priority !== undefined ? { priority: dto.priority } : {}),
       ...(startDateUpdate !== undefined ? { startDate: startDateUpdate } : {}),
@@ -362,7 +398,13 @@ export class ProjectsService {
         clientProfileId: true,
         serviceKey: true,
         repositoryUrl: true,
+        livePreviewUrl: true,
         figmaProjectUrl: true,
+        ga4MeasurementId: true,
+        ga4PropertyId: true,
+        ga4Status: true,
+        ga4MeasurementProfile: true,
+        ga4LastVerifiedAt: true,
         name: true,
         startDate: true,
         dueDate: true,
@@ -490,6 +532,12 @@ export class ProjectsService {
       dto.name === undefined &&
       dto.description === undefined &&
       dto.figmaProjectUrl === undefined &&
+      dto.repositoryUrl === undefined &&
+      dto.livePreviewUrl === undefined &&
+      dto.ga4MeasurementId === undefined &&
+      dto.ga4PropertyId === undefined &&
+      dto.ga4Status === undefined &&
+      dto.ga4MeasurementProfile === undefined &&
       dto.status === undefined &&
       dto.priority === undefined &&
       dto.startDate === undefined &&
@@ -497,6 +545,32 @@ export class ProjectsService {
     ) {
       throw new BadRequestException("Provide at least one project field to update.");
     }
+  }
+
+  private assertHttpUrl(value: string | null, fieldName: string): void {
+    if (!value || value.trim().length === 0) {
+      return;
+    }
+
+    try {
+      const parsed = new URL(value);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        throw new Error("Invalid protocol");
+      }
+    } catch {
+      throw new BadRequestException(`${fieldName} must be a valid http or https URL.`);
+    }
+  }
+
+  private resolveGa4LastVerifiedAt(
+    status: ProjectGa4Status,
+    currentValue: Date | null,
+  ): Date | null {
+    if (status === ProjectGa4Status.CONNECTED) {
+      return currentValue ?? new Date();
+    }
+
+    return null;
   }
 
   private assertBodyObject(value: unknown): void {
