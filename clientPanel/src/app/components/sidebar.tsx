@@ -188,6 +188,7 @@ const sharedBottomItems: MenuItem[] = [
   { id: 'reports', label: 'Raporlar', icon: BarChart3 },
   { id: 'meetings', label: 'Toplantılar', icon: Calendar },
   { id: 'billing', label: 'Faturalama', icon: CreditCard },
+  { id: 'tickets', label: 'Talepler', icon: MessageSquare },
   { id: 'settings', label: 'Ayarlar', icon: Settings },
 ];
 

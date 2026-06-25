@@ -27,7 +27,7 @@ import {
 const SELECTED_SERVICE_STORAGE_KEY = "socialtech-client-selected-service";
 const CURRENT_PAGE_STORAGE_KEY = "socialtech-client-current-page";
 const DEFAULT_PAGE = "overview";
-const SHARED_PAGE_IDS = new Set(["reports", "meetings", "billing", "settings"]);
+const SHARED_PAGE_IDS = new Set(["reports", "meetings", "billing", "tickets", "settings"]);
 
 const DEMO_CLIENT: DemoClient = {
   email: "client@socialtech.com",
@@ -45,6 +45,9 @@ const MeetingsPage = lazy(() =>
 );
 const BillingPage = lazy(() =>
   import("./pages/billing").then((module) => ({ default: module.BillingPage })),
+);
+const TicketsPage = lazy(() =>
+  import("./pages/tickets").then((module) => ({ default: module.TicketsPage })),
 );
 const SettingsPage = lazy(() =>
   import("./pages/settings").then((module) => ({ default: module.SettingsPage })),
@@ -331,6 +334,7 @@ export function ClientPortalApp() {
     if (currentPage === "reports") return <ReportsPage projectId={workspaceProjectId} selectedService={selectedService} />;
     if (currentPage === "meetings") return <MeetingsPage projectId={meetingProjectId} />;
     if (currentPage === "billing") return <BillingPage />;
+    if (currentPage === "tickets") return <TicketsPage projectId={activeProjectId} selectedService={selectedService} />;
     if (currentPage === "settings") return <SettingsPage />;
     if (currentPage === "competitor-analysis") return <AutomationsPage />;
 
