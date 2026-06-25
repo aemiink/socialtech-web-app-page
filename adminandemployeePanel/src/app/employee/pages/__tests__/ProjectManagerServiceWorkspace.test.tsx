@@ -162,6 +162,12 @@ vi.mock("../../../features/tasks/tasksApi", () => ({
   useToggleTaskTodoMutation: () => [vi.fn(), { isLoading: false }],
 }));
 
+vi.mock("../../../features/tickets/ticketsApi", () => ({
+  useGetAssignedClientTicketsQuery: () => ({ data: [], isLoading: false }),
+  useAddAssignedTicketMessageMutation: () => [vi.fn(), { isLoading: false }],
+  useUpdateAssignedTicketMutation: () => [vi.fn(), { isLoading: false }],
+}));
+
 describe("ProjectManagerServiceWorkspace task routing", () => {
   beforeEach(() => {
     vi.clearAllMocks();

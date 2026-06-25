@@ -103,6 +103,7 @@ export const baseApi = createApi({
     "WebMobileDesignSummary",
     "TechnicalSupportConfig",
     "TechnicalSupportSummary",
+    "ClientTickets",
     "SeoAuditConfig",
     "SeoAuditSummary",
     "ClientInvoices",

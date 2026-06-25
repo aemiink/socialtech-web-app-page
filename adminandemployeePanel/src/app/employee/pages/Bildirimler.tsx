@@ -1,17 +1,24 @@
 import { useMemo, useState } from "react";
-import { AlertCircle, Bell, CalendarClock, CheckSquare, FileText } from "lucide-react";
+import { AlertCircle, Bell, CalendarClock, CheckSquare, FileText, Headphones, MessageSquare } from "lucide-react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
+import { Textarea } from "../../components/ui/textarea";
 import { selectCurrentUser } from "../../features/auth/authSelectors";
-import { useGetProjectsQuery } from "../../features/projects/projectsApi";
-import type { Project } from "../../features/projects/projectsTypes";
+import {
+  useCreateProjectWorkspaceMessageMutation,
+  useGetProjectsQuery,
+  useGetWorkspaceMessageInboxQuery,
+} from "../../features/projects/projectsApi";
+import type { Project, WorkspaceMessageInboxItem } from "../../features/projects/projectsTypes";
 import { useGetTasksQuery } from "../../features/tasks/tasksApi";
 import type { Task } from "../../features/tasks/tasksTypes";
 import { getTaskStatusLabel } from "../../features/tasks/tasksUtils";
+import { useAddAssignedTicketMessageMutation, useGetAssignedTicketInboxQuery } from "../../features/tickets/ticketsApi";
+import type { ClientTicket } from "../../features/tickets/ticketsTypes";
 import { useAppSelector } from "../../store/hooks";
 
-type NotificationKind = "task" | "approval" | "deadline" | "project";
+type NotificationKind = "task" | "approval" | "deadline" | "project" | "message" | "ticket";
 
 type NotificationItem = {
   id: string;
@@ -20,21 +27,40 @@ type NotificationItem = {
   message: string;
   createdAt: string;
   href?: string;
+  projectId?: string;
+  parentMessageId?: string;
+  ticketId?: string;
+  canReply?: boolean;
 };
 
 export function Bildirimler() {
   const currentUser = useAppSelector(selectCurrentUser);
   const storageKey = currentUser?.id ? `employee-notification-read:${currentUser.id}` : "";
   const [readIds, setReadIds] = useState<Set<string>>(() => loadReadNotificationIds(storageKey));
+  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
   const { data: tasksResponse, isLoading: isTasksLoading, isError: isTasksError } = useGetTasksQuery(
     currentUser?.id ? { assigneeUserId: currentUser.id } : undefined,
     { skip: !currentUser?.id },
   );
   const { data: projectsResponse, isLoading: isProjectsLoading } = useGetProjectsQuery();
+  const { data: messageInbox = [], isLoading: isMessagesLoading } = useGetWorkspaceMessageInboxQuery(undefined, {
+    skip: !currentUser?.id,
+  });
+  const { data: ticketInbox = [], isLoading: isTicketsLoading } = useGetAssignedTicketInboxQuery(undefined, {
+    skip: !currentUser?.id,
+  });
+  const [createWorkspaceMessage, { isLoading: isReplyingMessage }] = useCreateProjectWorkspaceMessageMutation();
+  const [addTicketMessage, { isLoading: isReplyingTicket }] = useAddAssignedTicketMessageMutation();
 
   const notifications = useMemo(
-    () => buildNotifications(tasksResponse?.data ?? [], projectsResponse?.data ?? []),
-    [projectsResponse?.data, tasksResponse?.data],
+    () =>
+      buildNotifications(
+        tasksResponse?.data ?? [],
+        projectsResponse?.data ?? [],
+        messageInbox,
+        ticketInbox,
+      ),
+    [messageInbox, projectsResponse?.data, tasksResponse?.data, ticketInbox],
   );
   const unreadCount = notifications.filter((notification) => !readIds.has(notification.id)).length;
 
@@ -55,7 +81,34 @@ export function Bildirimler() {
     updateReadIds(new Set([...readIds, notificationId]));
   }
 
-  const isLoading = isTasksLoading || isProjectsLoading;
+  async function sendInlineReply(notification: NotificationItem) {
+    const draft = replyDrafts[notification.id]?.trim() ?? "";
+    if (!draft) {
+      return;
+    }
+
+    if (notification.kind === "message" && notification.projectId && notification.parentMessageId) {
+      await createWorkspaceMessage({
+        projectId: notification.projectId,
+        tabKey: "MESSAGES",
+        body: draft,
+        parentMessageId: notification.parentMessageId,
+      }).unwrap();
+    }
+
+    if (notification.kind === "ticket" && notification.ticketId) {
+      await addTicketMessage({
+        ticketId: notification.ticketId,
+        body: draft,
+      }).unwrap();
+    }
+
+    setReplyDrafts((prev) => ({ ...prev, [notification.id]: "" }));
+    markOneRead(notification.id);
+  }
+
+  const isLoading = isTasksLoading || isProjectsLoading || isMessagesLoading || isTicketsLoading;
+  const isReplying = isReplyingMessage || isReplyingTicket;
 
   return (
     <div className="space-y-6">
@@ -106,6 +159,29 @@ export function Bildirimler() {
                     </div>
                     <p className="text-sm text-[#A0A0A0]">{notification.message}</p>
                     <p className="mt-2 text-xs text-[#A0A0A0]">{formatRelativeDate(notification.createdAt)}</p>
+                    {notification.canReply ? (
+                      <div className="mt-3 space-y-2" onClick={(event) => event.stopPropagation()}>
+                        <Textarea
+                          value={replyDrafts[notification.id] ?? ""}
+                          onChange={(event) =>
+                            setReplyDrafts((prev) => ({
+                              ...prev,
+                              [notification.id]: event.target.value,
+                            }))
+                          }
+                          placeholder={notification.kind === "ticket" ? "Ticket cevabınızı yazın" : "Müşteri mesajına yanıt yazın"}
+                          className="min-h-20 bg-black/20"
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={isReplying || !(replyDrafts[notification.id]?.trim())}
+                          onClick={() => void sendInlineReply(notification)}
+                        >
+                          {isReplying ? "Gönderiliyor..." : "Yanıtla"}
+                        </Button>
+                      </div>
+                    ) : null}
                   </div>
                   <Button
                     size="sm"
@@ -128,11 +204,49 @@ export function Bildirimler() {
   );
 }
 
-function buildNotifications(tasks: Task[], projects: Project[]): NotificationItem[] {
+function buildNotifications(
+  tasks: Task[],
+  projects: Project[],
+  messages: WorkspaceMessageInboxItem[],
+  tickets: ClientTicket[],
+): NotificationItem[] {
   const now = new Date();
   const threeDaysLater = addDays(now, 3);
   const sevenDaysLater = addDays(now, 7);
   const notifications: NotificationItem[] = [];
+
+  for (const message of messages) {
+    const project = message.project;
+    const clientName = project?.clientProfile?.companyName ?? "Müşteri";
+    const projectName = project?.name ?? "Web App";
+    notifications.push({
+      id: `message:${message.id}:${message.updatedAt ?? message.createdAt}`,
+      kind: "message",
+      title: "Müşteri mesajı",
+      message: `${clientName} · ${projectName} · ${message.body.slice(0, 120)}`,
+      createdAt: message.createdAt,
+      projectId: message.projectId,
+      parentMessageId: message.id,
+      canReply: true,
+    });
+  }
+
+  for (const ticket of tickets) {
+    if (ticket.status === "CLOSED") {
+      continue;
+    }
+    const clientName = ticket.clientProfile?.companyName ?? "Müşteri";
+    const statusLabel = getTicketStatusLabel(ticket.status);
+    notifications.push({
+      id: `ticket:${ticket.id}:${ticket.updatedAt}`,
+      kind: "ticket",
+      title: "Ticket güncellemesi",
+      message: `${clientName} · ${ticket.title} · ${statusLabel}`,
+      createdAt: ticket.updatedAt ?? ticket.createdAt,
+      ticketId: ticket.id,
+      canReply: ticket.status !== "RESOLVED",
+    });
+  }
 
   for (const task of tasks) {
     const clientName = task.project?.clientProfile?.companyName ?? "Müşteri";
@@ -214,9 +328,22 @@ function getNotificationIcon(kind: NotificationKind) {
     approval: AlertCircle,
     deadline: CalendarClock,
     project: FileText,
+    message: MessageSquare,
+    ticket: Headphones,
   } satisfies Record<NotificationKind, typeof Bell>;
 
   return icons[kind];
+}
+
+function getTicketStatusLabel(status: ClientTicket["status"]): string {
+  const labels: Record<ClientTicket["status"], string> = {
+    OPEN: "Açık",
+    IN_PROGRESS: "İşlemde",
+    WAITING_CLIENT: "Müşteri Bekleniyor",
+    RESOLVED: "Çözüldü",
+    CLOSED: "Kapandı",
+  };
+  return labels[status];
 }
 
 function EmptyNotification({ text, tone = "muted" }: { text: string; tone?: "muted" | "error" }) {

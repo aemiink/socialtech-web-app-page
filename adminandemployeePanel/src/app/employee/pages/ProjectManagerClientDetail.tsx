@@ -249,6 +249,14 @@ export function ProjectManagerClientDetail() {
                   Mesajlar
                 </Link>
               </Button>
+              <Button asChild variant="ghost" size="sm">
+                <Link
+                  to={`/employee/project-manager/clients/${summary.client.id}/services/${serviceCard.serviceKey}?tab=TICKETS`}
+                >
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                  Ticket
+                </Link>
+              </Button>
             </div>
           </Card>
         ))}

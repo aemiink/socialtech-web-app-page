@@ -24,6 +24,7 @@ import type {
   WorkspaceMeetingRequest,
   WorkspaceMeetingRequestStatus,
   WorkspaceMessage,
+  WorkspaceMessageInboxItem,
   WorkspaceRevision,
   WorkspaceRevisionStatus,
   WorkspaceSection,
@@ -39,6 +40,7 @@ import { normalizeProjectResponse, normalizeProjectsListResponse } from "./proje
 
 const PROJECTS_LIST_ID = "LIST";
 const TASKS_LIST_ID = "LIST";
+const WORKSPACE_MESSAGE_INBOX_ID = "MESSAGE_INBOX";
 
 export const projectsApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -405,6 +407,13 @@ export const projectsApi = baseApi.injectEndpoints({
         { type: "Projects", id: `WORKSPACE_MEETINGS:${arg.projectId}` },
       ],
     }),
+    getWorkspaceMessageInbox: builder.query<WorkspaceMessageInboxItem[], void>({
+      query: () => ({
+        url: "/web-app-workspace/message-inbox",
+        method: "GET",
+      }),
+      providesTags: [{ type: "Projects", id: WORKSPACE_MESSAGE_INBOX_ID }],
+    }),
     getProjectWorkspaceMessages: builder.query<WorkspaceMessage[], { projectId: string; tabKey?: WorkspaceTabKey }>({
       query: ({ projectId, tabKey }) => ({
         url: `/projects/${projectId}/web-app-workspace/messages`,
@@ -431,6 +440,7 @@ export const projectsApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, arg) => [
         { type: "Projects", id: `WORKSPACE:${arg.projectId}` },
         { type: "Projects", id: `WORKSPACE_MESSAGES:${arg.projectId}` },
+        { type: "Projects", id: WORKSPACE_MESSAGE_INBOX_ID },
       ],
     }),
   }),
@@ -473,6 +483,7 @@ export const {
   useCreateProjectWorkspaceReportMutation,
   useGetProjectWorkspaceMeetingRequestsQuery,
   useUpdateProjectWorkspaceMeetingRequestMutation,
+  useGetWorkspaceMessageInboxQuery,
   useGetProjectWorkspaceMessagesQuery,
   useCreateProjectWorkspaceMessageMutation,
 } = projectsApi;

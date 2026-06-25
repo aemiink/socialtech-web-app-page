@@ -87,6 +87,16 @@ import {
   useUpdateTaskMutation,
   useUpdateTaskTodoMutation,
 } from "../../features/tasks/tasksApi";
+import {
+  useAddAssignedTicketMessageMutation,
+  useGetAssignedClientTicketsQuery,
+  useUpdateAssignedTicketMutation,
+} from "../../features/tickets/ticketsApi";
+import type {
+  ClientTicket,
+  ClientTicketPriority,
+  ClientTicketStatus,
+} from "../../features/tickets/ticketsTypes";
 import type {
   TaskApprovalType,
   TaskStatus,
@@ -119,6 +129,7 @@ type WorkspaceViewTab =
   | "TASKS"
   | "FILES"
   | "MESSAGES"
+  | "TICKETS"
   | "REVISIONS"
   | "REPORTS"
   | "MEETINGS"
@@ -138,6 +149,7 @@ const ALL_WORKSPACE_TABS: WorkspaceViewTab[] = [
   "TASKS",
   "FILES",
   "MESSAGES",
+  "TICKETS",
   "REVISIONS",
   "REPORTS",
   "MEETINGS",
@@ -287,6 +299,14 @@ const TASK_PRIORITY_OPTIONS = ["LOW", "MEDIUM", "HIGH", "URGENT"] as const;
 type TaskPriority = (typeof TASK_PRIORITY_OPTIONS)[number];
 const SPRINT_STATUS_OPTIONS: DeliverySprintStatus[] = ["PLANNED", "ACTIVE", "COMPLETED", "CANCELLED"];
 const PROJECT_GA4_STATUS_OPTIONS: ProjectGa4Status[] = ["NOT_CONFIGURED", "PENDING", "CONNECTED", "ERROR"];
+const CLIENT_TICKET_STATUS_OPTIONS: ClientTicketStatus[] = [
+  "OPEN",
+  "IN_PROGRESS",
+  "WAITING_CLIENT",
+  "RESOLVED",
+  "CLOSED",
+];
+const CLIENT_TICKET_PRIORITY_OPTIONS: ClientTicketPriority[] = ["LOW", "MEDIUM", "HIGH", "URGENT"];
 
 const ASSIGNEE_ROLE_TARGET_TABS: Partial<Record<string, EmployeePanelTargetTab[]>> = {
   DESIGNER: [
@@ -354,11 +374,12 @@ const WEB_DELIVERY_TABS: WorkspaceViewTab[] = [
   "TASKS",
   "FILES",
   "MESSAGES",
+  "TICKETS",
   "REVISIONS",
   "REPORTS",
   "MEETINGS",
 ];
-const CODE_DELIVERY_TABS: WorkspaceViewTab[] = ["OVERVIEW", "ROADMAP", "TASKS", "FILES"];
+const CODE_DELIVERY_TABS: WorkspaceViewTab[] = ["OVERVIEW", "ROADMAP", "TASKS", "FILES", "TICKETS"];
 const PAID_ADS_TABS: WorkspaceViewTab[] = [
   "OVERVIEW",
   "CAMPAIGNS",
@@ -366,6 +387,7 @@ const PAID_ADS_TABS: WorkspaceViewTab[] = [
   "CREATIVES",
   "INSIGHTS",
   "REPORTS",
+  "TICKETS",
   "TASKS",
   "FILES",
 ];
@@ -376,6 +398,7 @@ const SOCIAL_CONTENT_TABS: WorkspaceViewTab[] = [
   "CREATIVES",
   "INSIGHTS",
   "REPORTS",
+  "TICKETS",
   "TASKS",
   "FILES",
 ];
@@ -384,13 +407,14 @@ const GROWTH_TABS: WorkspaceViewTab[] = [
   "GROWTH_ACTIONS",
   "INSIGHTS",
   "REPORTS",
+  "TICKETS",
   "TASKS",
   "FILES",
 ];
-const DESIGN_TABS: WorkspaceViewTab[] = ["OVERVIEW", "CREATIVES", "REVISIONS", "TASKS", "FILES"];
-const SUPPORT_TABS: WorkspaceViewTab[] = ["OVERVIEW", "SUPPORT", "TASKS", "FILES"];
-const SEO_TABS: WorkspaceViewTab[] = ["OVERVIEW", "SEO", "INSIGHTS", "REPORTS", "TASKS", "FILES"];
-const GENERAL_TABS: WorkspaceViewTab[] = ["OVERVIEW", "TASKS", "FILES"];
+const DESIGN_TABS: WorkspaceViewTab[] = ["OVERVIEW", "CREATIVES", "REVISIONS", "TICKETS", "TASKS", "FILES"];
+const SUPPORT_TABS: WorkspaceViewTab[] = ["OVERVIEW", "TICKETS", "SUPPORT", "TASKS", "FILES"];
+const SEO_TABS: WorkspaceViewTab[] = ["OVERVIEW", "SEO", "INSIGHTS", "REPORTS", "TICKETS", "TASKS", "FILES"];
+const GENERAL_TABS: WorkspaceViewTab[] = ["OVERVIEW", "TICKETS", "TASKS", "FILES"];
 
 const WEB_DELIVERY_TARGETS: EmployeePanelTargetTab[] = [
   "GOREVLERIM",
@@ -518,6 +542,10 @@ export function ProjectManagerServiceWorkspace() {
   const [messageBody, setMessageBody] = useState("");
   const [replyParentId, setReplyParentId] = useState<string | null>(null);
   const [isInternalMessage, setIsInternalMessage] = useState(false);
+  const [ticketReplyDrafts, setTicketReplyDrafts] = useState<Record<string, string>>({});
+  const [ticketInternalDrafts, setTicketInternalDrafts] = useState<Record<string, boolean>>({});
+  const [ticketStatusDrafts, setTicketStatusDrafts] = useState<Record<string, ClientTicketStatus>>({});
+  const [ticketPriorityDrafts, setTicketPriorityDrafts] = useState<Record<string, ClientTicketPriority>>({});
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDescription, setTaskDescription] = useState("");
   const [taskAssigneeId, setTaskAssigneeId] = useState("");
@@ -604,6 +632,10 @@ export function ProjectManagerServiceWorkspace() {
     { projectId: project?.id ?? "" },
     { skip: !project },
   );
+  const { data: clientTickets = [], isLoading: areTicketsLoading } = useGetAssignedClientTicketsQuery(
+    { clientId: clientId ?? "" },
+    { skip: !clientId },
+  );
   const { data: assigneeCandidates = [] } = useGetProjectAssigneeCandidatesQuery(project?.id ?? "", {
     skip: !project,
   });
@@ -643,6 +675,8 @@ export function ProjectManagerServiceWorkspace() {
   const [updateTaskTodo, { isLoading: isUpdatingTodo }] = useUpdateTaskTodoMutation();
   const [deleteTaskTodo, { isLoading: isDeletingTodo }] = useDeleteTaskTodoMutation();
   const [toggleTaskTodo, { isLoading: isTogglingTodo }] = useToggleTaskTodoMutation();
+  const [addTicketMessage, { isLoading: isAddingTicketMessage }] = useAddAssignedTicketMessageMutation();
+  const [updateTicket, { isLoading: isUpdatingTicket }] = useUpdateAssignedTicketMutation();
   const [createSprint, { isLoading: isCreatingSprint }] = useCreateDeliverySprintMutation();
   const [updateSprint, { isLoading: isUpdatingSprint }] = useUpdateDeliverySprintMutation();
   const [createRelease, { isLoading: isCreatingRelease }] = useCreateDeliveryReleaseMutation();
@@ -912,6 +946,10 @@ export function ProjectManagerServiceWorkspace() {
 
   const messagesByParent = buildMessageTree(workspaceMessages);
   const rootMessages = messagesByParent.get("root") ?? [];
+  const operationTickets = useMemo(
+    () => sortTicketsForOperation(clientTickets, project.id, project.serviceKey),
+    [clientTickets, project.id, project.serviceKey],
+  );
 
   const checklistPreview = parseChecklistLines(taskTodoDraft);
   const completedTaskCount = tasks.filter((task) => task.status === "DONE").length;
@@ -928,6 +966,7 @@ export function ProjectManagerServiceWorkspace() {
   const latestRevision = workspaceRevisions[0] ?? null;
   const latestReport = workspaceReports[0] ?? null;
   const latestMeeting = workspaceMeetings[0] ?? null;
+  const latestTicket = operationTickets[0] ?? null;
   const recentFile = files[0] ?? null;
   const roadmapUpcomingCount =
     sprints.filter((sprint) => sprint.status === "PLANNED" || sprint.status === "ACTIVE").length +
@@ -983,6 +1022,45 @@ export function ProjectManagerServiceWorkspace() {
       setIsInternalMessage(false);
     } catch (mutationError) {
       setActionError(extractApiErrorMessage(mutationError, "Mesaj gönderilemedi."));
+    }
+  };
+
+  const handleSendTicketReply = async (ticketId: string) => {
+    const draft = ticketReplyDrafts[ticketId]?.trim() ?? "";
+    if (!draft) {
+      return;
+    }
+
+    try {
+      setActionError(null);
+      await addTicketMessage({
+        ticketId,
+        body: draft,
+        isInternal: ticketInternalDrafts[ticketId] ?? false,
+      }).unwrap();
+      setTicketReplyDrafts((prev) => ({ ...prev, [ticketId]: "" }));
+      setTicketInternalDrafts((prev) => ({ ...prev, [ticketId]: false }));
+    } catch (mutationError) {
+      setActionError(extractApiErrorMessage(mutationError, "Ticket yanıtı gönderilemedi."));
+    }
+  };
+
+  const handleUpdateTicket = async (ticket: ClientTicket) => {
+    const status = ticketStatusDrafts[ticket.id] ?? ticket.status;
+    const priority = ticketPriorityDrafts[ticket.id] ?? ticket.priority;
+    if (status === ticket.status && priority === ticket.priority) {
+      return;
+    }
+
+    try {
+      setActionError(null);
+      await updateTicket({
+        ticketId: ticket.id,
+        status,
+        priority,
+      }).unwrap();
+    } catch (mutationError) {
+      setActionError(extractApiErrorMessage(mutationError, "Ticket güncellenemedi."));
     }
   };
 
@@ -1530,10 +1608,11 @@ export function ProjectManagerServiceWorkspace() {
                 {serviceProfile.description}
               </p>
             </div>
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <WorkspaceStat icon={ListChecks} label="Açık Görev" value={String(tasks.length)} hint={`${completedTaskCount} tamamlandı`} />
               <WorkspaceStat icon={Folder} label="Dosya" value={String(files.length)} hint={recentFile ? recentFile.title : "Henüz dosya yok"} />
               <WorkspaceStat icon={MessageSquare} label="Mesaj" value={String(workspaceMessages.length)} hint={rootMessages.length > 0 ? "Aktif iletişim var" : "Soru-cevap bekliyor"} />
+              <WorkspaceStat icon={MessageSquare} label="Ticket" value={String(operationTickets.length)} hint={latestTicket ? getClientTicketStatusLabel(latestTicket.status) : "Talep bekleniyor"} />
             </div>
           </div>
 
@@ -2207,6 +2286,7 @@ export function ProjectManagerServiceWorkspace() {
               <CardContent className="space-y-3">
                 <InsightRow label="Revizyon" value={latestRevision?.title ?? "Açık revizyon yok"} meta={latestRevision?.status ?? "Temiz"} />
                 <InsightRow label="Mesaj akışı" value={`${workspaceMessages.length} mesaj`} meta={replyParentId ? "Yanıt modu aktif" : "Bekleyen yanıt yok"} />
+                <InsightRow label="Ticket" value={`${operationTickets.length} talep`} meta={latestTicket ? latestTicket.title : "Açık ticket yok"} />
                 <InsightRow label="Checklist" value={`${completedTodoCount}/${totalTodoCount || 0} tamamlandı`} meta={`%${workspaceProgress} genel ilerleme`} />
                 <InsightRow label="Ekip" value={`${assigneeCandidates.length} atanabilir kişi`} meta={assigneeCandidates.length > 0 ? "Dağıtım yapılabilir" : "Aday bulunamadı"} />
                 <InsightRow label="Yol Haritası" value={`${roadmapUpcomingCount} aktif plan`} meta={`${sprints.length} sprint • ${releases.length} release`} />
@@ -2512,6 +2592,154 @@ export function ProjectManagerServiceWorkspace() {
               </CardFooter>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="TICKETS">
+          <Card className="border-white/[0.06] bg-[#1A1A1A]">
+            <CardHeader>
+              <CardTitle className="text-white">Ticket</CardTitle>
+              <CardDescription>
+                Müşteri panelinden gelen destek talepleri ve PM yanıt akışı.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {areTicketsLoading ? <EmptyHint text="Ticketlar yükleniyor..." /> : null}
+              {!areTicketsLoading && operationTickets.length === 0 ? (
+                <EmptyHint text="Bu müşteri/hizmet için ticket bulunmuyor." />
+              ) : null}
+              {operationTickets.map((ticket) => {
+                const statusDraft = ticketStatusDrafts[ticket.id] ?? ticket.status;
+                const priorityDraft = ticketPriorityDrafts[ticket.id] ?? ticket.priority;
+                const replyDraft = ticketReplyDrafts[ticket.id] ?? "";
+                const isInternal = ticketInternalDrafts[ticket.id] ?? false;
+                const hasTicketChange = statusDraft !== ticket.status || priorityDraft !== ticket.priority;
+
+                return (
+                  <div key={ticket.id} className="rounded-2xl border border-white/[0.06] bg-black/20 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-white">{ticket.title}</p>
+                        <p className="mt-1 text-xs text-[#A0A0A0]">
+                          {ticket.project?.name ?? getServiceDisplayLabel(normalizeServiceKey(ticket.serviceKey))} ·{" "}
+                          {formatDateTime(ticket.createdAt)}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="outline" className={getClientTicketStatusBadgeClass(ticket.status)}>
+                          {getClientTicketStatusLabel(ticket.status)}
+                        </Badge>
+                        <Badge variant="outline" className="border-white/10 bg-white/5 text-[#D8D8D8]">
+                          {getClientTicketPriorityLabel(ticket.priority)}
+                        </Badge>
+                      </div>
+                    </div>
+                    <p className="mt-3 text-sm leading-6 text-[#D8D8D8]">{ticket.description}</p>
+
+                    <div className="mt-4 space-y-2">
+                      {ticket.messages.map((message) => (
+                        <div
+                          key={message.id}
+                          className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3"
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-xs font-medium text-white">
+                              {message.author?.displayName ?? "Kullanıcı"}
+                            </p>
+                            <span className="text-xs text-[#7D7D7D]">
+                              {formatDateTime(message.createdAt)}
+                            </span>
+                            {message.isInternal ? (
+                              <Badge variant="outline" className="border-[#AAFF01]/20 bg-[#AAFF01]/10 text-[#E8FFC2]">
+                                Internal
+                              </Badge>
+                            ) : null}
+                          </div>
+                          <p className="mt-2 text-sm leading-6 text-[#D8D8D8]">{message.body}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_220px_auto]">
+                      <Textarea
+                        value={replyDraft}
+                        onChange={(event) =>
+                          setTicketReplyDrafts((prev) => ({
+                            ...prev,
+                            [ticket.id]: event.target.value,
+                          }))
+                        }
+                        placeholder="Ticket cevabı yazın"
+                        className="min-h-24 bg-black/20 md:col-span-4"
+                      />
+                      <select
+                        value={statusDraft}
+                        onChange={(event) =>
+                          setTicketStatusDrafts((prev) => ({
+                            ...prev,
+                            [ticket.id]: event.target.value as ClientTicketStatus,
+                          }))
+                        }
+                        className="h-10 rounded-md border border-white/10 bg-black/30 px-3 text-sm text-white outline-none"
+                      >
+                        {CLIENT_TICKET_STATUS_OPTIONS.map((status) => (
+                          <option key={`${ticket.id}-${status}`} value={status}>
+                            {getClientTicketStatusLabel(status)}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={priorityDraft}
+                        onChange={(event) =>
+                          setTicketPriorityDrafts((prev) => ({
+                            ...prev,
+                            [ticket.id]: event.target.value as ClientTicketPriority,
+                          }))
+                        }
+                        className="h-10 rounded-md border border-white/10 bg-black/30 px-3 text-sm text-white outline-none"
+                      >
+                        {CLIENT_TICKET_PRIORITY_OPTIONS.map((priority) => (
+                          <option key={`${ticket.id}-${priority}`} value={priority}>
+                            {getClientTicketPriorityLabel(priority)}
+                          </option>
+                        ))}
+                      </select>
+                      <label className="flex h-10 items-center gap-2 rounded-md border border-white/10 bg-black/20 px-3 text-sm text-[#D8D8D8]">
+                        <Checkbox
+                          checked={isInternal}
+                          onCheckedChange={(checked) =>
+                            setTicketInternalDrafts((prev) => ({
+                              ...prev,
+                              [ticket.id]: checked === true,
+                            }))
+                          }
+                        />
+                        Internal
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => void handleSendTicketReply(ticket.id)}
+                          disabled={isAddingTicketMessage || replyDraft.trim().length === 0}
+                        >
+                          {isAddingTicketMessage ? "Gönderiliyor..." : "Yanıtla"}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void handleUpdateTicket(ticket)}
+                          disabled={isUpdatingTicket || !hasTicketChange}
+                        >
+                          {isUpdatingTicket ? "Kaydediliyor..." : "Durumu Kaydet"}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="REVISIONS">
@@ -2821,6 +3049,46 @@ function buildMessageTree(messages: WorkspaceMessage[]): Map<string, WorkspaceMe
   return map;
 }
 
+function sortTicketsForOperation(
+  tickets: ClientTicket[],
+  projectId: string,
+  serviceKey?: string | null,
+): ClientTicket[] {
+  const normalizedServiceKey = normalizeServiceKey(serviceKey);
+  return [...tickets]
+    .filter((ticket) => {
+      if (ticket.projectId === projectId) {
+        return true;
+      }
+      if (ticket.serviceKey && normalizeServiceKey(ticket.serviceKey) === normalizedServiceKey) {
+        return true;
+      }
+      return !ticket.projectId && !ticket.serviceKey;
+    })
+    .sort((first, second) => {
+      const firstScore = getOperationTicketScore(first, projectId, normalizedServiceKey);
+      const secondScore = getOperationTicketScore(second, projectId, normalizedServiceKey);
+      if (firstScore !== secondScore) {
+        return secondScore - firstScore;
+      }
+      return new Date(second.updatedAt).getTime() - new Date(first.updatedAt).getTime();
+    });
+}
+
+function getOperationTicketScore(
+  ticket: ClientTicket,
+  projectId: string,
+  normalizedServiceKey: string,
+): number {
+  if (ticket.projectId === projectId) {
+    return 3;
+  }
+  if (ticket.serviceKey && normalizeServiceKey(ticket.serviceKey) === normalizedServiceKey) {
+    return 2;
+  }
+  return 1;
+}
+
 function parseChecklistLines(value: string): string[] {
   return value
     .split("\n")
@@ -2881,6 +3149,35 @@ function getProjectFileApprovalBadgeClass(status: string | null | undefined): st
   if (status === "CHANGES_REQUESTED") return "border-[#00D4FF]/30 bg-[#00D4FF]/10 text-[#9CEEFF]";
   if (status === "REJECTED") return "border-red-500/40 bg-red-500/10 text-red-200";
   return "border-white/[0.12] bg-white/[0.04] text-[#A0A0A0]";
+}
+
+function getClientTicketStatusLabel(status: ClientTicketStatus): string {
+  const labels: Record<ClientTicketStatus, string> = {
+    OPEN: "Açık",
+    IN_PROGRESS: "İşlemde",
+    WAITING_CLIENT: "Müşteri Bekleniyor",
+    RESOLVED: "Çözüldü",
+    CLOSED: "Kapandı",
+  };
+  return labels[status];
+}
+
+function getClientTicketStatusBadgeClass(status: ClientTicketStatus): string {
+  if (status === "OPEN") return "border-[#FFA726]/30 bg-[#FFA726]/10 text-[#FFA726]";
+  if (status === "IN_PROGRESS") return "border-[#00D4FF]/30 bg-[#00D4FF]/10 text-[#9CEEFF]";
+  if (status === "WAITING_CLIENT") return "border-[#AAFF01]/30 bg-[#AAFF01]/10 text-[#d6ff93]";
+  if (status === "RESOLVED") return "border-emerald-400/30 bg-emerald-400/10 text-emerald-200";
+  return "border-white/[0.12] bg-white/[0.04] text-[#A0A0A0]";
+}
+
+function getClientTicketPriorityLabel(priority: ClientTicketPriority): string {
+  const labels: Record<ClientTicketPriority, string> = {
+    LOW: "Düşük",
+    MEDIUM: "Orta",
+    HIGH: "Yüksek",
+    URGENT: "Acil",
+  };
+  return labels[priority];
 }
 
 function normalizeAssigneeRoleKey(role: string | null | undefined): string | null {
@@ -4138,6 +4435,7 @@ function getViewTabLabel(tab: WorkspaceViewTab, profile?: ServiceWorkspaceProfil
   if (tab === "TASKS") return "Görevler";
   if (tab === "FILES") return "Dosyalar";
   if (tab === "MESSAGES") return "Mesajlar";
+  if (tab === "TICKETS") return "Ticket";
   if (tab === "REVISIONS") return "Revizyonlar";
   if (tab === "REPORTS") return "Raporlar";
   if (tab === "MEETINGS") return "Toplantılar";

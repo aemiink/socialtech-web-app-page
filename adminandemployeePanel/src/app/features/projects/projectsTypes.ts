@@ -132,6 +132,19 @@ export type WorkspaceMessage = {
   } | null;
 };
 
+export type WorkspaceMessageInboxItem = WorkspaceMessage & {
+  project?: {
+    id: string;
+    name: string;
+    serviceKey?: string | null;
+    clientProfile?: {
+      id: string;
+      companyName: string;
+      slug?: string | null;
+    } | null;
+  } | null;
+};
+
 export type WorkspaceRevision = {
   id: string;
   projectId: string;
