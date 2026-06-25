@@ -106,6 +106,8 @@
 - Delivery summary endpoint/UI
 - Project repository link requirement for `WEB_APP` / `MOBILE_APP`
 - Project-level Figma link support
+- Project-level Web APP live preview and dedicated GA4 client visibility
+- Web APP GA4 measurement profile based client journey visibility
 - Developer task detail work notes
 - Task code preparation + suggested branch metadata
 - Related commits in task detail (V1 read visibility)
@@ -116,6 +118,7 @@
 - Related frontend tests for developer delivery flows
 - Project files backend/API/UI (Cloudinary signed upload + share links)
 - Client panel client-visible file delivery integration
+- Employee report upload to automatic client-visible Reports folder
 - Web APP workspace backend module (sections/items/messages/revisions/reports/meeting requests)
 - Web APP workspace admin/employee management UI on project detail
 - Web APP workspace client panel API-driven reports/meetings/data binding

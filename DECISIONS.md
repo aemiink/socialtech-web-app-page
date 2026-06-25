@@ -1,5 +1,32 @@
 # Architecture Decisions
 
+## 2026-06-26 - Employee Report Uploads Via Project Files
+
+Herhangi bir assigned çalışan operasyon içinde müşteriye rapor dosyası yükleyebilmelidir; raporlar yanlışlıkla internal kalmamalı veya rastgele klasörlere dağılmamalıdır.
+
+Karar:
+- `ProjectFileCategory` içine genel `REPORT` kategorisi eklendi.
+- `REPORT` upload akışı backend'de özel kuraldır: sistem proje içinde `Raporlar` klasörünü bulur veya oluşturur.
+- `REPORT` dosyaları backend'de her zaman `CLIENT_VISIBLE` kaydedilir; frontend seçimi yanlış olsa bile müşteri panelinden saklanmaz.
+- Rapor upload için çalışan tarafında aktif client assignment yeterlidir; dosya modülü okuma kapsamı da aktif assignment ile hizalandı.
+- Client Portal ortak Raporlar sayfası, seçili proje için `REPORT` kategorisindeki client-visible dosyaları "Yüklenen Raporlar" olarak gösterir.
+
+Reason:
+Rapor yükleme operasyonel bir teslimat noktasıdır ve hizmet/rol fark etmeksizin müşteriye görünür olmalıdır. Klasör ve visibility kuralını backend'e almak, çalışan ekranındaki seçim hatalarının müşteri görünürlüğünü bozmasını engeller.
+
+## 2026-06-26 - Web App GA4 Measurement Profile
+
+Web App projelerinde GA4 görünürlüğü site tipine göre değişmelidir; kurumsal sitede ödeme yolculuğu göstermek, e-ticarette checkout/satın alma yolculuğunu saklamak yanlış müşteri beklentisi üretir.
+
+Karar:
+- Proje seviyesinde `ProjectGa4MeasurementProfile` contract'ı eklendi: `CORPORATE`, `ECOMMERCE`, `SHOWCASE`, `LEAD_GENERATION`, `CUSTOM`.
+- Varsayılan profil `CORPORATE` tutulur; eski projeler ödeme/satın alma akışı göstermeden güvenli açılır.
+- PM Web App operasyon ekranı GA4 Measurement ID, Property ID ve bağlantı durumu yanında ölçüm profilini de günceller.
+- Client Panel GA4 sekmesi profili okuyarak sadece ilgili yolculuk/event ailesini gösterir; e-ticaret checkout/payment blokları yalnızca `ECOMMERCE` profilinde görünür.
+
+Reason:
+GA4 ölçüm kapsamı hizmet türünden bağımsız olarak proje/site tipine bağlıdır. Bu ayrım, müşteri panelinde gereksiz veya eksik görünen event yolculuklarını engeller ve aynı Web App hizmeti içinde kurumsal, vitrin, lead ve e-ticaret sitelerini dengeli yönetir.
+
 ## 2026-06-18 - Social Media Active Platform Configuration
 
 Social Media hizmeti müşteriye tanımlanırken her müşteride tüm kanalların bulunmadığı netleşti. Admin create/edit ve Social Media global config akışında kanal seçimi config contract'ının parçası yapıldı.
